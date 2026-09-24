@@ -23,6 +23,7 @@ from flask import request
 from . import llm_bp
 from ..services.llm_provider_registry import LlmProviderRegistry
 from ..services.model_catalog_service import ModelCatalogService
+from ..services.provider_connection_store import ProviderConnectionStore
 from ..services.secret_resolver import SecretResolver
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.logger import get_logger
@@ -74,6 +75,32 @@ def _atomic_write(path: Path, payload: Dict[str, Any]) -> None:
         raise
 
 
+def _resolve_active_base_url(provider_id: str, registry_base_url: Optional[str]) -> Optional[str]:
+    """Ermittelt die ``base_url`` fuer die Active-Config (#1289).
+
+    Vorrang hat die gespeicherte ``ProviderConnection`` (validierter,
+    operator-gepflegter Zustand aus ``PUT /api/llm/providers/...``) vor dem
+    statischen Registry-Default. Ohne gespeicherte Connection oder ohne
+    dort gesetzte ``base_url`` bleibt der Registry-Default der Fallback.
+
+    ``transport == "cli"`` bzw. ``auth_mode == "session"`` (codex_cli)
+    sprechen keinen HTTP-Endpunkt — hier wird nie eine ``base_url``
+    erfunden, unabhaengig davon, was im Connection-Store steht.
+    """
+    definition = LlmProviderRegistry.connection_definition(provider_id)
+    if definition is not None and (definition.transport == "cli" or definition.auth_mode == "session"):
+        return None
+    connection = next(
+        (c for c in ProviderConnectionStore().list_connections() if c.id == provider_id),
+        None,
+    )
+    # Deaktivierte Connections liefern keine URL (analog zu den anderen
+    # Resolution-Pfaden, die auf ``enabled`` filtern).
+    if connection is not None and connection.enabled and connection.base_url:
+        return connection.base_url
+    return registry_base_url
+
+
 def save_active_config(provider_id: str, model: str, base_url: Optional[str] = None) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "provider_id": provider_id,
@@ -99,10 +126,16 @@ def put_active_config():
     """Set the active provider/model selection.
 
     Sicherheits-Hinweis: ``base_url`` wird NICHT aus dem Request-Body gelesen.
-    Sie wird ausschliesslich aus der server-seitigen Provider-Registry
-    abgeleitet, damit ein authentifizierter, aber boeswilliger Client die
-    LLM-Aufrufe nicht via SSRF-Vektor auf einen kontrollierten Host umlenken
-    kann (Gemini-Code-Assist Review PR #478).
+    Der Body ist unvalidierter Client-Input — ein authentifizierter, aber
+    boeswilliger Client soll die LLM-Aufrufe nicht via SSRF-Vektor auf einen
+    selbst kontrollierten Host umlenken koennen (Gemini-Code-Assist Review
+    PR #478). Das bleibt unveraendert.
+
+    ``base_url`` stammt stattdessen aus der gespeicherten
+    ``ProviderConnection`` (#1289): dem validierten Zustand, den der Operator
+    ueber ``PUT /api/llm/providers/...`` gepflegt hat. Erst ohne gespeicherte
+    Connection bzw. ohne dort gesetzte ``base_url`` faellt es auf den
+    server-seitigen Registry-Default zurueck.
     """
     payload = request.get_json(silent=True) or {}
     provider_id = (payload.get("provider_id") or "").strip()
@@ -119,11 +152,15 @@ def put_active_config():
     if not provider:
         return json_error(f"Unknown provider: {provider_id}", status=404, code="provider_not_found")
 
+    # Einmal aufloesen und fuer Gate UND Persistenz nutzen: sonst klassifiziert
+    # das Gate Modelle eines anderen Endpunkts als die Runtime nutzt.
+    effective_base_url = _resolve_active_base_url(provider_id, provider.base_url)
+
     # Capability-Gate (Issue #557): check if model supports tools
     if not force:
         resolver = SecretResolver()
         api_key = resolver.get_api_key(provider_id, provider.type)
-        models = _model_catalog.get_models(provider_id, provider.type, provider.base_url, api_key)
+        models = _model_catalog.get_models(provider_id, provider.type, effective_base_url, api_key)
         target_model = next((m for m in models if m.id == model), None)
 
         if target_model and not target_model.supports_tools:
@@ -134,6 +171,6 @@ def put_active_config():
                 code="unsupported_capability",
             )
 
-    saved = save_active_config(provider_id, model, provider.base_url)
+    saved = save_active_config(provider_id, model, effective_base_url)
     logger.info("Active LLM config updated: provider=%s model=%s force=%s", provider_id, model, force)
     return json_success(saved)
