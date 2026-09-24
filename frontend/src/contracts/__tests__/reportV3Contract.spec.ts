@@ -434,6 +434,21 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     ).toBe(false);
   });
 
+  it("weist doppelte Threshold-IDs ab (Review PR #1566)", () => {
+    const result = ReportV3Schema.safeParse({
+      schema_version: 4,
+      report_id: "r-1359-dup",
+      generated_at: "2026-09-24T00:00:00Z",
+      thresholds: [pilotBase, { ...pilotBase, value: 8 }, pilotDeviation],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message.includes("nicht eindeutig"))).toBe(
+        true,
+      );
+    }
+  });
+
   it("rejects Claim with invalid confidence value", () => {
     const badClaim = {
       id: "c1",

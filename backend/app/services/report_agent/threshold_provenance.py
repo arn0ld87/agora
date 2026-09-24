@@ -155,7 +155,13 @@ def _merge_pair(kept: Threshold, other: Threshold) -> Threshold:
     }
     # Issue #1359: Eine begründete Abweichung geht beim Zusammenführen nicht
     # verloren — sie gilt für den Wert, und der ist bei beiden derselbe.
-    if kept.deviates_from is None and other.deviates_from is not None:
+    # Zeigt sie auf den verbleibenden Eintrag selbst, verschwindet sie: ein
+    # Wert weicht nicht von sich selbst ab (Review PR #1566).
+    if (
+        kept.deviates_from is None
+        and other.deviates_from is not None
+        and other.deviates_from != kept.id
+    ):
         update["deviates_from"] = other.deviates_from
         update["deviation_rationale"] = other.deviation_rationale
     return kept.model_copy(update=update)

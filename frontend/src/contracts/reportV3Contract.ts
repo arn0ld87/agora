@@ -559,7 +559,19 @@ export const ReportV3Schema = z
 
     // Spiegelt ReportV3.validate_threshold_deviation_targets (#1359): ein
     // Verweis ins Leere behauptet eine Abweichung ohne Bezugswert.
-    const thresholdIds = new Set(value.thresholds.map((threshold) => threshold.id));
+    // Spiegelt ReportV3.validate_unique_export_ids für Thresholds (Review
+    // PR #1566): doppelte IDs machten deviates_from mehrdeutig.
+    const thresholdIds = new Set<string>();
+    value.thresholds.forEach((threshold, index) => {
+      if (thresholdIds.has(threshold.id)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["thresholds", index, "id"],
+          message: `Threshold-ID '${threshold.id}' ist nicht eindeutig.`,
+        });
+      }
+      thresholdIds.add(threshold.id);
+    });
     value.thresholds.forEach((threshold, index) => {
       if (threshold.deviates_from !== null && !thresholdIds.has(threshold.deviates_from)) {
         ctx.addIssue({

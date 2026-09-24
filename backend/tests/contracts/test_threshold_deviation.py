@@ -96,3 +96,18 @@ def test_das_schema_beschreibt_beide_felder_fuer_das_modell() -> None:
 
     assert "Kennung" in properties["deviates_from"]["description"]
     assert "Pflicht" in properties["deviation_rationale"]["description"]
+
+
+def test_doppelte_threshold_ids_werden_abgelehnt() -> None:
+    """Review PR #1566: ein Verweis auf eine doppelte ID wäre mehrdeutig."""
+    with pytest.raises(ValidationError, match="Threshold-IDs sind nicht eindeutig: T1_01"):
+        _report(
+            _threshold(),
+            _threshold(value=8.0),
+            _threshold(
+                id="T7_01",
+                value=6.0,
+                deviates_from="T1_01",
+                deviation_rationale="Begründung.",
+            ),
+        )

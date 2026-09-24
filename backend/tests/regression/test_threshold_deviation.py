@@ -167,6 +167,25 @@ def test_ein_verweis_auf_eine_verschmolzene_dublette_folgt_ihr() -> None:
     assert report.thresholds[1].deviates_from == "T1_01"
 
 
+def test_eine_dublette_mit_verweis_auf_den_verbleibenden_eintrag_verweist_nicht_auf_sich() -> None:
+    """Review PR #1566: T2_01 geht in T1_01 auf und verwies selbst auf T1_01.
+
+    Die Übernahme der Abweichung hätte ``T1_01 → T1_01`` erzeugt — an der
+    Validierung vorbei, weil ``model_copy`` sie nicht erneut ausführt.
+    """
+    report = _build([
+        _section(1, _raw("x", 4.0)),
+        _section(
+            2,
+            _raw("x", 4.0, deviates_from="T1_01", deviation_rationale="Verlängert."),
+        ),
+    ])
+
+    assert [t.id for t in report.thresholds] == ["T1_01"]
+    assert report.thresholds[0].deviates_from is None
+    assert report.thresholds[0].deviation_rationale is None
+
+
 # --- Prompt -------------------------------------------------------------------
 
 def test_die_extraktion_sieht_fruehere_zahlen_mit_der_kennung_des_merges() -> None:

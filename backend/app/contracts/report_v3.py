@@ -788,7 +788,13 @@ class ReportV3(BaseModel):
         ``ReportManager.build_report_v3_markdown()`` ``None`` und protokolliert
         den Grund, statt mehrdeutige IDs weiterzureichen.
         """
-        for label, collection in (("Claim", self.claims), ("DataGap", self.data_gaps)):
+        # Issue #1359 (Review PR #1566): Threshold-IDs sind Verweisziele von
+        # ``deviates_from`` — bei Dubletten wäre der Verweis mehrdeutig.
+        for label, collection in (
+            ("Claim", self.claims),
+            ("DataGap", self.data_gaps),
+            ("Threshold", self.thresholds),
+        ):
             seen: set[str] = set()
             duplicates: set[str] = set()
             for item in collection:
