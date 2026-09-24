@@ -351,6 +351,22 @@ persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
 des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
 canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
 
+### Report-Metadaten: Vertrag und Port — ein Adapter
+
+`ReportManager` delegiert seit #1580 das Lesen/Schreiben der Metadaten-Datei
+(`meta.json`, inkl. Legacy-Flachformat-Fallback `<report_id>.json`) an
+`FileReportRepository` (`backend/app/services/file_report_store.py`), hinter
+dem `ReportRepository`-Protocol (`backend/app/repositories/report_repository.py`).
+Das Pydantic-v2-Modell `ReportRecord`
+(`backend/app/contracts/report_record_contract.py`) beschreibt die
+persistierten Metadatenfelder verlustfrei (inkl. `outline` und
+`simulation_snapshot` als generische Dicts). Report-Inhalte (`report-v3.json`,
+`outline.json`, `section_XX.md`, Logs; Plan §11 Klasse B) bleiben Dateien und
+laufen NICHT über den Port — sie werden weiterhin direkt über
+`report_agent/storage.py` gelesen/geschrieben. `ReportManager` bleibt Fassade;
+keine Aufrufstelle außerhalb von `ReportManager` wurde angefasst. Der
+PostgreSQL-Adapter folgt in #1588.
+
 ## Security
 
 Aktueller Schwerpunkt:
