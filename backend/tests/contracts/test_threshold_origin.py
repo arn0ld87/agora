@@ -35,6 +35,7 @@ from app.services.report_agent.metadata_merge import (
     merge_section_metadata,
 )
 from app.services.report_agent.schemas import SectionMetadata
+from app.services.report_agent.threshold_provenance import dedup_thresholds
 
 EVIDENCE_ID = "ev_00000000000000000000000000000001"
 
@@ -144,7 +145,11 @@ class TestExtractionPath:
                         _threshold(id="thr_02", origin="model_proposal").model_dump(
                             mode="json"
                         ),
-                        # Dieselbe ID noch einmal — der Merge dedupliziert.
+                        # Dieselbe Modell-ID noch einmal. Issue #1359: der
+                        # Merge vergibt berichtsweite Kennungen statt über die
+                        # frei gewählte ID zu deduplizieren — sonst verschwände
+                        # ein widersprechender Wert still. Inhaltsgleiche
+                        # Dubletten fasst ``dedup_thresholds`` zusammen.
                         _threshold(id="thr_01").model_dump(mode="json"),
                     ]
                 }
@@ -153,7 +158,10 @@ class TestExtractionPath:
 
         merged = merge_section_metadata(sections)
 
-        assert [t.id for t in merged.thresholds] == ["thr_01", "thr_02"]
+        assert [t.id for t in merged.thresholds] == ["T1_01", "T2_01", "T2_02"]
+        # Alle drei beschreiben dieselbe Zahl — die Herkunft unterscheidet
+        # keinen Sachverhalt.
+        assert [t.id for t in dedup_thresholds(merged.thresholds)] == ["T1_01"]
         assert "thresholds" in merged.as_report_v3_kwargs()
 
     def test_ein_halluzinierter_eintrag_sprengt_den_report_nicht(self) -> None:
@@ -172,7 +180,9 @@ class TestExtractionPath:
 
         merged = merge_section_metadata(sections)
 
-        assert [t.id for t in merged.thresholds] == ["thr_01"]
+        # Issue #1359: die Kennung zählt die Rohposition — der verworfene
+        # Eintrag belegt T1_01.
+        assert [t.id for t in merged.thresholds] == ["T1_02"]
         assert merged.rejected
 
 

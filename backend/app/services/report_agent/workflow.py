@@ -69,6 +69,7 @@ from .search_dedup import (
 from .section_coverage import section_has_sufficient_evidence
 from .simulation_snapshot import capture_simulation_snapshot
 from .text_verification import verify_prose
+from .threshold_deviation import prior_threshold_lines, threshold_conflict_findings
 from .schemas import (
     EvidenceMapModel,
     _section_schema_for,
@@ -338,13 +339,14 @@ _RED_TEAM_SYSTEM_PROMPT = (
 _RED_TEAM_USER_TEMPLATE = (
     "Berichtsentwurf:\n\n{report_excerpt}\n\n"
     "Die Kennung vor jedem Eintrag nennt den Abschnitt: C3_02 ist der zweite "
-    "Claim aus Abschnitt 3. Widersprüche zwischen weit auseinanderliegenden "
+    "Claim aus Abschnitt 3, T7_01 der erste Schwellenwert aus Abschnitt 7. "
+    "Widersprüche zwischen weit auseinanderliegenden "
     "Abschnitten sind besonders zu prüfen — dort fallen sie beim Lesen am "
     "wenigsten auf.\n\n"
     "Identifiziere:\n"
     "(a) Widersprüche zwischen den Claims\n"
     "(b) Widersprüchliche operative Zahlen (zwei Schwellen für dieselbe Größe "
-    "mit unterschiedlichen Werten)\n"
+    "mit unterschiedlichen Werten, ohne vermerkte begründete Abweichung)\n"
     "(c) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
     "als hoch-konfident markiert sind)\n"
     "(d) Fehlende Cross-Segment-Reaktionen\n\n"
@@ -396,13 +398,22 @@ def _build_red_team_excerpt(report_v3: ReportV3) -> str:
     # genau dort weg, wo sie am nötigsten sind.
     lines: List[str] = []
     for threshold in report_v3.thresholds or []:
+        # Issue #1359: eine begründete Abweichung steht mit im Entwurf —
+        # sonst meldet der Reviewer sie als Widerspruch.
+        deviation = (
+            f"; weicht begründet ab von [{threshold.deviates_from}]: "
+            f"{threshold.deviation_rationale}"
+            if threshold.deviates_from
+            else ""
+        )
         # display_value statt f"{value:g} {unit}" (#1343): ein Datum trägt
         # keine Einheit, und ':g' an einem ISO-String würde den Entwurf
         # mitten in der Review-Vorbereitung sprengen.
         lines.append(
             f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
             f"{threshold.display_value} "
-            f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status})"
+            f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status}"
+            f"{deviation})"
         )
     for claim in report_v3.claims or []:
         lines.append(f"- [{claim.id}] [{claim.confidence}] {claim.statement}")
@@ -495,6 +506,12 @@ def _run_red_team_review(
 
     Slice 5 (Issue #497), Intent-Gate aus dem Evidence-Chain-Audit (#1160).
     """
+    # Issue #1359: Dieselbe Größe mit zwei Werten ohne begründete Abweichung
+    # lässt sich abzählen — das Modell kann sie übersehen, die Prüfung nicht.
+    deterministic_findings = [
+        *deterministic_findings,
+        *threshold_conflict_findings(report_v3.thresholds),
+    ]
     # Die deterministischen Befunde hängen nicht am Intent-Gate: sie kosten
     # keinen LLM-Call und gelten für jeden Lauf.
     if not _red_team_required(intent, echo_index):
@@ -1222,6 +1239,32 @@ def _record_metadata_truncation_degradation(
     )
 
 
+def _prior_thresholds_prompt(
+    agent: Any, schema_cls: type, section_index: int
+) -> str:
+    """Issue #1359: Zahlen früherer Abschnitte, auf die ein Wert verweisen kann.
+
+    Ohne sie kennt die Extraktion nur den eigenen Abschnitt — eine gewollte
+    Abweichung von einem Wert aus Abschnitt 1 ließe sich in Abschnitt 7 gar
+    nicht ausdrücken.
+    """
+    if "thresholds" not in getattr(schema_cls, "model_fields", {}):
+        return ""
+    evidence_map = getattr(agent, "evidence_map", None)
+    sections = evidence_map.get("sections") if isinstance(evidence_map, dict) else None
+    lines = prior_threshold_lines(sections, section_index)
+    if not lines:
+        return ""
+    return (
+        "\n\n## Bereits erfasste operative Zahlen früherer Abschnitte\n"
+        + "\n".join(lines)
+        + "\n\nNur als Bezug für deviates_from: nicht in die eigene Liste "
+        "übernehmen. Nennt dieser Abschnitt für dieselbe Größe einen anderen "
+        "Wert und begründet ihn, setze deviates_from auf die Kennung in "
+        "eckigen Klammern und übernimm die Begründung in deviation_rationale."
+    )
+
+
 def generate_section_metadata(
     agent: Any,
     section_title: str,
@@ -1283,7 +1326,7 @@ def generate_section_metadata(
     user_msg = (
         f"## Abschnittstitel\n{section_title}\n\n"
         f"## Inhalt\n{section_content[:METADATA_MAX_CONTENT_CHARS]}"
-    )
+    ) + _prior_thresholds_prompt(agent, schema_cls, section_index)
 
     try:
         result = agent.llm.chat_json(

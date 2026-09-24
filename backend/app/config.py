@@ -225,6 +225,33 @@ def validate_decision_layer_mode(mode: str) -> list[str]:
     return []
 
 
+def validate_job_lease_timing(
+    ttl_s: float, heartbeat_interval_s: float, max_stall_s: float
+) -> list[str]:
+    """Prüft die Job-Lease-Zeiten (Issue #1472, Codex-P2 PR #1555).
+
+    Ein Intervall von 0 ließe den Heartbeat-Loop ohne Pause drehen; ein
+    Intervall nahe der TTL ließe die Lease schon bei einem einzigen
+    verspäteten Tick verfallen und gäbe einen laufenden Job zum Doppelstart
+    frei. Deshalb: alle Werte > 0 und Intervall höchstens TTL/2."""
+    errors = [
+        f"{name} must be > 0 (got {value})"
+        for name, value in (
+            ('AGORA_JOB_LEASE_TTL_SECONDS', ttl_s),
+            ('AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS', heartbeat_interval_s),
+            ('AGORA_JOB_LEASE_MAX_STALL_SECONDS', max_stall_s),
+        )
+        if value <= 0
+    ]
+    if not errors and heartbeat_interval_s * 2 > ttl_s:
+        errors.append(
+            "AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS must be at most half of "
+            f"AGORA_JOB_LEASE_TTL_SECONDS (got interval {heartbeat_interval_s}, "
+            f"ttl {ttl_s})"
+        )
+    return errors
+
+
 def infer_vector_dim_for_model(model_name: str | None) -> int | None:
     """Infer a known vector dimension from the embedding model name."""
     normalized = (model_name or '').strip().lower()
@@ -517,6 +544,27 @@ class Config:
         os.environ.get('AGORA_STARTUP_RECONCILIATION', 'true').lower() in ('true', '1', 'yes')
     )
 
+    # Job-Lease mit Heartbeat und TTL (Issue #1472, Architekturentscheidung
+    # 2026-09-24): ersetzt den alten PID+Token-Stempel ohne Ablauf. Das
+    # Heartbeat-Intervall liegt bewusst deutlich unter der TTL (hier: 4.5x),
+    # damit ein einzelner verpasster Heartbeat (Gevent-Jitter, GC-Pause,
+    # kurzzeitige Registry-Contention) nicht sofort zum faelschlichen
+    # "verwaist" fuehrt. Defaults spiegeln
+    # ``app.contracts.job_lease_contract.DEFAULT_LEASE_TTL_S`` /
+    # ``DEFAULT_HEARTBEAT_INTERVAL_S`` (bewusst als Literal dupliziert,
+    # ``config.py`` haengt nicht von ``contracts/`` ab).
+    AGORA_JOB_LEASE_TTL_SECONDS = int(os.environ.get('AGORA_JOB_LEASE_TTL_SECONDS', '90'))
+    AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS = int(
+        os.environ.get('AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS', '20')
+    )
+    # Obergrenze ohne Fortschritt (Codex-P1, PR #1555): meldet ein Job so
+    # lange kein neues Run-Event, bleibt der Heartbeat aus und die Lease
+    # verfaellt eine TTL spaeter. Weit ueber der TTL, damit ein einzelner
+    # langer LLM-Call ohne Zwischenmeldung nicht als Haenger gilt.
+    AGORA_JOB_LEASE_MAX_STALL_SECONDS = int(
+        os.environ.get('AGORA_JOB_LEASE_MAX_STALL_SECONDS', '1800')
+    )
+
     # Ontology mutation (Issue #11) — how to handle novel entity types that
     # the NER pipeline flags during simulation:
     #   disabled (default) → drop the signal, ontology never changes
@@ -650,6 +698,14 @@ class Config:
         )
         # Decision-Layer-Pilotierung (f005, ADR-0016).
         errors.extend(validate_decision_layer_mode(cls.DECISION_LAYER_MODE))
+        # Job-Lease (Issue #1472).
+        errors.extend(
+            validate_job_lease_timing(
+                cls.AGORA_JOB_LEASE_TTL_SECONDS,
+                cls.AGORA_JOB_LEASE_HEARTBEAT_INTERVAL_SECONDS,
+                cls.AGORA_JOB_LEASE_MAX_STALL_SECONDS,
+            )
+        )
 
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:

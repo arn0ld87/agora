@@ -443,6 +443,28 @@ class Threshold(BaseModel):
         ),
     )
     evidence_refs: list[str] = Field(default_factory=list)
+    #: Issue #1359: Zwei Werte für dieselbe Größe sind ein Widerspruch, solange
+    #: nichts sie verbindet — „vier Wochen Pilotbetrieb“ in Abschnitt 1,
+    #: „mindestens acht“ in Abschnitt 7. Eine gewollte Abweichung verweist
+    #: deshalb ausdrücklich auf den anderen Wert und begründet sich. Additiv,
+    #: Default None — Bestandsartefakte laden unverändert.
+    deviates_from: str | None = Field(
+        default=None,
+        description=(
+            "Kennung (id) eines anderen Schwellenwerts für dieselbe Größe, von "
+            "dessen Wert dieser bewusst abweicht — aus diesem Abschnitt oder "
+            "aus der Liste bereits erfasster Zahlen früherer Abschnitte. Nur "
+            "setzen, wenn der Abschnittstext die Abweichung begründet; sonst "
+            "null. Nie die eigene id."
+        ),
+    )
+    deviation_rationale: str | None = Field(
+        default=None,
+        description=(
+            "Begründung aus dem Abschnittstext, warum dieser Wert vom Wert in "
+            "deviates_from abweicht. Pflicht, sobald deviates_from gesetzt ist."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -496,6 +518,27 @@ class Threshold(BaseModel):
         if self.evidence_status == "verified" and not self.evidence_refs:
             raise ValueError(
                 "evidence_status='verified' verlangt mindestens eine evidence_ref."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def deviation_is_explained(self) -> "Threshold":
+        """Issue #1359: Eine Abweichung ohne Begründung verbindet nichts.
+
+        Sie sähe für den Leser aus wie eine geklärte Abweichung, obwohl nur
+        zwei Werte nebeneinanderstehen. Und ein Wert, der von sich selbst
+        abweicht, ist kein Verweis, sondern ein Extraktionsfehler.
+        """
+        if self.deviates_from is None:
+            return self
+        if not self.deviates_from.strip():
+            raise ValueError("deviates_from darf nicht leer sein — sonst null.")
+        if self.deviates_from == self.id:
+            raise ValueError("deviates_from verweist auf den Schwellenwert selbst.")
+        if not (self.deviation_rationale or "").strip():
+            raise ValueError(
+                "deviates_from verlangt eine deviation_rationale — eine "
+                "Abweichung ohne Begründung ist ein Widerspruch."
             )
         return self
 
@@ -745,7 +788,13 @@ class ReportV3(BaseModel):
         ``ReportManager.build_report_v3_markdown()`` ``None`` und protokolliert
         den Grund, statt mehrdeutige IDs weiterzureichen.
         """
-        for label, collection in (("Claim", self.claims), ("DataGap", self.data_gaps)):
+        # Issue #1359 (Review PR #1566): Threshold-IDs sind Verweisziele von
+        # ``deviates_from`` — bei Dubletten wäre der Verweis mehrdeutig.
+        for label, collection in (
+            ("Claim", self.claims),
+            ("DataGap", self.data_gaps),
+            ("Threshold", self.thresholds),
+        ):
             seen: set[str] = set()
             duplicates: set[str] = set()
             for item in collection:
@@ -756,6 +805,27 @@ class ReportV3(BaseModel):
                 raise ValueError(
                     f"{label}-IDs sind nicht eindeutig: " + ", ".join(sorted(duplicates))
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_threshold_deviation_targets(self) -> "ReportV3":
+        """Issue #1359: ``deviates_from`` muss auf einen Schwellenwert zeigen.
+
+        Ein Verweis ins Leere behauptet eine begründete Abweichung, deren
+        Bezugswert der Leser nirgends findet.
+        """
+        known = {threshold.id for threshold in self.thresholds}
+        dangling = sorted(
+            f"{threshold.id}→{threshold.deviates_from}"
+            for threshold in self.thresholds
+            if threshold.deviates_from is not None
+            and threshold.deviates_from not in known
+        )
+        if dangling:
+            raise ValueError(
+                "deviates_from verweist auf unbekannte Schwellenwerte: "
+                + ", ".join(dangling)
+            )
         return self
 
     @model_validator(mode="after")

@@ -16,6 +16,17 @@
       "default": null,
       "title": "Api Key Ref"
     },
+    "auth_mode": {
+      "default": "api_key",
+      "enum": [
+        "none",
+        "api_key",
+        "oauth",
+        "session"
+      ],
+      "title": "Auth Mode",
+      "type": "string"
+    },
     "base_url": {
       "anyOf": [
         {
@@ -52,6 +63,16 @@
       "default": false,
       "title": "Supports Tools",
       "type": "boolean"
+    },
+    "transport": {
+      "default": "http",
+      "enum": [
+        "http",
+        "local",
+        "cli"
+      ],
+      "title": "Transport",
+      "type": "string"
     },
     "type": {
       "enum": [
