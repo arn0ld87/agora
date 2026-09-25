@@ -27,7 +27,7 @@ describe('useLogDrawer mit Supabase-Session', () => {
 
   it('sperrt Knopf, Hotkey und Drawer für Supabase-Nutzer', () => {
     const auth = useAuthStore()
-    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k' }
+    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k', realtime_enabled: false }
     auth.session = { access_token: 'x' } as never
     const drawer = useLogDrawer()
 

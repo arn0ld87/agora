@@ -12,10 +12,11 @@
 #   4. `docker compose up -d`
 #
 # Abweichungen vom offiziellen `supabase/docker/docker-compose.yml`:
-#   - Realtime, Edge Runtime (functions), imgproxy und Analytics/Logflare sind
-#     nicht enthalten (Plan §7: "je weniger Container am Anfang, desto weniger
+#   - Edge Runtime (functions), imgproxy und Analytics/Logflare sind nicht
+#     enthalten (Plan §7: "je weniger Container am Anfang, desto weniger
 #     bewegliche Teile"). Storage laeuft deshalb mit
-#     ENABLE_IMAGE_TRANSFORMATION=false.
+#     ENABLE_IMAGE_TRANSFORMATION=false. Realtime laeuft seit #1618 mit, nur
+#     fuer Listen-Projektionen (Plan §23).
 #   - Alle Host-Ports sind auf 127.0.0.1 gebunden. Exposition nach aussen
 #     ausschliesslich ueber den Reverse Proxy (Plan §7 "Exposition").
 name: agora-supabase
@@ -190,6 +191,51 @@ services:
       PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY}
     command: ["postgrest"]
 
+  # Realtime (Plan §23, #1618): postgres_changes auf die Listen-Tabellen aus
+  # der Publication `supabase_realtime` (Alembic dc4e84e7c000). Sichtbar ist je
+  # Abonnent nur, was die RLS-Policy fuer `authenticated` zulaesst. Kein
+  # Host-Port und nicht im Netz `agora-backend`: erreichbar nur ueber das
+  # Gateway (/realtime/v1/). Der Containername ist Absicht: Realtime liest die
+  # Tenant-ID aus der ersten Stelle des Hostnamens (`realtime-dev`), und die
+  # Gateway-Config zeigt auf genau diesen Namen.
+  realtime:
+    container_name: realtime-dev.supabase-realtime
+    image: ${REALTIME_IMAGE:-supabase/realtime:v2.134.10}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sSfL --head -o /dev/null -H "Authorization: Bearer ${ANON_KEY}"
+          http://localhost:4000/api/tenants/realtime-dev/health
+      timeout: 5s
+      interval: 30s
+      retries: 3
+      start_period: 10s
+    environment:
+      PORT: 4000
+      DB_HOST: ${POSTGRES_HOST}
+      DB_PORT: ${POSTGRES_PORT}
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
+      # Kein Default: der Upstream-Wert `supabaserealtime` ist oeffentlich.
+      DB_ENC_KEY: ${REALTIME_DB_ENC_KEY:?REALTIME_DB_ENC_KEY muss in .env gesetzt sein}
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      METRICS_JWT_SECRET: ${JWT_SECRET}
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+      DISABLE_HEALTHCHECK_LOGGING: "true"
+
   # Storage. Ab Phase 7 fuer grosse immutable Artefakte (Plan §19).
   # imgproxy ist nicht Teil des Stacks, deshalb keine Bildtransformation.
   storage:
@@ -283,8 +329,8 @@ services:
       # Logflare/Analytics laeuft nicht mit — Log-Ansichten bleiben leer.
       ENABLED_FEATURES_LOGS_ALL: "false"
 
-  # API-Gateway (Envoy). Einziger Eingang: /auth/v1, /rest/v1, /storage/v1
-  # und das Dashboard. Netzwerk-Aliase `envoy`/`kong` wie im Original, damit
+  # API-Gateway (Envoy). Einziger Eingang: /auth/v1, /rest/v1, /storage/v1,
+  # /realtime/v1 und das Dashboard. Netzwerk-Aliase `envoy`/`kong` wie im Original, damit
   # mitgelieferte Configs beide Namen aufloesen.
   api-gw:
     container_name: agora-supabase-gateway

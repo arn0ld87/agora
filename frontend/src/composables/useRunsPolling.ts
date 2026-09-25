@@ -10,6 +10,7 @@ import { ApiError } from '../api/envelope'
 import { RunsListResponseSchema } from '../contracts/runsContract'
 import type { RunDetail } from '../contracts/runsContract'
 import { usePolling } from './usePolling'
+import { onListInvalidated } from '../realtime/listInvalidation'
 
 export interface UseRunsPollingReturn {
   runs: Ref<RunDetail[]>
@@ -55,13 +56,26 @@ export function useRunsPolling(intervalMs: number | Ref<number> = 5000): UseRuns
 
   const polling = usePolling(tick, intervalMs, { pauseWhenHidden: true })
 
+  // Realtime (#1618): solange gepollt wird, lädt eine Run-Änderung im
+  // Workspace sofort nach. Das Polling bleibt die Rückfallebene.
+  let stopRealtime: (() => void) | null = null
+
   return {
     runs,
     loading,
     error,
     isRunning: polling.isRunning,
-    start: () => polling.start({ immediate: true }),
-    stop: polling.stop,
+    start: () => {
+      stopRealtime ??= onListInvalidated(['runs'], () => {
+        void polling.tick()
+      })
+      return polling.start({ immediate: true })
+    },
+    stop: () => {
+      stopRealtime?.()
+      stopRealtime = null
+      polling.stop()
+    },
     refresh: polling.tick,
   }
 }

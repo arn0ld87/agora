@@ -18,6 +18,7 @@ import Shelf from '../../components/shell/Shelf.vue'
 import Dossier from '../../components/shell/Dossier.vue'
 import { useShelf } from '../../composables/useShelf'
 import { usePolling } from '../../composables/usePolling'
+import { onListInvalidated } from '../../realtime/listInvalidation'
 import type { ShelfFilter, ShelfObject, ShelfObjectKind } from '../../types/shelf'
 
 /**
@@ -102,6 +103,12 @@ watch(
 )
 
 onMounted(() => {
+  void shelf.reload()
+})
+
+// Realtime (#1618): Änderungen im Workspace laden die Ablage sofort nach,
+// nicht erst beim nächsten Polling-Takt. Ohne Realtime bleibt es ein No-op.
+onListInvalidated(['projects', 'runs', 'reports'], () => {
   void shelf.reload()
 })
 </script>

@@ -70,6 +70,7 @@ def auth_config():
         jwt_enabled=jwt_enabled,
         supabase_url=(Config.SUPABASE_URL or None) if jwt_enabled else None,
         supabase_anon_key=(Config.SUPABASE_ANON_KEY or None) if jwt_enabled else None,
+        realtime_enabled=jwt_enabled and Config.SUPABASE_REALTIME,
     )
     return json_success(response.model_dump(mode='json'))
 

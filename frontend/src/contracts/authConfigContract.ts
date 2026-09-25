@@ -13,6 +13,8 @@ export const AuthConfigResponseSchema = z
     jwt_enabled: z.boolean(),
     supabase_url: z.string().nullable().default(null),
     supabase_anon_key: z.string().nullable().default(null),
+    // Realtime für Listen-Projektionen (#1618): nur Invalidierungssignal.
+    realtime_enabled: z.boolean().default(false),
   })
   .strict()
 

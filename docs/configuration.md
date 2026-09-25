@@ -61,6 +61,7 @@ Geheimnisse niemals committen, in Logs ausgeben oder in Run-/Report-Artefakte sc
 | `AGORA_SUPABASE_JWT_SECRET` 🔐 | HS256-Secret (Supabase `JWT_SECRET`, mindestens 32 Zeichen), alternativ zur JWKS-URL |
 | `AGORA_SUPABASE_URL` | öffentliche Gateway-URL für den Supabase-Client im Browser; `GET /api/auth/config` gibt sie nur bei aktivem JWT aus (#1616) |
 | `AGORA_SUPABASE_ANON_KEY` | öffentlicher Anon-Key für den Browser-Client, kein Geheimnis (#1616) |
+| `AGORA_SUPABASE_REALTIME` | `true` schaltet Realtime für Listen-Projektionen ein (Default `false`, #1618). Wirkt nur bei aktivem JWT und nur mit laufendem Dienst `realtime` im Supabase-Stack; ein Ereignis löst nur ein Nachladen über die API aus |
 
 **Supabase-JWT (ADR-0018, #1613).**
 - Ist `AGORA_SUPABASE_JWT_ISSUER` gesetzt, verlangt `Config.validate()` zusätzlich alle fünf Metadaten-Schalter auf `postgres` und `DATABASE_URL`, weil die Datei-Backends keine Workspace-Isolation kennen.

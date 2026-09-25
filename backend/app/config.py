@@ -711,6 +711,12 @@ class Config:
     # Geheimnis; ``GET /api/auth/config`` gibt es nur bei aktivem JWT aus.
     SUPABASE_URL = os.environ.get('AGORA_SUPABASE_URL', '')
     SUPABASE_ANON_KEY = os.environ.get('AGORA_SUPABASE_ANON_KEY', '')
+    # Realtime für Listen-Projektionen (#1618). Opt-in: nur mit laufendem
+    # Dienst `realtime` im Supabase-Stack einschalten, sonst versucht der
+    # Browser vergeblich eine WebSocket-Verbindung. Wirkt nur bei aktivem JWT.
+    SUPABASE_REALTIME = os.environ.get(
+        'AGORA_SUPABASE_REALTIME', 'false'
+    ).strip().lower() in ('1', 'true', 'yes', 'on')
 
     # f005 (ADR-0016): Decision-Layer-Pilotierung, Default 'disabled' haelt
     # jeden bestehenden Use-Case-Pfad unveraendert.

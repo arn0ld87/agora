@@ -34,16 +34,17 @@ Enthalten:
 | `storage` | `agora-supabase-storage` | Artefakt-Ablage ab Phase 7 (§19) |
 | `meta` | `agora-supabase-meta` | Schema-Introspektion für Studio |
 | `studio` | `agora-supabase-studio` | Admin-UI, nur intern erreichbar |
+| `realtime` | `realtime-dev.supabase-realtime` | Änderungen der Listen-Tabellen an den Browser (§23, #1618), nur über das Gateway |
 | `api-gw` | `agora-supabase-gateway` | Envoy als API-Gateway, einziger Eingang |
 
 Bewusst **nicht** enthalten (§7, „je weniger Container am Anfang, desto weniger
-bewegliche Teile"): Realtime, Edge Runtime, imgproxy, Analytics/Logflare.
+bewegliche Teile"): Edge Runtime, imgproxy, Analytics/Logflare.
 
 Folgen davon:
 
-- `/realtime/v1` und `/functions/v1` antworten am Gateway mit 503. Die
-  Envoy-Cluster existieren in der mitgelieferten Konfiguration, ihre Hosts
-  nicht — Envoy startet trotzdem (`STRICT_DNS`, Cluster bleibt leer).
+- `/functions/v1` antwortet am Gateway mit 503. Der Envoy-Cluster existiert
+  in der mitgelieferten Konfiguration, sein Host nicht — Envoy startet
+  trotzdem (`STRICT_DNS`, Cluster bleibt leer).
 - Storage läuft mit `ENABLE_IMAGE_TRANSFORMATION=false`.
 - Die Log-Ansichten in Studio bleiben leer.
 
@@ -230,3 +231,40 @@ docker network rm agora-backend
 ```
 
 Im Agora-Code bleibt nichts zurück.
+
+## Realtime (#1618)
+
+Realtime liefert `postgres_changes` der Tabellen `agora.projects`,
+`simulations`, `runs` und `reports` an den Browser, nur `INSERT` und `UPDATE`.
+Das Frontend nimmt ein Ereignis nur als Signal zum Nachladen über die API.
+
+1. `REALTIME_DB_ENC_KEY` in `.env` setzen (genau 16 Zeichen):
+
+   ```bash
+   # Schlüssel erzeugen und eintragen
+   echo "REALTIME_DB_ENC_KEY=$(openssl rand -hex 8)" >> .env
+   ```
+
+2. Dienst starten und Migration einspielen:
+
+   ```bash
+   docker compose up -d realtime
+   # im Agora-Backend: nimmt die Tabellen in die Publication auf
+   cd ../backend && uv run alembic -c migrations/alembic.ini upgrade head
+   ```
+
+3. In der Agora-`.env` einschalten und das Backend neu starten:
+
+   ```bash
+   AGORA_SUPABASE_REALTIME=true
+   ```
+
+Prüfen:
+
+```bash
+# Erwartet: die vier Tabellen
+docker exec agora-supabase-db psql -U postgres -tAc \
+  "SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime' ORDER BY 1"
+# Erwartet: "realtime_enabled": true
+curl -s https://<agora-host>/api/auth/config
+```

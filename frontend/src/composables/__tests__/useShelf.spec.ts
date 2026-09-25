@@ -645,7 +645,7 @@ describe('useShelf.reload mit Supabase-Session (#1617)', () => {
     const { useAuthStore } = await import('../../store/auth')
     setActivePinia(createPinia())
     const auth = useAuthStore()
-    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k' }
+    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k', realtime_enabled: false }
     auth.session = { access_token: 'x' } as never
     runsApi.listRuns.mockResolvedValue({ success: true, data: { runs: [], total: 0, aggregation: null } })
     reportApi.listReports.mockResolvedValue({ success: true, data: [] })

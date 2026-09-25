@@ -105,6 +105,7 @@ export const useAuthStore = defineStore('auth', () => {
     jwt_enabled: false,
     supabase_url: null,
     supabase_anon_key: null,
+    realtime_enabled: false,
   }
 
   async function loadConfig(): Promise<void> {
