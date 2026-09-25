@@ -377,7 +377,12 @@ export function useShelf(t: Translate, te?: TranslateExists) {
   /** Aktive Objekte — speisen den globalen Topbar-Indikator. */
   const activeObjects = computed(() => objects.value.filter((o) => o.active !== null))
 
+  // Überlappende Ladeläufe (Polling, Realtime-Signal #1618): nur der
+  // zuletzt gestartete schreibt, eine überholte Antwort wird verworfen.
+  let loadSeq = 0
+
   async function reload(): Promise<void> {
+    const seq = ++loadSeq
     loading.value = true
     error.value = ''
     // Vier unabhaengige Quellen: eine kaputte Quelle laesst die
@@ -390,6 +395,7 @@ export function useShelf(t: Translate, te?: TranslateExists) {
         ? listPersonaTemplates()
         : Promise.resolve({ success: true as const, data: { templates: [] as PersonaTemplateRecord[] } }),
     ])
+    if (seq !== loadSeq) return
     const runs: RunDetail[] =
       runsRes.status === 'fulfilled' ? ((runsRes.value as { data?: { runs?: RunDetail[] } }).data?.runs ?? []) : []
     const reports: Report[] =
