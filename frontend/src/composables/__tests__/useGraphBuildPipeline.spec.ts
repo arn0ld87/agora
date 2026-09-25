@@ -148,7 +148,7 @@ describe('useGraphBuildPipeline', () => {
 
   // Issue #1240: nur abweichende Textsorten gehen mit; ohne Eintrag bleibt ein
   // Dokument im Backend Domänenfakt.
-  it('sendet document_roles nur für abweichende Textsorten', async () => {
+  it('sendet document_roles positionsgleich zu den Dateien, sobald eine abweicht', async () => {
     pendingUpload.getPendingUpload.mockReturnValue({
       isPending: true,
       files: [
@@ -159,16 +159,17 @@ describe('useGraphBuildPipeline', () => {
       llmProfileId: 'profile_42',
       numAgents: 30,
       numRounds: 10,
-      documentRoles: { 'szenario.md': 'domain_fact', 'erwartung.md': 'expected_result' },
+      documentRoles: ['domain_fact', 'expected_result'],
     })
     const pipeline = useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
 
     await pipeline.initialize()
 
     const formData = graphApi.generateOntology.mock.calls[0][0] as FormData
-    expect(JSON.parse(String(formData.get('document_roles')))).toEqual({
-      'erwartung.md': 'expected_result',
-    })
+    expect(JSON.parse(String(formData.get('document_roles')))).toEqual([
+      'domain_fact',
+      'expected_result',
+    ])
   })
 
   it('lässt document_roles weg, wenn alle Dokumente Domänenfakten sind', async () => {

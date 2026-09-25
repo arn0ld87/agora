@@ -54,32 +54,41 @@ NON_SUPPORTING_DOCUMENT_ROLES: frozenset[str] = frozenset({
 })
 
 
-_DOCUMENT_ROLES_ADAPTER: TypeAdapter[dict[str, DocumentRole]] = TypeAdapter(
-    dict[str, DocumentRole]
-)
+_DOCUMENT_ROLES_ADAPTER: TypeAdapter[list[DocumentRole]] = TypeAdapter(list[DocumentRole])
 
 
-def parse_document_roles(raw: Optional[str]) -> dict[str, DocumentRole]:
-    """Upload-Formularfeld ``document_roles``: JSON ``{Dateiname: Rolle}``.
+def parse_document_roles(raw: Optional[str], file_count: int) -> list[DocumentRole]:
+    """Upload-Formularfeld ``document_roles``: JSON-Liste, eine Rolle je Datei.
 
-    Leer oder fehlend → ``{}`` (alle Dokumente ``domain_fact``). Ungültiges
-    JSON oder eine unbekannte Rolle → ``ValueError`` mit lesbarer Meldung.
-    Eine stillschweigend verworfene Rolle würde Erwartungstext wieder als
+    Die Liste folgt der Reihenfolge der ``files``-Teile. Positionen statt
+    Dateinamen: zwei Uploads mit gleichem Namen (``results.md`` aus zwei
+    Ordnern) sind verschiedene Dokumente und brauchen eigene Rollen
+    (Codex-Review PR #1606).
+
+    Leer oder fehlend → alle ``domain_fact``. Ungültiges JSON, eine unbekannte
+    Rolle oder eine Länge ungleich der Dateizahl → ``ValueError``. Eine
+    stillschweigend verworfene Rolle würde Erwartungstext wieder als
     Domänenfakt ingestieren — genau den Fehler aus #1240.
     """
     if raw is None or not raw.strip():
-        return {}
+        return [DocumentRole.domain_fact] * file_count
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError("document_roles must be a valid JSON object") from exc
+        raise ValueError("document_roles must be a valid JSON array") from exc
     try:
-        return _DOCUMENT_ROLES_ADAPTER.validate_python(payload)
+        roles = _DOCUMENT_ROLES_ADAPTER.validate_python(payload)
     except ValidationError as exc:
         allowed = ", ".join(role.value for role in DocumentRole)
         raise ValueError(
-            f"document_roles must map file names to one of: {allowed}"
+            f"document_roles must be a list with one of: {allowed}"
         ) from exc
+    if len(roles) != file_count:
+        raise ValueError(
+            f"document_roles must contain exactly one role per file "
+            f"({len(roles)} roles for {file_count} files)"
+        )
+    return roles
 
 
 class DocumentManifestEntry(BaseModel):

@@ -41,6 +41,12 @@ const router = useRouter()
 const ALLOWED = ['.pdf', '.md', '.txt', '.markdown']
 
 const files = ref<File[]>([])
+// Issue #1240: Textsorte je Datei, positionsgleich zu `files`. Szenario-,
+// Frage- und Erwartungstext stützen im Report keinen Claim — sonst liest der
+// Report die mitgelieferten Antworten als Simulationsbefund. Positionen statt
+// Dateinamen, weil zwei Uploads gleich heißen können (Codex-Review PR #1606).
+const DOCUMENT_ROLES = DocumentRoleSchema.options
+const documentRoles = ref<DocumentRole[]>([])
 const isDragOver = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const errorMsg = ref('')
@@ -239,6 +245,10 @@ function applyAcceptedFiles(rawFiles: FileList): void {
   // bestehende angehängt, nicht ersetzt — mehrfaches Drop/Picker-Interaktion
   // sammelt statt zu überschreiben.
   files.value = [...files.value, ...accepted]
+  documentRoles.value = [
+    ...documentRoles.value,
+    ...accepted.map((): DocumentRole => 'domain_fact'),
+  ]
   if (accepted.length === 0 && rawFiles.length > 0) {
     errorMsg.value = t('errors.fileTypeNotAllowed')
   } else {
@@ -270,21 +280,18 @@ function onDragLeave() {
 }
 
 function removeFile(i: number) {
-  const [removed] = files.value.splice(i, 1)
-  if (removed && !files.value.some(f => f.name === removed.name)) {
-    delete documentRoles.value[removed.name]
-  }
+  files.value.splice(i, 1)
+  documentRoles.value.splice(i, 1)
 }
 
-// Issue #1240: Textsorte je Datei. Szenario-, Frage- und Erwartungstext
-// stützen im Report keinen Claim — sonst liest der Report die mitgelieferten
-// Antworten als Simulationsbefund.
-const DOCUMENT_ROLES = DocumentRoleSchema.options
-const documentRoles = ref<Record<string, DocumentRole>>({})
+// Issue #1240: Textsorte je Datei, positionsgleich zu `files`. Szenario-,
+// Frage- und Erwartungstext stützen im Report keinen Claim — sonst liest der
+// Report die mitgelieferten Antworten als Simulationsbefund. Positionen statt
+// Dateinamen, weil zwei Uploads gleich heißen können (Codex-Review PR #1606).
 
-function onPickRole(fileName: string, event: Event) {
+function onPickRole(index: number, event: Event) {
   const parsed = DocumentRoleSchema.safeParse((event.target as HTMLSelectElement).value)
-  if (parsed.success) documentRoles.value[fileName] = parsed.data
+  if (parsed.success) documentRoles.value[index] = parsed.data
 }
 
 function formatBytes(bytes: number): string {
@@ -343,7 +350,7 @@ async function startSimulation() {
       profileId,
       numAgents.value,
       numRounds.value,
-      { ...documentRoles.value },
+      files.value.map((_file, index) => documentRoles.value[index] ?? 'domain_fact'),
     )
     // Rundenzahl und Budget gehen in die Query, nicht in den Store: Schritt 1
     // leert ihn nach dem Upload (`clearPendingUpload`), Schritt 3 las danach
@@ -435,10 +442,10 @@ onMounted(() => {
                 <select
                   class="hero-file__role"
                   :aria-label="`${$t('dashboard.hero.documentRoleLabel')}: ${f.name}`"
-                  :value="documentRoles[f.name] ?? 'domain_fact'"
+                  :value="documentRoles[i] ?? 'domain_fact'"
                   @click.stop
                   @keydown.stop
-                  @change="onPickRole(f.name, $event)"
+                  @change="onPickRole(i, $event)"
                 >
                   <option v-for="role in DOCUMENT_ROLES" :key="role" :value="role">
                     {{ $t(`dashboard.hero.documentRoles.${role}`) }}

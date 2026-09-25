@@ -310,3 +310,87 @@ def test_phase_read_entities_loest_aliase_auf_und_haelt_technik_aus_dem_cap(monk
         "Dr. Miriam Vogt",
         "Pflegekräfte",
     ])
+
+
+# ---------------------------------------------------------------------------
+# Codex-Review PR #1606
+# ---------------------------------------------------------------------------
+
+
+def _node(name: str, entity_type: str, **extra):
+    from app.services.entity_reader import EntityNode
+
+    return EntityNode(
+        uuid=f"uuid-{name}-{entity_type}", name=name, labels=["Entity", entity_type],
+        summary="", attributes={}, **extra,
+    )
+
+
+def test_merge_behaelt_den_graph_kontext_der_aliase():
+    """P1: Fakten, die nur am Alias hängen, gehen nicht verloren."""
+    from app.services.entity_alias_resolution import resolve_aliases
+
+    full = _node(
+        "Dr. Miriam Vogt", "Person",
+        related_edges=[{"edge_name": "LEITET", "fact": "Vogt leitet das Projekt"}],
+        related_nodes=[{"uuid": "uuid-projekt", "name": "Projekt"}],
+    )
+    alias = _node(
+        "Vogt", "Executive",
+        related_edges=[
+            {"edge_name": "LEITET", "fact": "Vogt leitet das Projekt"},
+            {"edge_name": "LEHNT_AB", "fact": "Vogt lehnt den Vollstart ab"},
+        ],
+        related_nodes=[
+            {"uuid": "uuid-Dr. Miriam Vogt-Person", "name": "Dr. Miriam Vogt"},
+            {"uuid": "uuid-klinik", "name": "Klinik"},
+        ],
+    )
+    [merged] = resolve_aliases([full, alias])
+
+    facts = [edge["fact"] for edge in merged.related_edges]
+    assert facts == ["Vogt leitet das Projekt", "Vogt lehnt den Vollstart ab"]
+    assert [node["uuid"] for node in merged.related_nodes] == ["uuid-projekt", "uuid-klinik"]
+
+
+def test_ausgabe_folgt_der_ersten_nennung_nicht_der_klasse():
+    """P2: Der Cap vergibt Plätze nach erster Nennung."""
+    from app.services.entity_alias_resolution import resolve_aliases
+
+    entities = [
+        _node("Dr. Miriam Vogt", "Person"),
+        _node("Nexora GmbH", "Organization"),
+        _node("Vogt", "Executive"),
+        _node("Thomas Brandt", "Person"),
+    ]
+    assert [e.name for e in resolve_aliases(entities)] == [
+        "Dr. Miriam Vogt", "Nexora GmbH", "Thomas Brandt",
+    ]
+
+
+def test_vorschau_zaehlt_aliase_nur_einmal(monkeypatch):
+    """P2: Vorschau und Laufpfad liefern dieselbe Personazahl."""
+    import types
+    from unittest.mock import MagicMock
+
+    from app.api import simulation_prepare as mod
+    from app.services.entity_reader import FilteredEntities
+
+    pool = [
+        _node("BFW", "Organization"),
+        _node("BFW Leipzig", "Organization"),
+        _node("Berufsförderungswerk Leipzig (BFW Leipzig)", "Organization"),
+        _node("Dr. Miriam Vogt", "Person"),
+    ]
+    reader = MagicMock()
+    reader.filter_defined_entities.return_value = FilteredEntities(
+        entities=list(pool), entity_types={"Organization", "Person"},
+        total_count=len(pool), filtered_count=len(pool),
+    )
+    monkeypatch.setattr(mod, "EntityReader", lambda _storage: reader)
+    state = types.SimpleNamespace(graph_id="graph_1", entities_count=0, entity_types=[])
+    inputs = types.SimpleNamespace(entity_types=None, max_agents=None)
+
+    mod._preview_entity_counts(state, MagicMock(), inputs)
+
+    assert state.entities_count == 2

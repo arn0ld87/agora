@@ -39,10 +39,11 @@ E  Kanonischer Repräsentant
 
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 from dataclasses import replace
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from ..contracts.entity_semantic_class_contract import SemanticEntityClass
 from ..utils.logger import get_logger
@@ -261,7 +262,38 @@ def _attach_aliases(
         )
         new_attrs["_agora_alias_summaries"] = existing_summaries + alias_summaries
 
-    return replace(entity, attributes=new_attrs)
+    # Codex-Review PR #1606 (P1): Der Persona-Kontext wird direkt aus
+    # ``related_edges``/``related_nodes`` gebaut
+    # (``oasis_profile_context._build_entity_context``). Fakten, die nur an
+    # einem Alias hingen, gingen sonst beim Merge verloren.
+    cluster_uuids = {entity.uuid, *(a.uuid for a in aliases)}
+    related_edges = _merge_unique(
+        [entity.related_edges, *(a.related_edges for a in aliases)]
+    )
+    related_nodes = [
+        node
+        for node in _merge_unique([entity.related_nodes, *(a.related_nodes for a in aliases)])
+        if not (isinstance(node, dict) and node.get("uuid") in cluster_uuids)
+    ]
+    return replace(
+        entity,
+        attributes=new_attrs,
+        related_edges=related_edges,
+        related_nodes=related_nodes,
+    )
+
+
+def _merge_unique(groups: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """Listen zusammenführen, Dubletten (inhaltsgleiche Dicts) entfernen."""
+    seen: set[str] = set()
+    merged: List[Dict[str, Any]] = []
+    for group in groups:
+        for item in group or []:
+            key = json.dumps(item, sort_keys=True, default=str)
+            if key not in seen:
+                seen.add(key)
+                merged.append(item)
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +326,10 @@ def resolve_aliases(entities: List[EntityNode]) -> List[EntityNode]:
         cls = classify_entity(entity.name, entity.get_entity_type() or "")
         by_class[cls].append(entity)
 
-    result: List[EntityNode] = []
+    # Codex-Review PR #1606 (P2): Der Cap vergibt Plätze nach erster Nennung.
+    # Ausgegeben wird deshalb in der Reihenfolge der frühesten Nennung je
+    # Cluster, nicht gruppiert nach Klasse.
+    positioned: List[tuple[int, EntityNode]] = []
 
     for cls, class_entities in by_class.items():
         if cls == SemanticEntityClass.PERSON:
@@ -306,8 +341,9 @@ def resolve_aliases(entities: List[EntityNode]) -> List[EntityNode]:
             clusters = [[e] for e in class_entities]
 
         for cluster in clusters:
+            first_position = min(original_order[e.uuid] for e in cluster)
             if len(cluster) == 1:
-                result.append(cluster[0])
+                positioned.append((first_position, cluster[0]))
                 continue
             canonical = _pick_canonical(cluster, original_order)
             aliases = [e for e in cluster if e.uuid != canonical.uuid]
@@ -321,9 +357,10 @@ def resolve_aliases(entities: List[EntityNode]) -> List[EntityNode]:
                 cls.value,
                 alias_names,
             )
-            result.append(canonical)
+            positioned.append((first_position, canonical))
 
-    return result
+    positioned.sort(key=lambda entry: entry[0])
+    return [entity for _position, entity in positioned]
 
 
 __all__ = ["resolve_aliases"]

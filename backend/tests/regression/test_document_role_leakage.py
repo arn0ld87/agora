@@ -114,13 +114,23 @@ def test_manifest_altbestand_ohne_rolle_ist_domaenenfakt():
 
 
 def test_upload_rollen_werden_streng_geparst():
-    assert parse_document_roles(None) == {}
-    assert parse_document_roles(" ") == {}
-    assert parse_document_roles('{"a.md": "requirement"}') == {"a.md": DocumentRole.requirement}
+    domain = DocumentRole.domain_fact
+    assert parse_document_roles(None, 2) == [domain, domain]
+    assert parse_document_roles(" ", 1) == [domain]
+    assert parse_document_roles('["domain_fact", "requirement"]', 2) == [
+        domain,
+        DocumentRole.requirement,
+    ]
     with pytest.raises(ValueError):
-        parse_document_roles('{"a.md": "loesung"}')
+        parse_document_roles('["loesung"]', 1)
     with pytest.raises(ValueError):
-        parse_document_roles("kein json")
+        parse_document_roles("kein json", 1)
+    with pytest.raises(ValueError, match="one role per file"):
+        parse_document_roles('["requirement"]', 2)
+    with pytest.raises(ValueError):
+        # Die alte Form {Dateiname: Rolle} konnte gleichnamige Uploads nicht
+        # unterscheiden (Codex-Review PR #1606).
+        parse_document_roles('{"a.md": "requirement"}', 1)
 
 
 def test_evidence_record_traegt_rolle_und_lehnt_unbekannte_ab():

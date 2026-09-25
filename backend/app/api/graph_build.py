@@ -25,7 +25,6 @@ from ..services.graph_build import (
 from ..contracts.document_manifest_contract import (
     DocumentManifest,
     DocumentManifestEntry,
-    DocumentRole,
     parse_document_roles,
 )
 from ..utils.file_parser import FileParser, derive_document_id
@@ -201,10 +200,13 @@ def generate_ontology():
     if not uploaded_files or all(not f.filename for f in uploaded_files):
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Please upload at least one document file")
 
-    # Issue #1240: optionale Textsorte je Datei. Fehlt sie, gilt ein Dokument
-    # als Domänenfakt — das bisherige Verhalten.
+    # Issue #1240: optionale Textsorte je Datei, in der Reihenfolge der
+    # ``files``-Teile. Fehlt sie, gilt ein Dokument als Domänenfakt — das
+    # bisherige Verhalten.
     try:
-        document_roles = parse_document_roles(request.form.get('document_roles'))
+        document_roles = parse_document_roles(
+            request.form.get('document_roles'), len(uploaded_files)
+        )
     except ValueError as exc:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
 
@@ -217,7 +219,7 @@ def generate_ontology():
     existing_document_ids: set = set()
 
     try:
-        for file in uploaded_files:
+        for file, document_role in zip(uploaded_files, document_roles):
             if file and file.filename:
                 if not allowed_file(file):
                     continue
@@ -261,9 +263,7 @@ def generate_ontology():
                         filename=file_info["original_filename"],
                         start_offset=start_offset,
                         end_offset=end_offset,
-                        document_role=document_roles.get(
-                            file_info["original_filename"], DocumentRole.domain_fact
-                        ),
+                        document_role=document_role,
                     )
                 )
 

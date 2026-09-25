@@ -222,6 +222,9 @@ degradations :Optional [DegradationCollector ]=None ,
         )
         filtered.entities = alias_resolved
         filtered.filtered_count = len(alias_resolved)
+        filtered.entity_types = {
+            entity.get_entity_type() or "Entity" for entity in alias_resolved
+        }
 
         # Issue #1177: Vor dem Cap deduplizieren. Mehrfachnennungen derselben
         # Stakeholdergruppe belegten sonst die begrenzten Persona-Plaetze und

@@ -172,12 +172,13 @@ export function useGraphBuildPipeline({
       formData.append('simulation_requirement', pending.simulationRequirement)
       formData.append('num_agents', String(pending.numAgents))
       formData.append('num_rounds', String(pending.numRounds))
-      // Issue #1240: nur abweichende Rollen; ohne Eintrag bleibt ein Dokument
-      // Domänenfakt. Der Backend-Parser lehnt unbekannte Rollen mit 400 ab.
-      const documentRoles = Object.fromEntries(
-        Object.entries(pending.documentRoles ?? {}).filter(([, role]) => role !== 'domain_fact'),
+      // Issue #1240: eine Rolle je Datei, positionsgleich zu `files`. Nur
+      // gesendet, wenn mindestens eine Datei vom Domänenfakt abweicht; der
+      // Backend-Parser lehnt unbekannte Rollen und falsche Längen mit 400 ab.
+      const documentRoles = pending.files.map(
+        (_file, index) => pending.documentRoles?.[index] ?? 'domain_fact',
       )
-      if (Object.keys(documentRoles).length > 0) {
+      if (documentRoles.some((role) => role !== 'domain_fact')) {
         formData.append('document_roles', JSON.stringify(documentRoles))
       }
 
