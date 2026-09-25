@@ -16,6 +16,11 @@ const EXEMPT_ROUTE_NAMES = new Set(['Onboarding', 'NotFound'])
 export async function onboardingGuard(
   to: RouteLocationNormalized,
 ): Promise<boolean | RouteLocationRaw> {
+  // Öffentliche Routen (z.B. Auth-Views, #1617) nie durch den Onboarding-Guard leiten.
+  if (to.meta?.public) {
+    return true
+  }
+
   if (to.name != null && EXEMPT_ROUTE_NAMES.has(String(to.name))) {
     return true
   }

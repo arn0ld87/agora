@@ -61,6 +61,9 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const workspaces = ref<WorkspaceSummary[]>([])
   const activeWorkspaceId = ref<string | null>(null)
+  // Supabase meldet PASSWORD_RECOVERY beim Einlesen des Reset-Links, also
+  // schon beim Init — vor dem Mount der Reset-View. Deshalb hält der Store es.
+  const passwordRecovery = ref(false)
 
   // --- Computed ---
   const jwtEnabled = computed(() => config.value?.jwt_enabled ?? false)
@@ -115,7 +118,8 @@ export const useAuthStore = defineStore('auth', () => {
           setSessionToken(data.session.access_token)
         }
 
-        supabase.auth.onAuthStateChange((_event, newSession) => {
+        supabase.auth.onAuthStateChange((event, newSession) => {
+          if (event === 'PASSWORD_RECOVERY') passwordRecovery.value = true
           session.value = newSession
           user.value = newSession?.user ?? null
           setSessionToken(newSession?.access_token ?? null)
@@ -137,6 +141,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     await loadWorkspaces()
+  }
+
+  // Einmaliger Start: der Router-Guard wartet darauf, bevor er die erste
+  // Navigation entscheidet (app.use(router) navigiert sofort).
+  let initPromise: Promise<void> | null = null
+  function ensureInit(): Promise<void> {
+    if (!initPromise) {
+      initPromise = init().catch(() => {
+        // Fehler beim Auth-Init — Legacy-Verhalten bleibt.
+      })
+    }
+    return initPromise
   }
 
   async function signIn(email: string, password: string): Promise<void> {
@@ -177,6 +193,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!supabase) throw new Error('Supabase not initialised (jwt_enabled=false)')
     const { error } = await supabase.auth.updateUser({ password })
     if (error) throw error
+    passwordRecovery.value = false
   }
 
   async function loadWorkspaces(): Promise<void> {
@@ -237,6 +254,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     workspaces,
     activeWorkspaceId,
+    passwordRecovery,
     // computed
     jwtEnabled,
     isAuthenticated,
@@ -245,6 +263,7 @@ export const useAuthStore = defineStore('auth', () => {
     // actions
     loadConfig,
     init,
+    ensureInit,
     signIn,
     signUp,
     signOut,

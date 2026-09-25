@@ -203,4 +203,34 @@ describe('onAuthStateChange — session sync', () => {
     expect(getSessionToken()).toBe('new-token-abc')
     expect(store.session).toEqual(newSession)
   })
+
+  it('merkt sich PASSWORD_RECOVERY für die Reset-View', async () => {
+    const captured: { cb: ((event: string, session: unknown) => void) | null } = { cb: null }
+    mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
+    mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
+      captured.cb = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockResolvedValueOnce({ data: [] })
+
+    const store = useAuthStore()
+    await store.init()
+    expect(store.passwordRecovery).toBe(false)
+
+    captured.cb?.('PASSWORD_RECOVERY', { access_token: 'rec', user: { id: 'u3' }, expires_at: 9999 })
+
+    expect(store.passwordRecovery).toBe(true)
+  })
+
+  it('startet nur einmal (ensureInit)', async () => {
+    mocks._svcGet.mockResolvedValue(AUTH_CFG_DISABLED)
+    const store = useAuthStore()
+
+    await Promise.all([store.ensureInit(), store.ensureInit()])
+
+    const configCalls = mocks._svcGet.mock.calls.filter((c) => c[0] === '/api/auth/config')
+    expect(configCalls).toHaveLength(1)
+  })
 })

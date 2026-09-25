@@ -2,6 +2,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
+import { useAuthStore } from '../store/auth'
+import { safeNext } from '../auth/safeNext'
+
+const AUTH_ONLY_ROUTES = { Login: 1, Register: 1, PasswordReset: 1, EmailConfirm: 1 } as const
 
 const routes: RouteRecordRaw[] = [
   // Root → Ablage. Redesign PR 10 (Legacy-Abbau): das Shell-Flag
@@ -246,6 +250,32 @@ const routes: RouteRecordRaw[] = [
     props: true,
   },
 
+  // Auth-Routen (#1617, Teil B1)
+  {
+    path: '/auth/login',
+    name: 'Login',
+    component: () => import('../views/auth/LoginView.vue'),
+    meta: { public: true, layout: 'bare' },
+  },
+  {
+    path: '/auth/register',
+    name: 'Register',
+    component: () => import('../views/auth/RegisterView.vue'),
+    meta: { public: true, layout: 'bare' },
+  },
+  {
+    path: '/auth/reset',
+    name: 'PasswordReset',
+    component: () => import('../views/auth/PasswordResetView.vue'),
+    meta: { public: true, layout: 'bare' },
+  },
+  {
+    path: '/auth/confirm',
+    name: 'EmailConfirm',
+    component: () => import('../views/auth/EmailConfirmView.vue'),
+    meta: { public: true, layout: 'bare' },
+  },
+
   // Catch-all: unbekannte Pfade landen auf der NotFound-View statt leerer Shell.
   {
     path: '/:pathMatch(.*)*',
@@ -259,7 +289,29 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  let auth: ReturnType<typeof useAuthStore> | null = null
+  try {
+    auth = useAuthStore()
+  } catch {
+    // Pinia noch nicht aktiv (z.B. Unit-Tests ohne Store).
+  }
+  if (auth) await auth.ensureInit()
+
+  // JWT-Modus (#1617): ohne Session nur öffentliche Routen.
+  if (auth?.jwtEnabled) {
+    if (to.meta?.public) {
+      if (to.name === 'Login' && auth.isAuthenticated) return safeNext(to.query.next)
+      return true
+    }
+    if (!auth.isAuthenticated) return { name: 'Login', query: { next: to.fullPath } }
+    return true
+  }
+
+  // Ohne JWT gibt es keine Anmeldung, Registrierung oder Bestätigung.
+  if (to.meta?.public && String(to.name ?? '') in AUTH_ONLY_ROUTES) return '/'
+
+  // Legacy-Guard: requiresAuth-Routen ohne Token auf das Dashboard.
   if (!to.meta?.requiresAuth) return true
   if (getAgoraToken()) return true
   return { name: 'Dashboard', query: { authRequired: '1', next: to.fullPath } }

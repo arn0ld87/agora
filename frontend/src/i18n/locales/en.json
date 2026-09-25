@@ -2031,5 +2031,53 @@
   },
   "stepper": {
     "stepAria": "Step {n}: {label}"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "emailLabel": "Email address",
+      "passwordLabel": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "forgotPassword": "Forgot password?",
+      "toRegister": "No account yet? Register now",
+      "errorGeneric": "Sign-in failed. Please check your credentials."
+    },
+    "register": {
+      "title": "Create account",
+      "emailLabel": "Email address",
+      "passwordLabel": "Password",
+      "passwordHint": "At least 12 characters",
+      "confirmLabel": "Confirm password",
+      "submit": "Register",
+      "submitting": "Registering…",
+      "toLogin": "Already registered? Sign in",
+      "successMessage": "Please confirm your email address. We sent you a confirmation link.",
+      "errorPasswordTooShort": "Password must be at least 12 characters long.",
+      "errorPasswordMismatch": "Passwords do not match.",
+      "errorGeneric": "Registration failed. Please try again."
+    },
+    "reset": {
+      "title": "Reset password",
+      "emailLabel": "Email address",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm new password",
+      "passwordHint": "At least 12 characters",
+      "submitRequest": "Request link",
+      "submitNew": "Set password",
+      "submitting": "Processing…",
+      "toLogin": "Back to sign in",
+      "successMessage": "If an account with this email exists, we sent you a reset link.",
+      "errorPasswordTooShort": "Password must be at least 12 characters long.",
+      "errorPasswordMismatch": "Passwords do not match.",
+      "errorGeneric": "Password could not be set. Please request a new link."
+    },
+    "confirm": {
+      "title": "Confirm email",
+      "checking": "Checking confirmation…",
+      "successMessage": "Your email address has been confirmed. Redirecting…",
+      "errorInvalidLink": "The confirmation link is invalid or has expired.",
+      "toLogin": "Go to sign in"
+    }
   }
 }
