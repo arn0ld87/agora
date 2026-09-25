@@ -31,6 +31,25 @@ dazwischen in die Dateien geschrieben wird, landet nie in der Datenbank.
   Datenbank zum Backup. Die Dateien unter `uploads/` gehören weiter dazu:
   Report-Inhalte und Simulationsartefakte bleiben dort.
 - Neo4j und Redis sind vom Cutover nicht betroffen.
+- Das laufende Agora-Image kennt denselben Alembic-Head wie der Checkout, aus
+  dem Schritt 1 migriert (siehe unten). Sonst bricht das Start-Gate (#1582)
+  nach dem Umschalten ab („Datenbankschema ist neuer als der Code“), und der
+  Container startet in einer Schleife neu. So geschehen beim Cutover auf
+  armserver (#1592).
+
+### Image und Checkout auf denselben Head prüfen
+
+```bash
+# Head im Checkout (liest nur die Migrationsskripte, keine Datenbank)
+cd backend && uv run alembic -c migrations/alembic.ini heads
+# Head im laufenden Image
+docker compose exec -T agora sh -c \
+  'cd /app/backend && .venv/bin/alembic -c migrations/alembic.ini heads'
+```
+
+Beide Ausgaben müssen dieselbe Revision zeigen. Weichen sie ab, erst das Image
+aus demselben Commit bauen und deployen, dann migrieren. Ein Image, das älter
+ist als die Migration, startet gegen das neue Schema nicht mehr.
 
 ## Ablauf
 
