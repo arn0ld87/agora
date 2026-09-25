@@ -298,7 +298,7 @@ Unter [`supabase/`](../supabase/README.md) liegt ein **eigenes** Compose-Projekt
 
 Das ist Phase 1 des Migrationsplans [`plans/supabase.md`](plans/supabase.md) §7 und **ausschließlich Infrastruktur**. Der PostgreSQL-Code im Backend (Adapter, Alembic, Feature-Flags) ist in den Abschnitten darunter beschrieben und im Default nicht aktiv; dieser Stack ist nur die Instanz, gegen die er später laufen soll. Der Agora-Stack startet und läuft unverändert ohne diesen Stack; die Kopplung ans gemeinsame Docker-Netz `agora-backend` ist ein zusätzliches Overlay ([`deploy/compose/docker-compose.supabase.yml`](../deploy/compose/docker-compose.supabase.yml)), nie die Basis-`docker-compose.yml`.
 
-Daraus folgt ausdrücklich **nicht**, dass Agora Postgres nutzt, dass Multi-User näher rückt oder dass Auth sich geändert hat. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell sind unverändert die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen.
+Daraus folgt ausdrücklich **nicht**, dass Multi-User näher rückt oder dass Auth sich geändert hat. Welche Installation PostgreSQL nutzt, steht unter „Metadaten-Cutover armserver“: armserver nutzt dafür nicht diesen Stack, sondern den bestehenden self-hosted Supabase des Hosts. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell sind unverändert die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen.
 
 Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config) liegen nicht im Repository. `supabase/bootstrap.sh` holt sie von einem gepinnten supabase/supabase-Commit nach `supabase/volumes/` (gitignored) — ohne diesen Lauf startet der Stack nicht.
 
@@ -314,13 +314,13 @@ Seit [#1582](https://github.com/arn0ld87/agora/issues/1582) erzwingt `create_app
 
 Für den Nachweis, dass eine Migration nichts verliert, existiert `backend/scripts/migration_baseline.py`: es erhebt je Objektklasse Anzahl, IDs, Zeitstempel, Statuswerte und Referenzen plus eine Prüfsumme je Artefaktdatei und vergleicht zwei solche Manifeste (Runbook: [`runbooks/migration-baseline.md`](runbooks/migration-baseline.md)). Beim Metadaten-Cutover auf armserver am 25.09.2026 ([#1592](https://github.com/arn0ld87/agora/issues/1592)) lief damit der erste Vorher/Nachher-Vergleich über eine echte Migrationsphase: Anzahl, IDs, Felder und Prüfsummen unverändert (Details unten unter „Metadaten-Cutover armserver“).
 
-Die erste Fachtabelle existiert als Definition: `agora.llm_profiles` (SQLAlchemy-Modell `LlmProfileModel` plus Migration) hält LLM-Profil-Metadaten — Name, Provider, Basis-URL, Modellname, ein partieller Unique-Index, der höchstens ein Default-Profil erlaubt. Provider-Secrets bleiben im Fernet-Store, Workspace- und Auth-Spalten sind bewusst nicht vorgezogen. Solange `AGORA_METADATA_BACKEND=legacy` gilt, liest und schreibt die Tabelle niemand — das ist Phase 4.
+Die erste Fachtabelle existiert als Definition: `agora.llm_profiles` (SQLAlchemy-Modell `LlmProfileModel` plus Migration) hält LLM-Profil-Metadaten — Name, Provider, Basis-URL, Modellname, ein partieller Unique-Index, der höchstens ein Default-Profil erlaubt. Provider-Secrets bleiben im Fernet-Store, Workspace- und Auth-Spalten sind bewusst nicht vorgezogen. Gelesen und geschrieben wird sie über `AGORA_LLM_PROFILE_BACKEND=postgres` (Phase 4, siehe unten), unabhängig von `AGORA_METADATA_BACKEND`; aktiv ist das auf armserver seit 25.09.2026 ([#1592](https://github.com/arn0ld87/agora/issues/1592)).
 
 Für die LLM-Profile existiert seit PR 3 ein Port (`app/repositories/llm_profile_repository.py`) mit genau einem Adapter: `SqliteLlmProfileRepository`, die umbenannte bisherige Klasse auf derselben `instance/llm_profiles.db`. `AGORA_LLM_PROFILE_BACKEND` schaltet die Ablage getrennt von `AGORA_METADATA_BACKEND` und steht im Default auf `sqlite`. Seit PR 4 existiert mit `PostgresLlmProfileRepository` ein zweiter Adapter: Metadaten aus `agora.llm_profiles`, Schlüssel aus dem Fernet-Store, IDs weiterhin als 32-Zeichen-`hex`, damit gespeicherte `profile:<id>`-Referenzen weiter zeigen. `backend/scripts/migrate_llm_profiles_to_postgres.py` überträgt den Bestand und lässt die SQLite unberührt; Ablauf und Rückweg stehen in [`runbooks/llm-profile-postgres-umstellung.md`](runbooks/llm-profile-postgres-umstellung.md).
 
 **Umgeschaltet auf armserver seit 25.09.2026 (#1592):** `AGORA_LLM_PROFILE_BACKEND=postgres`, 1 Profil übertragen, `--verify` deckungsgleich (Metadaten, Zeitstempel, Schlüssel). Der Default im Code bleibt `sqlite`. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (16 Integrationstests), nicht gegen einen produktiven Bestand. Seit #1577 laufen alle PostgreSQL-Integrationstests im CI-Job `integration` gegen einen `postgres:17`-Service (auf `push:main` und `workflow_dispatch`); vorher fehlten dort Service und `AGORA_TEST_POSTGRES_URL`, und der Job war rot.
 
-Dazu gehört ein zweiter Baustein: `LlmProfileSecretsStore` (`app/services/llm_profile_secrets_store.py`) legt die API-Keys **pro Profil** Fernet-verschlüsselt unter `AGORA_DATA_DIR` ab, weil `agora.llm_profiles` bewusst keine `api_key`-Spalte hat und der bestehende Provider-Secret-Store pro **Provider** ablegt — zwei Profile desselben Providers dürfen aber verschiedene Schlüssel tragen. `backend/scripts/migrate_profile_secrets.py` füllt den Store aus der SQLite (read-only, `--verify` vergleicht feldweise). **Kein Lesepfad nutzt ihn bisher**: die SQLite bleibt die Wahrheit, der Store ist die Ablage, die PR 4 vorfinden wird.
+Dazu gehört ein zweiter Baustein: `LlmProfileSecretsStore` (`app/services/llm_profile_secrets_store.py`) legt die API-Keys **pro Profil** Fernet-verschlüsselt unter `AGORA_DATA_DIR` ab, weil `agora.llm_profiles` bewusst keine `api_key`-Spalte hat und der bestehende Provider-Secret-Store pro **Provider** ablegt — zwei Profile desselben Providers dürfen aber verschiedene Schlüssel tragen. `backend/scripts/migrate_profile_secrets.py` füllt den Store aus der SQLite (read-only, `--verify` vergleicht feldweise). Seit PR 4 liest `PostgresLlmProfileRepository` die Schlüssel aus diesem Store. Mit dem Default `sqlite` bleibt die SQLite die Wahrheit; auf armserver seit 25.09.2026 ([#1592](https://github.com/arn0ld87/agora/issues/1592)) gilt `AGORA_LLM_PROFILE_BACKEND=postgres`: Metadaten in `agora.llm_profiles`, Schlüssel in diesem Store, die SQLite ist eingefroren und nur noch Rückweg.
 
 ### Projektmetadaten: Vertrag, Port und zwei Adapter
 
@@ -397,7 +397,7 @@ Seit Teil 2 von #1588 gibt es den zweiten Adapter: `PostgresReportRepository` (`
 
 Seit #1612 gibt es `agora.workspaces` und `agora.workspace_members` (Alembic-Revision `5c2913c7ba4f`, linear auf `8d6e0b3c2f15`), inklusive Default-Workspace (`00000000-0000-0000-0000-000000000001`/Slug `default`/Name `Standard`), den die Migration selbst einfügt. `workspace_members.role` ist per Check-Constraint auf `owner|admin|member|viewer` begrenzt, `slug` per Check-Constraint auf `^[a-z0-9][a-z0-9-]{0,62}$` und eindeutig. `workspace_members.user_id` trägt **keinen** Fremdschlüssel auf `auth.users` — CI und lokale Testläufe laufen gegen reines PostgreSQL ohne das Supabase-`auth`-Schema, die referenzielle Integrität dorthin ist Sache der Anwendungsschicht. Dazu kommen der Port `WorkspaceRepository` (`backend/app/repositories/workspace_repository.py`) und der Adapter `PostgresWorkspaceRepository` (`backend/app/infrastructure/postgres/repositories/workspace_repository.py`, `get`/`get_by_slug`/`create`/`list_for_user`/`membership`/`add_member`/`remove_member`) sowie die Verträge `Workspace`/`WorkspaceMembership`/`WorkspaceRole` (`backend/app/contracts/workspace_contract.py`) und `Principal`/`AuthType` (`backend/app/contracts/auth_contract.py`). Anders als bei den übrigen Ports gibt es keinen Dateiadapter und kein Backend-Flag: `get_workspace_repository()` liefert immer den PostgreSQL-Adapter und verlangt nur `DATABASE_URL`.
 
-**Umgeschaltet ist nichts.** Kein bestehender Store liest oder schreibt `workspace_id`; Projekte, Simulationen, Runs und Reports bleiben ohne Workspace-Bezug. `Principal` hat noch keinen Aufrufer, der ihn befüllt.
+**Stand:** Seit #1614 lesen und schreiben die PostgreSQL-Adapter `workspace_id` (unten), seit #1613 legt der Guard für jeden Request einen `Principal` ab. Auf armserver seit 25.09.2026 ([#1592](https://github.com/arn0ld87/agora/issues/1592)) liegen alle 244 Projekte, 88 Simulationen, 594 Runs und 80 Reports im Default-Workspace. Weitere Workspaces entstehen nur mit Supabase-JWT, und das ist nach ADR-0019 aus.
 
 
 ### Auth: Supabase-JWT und Principal (#1613)
@@ -427,7 +427,7 @@ Verifiziert gegen PostgreSQL mit:
 - Request-Isolation und System-Kontext
 - Verweisprüfung im Guard
 
-**Umgeschaltet ist nichts.**
+**Einzelbetrieb aktiv auf armserver seit 25.09.2026 ([#1592](https://github.com/arn0ld87/agora/issues/1592)):** Die Adapter arbeiten dort mit `workspace_id`. Ohne JWT ist der Principal der Legacy-Principal im Default-Workspace (`legacy_principal`), Hintergrundarbeit läuft im System-Kontext. Aus ist nur die Mandantentrennung zwischen Nutzern (kein `AGORA_SUPABASE_JWT_ISSUER`, ADR-0019).
 
 
 ### Row Level Security (#1615)
@@ -438,7 +438,7 @@ Seit #1615 stehen Projekte, Simulationen, Runs, Reports, Workspaces und Mitglied
 - **Werkzeuge:** `pg_dump`/`pg_restore` laufen mit `--enable-row-security` im System-Kontext.
 - **Supabase-Rolle `authenticated`:** darf nur lesen, gefiltert über `auth.uid()`. Die Policy wird nur angelegt, wenn das Schema `auth` existiert.
 
-Verifiziert mit der Testmatrix aus §18 gegen PostgreSQL, roh unter einer eingeschränkten Rolle. **Umgeschaltet ist nichts.**
+Verifiziert mit der Testmatrix aus §18 gegen PostgreSQL, roh unter einer eingeschränkten Rolle. **Aktiv auf armserver seit 25.09.2026 ([#1592](https://github.com/arn0ld87/agora/issues/1592)):** FORCE RLS greift, die App läuft als `agora_app` (`NOSUPERUSER NOBYPASSRLS`, besitzt keine Tabelle); ohne Kontext sieht sie 0 Zeilen. Requests laufen im Default-Workspace, Hintergrundarbeit im System-Kontext. Der Tenant-Modus (Rollen-Gate bricht den Start ab, Workspace aus dem JWT) ist aus, weil kein JWT-Issuer gesetzt ist (ADR-0019).
 
 ### Offene Registrierung und Workspace-API (#1616)
 
