@@ -42,7 +42,12 @@ from flask import Blueprint, Flask, current_app, request
 
 from . import signed_ticket
 from .api_responses import json_error
-from ..config import Config, supabase_jwt_configured, supabase_jwt_settings
+from ..config import (
+    Config,
+    supabase_jwt_configured,
+    supabase_jwt_settings,
+    validate_auth_backend,
+)
 from ..contracts.auth_contract import AuthType, Principal
 from ..security.principal_context import (
     WORKSPACE_HEADER,
@@ -68,12 +73,29 @@ def _auth_error(code: str = "auth_required"):
 
 
 def _jwt_enabled() -> bool:
-    """JWT-Zweig aktiv: Modus ``hybrid``/``supabase`` und JWT konfiguriert.
+    """JWT-Zweig aktiv: Modus ``hybrid``/``supabase``, JWT konfiguriert **und**
+    die Invariante aus ADR-0018 erfüllt.
 
-    ``Config.validate()`` stellt sicher, dass dann alle Metadaten-Backends auf
-    PostgreSQL stehen (ADR-0018, Punkt 3).
+    Die Invariante wird hier selbst geprüft, nicht nur in ``Config.validate()``:
+    mit ``FLASK_DEBUG`` protokolliert ``create_app`` Validierungsfehler nur und
+    startet trotzdem. Ein JWT-Zweig ohne Workspace-Isolation wäre dann offen
+    (Codex-Review auf #1622). Scheitert die Prüfung, bleibt JWT aus.
     """
-    return Config.AUTH_BACKEND in ("hybrid", "supabase") and supabase_jwt_configured(Config)
+    if Config.AUTH_BACKEND not in ("hybrid", "supabase") or not supabase_jwt_configured(Config):
+        return False
+    return _jwt_invariant_holds()
+
+
+def _jwt_invariant_holds() -> bool:
+    errors = validate_auth_backend(Config)
+    if errors:
+        _logger.error(
+            "auth: Supabase-JWT bleibt aus — Konfiguration verletzt ADR-0018 (%d Fehler, "
+            "siehe Config.validate()).",
+            len(errors),
+        )
+        return False
+    return True
 
 
 def _master_token_allowed() -> bool:

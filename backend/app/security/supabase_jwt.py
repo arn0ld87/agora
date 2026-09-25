@@ -146,9 +146,14 @@ class SupabaseJwtVerifier:
         self._settings = settings
         self._jwks_client: jwt.PyJWKClient | None = None
         if settings.jwks_url:
+            # Nur der JWKS-Satz wird gecacht, mit Ablauf (``lifespan``).
+            # ``cache_keys=True`` legte zusätzlich einen LRU-Cache je Schlüssel
+            # ohne Ablauf an: ein rotierter oder kompromittierter Schlüssel
+            # bliebe bis zum Neustart gültig (Codex-Review auf #1622).
             self._jwks_client = jwt.PyJWKClient(
                 settings.jwks_url,
-                cache_keys=True,
+                cache_keys=False,
+                cache_jwk_set=True,
                 lifespan=settings.jwks_cache_seconds,
                 timeout=settings.jwks_timeout_seconds,
             )
@@ -165,10 +170,14 @@ class SupabaseJwtVerifier:
             return self._jwks_client.get_signing_key_from_jwt(token).key
         except jwt.PyJWKClientConnectionError as exc:
             raise JwtVerificationError(JwtErrorCode.KEY_UNAVAILABLE) from exc
+        except jwt.PyJWKSetError as exc:
+            # Leerer oder unbrauchbarer Schlüsselsatz: ein Problem des
+            # Endpunkts, nicht des Tokens.
+            raise JwtVerificationError(JwtErrorCode.KEY_UNAVAILABLE) from exc
         except jwt.PyJWKClientError as exc:
             # Unbekannte ``kid`` oder unbrauchbarer Schlüssel.
             raise JwtVerificationError(JwtErrorCode.INVALID_SIGNATURE) from exc
-        except jwt.DecodeError as exc:
+        except jwt.PyJWTError as exc:
             raise JwtVerificationError(JwtErrorCode.MALFORMED) from exc
 
     def verify(self, token: str) -> SupabaseJwtClaims:
@@ -177,7 +186,10 @@ class SupabaseJwtVerifier:
             raise JwtVerificationError(JwtErrorCode.MALFORMED)
         try:
             header = jwt.get_unverified_header(token)
-        except jwt.DecodeError as exc:
+        except jwt.PyJWTError as exc:
+            # Auch ``InvalidTokenError`` (etwa eine numerische ``kid`` oder ein
+            # unbekanntes ``crit``) ist ein kaputtes Token, kein 500
+            # (Codex-Review auf #1622).
             raise JwtVerificationError(JwtErrorCode.MALFORMED) from exc
         # Vor jedem Schlüsselabruf: ein fremder Algorithmus (auch ``none``)
         # darf weder den JWKS-Endpunkt anstoßen noch bis zur Prüfung kommen.

@@ -61,6 +61,10 @@ def client(database, monkeypatch):
     monkeypatch.setattr(Config, 'SUPABASE_JWKS_URL', '')
     for _, attr in WORKSPACE_SCOPED_BACKENDS:
         monkeypatch.setattr(Config, attr, 'postgres')
+    # In diesem Stand ist JWT bis #1614 gesperrt; der Test prüft den Pfad
+    # dahinter.
+    monkeypatch.setattr('app.config.TENANT_ISOLATION_AVAILABLE', True)
+    monkeypatch.delenv('AGORA_ALLOW_ANONYMOUS', raising=False)
     monkeypatch.setenv('AGORA_AUTH_TOKEN', 'master-token-for-tests')
     principal_context.reset_jwt_verifier()
 

@@ -245,3 +245,61 @@ def test_looks_like_jwt_separates_master_tokens_and_api_keys():
     assert not looks_like_jwt('ago_' + 'a' * 40)
     assert not looks_like_jwt('ein-master-token-mit.punkt')
     assert not looks_like_jwt('eyJ.nur-zwei')
+
+
+def test_malformed_header_fields_are_a_401_not_a_500():
+    """``get_unverified_header`` wirft bei einer numerischen ``kid`` oder einem
+    unbekannten ``crit`` ``InvalidTokenError`` statt ``DecodeError``
+    (Codex-Review auf #1622)."""
+    def seg(data: dict[str, Any]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b'=').decode()
+
+    for header in ({'alg': 'HS256', 'kid': 123}, {'alg': 'HS256', 'crit': ['unbekannt']}):
+        token = f'{seg(header)}.{seg(_claims())}.c2ln'
+        assert _reject(_hs_verifier(), token) is JwtErrorCode.MALFORMED
+
+
+def test_jwks_signing_keys_are_not_cached_without_expiry(jwks_verifier):
+    """Nur der JWKS-Satz wird gecacht (mit ``lifespan``); ein Schlüssel-Cache
+    ohne Ablauf hielte rotierte Schlüssel gültig (Codex-Review auf #1622)."""
+    client = jwks_verifier._jwks_client
+    assert client is not None
+    assert client.jwk_set_cache is not None
+    assert not hasattr(client.get_signing_key, 'cache_info')
+
+
+def test_rotated_key_is_rejected_after_the_jwks_cache_expires(rsa_key, monkeypatch):
+    verifier = SupabaseJwtVerifier(
+        SupabaseJwtSettings(
+            issuer=ISSUER, jwks_url='http://auth.internal:9999/jwks', jwks_cache_seconds=30
+        )
+    )
+    old_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(rsa_key.public_key(), as_dict=True)
+    old_jwk.update({'kid': 'key-1', 'alg': 'RS256'})
+    keys = {'keys': [old_jwk]}
+    assert verifier._jwks_client is not None
+    monkeypatch.setattr(verifier._jwks_client, 'fetch_data', lambda: keys)
+    token = jwt.encode(_claims(), rsa_key, algorithm='RS256', headers={'kid': 'key-1'})
+    assert verifier.verify(token).user_id == USER_ID
+
+    # Rotation: ein neuer Schlüssel ersetzt den alten; der Satz-Cache läuft ab
+    # (hier simuliert durch Leeren).
+    new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    new_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(new_key.public_key(), as_dict=True)
+    new_jwk.update({'kid': 'key-2', 'alg': 'RS256'})
+    keys['keys'] = [new_jwk]
+    assert verifier._jwks_client.jwk_set_cache is not None
+    verifier._jwks_client.jwk_set_cache.lifespan = 0  # sofort abgelaufen
+
+    assert _reject(verifier, token) is JwtErrorCode.INVALID_SIGNATURE
+
+
+def test_empty_jwks_is_key_unavailable(rsa_key, monkeypatch):
+    verifier = SupabaseJwtVerifier(
+        SupabaseJwtSettings(issuer=ISSUER, jwks_url='http://auth.internal:9999/jwks')
+    )
+    assert verifier._jwks_client is not None
+    monkeypatch.setattr(verifier._jwks_client, 'fetch_data', lambda: {'keys': []})
+    token = jwt.encode(_claims(), rsa_key, algorithm='RS256', headers={'kid': 'key-1'})
+
+    assert _reject(verifier, token) is JwtErrorCode.KEY_UNAVAILABLE
