@@ -193,6 +193,11 @@ _GAP_SUGGESTED_FIX_DEFAULT = (
 _NON_FACTUAL_CLAIM_TYPES = frozenset({"recommendation", "structural"})
 
 
+#: Rollenwechsel-Kategorien, bei denen eine Aktion nicht als Stimme ihres
+#: Agents gelten darf (Issue #1323, Slice 5.2).
+_HARD_ROLE_CONFLICTS = frozenset({"foreign_role", "foreign_name_signature"})
+
+
 def _is_non_factual_claim(claim: Dict[str, Any]) -> bool:
     return claim.get("claim_type") in _NON_FACTUAL_CLAIM_TYPES
 
@@ -443,7 +448,18 @@ class ReportAgent:
                     ).to_dict())
                     items[-1]["producer_key"] = f"simulation-metric:{field}"
 
-            sampled_actions = self._sample_actions_timeseries(action_dicts, k=8)
+            # Slice 5.2 (#1323): Aktionen mit hartem Rollenwechsel-Konflikt
+            # stehen nicht für ihren Agent. Sie fallen VOR der Stichprobe
+            # heraus — sonst zog die Zeitreihen-Stichprobe eine markierte
+            # Aktion und ihr Zeitfenster blieb ohne Evidence, obwohl gültige
+            # Aktionen darin lagen (Codex-Review PR #1620).
+            # ``unmatched_self_reference`` bleibt drin (schwächere Kategorie).
+            eligible_actions = [
+                action for action in action_dicts
+                if action.get("role_conflict") not in _HARD_ROLE_CONFLICTS
+            ]
+            _skipped_foreign = len(action_dicts) - len(eligible_actions)
+            sampled_actions = self._sample_actions_timeseries(eligible_actions, k=8)
             for action in sampled_actions:
                 action_type = action.get("action_type") or "action"
                 agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
@@ -476,6 +492,13 @@ class ReportAgent:
                     items[-1]["producer_key"] = "simulation-action:" + ":".join(
                         str(value) for value in action_identity
                     )
+            if _skipped_foreign:
+                logger.info(
+                    "report_evidence: %d action(s) with foreign role conflict skipped "
+                    "(simulation_id=%s)",
+                    _skipped_foreign,
+                    self.simulation_id,
+                )
             return items
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to collect simulation evidence: {exc}")

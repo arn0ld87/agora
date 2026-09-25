@@ -73,6 +73,7 @@ class _FakeBuilder:
         chunk_ids,
         run_id,
         checkpoint_callback,
+        chunk_contexts=None,
     ):
         if self._batch_effect is not None:
             self._batch_effect(degradations, extraction_tally)

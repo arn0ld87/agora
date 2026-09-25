@@ -344,6 +344,7 @@ class _FakeResumeBuilder:
     def add_text_batches(
         self, graph_id, chunks, batch_size, progress_callback,
         document_ids, chunk_ids, run_id, checkpoint_callback,
+        chunk_contexts=None,
     ):
         self.add_text_batches_calls.append({
             "graph_id": graph_id,

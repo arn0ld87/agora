@@ -28,6 +28,7 @@ from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
 from ..container import get_container
 from ..services.graph_build import GraphBuildService
+from ..storage.ner_chunk_context import build_chunk_contexts
 from ..services.graph_build_checkpoint import (
     GraphBuildCheckpoint,
     checkpoint_is_resumable,
@@ -766,6 +767,9 @@ def _restart_graph_build(run: dict):
                         graph_id, chunks, batch_size=3,
                         progress_callback=add_progress_callback,
                         run_id=new_run["run_id"],
+                        # Issue #1470 (Codex-Review PR #1620): derselbe
+                        # NER-Kontext wie im Erst- und im Resume-Build.
+                        chunk_contexts=build_chunk_contexts(chunks),
                     )
                 except GraphBuildCancelled as cancel_exc:
                     _finish_cancelled_restart(graph_id, cancel_exc.episode_uuids, builder)

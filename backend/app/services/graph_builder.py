@@ -388,6 +388,7 @@ class GraphBuilderService:
         chunk_ids: Optional[List[Optional[int]]] = None,
         run_id: Optional[str] = None,
         checkpoint_callback: Optional[Callable[[int, str], None]] = None,
+        chunk_contexts: Optional[List[str]] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -454,6 +455,8 @@ class GraphBuilderService:
             raise ValueError("document_ids must have the same length as chunks")
         if chunk_ids is not None and len(chunk_ids) != total_chunks:
             raise ValueError("chunk_ids must have the same length as chunks")
+        if chunk_contexts is not None and len(chunk_contexts) != total_chunks:
+            raise ValueError("chunk_contexts must have the same length as chunks")
 
         max_workers = max(1, min(Config.GRAPH_PARALLEL_CHUNKS, total_chunks))
         logger.info(
@@ -482,6 +485,7 @@ class GraphBuilderService:
                     extraction_tally=extraction_tally,
                     document_id=document_ids[idx] if document_ids is not None else None,
                     chunk_id=chunk_ids[idx] if chunk_ids is not None else None,
+                    chunk_context=chunk_contexts[idx] if chunk_contexts is not None else "",
                 )
                 elapsed = time.time() - t0
                 logger.info(
