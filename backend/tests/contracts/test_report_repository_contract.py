@@ -369,3 +369,48 @@ def test_list_ids_returns_storage_keys_not_manifest_ids(repo, tmp_path):
     assert keys == {"report_deepseek_7ce9e4882bae", "report_flach00001"}
     loaded = repo.get("report_deepseek_7ce9e4882bae")
     assert loaded is not None and loaded.report_id == "report_7ce9e4882bae"
+
+
+# ---------------------------------------------------------------------------
+# delete (seit #1588)
+# ---------------------------------------------------------------------------
+
+
+def test_delete_removes_folder_meta_and_reports_it(repo, tmp_path):
+    record = _make_record()
+    repo.save(record)
+    content = tmp_path / "reports" / record.report_id / "report-v3.json"
+    content.write_text("{}", encoding="utf-8")
+
+    assert repo.delete(record.report_id) is True
+
+    assert repo.get(record.report_id) is None
+    # Report-Inhalte sind keine Metadaten — sie raeumt ReportManager ab.
+    assert content.exists()
+
+
+def test_delete_removes_legacy_flat_file(repo, tmp_path):
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True)
+    legacy = reports_dir / "report_legacy00001.json"
+    legacy.write_text(
+        json.dumps(_make_record(report_id="report_legacy00001").to_dict()),
+        encoding="utf-8",
+    )
+
+    assert repo.delete("report_legacy00001") is True
+    assert not legacy.exists()
+
+
+def test_delete_unknown_report_returns_false(repo):
+    assert repo.delete("report_gibtesnicht") is False
+
+
+def test_factory_rejects_unknown_backend_instead_of_falling_back(monkeypatch):
+    from app.config import Config
+    from app.repositories.report_repository import ReportBackendUnavailable
+
+    monkeypatch.setattr(Config, "REPORT_BACKEND", "sqlite")
+
+    with pytest.raises(ReportBackendUnavailable):
+        get_report_repository()

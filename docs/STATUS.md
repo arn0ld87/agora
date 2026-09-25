@@ -302,7 +302,7 @@ Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config
 
 ### PostgreSQL-Grundlage: installiert, im Default ungenutzt
 
-`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit fünf Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`, die vierte die Tabelle `agora.simulations`, die fünfte die Tabelle `agora.runs`.
+`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit sechs Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`, die vierte die Tabelle `agora.simulations`, die fünfte die Tabelle `agora.runs`, die sechste die Tabelle `agora.reports`.
 
 Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetzt, und solange er gilt, wird keine Verbindung aufgebaut. `DATABASE_URL` hat bewusst keinen Default; `Config.validate()` lehnt `AGORA_METADATA_BACKEND=postgres` ohne URL, einen unbekannten Backend-Wert und ein `postgresql://`-Schema (psycopg2 ist nicht installiert) beim Start ab.
 
@@ -365,7 +365,7 @@ Seit #1587 gibt es den zweiten Adapter: `PostgresRunRepository` (`app/infrastruc
 
 **Umgeschaltet ist nichts.** `AGORA_RUN_BACKEND` steht im Default auf `file`. `Config.validate()` lehnt `postgres` bei `AGORA_SIMULATION_BACKEND=file` (der Fremdschlüssel zeigte ins Leere) und ohne `DATABASE_URL` ab. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (Integrationstests für Adapter, Migrations-Roundtrip und `POST /api/runs/<id>/resume` samt `409 job_lease_active`), nicht gegen einen produktiven Bestand.
 
-### Report-Metadaten: Vertrag und Port — ein Adapter
+### Report-Metadaten: Vertrag, Port, zwei Adapter
 
 `ReportManager` delegiert seit #1580 das Lesen/Schreiben der Metadaten-Datei
 (`meta.json`, inkl. Legacy-Flachformat-Fallback `<report_id>.json`) an
@@ -385,7 +385,11 @@ mit abweichendem Ordnernamen finden ihre Artefakte weiter über den Ordner, nich
 `branching_service.create_branch` (Report-Kopie in einen Zweig) und
 `simulation_history._get_report_id_for_simulation` die Metadaten über den Port
 statt `meta.json` direkt zu öffnen; der Zweig kopiert den Report-Ordner unter
-dem Ablageschlüssel. Der PostgreSQL-Adapter folgt mit Teil 2 von #1588.
+dem Ablageschlüssel.
+
+Seit Teil 2 von #1588 gibt es den zweiten Adapter: `PostgresReportRepository` (`app/infrastructure/postgres/repositories/report_repository.py`) auf `agora.reports` (Revision `8d6e0b3c2f15`, linear auf `3f9b2d7e6a41`). Primärschlüssel ist der **Ablageschlüssel** (Ordnername), nicht zwingend die `report_id` im Datensatz — Altbestände finden ihre Inhalte so weiter. `payload jsonb` hält den vollständigen Inhalt von `meta.json`; `report_id`, `simulation_id`, `status`, `created_at`, `completed_at` sind daraus abgeleitete Projektionen. `simulation_id` ist Fremdschlüssel auf `agora.simulations(id)` (nullable, `ON DELETE SET NULL`); gelesen und nach Simulation gefiltert wird aus dem `payload`, damit ein Report ohne Simulation dieselbe Antwort liefert wie in der Dateiablage. Der Port hat seitdem `delete()`: `ReportManager.delete_report` entfernt den Metadatensatz über das Repository und danach den Ordner. `backend/scripts/migrate_reports_to_postgres.py` überträgt den Bestand (Ordner- und Flachformat) mit `--dry-run`/`--verify`, idempotent, Dateien unberührt, Fehler einzeln; Ablauf und Rückweg in [`runbooks/report-postgres-umstellung.md`](runbooks/report-postgres-umstellung.md). Report-Inhalte bleiben Dateien.
+
+**Umgeschaltet ist nichts.** `AGORA_REPORT_BACKEND` steht im Default auf `file`. `Config.validate()` lehnt `postgres` bei `AGORA_SIMULATION_BACKEND=file` und ohne `DATABASE_URL` ab. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (Integrationstests für Adapter, Migrations-Roundtrip, Löschen über `ReportManager` und einen mit beiden Backends byte-gleichen Export), nicht gegen einen produktiven Bestand.
 
 ### Readiness: `/readyz` kennt den PostgreSQL-Zustand
 
