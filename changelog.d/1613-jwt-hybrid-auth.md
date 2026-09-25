@@ -4,4 +4,4 @@
 
 ### Security
 
-- **Betreiber-Endpunkte für JWT-Nutzer gesperrt** — Settings, API-Keys, Logs, Onboarding, Profil und Modell-Stream verwalten prozessweiten Zustand und antworten Supabase-Nutzern mit `403 operator_only`. JWT verlangt alle fünf Metadaten-Backends auf PostgreSQL. Bis zur Workspace-Isolation der Repositories (#1614) lehnt `Config.validate()` jede JWT-Konfiguration ab. Weder Token noch Claims noch das Secret erscheinen in Logs oder Fehlermeldungen. (#1613)
+- **Betreiber-Endpunkte für JWT-Nutzer gesperrt** — Settings, LLM-Profile, API-Keys, Logs, Onboarding, Profil und Modell-Stream verwalten prozessweiten Zustand und antworten Supabase-Nutzern mit `403 operator_only`. JWT verlangt alle fünf Metadaten-Backends auf PostgreSQL. Bis zur Workspace-Isolation der Repositories (#1614) lehnt `Config.validate()` jede JWT-Konfiguration ab. Weder Token noch Claims noch das Secret erscheinen in Logs oder Fehlermeldungen. (#1613)

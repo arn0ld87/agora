@@ -405,7 +405,7 @@ Seit #1613 kennt der Guard `AGORA_AUTH_BACKEND=legacy|hybrid|supabase` (`backend
 - **JWT-Prüfung:** `backend/app/security/supabase_jwt.py` prüft Signatur (JWKS oder HS256), `iss`, `aud`, `exp`, `nbf` und `sub`.
 - **Workspace-Wahl:** Sie läuft über `X-Agora-Workspace` und die Mitgliedschaft in `agora.workspace_members`.
 - **Principal:** Jeder zugelassene Request legt einen `Principal` ab. `require_scope` leitet die Scopes aus der Rolle ab, Tickets sind an ihren Aussteller gebunden.
-- **Betreiber-Endpunkte:** Settings, API-Keys, Logs, Onboarding, Profil und Modell-Stream sind für JWT-Nutzer gesperrt.
+- **Betreiber-Endpunkte:** Settings, LLM-Profile, API-Keys, Logs, Onboarding, Profil und Modell-Stream sind für JWT-Nutzer gesperrt.
 
 **Umgeschaltet ist nichts:** Bis die Repositories nach Workspace filtern (#1614), lehnt `Config.validate()` jede JWT-Konfiguration ab. Verifiziert ist das mit Unit-Tests für Verifier, Guard, Scopes und Tickets sowie mit einem Integrationstest der Mitgliedschaftsprüfung gegen PostgreSQL.
 

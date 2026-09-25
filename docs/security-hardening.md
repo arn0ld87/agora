@@ -106,7 +106,7 @@ Ohne gesetzten Env-Wert verhält sich der Server wie vorher, gibt aber beim Star
   - Anonyme Supabase-Sitzungen (`is_anonymous`) werden abgelehnt.
 - **Keine Tokens im Log:** Weder Token noch Claims landen im Log. Fehler tragen nur einen Code. Auch Konfigurationsfehler nennen das Secret nicht, denn Pydantic-Eingaben werden aus den Meldungen entfernt.
 - **Keine Isolation ohne PostgreSQL:** JWT verlangt alle fünf Metadaten-Backends auf `postgres` und schließt `AGORA_ALLOW_ANONYMOUS` aus. Bis die Repositories nach Workspace filtern (#1614), lehnt `Config.validate()` JWT ganz ab.
-- **Prozessweiter Zustand** (Provider-Keys, API-Keys, Logs, Onboarding, Profil, Modell-Stream) ist für JWT-Nutzer gesperrt (`operator_only`).
+- **Prozessweiter Zustand** (Provider-Keys, LLM-Profile, API-Keys, Logs, Onboarding, Profil, Modell-Stream) ist für JWT-Nutzer gesperrt (`operator_only`).
 - **Tickets** sind an den Principal ihres Ausstellers gebunden. Mit aktivem JWT gilt kein ungebundenes Ticket.
 
 ## Phase 3 — Endpoint-Härtung
