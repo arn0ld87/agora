@@ -64,6 +64,13 @@ def _reset_backend_switches(monkeypatch):
     monkeypatch.setattr(Config, "PROJECT_BACKEND", "file")
 
 
+@pytest.fixture(autouse=True)
+def _reset_readiness_database(monkeypatch):
+    """Der Probe-Cache ist modulweit — jeder Test startet ohne gecachte Database."""
+    monkeypatch.setattr(readiness_module, "_readiness_database", None)
+    monkeypatch.setattr(readiness_module, "_readiness_database_url", None)
+
+
 # ---------------------------------------------------------------------------
 # disabled — Legacy-Default, keine Verbindung
 # ---------------------------------------------------------------------------
@@ -249,3 +256,50 @@ def test_probe_failure_is_logged_without_traceback(client, monkeypatch):
     for record in probe_records:
         assert record.exc_info is None
         assert "geheim" not in record.getMessage()
+
+
+# ---------------------------------------------------------------------------
+# Wiederverwendung — keine neue Engine pro /readyz-Aufruf
+# ---------------------------------------------------------------------------
+
+
+def test_repeated_readyz_calls_reuse_one_probe_database(client, monkeypatch):
+    """Der Docker-Healthcheck ruft /readyz alle 30 s auf. Vorher entstand dabei
+    jedes Mal eine neue Database samt Engine (Log: ``PostgreSQL engine
+    initialised`` alle 30 s). Jetzt genau eine pro Prozess und URL."""
+    constructed: list[Database] = []
+
+    class _CountingDatabase(Database):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            constructed.append(self)
+
+    monkeypatch.setattr(readiness_module, "Database", _CountingDatabase)
+    monkeypatch.setattr(Config, "PROJECT_BACKEND", "postgres")
+    monkeypatch.setattr(Config, "DATABASE_URL", _FAKE_DATABASE_URL)
+    monkeypatch.setattr(Database, "check_connection", lambda self: True)
+
+    for _ in range(3):
+        assert client.get("/readyz").get_json()["checks"]["postgres"]["state"] == "ok"
+
+    assert len(constructed) == 1
+
+
+def test_changed_database_url_rebuilds_the_probe_database(client, monkeypatch):
+    constructed: list[Database] = []
+
+    class _CountingDatabase(Database):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            constructed.append(self)
+
+    monkeypatch.setattr(readiness_module, "Database", _CountingDatabase)
+    monkeypatch.setattr(Config, "PROJECT_BACKEND", "postgres")
+    monkeypatch.setattr(Database, "check_connection", lambda self: True)
+
+    monkeypatch.setattr(Config, "DATABASE_URL", _FAKE_DATABASE_URL)
+    client.get("/readyz")
+    monkeypatch.setattr(Config, "DATABASE_URL", _FAKE_DATABASE_URL + "_neu")
+    client.get("/readyz")
+
+    assert len(constructed) == 2

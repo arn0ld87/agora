@@ -77,6 +77,15 @@ _POSTGRES_READINESS_CONNECT_TIMEOUT = 2.0
 #: Worker-Thread ist dort ein Greenlet und blockiert den Hub nicht.
 _POSTGRES_READINESS_DEADLINE = 3.0
 
+#: Die ``Database`` der /readyz-Probe, einmal pro Prozess gebaut. Vorher entstand
+#: bei jedem Aufruf eine neue Engine samt ``PostgreSQL engine initialised``-Zeile
+#: im Log, beim Docker-Healthcheck also alle 30 s. NullPool bleibt: jede Probe
+#: öffnet weiterhin eine frische Verbindung und prüft damit echte Erreichbarkeit,
+#: nur die Engine wird wiederverwendet. Wechselt ``DATABASE_URL``, wird neu gebaut.
+_readiness_database: Database | None = None
+_readiness_database_url: str | None = None
+_readiness_database_lock = threading.Lock()
+
 
 def _safe_probe_failure(check_name: str, exc: Exception) -> CheckResult:
     logger.warning("%s readiness probe failed: %s", check_name, exc, exc_info=True)
@@ -241,8 +250,23 @@ def _probe_postgres(database: Database, outcome: dict[str, bool]) -> None:
     except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden generisch gemeldet
         logger.warning("postgres readiness probe failed: %s", type(exc).__name__)
         outcome["healthy"] = False
-    finally:
-        database.dispose()
+
+
+def _get_readiness_database() -> Database:
+    """Die wiederverwendete Probe-``Database``; neu gebaut nur bei geänderter URL."""
+    global _readiness_database, _readiness_database_url
+    url = Config.DATABASE_URL
+    with _readiness_database_lock:
+        if _readiness_database is None or _readiness_database_url != url:
+            if _readiness_database is not None:
+                _readiness_database.dispose()
+            _readiness_database = Database(
+                url,
+                use_pool=False,
+                connect_timeout=_POSTGRES_READINESS_CONNECT_TIMEOUT,
+            )
+            _readiness_database_url = url
+        return _readiness_database
 
 
 def _check_postgres() -> PostgresReadinessCheck:
@@ -257,12 +281,12 @@ def _check_postgres() -> PostgresReadinessCheck:
     * ``unavailable`` — mindestens ein Backend ist aktiv, die Probe scheitert.
       ``ok=False`` macht /readyz rot (503).
 
-    Aktuell hält kein Store dauerhaft eine Engine in ``app.extensions`` — noch
-    ist kein Adapter umgeschaltet (docs/plans/supabase.md, Umsetzungsstand).
-    Deshalb baut dieser Check bei Bedarf eine kurzlebige ``Database`` mit
-    kleinem Verbindungs-Timeout und disposed sie danach wieder, statt den
-    langlebigen Prozess-Singleton (``get_database()``) zu benutzen oder gar
-    offen zu halten.
+    Die Probe nutzt eine eigene ``Database`` (NullPool, kurzes
+    Verbindungs-Timeout) statt des Prozess-Singletons ``get_database()``: eine
+    hängende Probe soll keine Pool-Verbindung des Anwendungspfads blockieren.
+    Diese ``Database`` wird pro Prozess einmal gebaut und wiederverwendet
+    (``_get_readiness_database``); jede Probe öffnet trotzdem eine frische
+    Verbindung.
 
     ``detail`` bleibt in jedem Zweig generisch: psycopg-Fehlertexte tragen
     häufig Host, Port, User oder Datenbanknamen im Klartext (z. B.
@@ -278,11 +302,7 @@ def _check_postgres() -> PostgresReadinessCheck:
             state="disabled",
         )
 
-    database = Database(
-        Config.DATABASE_URL,
-        use_pool=False,
-        connect_timeout=_POSTGRES_READINESS_CONNECT_TIMEOUT,
-    )
+    database = _get_readiness_database()
     outcome: dict[str, bool] = {}
     worker = threading.Thread(
         target=_probe_postgres,
@@ -293,7 +313,7 @@ def _check_postgres() -> PostgresReadinessCheck:
     worker.start()
     worker.join(_POSTGRES_READINESS_DEADLINE)
     if worker.is_alive():
-        # Der Worker räumt seine Database selbst ab, sobald er zurückkehrt.
+        # NullPool: die Verbindung des Workers schließt, sobald er zurückkehrt.
         logger.warning(
             "postgres readiness probe exceeded %.1fs deadline",
             _POSTGRES_READINESS_DEADLINE,
