@@ -85,7 +85,7 @@ beforeEach(() => {
   localStorageMock.clear()
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  ;(_resetSupabaseClient as ReturnType<typeof vi.fn>)()
+  ;(_resetSupabaseClient as unknown as () => void)()
 })
 
 describe('loadConfig()', () => {
@@ -184,10 +184,10 @@ describe('switchWorkspace()', () => {
 
 describe('onAuthStateChange — session sync', () => {
   it('updates session token when SIGNED_IN fires', async () => {
-    let capturedCb: ((event: string, session: unknown) => void) | null = null
+    const captured: { cb: ((event: string, session: unknown) => void) | null } = { cb: null }
     mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
     mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
-      capturedCb = cb
+      captured.cb = cb
       return { data: { subscription: { unsubscribe: vi.fn() } } }
     })
     mocks._svcGet
@@ -198,7 +198,7 @@ describe('onAuthStateChange — session sync', () => {
     await store.init()
 
     const newSession = { access_token: 'new-token-abc', user: { id: 'u2' }, expires_at: 9999 }
-    capturedCb?.('SIGNED_IN', newSession)
+    captured.cb?.('SIGNED_IN', newSession)
 
     expect(getSessionToken()).toBe('new-token-abc')
     expect(store.session).toEqual(newSession)

@@ -1,0 +1,18 @@
+{
+  "$id": "https://alexle135.de/schemas/workspace-member-removal.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``DELETE /api/workspaces/current/members/<user_id>``: wer entfernt wurde.",
+  "properties": {
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id"
+  ],
+  "title": "WorkspaceMemberRemoval",
+  "type": "object"
+}

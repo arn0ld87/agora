@@ -93,6 +93,7 @@ from app.contracts.workspace_contract import (
     AuthConfigResponse,
     WorkspaceBootstrapRequest,
     WorkspaceMembership,
+    WorkspaceMemberRemoval,
     WorkspaceMemberUpsert,
     WorkspaceSummary,
 )
@@ -198,6 +199,7 @@ CONTRACTS: dict[str, type] = {
     "workspace-bootstrap-request.schema.json": WorkspaceBootstrapRequest,
     "workspace-membership.schema.json": WorkspaceMembership,
     "workspace-member-upsert.schema.json": WorkspaceMemberUpsert,
+    "workspace-member-removal.schema.json": WorkspaceMemberRemoval,
     "system-status-ollama.schema.json": SystemStatusOllama,
     "system-status-e2e.schema.json": SystemStatusE2E,
     # Neo4j-/Disk-Teilbaeume von /api/status (Issue #1466)

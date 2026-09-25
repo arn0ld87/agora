@@ -3,10 +3,11 @@
  *
  * Mirrors:
  *   - WorkspaceRole        (enum)
- *   - WorkspaceSummary     (GET /api/workspaces — workspace_summary.schema.json)
+ *   - WorkspaceSummary     (GET /api/workspaces — workspace-summary.schema.json)
  *   - WorkspaceBootstrapRequest (POST /api/workspaces/bootstrap — workspace-bootstrap-request.schema.json)
  *   - WorkspaceMembership  (workspace-membership.schema.json)
  *   - WorkspaceMemberUpsert (workspace-member-upsert.schema.json)
+ *   - WorkspaceMemberRemoval (DELETE …/members/<user_id> — workspace-member-removal.schema.json)
  */
 import { z } from 'zod'
 
@@ -46,3 +47,10 @@ export const WorkspaceMemberUpsertSchema = z
   })
   .strict()
 export type WorkspaceMemberUpsert = z.infer<typeof WorkspaceMemberUpsertSchema>
+
+export const WorkspaceMemberRemovalSchema = z
+  .object({
+    user_id: z.string().uuid(),
+  })
+  .strict()
+export type WorkspaceMemberRemoval = z.infer<typeof WorkspaceMemberRemovalSchema>

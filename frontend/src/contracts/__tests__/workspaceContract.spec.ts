@@ -4,6 +4,7 @@ import workspaceSummaryJsonSchema from '../../../../schemas/workspace-summary.sc
 import workspaceBootstrapRequestJsonSchema from '../../../../schemas/workspace-bootstrap-request.schema.json'
 import workspaceMembershipJsonSchema from '../../../../schemas/workspace-membership.schema.json'
 import workspaceMemberUpsertJsonSchema from '../../../../schemas/workspace-member-upsert.schema.json'
+import workspaceMemberRemovalJsonSchema from '../../../../schemas/workspace-member-removal.schema.json'
 
 import {
   WorkspaceRoleSchema,
@@ -11,6 +12,7 @@ import {
   WorkspaceBootstrapRequestSchema,
   WorkspaceMembershipSchema,
   WorkspaceMemberUpsertSchema,
+  WorkspaceMemberRemovalSchema,
 } from '../workspaceContract'
 
 describe('workspace contracts — canonical Zod mirrors', () => {
@@ -36,6 +38,18 @@ describe('workspace contracts — canonical Zod mirrors', () => {
     expect(Object.keys(WorkspaceMemberUpsertSchema.shape).sort()).toEqual(
       Object.keys(workspaceMemberUpsertJsonSchema.properties).sort(),
     )
+  })
+
+  it('WorkspaceMemberRemovalSchema has same top-level keys as generated JSON schema', () => {
+    expect(Object.keys(WorkspaceMemberRemovalSchema.shape).sort()).toEqual(
+      Object.keys(workspaceMemberRemovalJsonSchema.properties).sort(),
+    )
+  })
+
+  it('WorkspaceMemberRemovalSchema accepts the DELETE response and rejects extra keys', () => {
+    const userId = '123e4567-e89b-12d3-a456-426614174000'
+    expect(WorkspaceMemberRemovalSchema.safeParse({ user_id: userId }).success).toBe(true)
+    expect(WorkspaceMemberRemovalSchema.safeParse({ removed: userId }).success).toBe(false)
   })
 
   it('WorkspaceRoleSchema enum values match the JSON schema enum', () => {
