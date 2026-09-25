@@ -1,0 +1,24 @@
+{
+  "$id": "https://alexle135.de/schemas/workspace-bootstrap-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``POST /api/workspaces/bootstrap``: optionaler Anzeigename.",
+  "properties": {
+    "name": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    }
+  },
+  "title": "WorkspaceBootstrapRequest",
+  "type": "object"
+}

@@ -1,0 +1,46 @@
+{
+  "$id": "https://alexle135.de/schemas/auth-config-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``GET /api/auth/config`` \u2014 \u00f6ffentlich, ohne Geheimnisse (#1616).\n\n``supabase_anon_key`` ist der \u00f6ffentliche Anon-Key; er ist f\u00fcr den Browser\nbestimmt und gew\u00e4hrt allein keinen Zugriff auf Agora-Daten.",
+  "properties": {
+    "auth_backend": {
+      "title": "Auth Backend",
+      "type": "string"
+    },
+    "jwt_enabled": {
+      "title": "Jwt Enabled",
+      "type": "boolean"
+    },
+    "supabase_anon_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supabase Anon Key"
+    },
+    "supabase_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supabase Url"
+    }
+  },
+  "required": [
+    "auth_backend",
+    "jwt_enabled"
+  ],
+  "title": "AuthConfigResponse",
+  "type": "object"
+}

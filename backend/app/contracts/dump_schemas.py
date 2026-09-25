@@ -89,6 +89,13 @@ from app.contracts.user_profile_contract import (
     UserProfile,
     UserProfileUpdateRequest,
 )
+from app.contracts.workspace_contract import (
+    AuthConfigResponse,
+    WorkspaceBootstrapRequest,
+    WorkspaceMembership,
+    WorkspaceMemberUpsert,
+    WorkspaceSummary,
+)
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationResponse,
@@ -185,6 +192,12 @@ CONTRACTS: dict[str, type] = {
     "onboarding-state.schema.json": OnboardingState,
     "onboarding-step-update-request.schema.json": OnboardingStepUpdateRequest,
     "onboarding-status-response.schema.json": OnboardingStatusResponse,
+    # Supabase-Auth und Workspaces (#1616, Frontend-Spiegel #1617)
+    "auth-config-response.schema.json": AuthConfigResponse,
+    "workspace-summary.schema.json": WorkspaceSummary,
+    "workspace-bootstrap-request.schema.json": WorkspaceBootstrapRequest,
+    "workspace-membership.schema.json": WorkspaceMembership,
+    "workspace-member-upsert.schema.json": WorkspaceMemberUpsert,
     "system-status-ollama.schema.json": SystemStatusOllama,
     "system-status-e2e.schema.json": SystemStatusE2E,
     # Neo4j-/Disk-Teilbaeume von /api/status (Issue #1466)
