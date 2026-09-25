@@ -1,0 +1,38 @@
+name: Refresh Hollerau demo video
+
+on:
+  push:
+    branches:
+      - docs/hollerau-showcase-run
+    paths:
+      - .github/workflows/hollerau-video-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/hollerau-showcase-run
+          fetch-depth: 0
+
+      - name: Fetch cleaned Agora-only demo
+        run: |
+          curl -L --fail --retry 3 -o media/agora-demo.mp4 'https://at.adobe.com/2z1oNNL0u7t5MR9n'
+          file media/agora-demo.mp4
+          test -s media/agora-demo.mp4
+
+      - name: Commit video and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add media/agora-demo.mp4
+          git rm .github/workflows/hollerau-video-refresh.yml
+          git commit -m "docs: use full-frame showcase video"
+          git push origin HEAD:docs/hollerau-showcase-run
