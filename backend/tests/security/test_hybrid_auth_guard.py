@@ -17,7 +17,7 @@ import jwt
 import pytest
 from flask import Blueprint, Flask, jsonify
 
-from app.config import Config
+from app.config import WORKSPACE_SCOPED_BACKENDS, Config
 from app.contracts.auth_contract import AuthType, Principal
 from app.contracts.workspace_contract import (
     DEFAULT_WORKSPACE_ID,
@@ -91,6 +91,14 @@ def make_client(monkeypatch):
         monkeypatch.setattr(Config, 'SUPABASE_JWT_ISSUER', ISSUER if jwt_on else '')
         monkeypatch.setattr(Config, 'SUPABASE_JWT_SECRET', SECRET if jwt_on else '')
         monkeypatch.setattr(Config, 'SUPABASE_JWKS_URL', '')
+        if jwt_on:
+            # Eine gültige JWT-Lage nach ADR-0018: alle Metadaten auf
+            # PostgreSQL, Isolation vorhanden. Der Guard prüft das selbst.
+            monkeypatch.setattr('app.config.TENANT_ISOLATION_AVAILABLE', True)
+            monkeypatch.delenv('AGORA_ALLOW_ANONYMOUS', raising=False)
+            monkeypatch.setattr(Config, 'DATABASE_URL', 'postgresql+psycopg://u:p@db:5432/agora')
+            for _, attr in WORKSPACE_SCOPED_BACKENDS:
+                monkeypatch.setattr(Config, attr, 'postgres')
         if master is None:
             monkeypatch.delenv('AGORA_AUTH_TOKEN', raising=False)
         else:
@@ -417,3 +425,14 @@ def test_master_token_passes_scope_checks(scoped_client):
     client = scoped_client(jwt_on=False)
 
     assert client.get('/data/read', headers={'X-Agora-Token': MASTER}).status_code == 200
+
+
+def test_jwt_stays_off_when_the_invariant_fails_even_in_debug(make_client, monkeypatch):
+    """``create_app`` startet mit ``FLASK_DEBUG`` trotz Validierungsfehlern.
+    Der Guard prüft die Invariante deshalb selbst (Codex-Review auf #1622)."""
+    client = make_client(jwt_on=True)
+    monkeypatch.setattr(Config, 'PROJECT_BACKEND', 'file')
+
+    response = client.get('/api/whoami', headers=_bearer(_token()))
+
+    assert response.status_code == 401
