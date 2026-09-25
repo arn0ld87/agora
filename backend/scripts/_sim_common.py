@@ -763,6 +763,18 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
     if effective == "auto":
         avail_mb = _read_available_mb_linux()
         inject_fp16 = not (avail_mb is not None and avail_mb >= _BERT_FP32_MIN_AVAIL_MB)
+        if inject_fp16:
+            # Sichtbare Degradation: fp16 auf der CPU braucht ~12 min pro
+            # Forward und blockiert den Event-Loop beider Plattformen. Ein
+            # Lauf wirkt dann in der ersten Twitter-Runde "haengend".
+            logging.getLogger("agora._sim_common").warning(
+                "TWHIN-BERT laedt in fp16, weil nur %s MB RAM frei sind "
+                "(fp32 braucht >= %d MB). Der Twitter-Recommender wird dadurch "
+                "sehr langsam (~12 min pro Runde). Container-Speicherlimit "
+                "anheben oder AGORA_BERT_MEMORY_PROFILE setzen.",
+                "unbekannt" if avail_mb is None else f"{avail_mb:.0f}",
+                _BERT_FP32_MIN_AVAIL_MB,
+            )
     else:
         inject_fp16 = True
 

@@ -211,6 +211,14 @@ Bekannt offen: [#1323](https://github.com/arn0ld87/agora/issues/1323). Im Refere
 
 Das ist kein reiner Stilfehler. Solche Aktionen nicht als belastbare Stakeholder-Evidence behandeln, ohne den Rollenbezug zu prüfen.
 
+### Lauf hängt in der ersten Twitter-Runde
+
+Siehe [#1646](https://github.com/arn0ld87/agora/issues/1646). Hat der Agora-Container beim Simulationsstart weniger als 4096 MB frei, lädt das Profil `AGORA_BERT_MEMORY_PROFILE=auto` den Recommender `Twitter/twhin-bert-base` in fp16. fp16 hat auf der CPU keine nativen Kernel: ein Forward dauert rund 12 Minuten und blockiert Twitter und Reddit zugleich. Der Lauf steht dann in der ersten aktiven Runde (bei Start-Offset z. B. „Runde 8“), der Simulationsprozess belegt viele Kerne, die Tabelle `rec` in `twitter_simulation.db` bleibt leer.
+
+Erkennung: Im `simulation.log` steht „TWHIN-BERT laedt in fp16“ (seit #1646), in älteren Ständen nur die transformers-Warnung „`torch_dtype` is deprecated“.
+
+Abhilfe: Speicherlimit des Agora-Containers anheben (Richtwert ≥ 6 GiB, Web-Worker plus fp32-Modell plus Torch-Overhead). Das geht ohne Neustart per `docker update --memory 12g --memory-swap 16g agora`, dauerhaft im Compose-Overlay (`mem_limit`). Ein bereits laufender Simulationsprozess behält sein fp16-Modell; erst ein neu gestarteter Lauf lädt fp32.
+
 ### Twitter-Feed wirkt zwischen identischen Läufen zufällig
 
 Bekannt offen: [#1236](https://github.com/arn0ld87/agora/issues/1236). Der OASIS-Twitter-Recommender nutzt `Twitter/twhin-bert-base` über einen Pooler, dessen Gewichte im verwendeten Checkpoint nicht trainiert vorliegen und neu initialisiert werden können.

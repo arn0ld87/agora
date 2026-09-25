@@ -35,6 +35,15 @@ Superuser, eine Rolle mit `BYPASSRLS` oder den Tabellen-Owner zeigt.
    GRANT SELECT ON public.alembic_version TO agora_app;
    ```
 
+   **Supabase:** Dort schaltet ein Event-Trigger auf neuen Tabellen in `public` automatisch RLS ein, auch auf `public.alembic_version`. Ohne Policy sieht `agora_app` trotz `GRANT SELECT` keine Zeile, und das Start-Gate bricht mit „Keine Alembic-Revision in der Datenbank gefunden“ ab, obwohl die Revision drinsteht. RLS dort nicht abschalten (`anon`/`authenticated` haben auf `public` volle Grants), sondern eine reine Lese-Policy anlegen:
+
+   ```sql
+   CREATE POLICY agora_app_read_alembic_version ON public.alembic_version
+     FOR SELECT TO agora_app USING (true);
+   ```
+
+   Prüfen: `SELECT relrowsecurity FROM pg_class WHERE oid = 'public.alembic_version'::regclass;` — steht dort `t`, braucht es die Policy.
+
    `ALTER DEFAULT PRIVILEGES` gilt für Tabellen, die der ausführende Owner künftig anlegt. Laufen Migrationen unter einer anderen Rolle, braucht es `FOR ROLE <owner>`.
 
    Auf Supabase zusätzlich, als `postgres` (#1616): Die Mitgliederverwaltung prüft neue Mitglieder gegen `auth.users`, damit keine Mitgliedschaft für eine unbekannte ID entsteht. Nötig ist nur die Spalte `id`:

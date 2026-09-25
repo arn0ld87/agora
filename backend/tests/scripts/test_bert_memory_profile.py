@@ -43,6 +43,8 @@ import time
 from pathlib import Path
 from unittest import mock
 
+import logging
+
 import pytest
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -914,3 +916,54 @@ def test_real_rec_matrix_is_deterministic_and_actually_personalized(
             f"Nutzer identische Empfehlung ist das Symptom der "
             f"Zufallsprojektion. Vollstaendige Matrix: {first}"
         )
+
+
+
+def _collect_sim_common_warnings() -> tuple[logging.Handler, list[str]]:
+    """Handler direkt am Logger: ``agora.*`` propagiert nicht zum Root, caplog
+    saehe die Meldung sonst nicht."""
+    messages: list[str] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    handler = _Collect(level=logging.WARNING)
+    logging.getLogger("agora._sim_common").addHandler(handler)
+    return handler, messages
+
+
+def test_auto_profile_warns_when_falling_back_to_fp16(
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
+) -> None:
+    """Der fp16-Fallback ist eine Degradation (Lauf wirkt in der ersten
+    Twitter-Runde haengend) und muss im Log sichtbar sein (#1646)."""
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "auto")
+    monkeypatch.setattr(_sim_common_module, "_read_available_mb_linux", lambda: 300.0)
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = lambda *a, **k: mock.Mock()
+    handler, messages = _collect_sim_common_warnings()
+    try:
+        with _patch_transformers_and_torch(fake_module, fake_torch):
+            install_bert_memory_profile()
+    finally:
+        logging.getLogger("agora._sim_common").removeHandler(handler)
+
+    assert any("fp16" in m and "300 MB" in m for m in messages)
+
+
+def test_auto_profile_does_not_warn_with_enough_ram(
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
+) -> None:
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "auto")
+    monkeypatch.setattr(_sim_common_module, "_read_available_mb_linux", lambda: 8192.0)
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = lambda *a, **k: mock.Mock()
+    handler, messages = _collect_sim_common_warnings()
+    try:
+        with _patch_transformers_and_torch(fake_module, fake_torch):
+            install_bert_memory_profile()
+    finally:
+        logging.getLogger("agora._sim_common").removeHandler(handler)
+
+    assert not [m for m in messages if "fp16" in m]
