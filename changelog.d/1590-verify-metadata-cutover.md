@@ -1,0 +1,3 @@
+### Added
+
+- **Sammelprüfung für den Metadaten-Cutover** — `backend/scripts/verify_metadata_cutover.py` prüft in Cutover-Reihenfolge Schalter-Konsistenz (Fremdschlüssel-Reihenfolge LLM-Profile → Projekte → Simulationen → Runs → Reports, `DATABASE_URL`), Alembic-Head, das `--verify` aller fünf Migrationsskripte und `migration_baseline.py --compare`; Exit 0 nur, wenn jeder Schritt grün ist (1 = Fehler, 2 = ungeprüft), Zusammenfassung nach Plan §33. Runbook `docs/runbooks/metadata-postgres-cutover.md` fasst die Einzel-Runbooks in Cutover-Reihenfolge zusammen, inkl. Rückweg. Umgeschaltet ist nichts. (#1590)
