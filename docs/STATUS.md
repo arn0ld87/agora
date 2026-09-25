@@ -542,4 +542,5 @@ Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines 
 - API: [`api.md`](api.md) und [`api-contracts.md`](api-contracts.md)
 - Konfiguration: [`configuration.md`](configuration.md)
 - Betrieb: [`operator-guide.md`](operator-guide.md), [`operations.md`](operations.md), [`backup-restore.md`](backup-restore.md)
+- UI: Der [visuelle Audit vom September 2026](ui/premium-redesign-2026-09/01-visual-audit.md) beschreibt den jüngeren Stand; [`ui/design-language-v4.md`](ui/design-language-v4.md) dokumentiert einen Snapshot vom Mai 2026.
 - historische Pläne/Audits: nicht als Current-State-Quelle verwenden

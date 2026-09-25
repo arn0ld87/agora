@@ -1,13 +1,15 @@
 # Agora UI-Regeln
 
-Diese Regeln sind aus der bestehenden v4-Code-Realität abgeleitet (Stand 2026-05-15,
-Commit `de933b9`). Sie kodifizieren Patterns, die in `components/v4/` bereits
-konsistent gelebt werden, damit neue Komponenten nicht aus dem Rahmen fallen.
+Diese Regeln gehen auf die v4-Codebasis vom 15.05.2026 (Commit `de933b9`)
+zurück. Die Verzeichnisliste und die Prüfkommandos wurden mit dem Stand vom
+25.09.2026 abgeglichen. Für visuelle Änderungen gilt zusätzlich der
+[UI-Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md).
 
 ## Verzeichnis-Regeln
 
 - Neue Komponenten landen unter `frontend/src/components/v4/<bucket>/`.
-  Buckets: `shell`, `forms`, `data`, `dashboard`, `steps`.
+  Buckets: `shell`, `forms`, `data`, `dashboard`, `steps`,
+  `run-budget`, `sim-feed`.
 - Falls keine bestehende Bucket passt: neuen Bucket anlegen, in
   [`component-audit.md`](./component-audit.md) eintragen.
 - `frontend/src/components/ui/` ist **read-only Legacy-Zone**. Keine neuen Files.
@@ -110,7 +112,8 @@ Strings durch overridebare Props.
 ## Security-Regeln
 
 - API-Keys werden **nie** dauerhaft im Frontend persistiert. Eingabe →
-  Backend → verschlüsselt server-seitig (siehe `backend/data/llm_provider_secrets.lock`).
+  Backend → verschlüsselt server-seitig (siehe
+  [Secret-Key-Lifecycle](../secret-key-lifecycle.md)).
 - Kein `localStorage`/`sessionStorage` für Secrets.
 - DOMPurify-Pflicht für jedes `v-html`-Rendering (Markdown, externer HTML-Content).
 - Niemals Demo-API-Keys in Code, Tests oder Storybook-Stories committen.
@@ -142,12 +145,8 @@ bun run test
 bun run build
 ```
 
-`bun run check` führt typecheck + test:coverage + build in einem Rutsch aus.
+`bun run check` führt lint, typecheck, test:coverage und build aus.
 
-> Anmerkung: Die Top-Level-`CLAUDE.md` zeigt im aktuellen Stand teilweise noch
-> `npm`-Befehle. Faktisch ist Bun (1.3+) der Standard im Repo — Lockfile ist
-> `bun.lock` und `packageManager` ist Bun. Eine Synchronisierung der
-> `CLAUDE.md`-Beispiele auf `bun run`-Form ist als separater Doku-Slice empfohlen.
 
 ## Anti-Patterns (sofort raus)
 
@@ -169,4 +168,4 @@ bun run build
 - Design-Language: [`design-language-v4.md`](./design-language-v4.md)
 - Component-Audit: [`component-audit.md`](./component-audit.md)
 - shadcn-vue-Entscheidung: [`shadcn-vue-evaluation.md`](./shadcn-vue-evaluation.md)
-- Epic-Doku: [`docs/2026-05-11-design-v4-app-shell-epic.md`](../2026-05-11-design-v4-app-shell-epic.md)
+- UI-Audit: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)
