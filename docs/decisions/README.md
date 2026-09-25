@@ -6,7 +6,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 
 | Nr | Titel | Status | Slice |
 |---|---|---|---|
-| [0001](0001-auth-model.md) | Auth-Zielbild für v1.0 | Accepted (2026-05-04) | M10.4 |
+| [0001](0001-auth-model.md) | Auth-Zielbild für v1.0 | Superseded by [0018](0018-multi-user-before-1-0.md) (2026-09-25) | M10.4 |
 | [0002](0002-evidence-gating.md) | Evidence-Gating für Report-Generation | Accepted (2026-05-10) | M11.7 |
 | [0002-S](0002-supersedes.md) | Der Entailment-Judge darf in der Grauzone belegen | Accepted (2026-08-17) | #1357 |
 | [0003](0003-pydantic-settings-migration.md) | Pydantic-Settings-Migration | Accepted (2026-05-15) | Pydantic-Settings-Epic |

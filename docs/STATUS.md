@@ -448,7 +448,7 @@ Priorität vor neuen Features:
 7. #766 — Backup/Restore/Upgrade/Rollback nachweisen. Werkzeug und Runbook stehen; der Durchgang auf einem frischen Host fehlt.
 8. #765 — Agora gegen einfachere LLM-/Persona-Baselines und reale Referenzen evaluieren.
 
-Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines Plugin-System oder ein weiterer großer Frontend-Rewrite.
+Nicht priorisiert vor 1.0: Kubernetes/Helm, Federation, allgemeines Plugin-System oder ein weiterer großer Frontend-Rewrite. Multi-User mit Workspaces, Supabase Auth und RLS gehört seit [ADR-0018](decisions/0018-multi-user-before-1-0.md) zum Weg zu 1.0 (Epic [#1610](https://github.com/arn0ld87/agora/issues/1610)).
 
 ## Dokumentationspflege
 
