@@ -97,6 +97,12 @@ export const ClaimSchema = z
       .enum(["speculative", "low", "medium", "high", "verified"])
       .optional()
       .nullable(),
+    // Issue #1400: Art der Aussage. Spiegelt report_v3.py::Claim.claim_type.
+    // Nicht mit confidence_scope verwechseln.
+    claim_type: z
+      .enum(["empirical", "analytical", "recommendation", "structural"])
+      .optional()
+      .nullable(),
   })
   .strict();
 export type Claim = z.infer<typeof ClaimSchema>;

@@ -172,6 +172,15 @@ export function useGraphBuildPipeline({
       formData.append('simulation_requirement', pending.simulationRequirement)
       formData.append('num_agents', String(pending.numAgents))
       formData.append('num_rounds', String(pending.numRounds))
+      // Issue #1240: eine Rolle je Datei, positionsgleich zu `files`. Nur
+      // gesendet, wenn mindestens eine Datei vom Domänenfakt abweicht; der
+      // Backend-Parser lehnt unbekannte Rollen und falsche Längen mit 400 ab.
+      const documentRoles = pending.files.map(
+        (_file, index) => pending.documentRoles?.[index] ?? 'domain_fact',
+      )
+      if (documentRoles.some((role) => role !== 'domain_fact')) {
+        formData.append('document_roles', JSON.stringify(documentRoles))
+      }
 
       let aiModelRef: AiModelRefPayload | null = null
       if (pending.llmProfileId) {

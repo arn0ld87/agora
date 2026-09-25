@@ -42,6 +42,20 @@ def init_evidence_map(
 _SEED_DOC_ANCHOR_PREFIX = "seed_doc:"
 
 
+def document_role_of(
+    provenance: Optional[Dict[str, Any]],
+    document_roles: Optional[Dict[str, str]],
+) -> Optional[str]:
+    """Dokument-Rolle eines Graph-Fakts über seine Provenance (Issue #1240).
+
+    ``None`` bei unbekannter Herkunft oder Standardrolle — geraten wird nicht.
+    """
+    if not isinstance(provenance, dict) or not document_roles:
+        return None
+    document_id = str(provenance.get("document_id") or "").strip()
+    return document_roles.get(document_id) if document_id else None
+
+
 def build_seed_document_anchor(provenance: Optional[Dict[str, Any]]) -> Optional[str]:
     """``seed_doc:<document_id>#chunk:<chunk_id>`` — oder ``None`` (ADR-0013).
 
@@ -352,6 +366,12 @@ def _record_text_confidence_downgrade(
     entstanden ist. Ein spaeteres ``medium`` waere bereits abgestuft und
     damit die falsche Referenz.
     """
+    # Issue #1400: Nur eine Tatsachenbehauptung kann sicherer formuliert sein,
+    # als ihr Label traegt. Eine Empfehlung, Analyse oder Gliederung ist
+    # naturgemaess ungehedgt; der Hinweis waere dort falscher Alarm.
+    # Untypisierte Alt-Claims bleiben beim bisherigen Verhalten.
+    if claim.get("claim_type") not in (None, "empirical"):
+        return
     trail = claim.get("audit_trail")
     if not isinstance(trail, list):
         trail = []
@@ -981,6 +1001,7 @@ def degrade_sections_for_violations(
 
 
 __all__ = [
+    "document_role_of",
     "init_evidence_map",
     "normalize_claims_for_contract",
     "normalize_sections_for_contract",

@@ -113,3 +113,67 @@ def test_ontology_generate_persists_requirement_files_and_text_length(
     assert reloaded.simulation_requirement == REQUIREMENT
     assert reloaded.files, "files-Liste muss die project.json überleben"
     assert reloaded.total_text_length and reloaded.total_text_length > 0
+
+
+def test_ontology_generate_persists_document_roles_in_manifest(client, persistence_mocks):
+    """Issue #1240: die Textsorte je Datei landet im Dokument-Manifest."""
+    response = client.post(
+        "/api/graph/ontology/generate",
+        data={
+            "simulation_requirement": REQUIREMENT,
+            "project_name": "rollen-check",
+            # Zwei gleichnamige Uploads aus verschiedenen Ordnern: die Rolle
+            # hängt an der Position, nicht am Namen (Codex-Review PR #1606).
+            "document_roles": '["domain_fact", "expected_result", "domain_fact"]',
+            "files": [
+                (io.BytesIO(b"Szenario und Domaenenfakten."), "szenario.md"),
+                (io.BytesIO(b"Der Betriebsrat wird zustimmen."), "results.md"),
+                (io.BytesIO(b"Gemessene Werte aus dem Pilot."), "results.md"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200, response.get_json()
+    manifest = ProjectManager.get_document_manifest(response.get_json()["data"]["project_id"])
+    roles = [(entry.filename, entry.document_role.value) for entry in manifest.documents]
+    assert roles == [
+        ("szenario.md", "domain_fact"),
+        ("results.md", "expected_result"),
+        ("results.md", "domain_fact"),
+    ]
+
+
+def test_ontology_generate_rejects_unknown_document_role(client, persistence_mocks):
+    response = client.post(
+        "/api/graph/ontology/generate",
+        data={
+            "simulation_requirement": REQUIREMENT,
+            "project_name": "rollen-check",
+            "document_roles": '["loesung"]',
+            "files": (io.BytesIO(b"Document body."), "doc.txt"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert "document_roles" in response.get_json()["error"]
+
+
+def test_ontology_generate_rejects_role_count_mismatch(client, persistence_mocks):
+    response = client.post(
+        "/api/graph/ontology/generate",
+        data={
+            "simulation_requirement": REQUIREMENT,
+            "project_name": "rollen-check",
+            "document_roles": '["expected_result"]',
+            "files": [
+                (io.BytesIO(b"a"), "a.md"),
+                (io.BytesIO(b"b"), "b.md"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert "one role per file" in response.get_json()["error"]

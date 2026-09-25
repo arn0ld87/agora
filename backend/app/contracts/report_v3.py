@@ -114,6 +114,10 @@ class Claim(BaseModel):
     # dann deckt seine Formulierung eine hoehere Sicherheit ab, als das
     # Label ausweist. ``None`` heisst "nicht abgestuft", nicht "unbekannt".
     text_confidence: Literal["speculative", "low", "medium", "high", "verified"] | None = None
+    # Issue #1400: Art der Aussage (Tatsache, Analyse, Empfehlung, Struktur).
+    # Nicht mit ``confidence_scope`` verwechseln — das eine sagt, *was*
+    # behauptet wird, das andere, *wofuer* die Confidence gilt.
+    claim_type: Literal["empirical", "analytical", "recommendation", "structural"] | None = None
 
     @model_validator(mode="after")
     def provenance_must_not_contradict_itself(self) -> "Claim":

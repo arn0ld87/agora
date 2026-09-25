@@ -41,6 +41,7 @@ from ..services.llm_routing_seed import (
     resolve_route_api_key,
     seed_run_stage_routing,
 )
+from ..services.document_roles import load_document_roles
 from ..services.report_agent import ReportAgent, ReportManager
 from ..services.report_agent.output_contract import is_deliverable_report_status
 from ..services.report_generation import (
@@ -1121,6 +1122,8 @@ def _resume_report_generate(run: dict):
                 graph_tools=graph_tools,
                 llm_client=shared_llm_client,
                 model_name=llm_model_override,
+                # Issue #1240: Szenario-/Erwartungstext stützt keinen Claim.
+                document_roles=load_document_roles(project.project_id),
             )
 
             def progress_callback(stage, progress, message):

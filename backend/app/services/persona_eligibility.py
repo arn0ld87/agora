@@ -38,6 +38,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
+from ..contracts.entity_semantic_class_contract import SemanticEntityClass
 from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
@@ -47,6 +48,18 @@ from .degradation_collector import DegradationCollector
 from .entity_reader import EntityNode
 
 logger = get_logger("agora.persona_eligibility")
+
+# Semantische Klassen, die grundsätzlich keine Persona tragen können.
+# Ergänzt die Typ-Blockliste (INELIGIBLE_ENTITY_TYPES) um Fälle, bei denen
+# der *Typ* uneindeutig ist, aber der *Name* ein technisches/geografisches/
+# konzeptuelles Artefakt benennt (Issue #1470, Slice 4.3).
+_INELIGIBLE_SEMANTIC_CLASSES: frozenset[SemanticEntityClass] = frozenset(
+    {
+        SemanticEntityClass.TECHNOLOGY,
+        SemanticEntityClass.LOCATION,
+        SemanticEntityClass.CONCEPT,
+    }
+)
 
 
 # Stufe 1 — harte Blockliste. Case-insensitiv gegen den normalisierten
@@ -275,6 +288,10 @@ def filter_eligible_entities(
         ``PersonaEligibilityResult`` mit den verbleibenden Entitäten und
         den Ausschlussgründen.
     """
+    # Lazy-import um Zirkelimport zu vermeiden (entity_semantic_class importiert
+    # persona_domain_coherence, nicht persona_eligibility).
+    from .entity_semantic_class import classify_entity
+
     known_types = _known_entity_types()
     eligible: list[EntityNode] = []
     exclusions: list[EligibilityExclusion] = []
@@ -307,6 +324,35 @@ def filter_eligible_entities(
                 "Persona-Eligibility: Entität ausgeschlossen name=%s type=%s reason=%s",
                 entity.name,
                 entity_type,
+                reason,
+            )
+            continue
+
+        # Issue #1470 (Slice 4.3): semantische Klasse prüfen.  Technische
+        # Artefakte (Vektordatenbank, RAG-Architektur), geografische und
+        # konzeptuelle Entitäten belegen keinen Persona-Platz — auch dann
+        # nicht, wenn ihr Typ uneindeutig ist (z. B. "TechnologyProvider"
+        # oder "Organization" mit technischem Namen).
+        semantic_class = classify_entity(entity.name, entity_type)
+        if semantic_class in _INELIGIBLE_SEMANTIC_CLASSES:
+            reason = (
+                f"Semantische Klasse '{semantic_class.value}' hat keinen "
+                f"menschlichen Träger (name='{entity.name}', "
+                f"entity_type='{entity_type}', Issue #1470)"
+            )
+            exclusions.append(
+                EligibilityExclusion(
+                    entity_name=entity.name,
+                    entity_type=entity_type,
+                    reason=reason,
+                )
+            )
+            logger.info(
+                "Persona-Eligibility: Entitaet ausgeschlossen name=%s type=%s "
+                "semantic_class=%s reason=%s",
+                entity.name,
+                entity_type,
+                semantic_class.value,
                 reason,
             )
             continue

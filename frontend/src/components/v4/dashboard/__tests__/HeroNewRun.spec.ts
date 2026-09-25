@@ -469,11 +469,54 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
       expect(setPendingUploadMock).toHaveBeenCalledWith(
         [file], 'Welche Reaktionen sind zu erwarten?',
         selection === 'profile' ? 'cloud-profile' : null, 30, 10,
+        ['domain_fact'],
       )
       expect(routerPushMock).toHaveBeenCalled()
       w.unmount()
     },
   )
+
+  // Issue #1240: Textsorte je Datei reist mit dem Upload.
+  it('übergibt die gewählte Textsorte je Datei an setPendingUpload', async () => {
+    const w = await mountHero()
+    const file = new File(['Erwartung'], 'erwartung.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    const select = w.find<HTMLSelectElement>('.hero-file__role')
+    expect(select.element.value).toBe('domain_fact')
+    await select.setValue('expected_result')
+    await w.find('#hero-requirement').setValue('Welche Reaktionen sind zu erwarten?')
+    await flushPromises()
+    await w.find('.hero-cta').trigger('click')
+    expect(setPendingUploadMock).toHaveBeenCalledWith(
+      [file], 'Welche Reaktionen sind zu erwarten?', null, 30, 10,
+      ['expected_result'],
+    )
+    w.unmount()
+  })
+
+  // Codex-Review PR #1606: gleichnamige Uploads behalten eigene Rollen.
+  it('hält die Textsorte je Upload auseinander, auch bei gleichem Dateinamen', async () => {
+    const w = await mountHero()
+    const first = new File(['Erwartung'], 'results.md', { type: 'text/markdown' })
+    const second = new File(['Messwerte'], 'results.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [first, second] })
+    await input.trigger('change')
+    const selects = w.findAll<HTMLSelectElement>('.hero-file__role')
+    expect(selects).toHaveLength(2)
+    await selects[0].setValue('expected_result')
+    expect(selects[1].element.value).toBe('domain_fact')
+    await w.find('#hero-requirement').setValue('Welche Reaktionen sind zu erwarten?')
+    await flushPromises()
+    await w.find('.hero-cta').trigger('click')
+    expect(setPendingUploadMock).toHaveBeenCalledWith(
+      [first, second], 'Welche Reaktionen sind zu erwarten?', null, 30, 10,
+      ['expected_result', 'domain_fact'],
+    )
+    w.unmount()
+  })
 
   it.each(['neo4j-offline', 'status-error', 'profiles-loading'])(
     'sperrt bei %s weiterhin und zeigt den zutreffenden Hinweis',
@@ -564,6 +607,7 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
       'abc',
       30,
       10,
+      ['domain_fact'],
     )
     // Issue #1234: Die Rundenzahl reist in der Query, nicht im Store — den
     // leert Schritt 1 nach dem Upload.
@@ -606,6 +650,7 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
       null,
       30,
       10,
+      ['domain_fact'],
     )
     const pushed = routerPushMock.mock.calls.at(-1)?.[0] as { query?: Record<string, string> }
     expect(JSON.parse(String(pushed.query?.budget))).toEqual({

@@ -214,8 +214,17 @@ def _preview_entity_counts(state, storage, inputs: _PrepareInputs) -> None:
         # die Generierung anschliessend erzeugt — der Nutzer saehe eine Zahl,
         # die nie eintritt. Der Kommentar oben nennt genau diese Gefahr
         # bereits fuer den Eignungsfilter.
+        from ..services.entity_alias_resolution import resolve_aliases
         from ..services.prepare_service import _dedupe_entities
 
+        # Issue #1470 (Codex-Review PR #1606): dieselbe Alias-Auflösung wie
+        # im Laufpfad — sonst meldet die Vorschau „BFW", „BFW Leipzig" und
+        # „Berufsförderungswerk Leipzig (BFW Leipzig)" als drei Personas.
+        filtered_preview.entities = resolve_aliases(filtered_preview.entities)
+        filtered_preview.filtered_count = len(filtered_preview.entities)
+        filtered_preview.entity_types = {
+            entity.get_entity_type() or "Entity" for entity in filtered_preview.entities
+        }
         deduped_preview, duplicate_count = _dedupe_entities(filtered_preview.entities)
         if duplicate_count:
             filtered_preview.entities = deduped_preview

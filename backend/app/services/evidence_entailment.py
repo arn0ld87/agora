@@ -31,7 +31,16 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from ..contracts.document_manifest_contract import NON_SUPPORTING_DOCUMENT_ROLES
 from .claim_atomizer import split_compound_claim
+from .quantifier_claims import (
+    CHECK_CORE_SUPPORTED,
+    CHECK_NEEDS_AGGREGATION,
+    QuantifierStrength,
+    detect_quantifier,
+    evidence_backs_quantifier,
+    quantifier_label,
+)
 
 
 class EntailmentVerdict(str, Enum):
@@ -105,6 +114,11 @@ class EntailmentResult:
     @property
     def supports(self) -> bool:
         return self.verdict is EntailmentVerdict.SUPPORTED
+
+
+#: Begründungspräfix für Evidence aus Szenario-/Erwartungstext (#1240). Das
+#: Hypothesen-Routing erkennt daran, dass ein Claim nur am Testfall hing.
+SCENARIO_ROLE_REASON_PREFIX = "Szenario-/Erwartungstext des Eingabedokuments"
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +347,8 @@ def _content_tokens(text: str) -> set[str]:
 #: steht selbst in ``_STOPWORDS`` und faellt dort weg (#1317).
 _NEGATION_MARKERS = frozenset({
     "nicht", "kein", "keine", "keiner", "keines", "keinem", "keinen",
-    "nie", "niemals", "ohne", "weder", "not", "no", "never", "without",
+    "nie", "niemals", "niemand", "ohne", "weder", "not", "no", "never", "without",
+    "nobody",
 })
 
 
@@ -1184,6 +1199,19 @@ def classify_evidence(
     if not claim or not evidence_text:
         return EntailmentResult(EntailmentVerdict.INSUFFICIENT, "leerer Claim oder Evidence-Text")
 
+    # Issue #1240: Szenario-, Frage- und Erwartungstext des Eingabedokuments
+    # beschreiben den Testfall, nicht die Domäne. Sie stützen nie — und
+    # widersprechen auch nie: eine erwartete Antwort, die die Simulation nicht
+    # zeigt, ist kein Gegenbeleg. Vor allen Regeln, damit der Judge dafür
+    # kein Budget verbraucht.
+    role = str(evidence_item.get("document_role") or "")
+    if role in NON_SUPPORTING_DOCUMENT_ROLES:
+        return EntailmentResult(
+            EntailmentVerdict.RELATED_ONLY,
+            f"{SCENARIO_ROLE_REASON_PREFIX} (document_role={role}) — Kontext, kein Beleg",
+            checks=["non_supporting_document_role"],
+        )
+
     checks: List[str] = []
     claim_facts = extract_numeric_facts(claim)
     evidence_facts = extract_numeric_facts(evidence_text)
@@ -1193,12 +1221,19 @@ def classify_evidence(
     if claim_facts:
         return _classify_numeric_claim(claim_facts, evidence_facts, checks)
 
-    # --- Regel 2: Claim behauptet eine Mehrheit/Minderheit ------------------
-    direction = _quantifier_direction(claim)
-    if direction and evidence_facts:
-        return _classify_quantifier_claim(claim, direction, evidence_facts, checks)
+    # --- Regel 2: Claim trägt eine Mengenaussage -----------------------------
+    strength = detect_quantifier(claim)
+    numerically_backed = False
+    if strength is not None and evidence_facts:
+        decided, numerically_backed = _classify_quantified_share(
+            claim, strength, evidence_facts, checks
+        )
+        if decided is not None:
+            return decided
+    elif _quantifier_direction(claim) == "minority" and evidence_facts:
+        return _classify_quantifier_claim(claim, "minority", evidence_facts, checks)
 
-    return _classify_qualitative_claim(
+    result = _classify_qualitative_claim(
         claim,
         evidence_text,
         checks,
@@ -1206,6 +1241,9 @@ def classify_evidence(
         retrieval_score=retrieval_score,
         judge=judge,
     )
+    if strength is None or numerically_backed:
+        return result
+    return _cap_quantified_result(strength, evidence_text, result)
 
 
 def _classify_numeric_claim(
@@ -1347,6 +1385,78 @@ def _classify_quantifier_claim(
         EntailmentVerdict.RELATED_ONLY,
         "Mengenaussage ohne quantitativen Beleg",
         checks=checks + ["quantifier_unbacked"],
+    )
+
+
+#: Anteil in Prozent, ab dem eine Quelle einen Quantor trägt. „Mehrheit" ist
+#: strikt über der Hälfte; „alle" verlangt den vollen Anteil.
+_QUANTIFIER_SHARE_FLOOR: Dict[QuantifierStrength, Callable[[float], bool]] = {
+    QuantifierStrength.UNIVERSAL: lambda pct: pct >= 99.5,
+    QuantifierStrength.NEAR_UNIVERSAL: lambda pct: pct >= 80.0,
+    QuantifierStrength.MAJORITY: lambda pct: pct > 50.0,
+    QuantifierStrength.NONE: lambda pct: pct <= 0.5,
+    QuantifierStrength.NEAR_NONE: lambda pct: pct <= 20.0,
+}
+
+
+def _classify_quantified_share(
+    claim: str,
+    strength: QuantifierStrength,
+    evidence_facts: List[NumericFact],
+    checks: List[str],
+) -> tuple[Optional[EntailmentResult], bool]:
+    """Regel 2 — prüft einen Quantor gegen Prozentangaben der Quelle (#1345).
+
+    Liefert ``(Urteil, gedeckt)``. Ein Urteil gibt es nur beim Widerspruch:
+    „nahezu alle" gegen „62 %" ist eine Überzeichnung. Deckt der Anteil den
+    Quantor, entscheidet anschließend der qualitative Pfad, ob die Quelle
+    auch *dieselbe Aussage* trifft — die Zahl allein belegt nur die Menge.
+    """
+    checks.append("quantifier_claim")
+    meets = _QUANTIFIER_SHARE_FLOOR[strength]
+    for ev_fact in evidence_facts:
+        if ev_fact.unit != "percent" or not subjects_match(claim, ev_fact.subject):
+            continue
+        if meets(ev_fact.value):
+            checks.append("quantifier_share_backed")
+            return None, True
+        return (
+            EntailmentResult(
+                EntailmentVerdict.CONTRADICTED,
+                f"Mengenaussage „{quantifier_label(strength)}“ steht gegen einen "
+                f"Anteil von {ev_fact.value:g} %",
+                matched_fact=ev_fact,
+                checks=checks + ["quantifier_vs_share"],
+            ),
+            False,
+        )
+    return None, False
+
+
+def _cap_quantified_result(
+    strength: QuantifierStrength,
+    evidence_text: str,
+    result: EntailmentResult,
+) -> EntailmentResult:
+    """Eine Quelle ohne eigene Mengenaussage trägt höchstens den Kern (#1345).
+
+    „Vorgeschlagen wird: zunächst ausschließlich Falkenbrück-Mitte" belegt die
+    Empfehlung, nicht dass nahezu alle Akteure sie teilen. Das gilt auch dann,
+    wenn Deckung oder Judge den Kern bestätigen — der Judge sieht immer nur
+    eine Quelle und kann über Mengen nicht urteilen. Ob mehrere Stimmen
+    zusammen den Quantor tragen, entscheidet
+    :func:`quantifier_claims.aggregate_quantifier_support` im Binder.
+    """
+    if result.verdict is not EntailmentVerdict.SUPPORTED:
+        return result
+    if evidence_backs_quantifier(strength, evidence_text):
+        result.checks.append("quantifier_backed_by_source")
+        return result
+    return EntailmentResult(
+        EntailmentVerdict.RELATED_ONLY,
+        f"Mengenaussage „{quantifier_label(strength)}“ — eine einzelne Quelle "
+        "belegt nur die eigene Position, nicht ihre Verbreitung",
+        checks=result.checks + [CHECK_CORE_SUPPORTED, CHECK_NEEDS_AGGREGATION],
     )
 
 
@@ -1508,6 +1618,7 @@ __all__ = [
     "PREDICATE_MATCH_THRESHOLD",
     "QUALITATIVE_RELATED_THRESHOLD",
     "RETRIEVAL_RELEVANCE_THRESHOLD",
+    "SCENARIO_ROLE_REASON_PREFIX",
     "QUALITATIVE_SUPPORT_THRESHOLD",
     "TOPIC_MATCH_THRESHOLD",
     "classify_evidence",

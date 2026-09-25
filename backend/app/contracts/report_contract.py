@@ -31,6 +31,8 @@ from pydantic import (
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema
 
+from .document_manifest_contract import DocumentRole
+
 
 # Strenger Default für Vertrags-Modelle
 _STRICT = ConfigDict(extra="forbid", populate_by_name=True)
@@ -41,6 +43,23 @@ class ConfidenceLabel(str, Enum):
     medium = "medium"
     high = "high"
     verified = "verified"
+
+
+class ClaimType(str, Enum):
+    """Art der Aussage — nicht ihr Beleggrad (Issue #1400).
+
+    ``empirical`` heisst hier „Tatsachenbehauptung über Quelle oder
+    Simulation" und ist nicht zu verwechseln mit ``Claim.confidence_scope =
+    "empirical"`` in ``report_v3`` (reale Erhebungsdaten). Nur empirische
+    Claims werden voll gegen den Evidence-Index abgewertet; die anderen drei
+    Typen erhalten einen Confidence-Boden, der nie ueber ``low`` hinausgeht
+    (ADR-0002 Anker 4/5 bleiben die einzige Route zu ``high``).
+    """
+
+    empirical = "empirical"
+    analytical = "analytical"
+    recommendation = "recommendation"
+    structural = "structural"
 
 
 class EvidenceType(str, Enum):
@@ -224,6 +243,10 @@ class EvidenceItemModel(BaseModel):
     persona_role_family: Optional[str] = Field(
         default=None, min_length=1, max_length=120
     )
+    # Issue #1240: Textsorte des Quelldokuments. Szenario-, Frage- und
+    # Erwartungstext stuetzen keinen Claim (``classify_evidence``), bleiben
+    # aber als Kontext sichtbar. ``None`` = unbekannt/Altbestand.
+    document_role: Optional[DocumentRole] = None
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceItemModel":
@@ -298,6 +321,8 @@ class EvidenceRecordModel(BaseModel):
     persona_role_family: Optional[str] = Field(
         default=None, min_length=1, max_length=120
     )
+    # Issue #1240, siehe EvidenceItemModel.
+    document_role: Optional[DocumentRole] = None
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceRecordModel":
@@ -427,6 +452,9 @@ class ReportClaimModel(BaseModel):
     evidence: list[EvidenceItemModel] = Field(default_factory=list, max_length=10)
     audit_trail: list[dict[str, Any]] = Field(default_factory=list)
     notes: Optional[str] = None
+    # Issue #1400: ``None`` = vor der Typisierung entstanden; so validieren
+    # Alt-Artefakte unveraendert weiter.
+    claim_type: Optional[ClaimType] = None
 
     @model_validator(mode="after")
     def non_low_claims_need_evidence(self) -> "ReportClaimModel":
@@ -601,6 +629,7 @@ class IndexedReportClaimModel(BaseModel):
     evidence: list[ClaimEvidenceBindingModel] = Field(default_factory=list, max_length=10)
     audit_trail: list[dict[str, Any]] = Field(default_factory=list)
     notes: Optional[str] = None
+    claim_type: Optional[ClaimType] = None  # Issue #1400, siehe ReportClaimModel
 
     @model_validator(mode="after")
     def require_binding_for_non_low_claim(self) -> "IndexedReportClaimModel":
@@ -684,6 +713,9 @@ class ReportSectionHypothesisModel(BaseModel):
     hypothesis_text: str = Field(min_length=8, max_length=1000)
     rationale: str = Field(min_length=8, max_length=1000)
     suggested_evidence: list[str] = Field(default_factory=list, max_length=5)
+    # Issue #1400: Typ des Ursprungs-Claims. Eine unbelegte Empfehlung landet
+    # hier, ist aber keine Hypothese ueber die Welt — der Typ macht das lesbar.
+    claim_type: Optional[ClaimType] = None
 
     # Sub-Slice 05.7: Pre-Validator vor max_length, damit LLM-Bloat
     # (komplette Markdown-Tabellen) truncated wird statt ValidationError.

@@ -45,7 +45,7 @@ die applied_penalties auswerten wollen.
 from __future__ import annotations
 
 import statistics
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # MAI-14: Schwellwerte für Sentiment-Contradiction-Heuristik.
 _CONTRADICTION_PENALTY_AMOUNT: float = 0.2
@@ -321,6 +321,30 @@ def compute_confidence(
     return score, label
 
 
+#: Confidence-Boden fuer nicht-empirische Claims (Issue #1400). Liegt genau
+#: auf der ``low``-Schwelle: ein Empfehlungs- oder Struktursatz ist keine
+#: unbelegte Tatsachenbehauptung und darf nicht als ``speculative`` erscheinen —
+#: aber auch nie ueber ``low`` hinaus. ``medium`` und hoeher bleiben allein
+#: ueber Evidence und die ADR-0002-Validatoren erreichbar (Anker 4/5).
+NON_EMPIRICAL_CONFIDENCE_FLOOR = 0.45
+
+_NON_EMPIRICAL_TYPES = frozenset({"analytical", "recommendation", "structural"})
+
+
+def apply_claim_type_floor(
+    claim_type: Optional[str], score: float, label: str
+) -> Tuple[float, str]:
+    """Hebt nicht-empirische Claims auf den Typ-Boden — nie darueber hinaus.
+
+    Ein Score ueber dem Boden bleibt unveraendert; der Boden ersetzt nur,
+    was darunter liegt. Empirische und untypisierte Claims laufen unveraendert
+    durch.
+    """
+    if claim_type not in _NON_EMPIRICAL_TYPES or score >= NON_EMPIRICAL_CONFIDENCE_FLOOR:
+        return score, label
+    return NON_EMPIRICAL_CONFIDENCE_FLOOR, "low"
+
+
 def compute_claim_confidence(
     evidence: List[Dict],
     *,
@@ -450,6 +474,8 @@ def apply_echo_cap(
 
 
 __all__ = [
+    "NON_EMPIRICAL_CONFIDENCE_FLOOR",
+    "apply_claim_type_floor",
     "apply_echo_cap",
     "compute_confidence",
     "compute_confidence_breakdown",
