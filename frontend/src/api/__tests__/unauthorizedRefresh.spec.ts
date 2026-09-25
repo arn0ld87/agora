@@ -8,8 +8,10 @@ const sb = vi.hoisted(() => ({
   signOut: vi.fn(),
 }))
 
+const clearPersisted = vi.hoisted(() => vi.fn())
 vi.mock('../../auth/supabaseClient', () => ({
   getSupabaseClient: vi.fn(() => ({ auth: sb })),
+  clearPersistedSession: clearPersisted,
 }))
 
 import service, { authFetch, register401SignOutCallback } from '../index'
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.restoreAllMocks()
   sb.refreshSession.mockReset()
   sb.signOut.mockReset()
+  clearPersisted.mockReset()
   setSessionToken('old-token')
   register401SignOutCallback(() => {})
 })
@@ -61,7 +64,8 @@ describe('401 mit Supabase-Session', () => {
     await expect(rejectedHandler()(unauthorized({ url: '/api/y' }))).rejects.toBeTruthy()
 
     expect(retry).not.toHaveBeenCalled()
-    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    // Der registrierte Store meldet ab, nicht die API-Schicht.
+    expect(sb.signOut).not.toHaveBeenCalled()
     expect(onSignOut).toHaveBeenCalledTimes(1)
     expect(getSessionToken()).toBeNull()
   })
@@ -76,7 +80,8 @@ describe('401 mit Supabase-Session', () => {
 
     await expect(rejectedHandler()(unauthorized(retriedConfig))).rejects.toBeTruthy()
 
-    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    // Der registrierte Store meldet ab, nicht die API-Schicht.
+    expect(sb.signOut).not.toHaveBeenCalled()
     expect(onSignOut).toHaveBeenCalledTimes(1)
     expect(getSessionToken()).toBeNull()
   })
@@ -146,7 +151,8 @@ describe('authFetch()', () => {
     const res = await authFetch('/api/x')
 
     expect(res.status).toBe(401)
-    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    // Der registrierte Store meldet ab, nicht die API-Schicht.
+    expect(sb.signOut).not.toHaveBeenCalled()
     expect(onSignOut).toHaveBeenCalledTimes(1)
     expect(getSessionToken()).toBeNull()
     vi.unstubAllGlobals()
@@ -162,7 +168,8 @@ describe('authFetch()', () => {
     expect(res.status).toBe(401)
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(sb.refreshSession).toHaveBeenCalledTimes(1)
-    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    // Der registrierte Store meldet ab, nicht die API-Schicht.
+    expect(sb.signOut).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
 
@@ -176,5 +183,32 @@ describe('authFetch()', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(sb.refreshSession).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('Abmeldung ohne registrierten Store', () => {
+  beforeEach(() => {
+    register401SignOutCallback(null)
+  })
+
+  it('meldet selbst genau einmal bei Supabase ab', async () => {
+    sb.refreshSession.mockResolvedValue({ data: { session: null }, error: new Error('expired') })
+    sb.signOut.mockResolvedValue({ error: null })
+
+    await expect(rejectedHandler()(unauthorized({ url: '/api/z' }))).rejects.toBeTruthy()
+
+    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    expect(clearPersisted).not.toHaveBeenCalled()
+    expect(getSessionToken()).toBeNull()
+  })
+
+  it('leert den Speicher direkt, wenn die Abmeldung wirft', async () => {
+    sb.refreshSession.mockResolvedValue({ data: { session: null }, error: new Error('expired') })
+    sb.signOut.mockRejectedValue(new Error('network'))
+
+    await expect(rejectedHandler()(unauthorized({ url: '/api/z' }))).rejects.toBeTruthy()
+
+    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    expect(clearPersisted).toHaveBeenCalledTimes(1)
   })
 })
