@@ -13,10 +13,10 @@ umgeschrieben. Offene Checkboxen in den Phasenabschnitten sind **kein**
 Fortschrittsanzeiger. Maßgeblich sind diese Tabelle, [`docs/STATUS.md`](../STATUS.md)
 und das Epic [#1576](https://github.com/arn0ld87/agora/issues/1576).
 
-**Umgeschaltet ist nichts.** Gebaut sind bisher fünf PostgreSQL-Adapter,
+**Umgeschaltet ist auf armserver seit 25.09.2026 (#1592) alles, was einen Adapter hat:** die fünf Metadaten-Schalter stehen dort auf `postgres`. Gebaut sind bisher fünf PostgreSQL-Adapter,
 `PostgresLlmProfileRepository`, `PostgresProjectRepository`,
 `PostgresSimulationRepository`, `PostgresRunRepository` und
-`PostgresReportRepository`; alle sind per Default inaktiv
+`PostgresReportRepository`; im Code sind alle per Default inaktiv
 (`AGORA_METADATA_BACKEND=legacy`, `AGORA_LLM_PROFILE_BACKEND=sqlite`,
 `AGORA_PROJECT_BACKEND=file`, `AGORA_SIMULATION_BACKEND=file`,
 `AGORA_RUN_BACKEND=file`, `AGORA_REPORT_BACKEND=file`). Blobs haben noch
@@ -41,7 +41,7 @@ keinen Adapter (siehe Tabelle).
 | — | Frontend-Auth-Client (§22) | supabase-js nur für Auth, Store, Bearer-Interceptor, Login-Views, Workspace-Wechsel: gemergt (#1626, Issue #1617) |
 | — | Realtime für Listen-Projektionen (§23) | Publication `supabase_realtime` (INSERT/UPDATE), Dienst `realtime`, Invalidierung in Ablage und Run-Liste: gemergt (#1628, Issue #1618) |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
-| PR 15 | Cutover Metadaten-Backend | Prüfskript gemergt (#1608, Issue #1590), Cutover armserver #1592 |
+| PR 15 | Cutover Metadaten-Backend | Prüfskript gemergt (#1608, Issue #1590), Cutover armserver durchgeführt (#1592, 25.09.2026) |
 | — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); Rollback-Gate gemergt (#1609, Issue #1589) |
 
 **Vorgezogen (ADR-0018, 25.09.2026), dann wieder zurückgestellt (ADR-0019,
