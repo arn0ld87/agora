@@ -222,7 +222,8 @@ Ist JWT aktiv (`GET /api/auth/config` → `jwt_enabled: true`), meldet sich der 
   - `/auth/login`, `/auth/register`, `/auth/reset` und `/auth/confirm` sind öffentlich und nur mit JWT erreichbar.
   - Ohne Session leitet der Guard jede andere Route auf den Login. `next` ist auf interne Pfade beschränkt (`safeNext`).
 - **Workspace-Wechsel** im Nutzermenü: Die Auswahl wird gespeichert, der Ticket-Cache geleert und die Seite neu geladen. So hält kein Store Daten des vorherigen Workspace.
-- Profil, Einstellungen und Onboarding sind Betreiber-Zustand (`operator_only`). Für Supabase-Nutzer sind sie ausgeblendet, der Onboarding-Guard lädt sie dann nicht.
+- Profil, Einstellungen, Onboarding und Logs sind Betreiber-Zustand (`operator_only`). Für Supabase-Nutzer sind sie ausgeblendet: Log-Knopf, Hotkey und Drawer gibt es dann nicht, und der Onboarding-Guard lädt nichts davon.
+- Kann eine wiederhergestellte Session beim Start keinen Workspace aktivieren, wird sie beendet. `SIGNED_OUT`, auch aus einem anderen Tab, verwirft den Workspace-Zustand und führt zum Login.
 
 ---
 

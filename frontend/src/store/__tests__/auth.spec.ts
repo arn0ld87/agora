@@ -70,7 +70,11 @@ vi.mock('../../api/index', () => ({
   requestWithRetry: vi.fn(),
 }))
 
-vi.mock('../../router', () => ({ default: { push: vi.fn() } }))
+const routerMock = vi.hoisted(() => ({
+  push: vi.fn(async () => {}),
+  currentRoute: { value: { name: 'Dashboard', fullPath: '/dashboard' } },
+}))
+vi.mock('../../router', () => ({ default: routerMock }))
 
 import { useApiAuth } from '../../composables/useApiAuth'
 import { useAuthStore, _setReloadPage } from '../auth'
@@ -400,5 +404,73 @@ describe('Codex-Runde 2 (#1617)', () => {
 
     expect(store.isAuthenticated).toBe(true)
     vi.mocked(getAgoraToken).mockReturnValue('')
+  })
+})
+
+describe('Codex-Runde 3 (#1617)', () => {
+  it('beendet eine wiederhergestellte Session, deren Workspace-Start scheitert', async () => {
+    mocks._sbOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'restored', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockRejectedValueOnce(new Error('network'))
+    const store = useAuthStore()
+
+    await store.init()
+
+    expect(mocks._sbSignOut).toHaveBeenCalledTimes(1)
+    expect(store.session).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
+    expect(getSessionToken()).toBeNull()
+  })
+
+  it('behält eine wiederhergestellte Session mit aktivem Workspace', async () => {
+    mocks._sbOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'restored', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [WS_A, WS_B] })
+    const store = useAuthStore()
+
+    await store.init()
+
+    expect(mocks._sbSignOut).not.toHaveBeenCalled()
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
+  })
+
+  it('SIGNED_OUT leert den Workspace-Zustand und führt zum Login', async () => {
+    const captured: { cb: ((event: string, session: unknown) => void) | null } = { cb: null }
+    mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
+      captured.cb = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'tok', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [WS_A] })
+    const store = useAuthStore()
+    await store.init()
+    routerMock.push.mockClear()
+
+    captured.cb?.('SIGNED_OUT', null)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(store.workspaces).toEqual([])
+    expect(store.activeWorkspaceId).toBeNull()
+    expect(getSessionToken()).toBeNull()
+    expect(routerMock.push).toHaveBeenCalledWith({ name: 'Login', query: { next: '/dashboard' } })
+  })
+
+  it('gewährt Betreiber-Zugang nur ohne Supabase-Session', async () => {
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED)
+    const store = useAuthStore()
+    await store.loadConfig()
+    expect(store.operatorAccess).toBe(true)
+
+    store.session = { access_token: 'x' } as never
+
+    expect(store.operatorAccess).toBe(false)
   })
 })

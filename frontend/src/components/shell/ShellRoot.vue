@@ -15,6 +15,7 @@
 
       <!-- Protokoll → oeffnet den Log-Drawer (Redesign PR 2: ex-FAB in App.vue) -->
       <button
+        v-if="logsAvailable"
         type="button"
         class="shell-root__icon-btn"
         :data-testid="ShellTestId.logsTrigger"
@@ -137,7 +138,7 @@ const { t } = useI18n()
 const cancelAction = useCancelAction()
 const { isMobile } = useIsMobile()
 const { isOpen: isPaletteOpen, open: openPalette } = useCommandPalette()
-const { toggle: toggleLogDrawer } = useLogDrawer()
+const { toggle: toggleLogDrawer, available: logsAvailable } = useLogDrawer()
 const wasPaletteOpened = ref(false)
 
 const CommandPalette = defineAsyncComponent(() => import('../v4/shell/CommandPalette.vue'))

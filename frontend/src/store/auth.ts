@@ -73,6 +73,10 @@ export const useAuthStore = defineStore('auth', () => {
     return !!getAgoraToken()
   })
 
+  /** Betreiber-Zugang: Legacy-Token oder offener Modus, keine Supabase-Session.
+   *  Prozessweite Bereiche (Logs, Einstellungen) sind für JWT gesperrt. */
+  const operatorAccess = computed(() => !(jwtEnabled.value && session.value))
+
   const tokenExpiry = computed<number | null>(() => {
     if (!session.value?.expires_at) return null
     return session.value.expires_at
@@ -115,6 +119,12 @@ export const useAuthStore = defineStore('auth', () => {
         // bzw. SIGNED_IN, bevor getSession() zurückkehrt.
         supabase.auth.onAuthStateChange((event, newSession) => {
           if (event === 'PASSWORD_RECOVERY') passwordRecovery.value = true
+          if (event === 'SIGNED_OUT') {
+            // Auch aus einem anderen Tab: Workspace-Zustand verwerfen und die
+            // geschützte Ansicht verlassen.
+            clearWorkspaceState()
+            setTimeout(() => { void goToLogin() }, 0)
+          }
           session.value = newSession
           user.value = newSession?.user ?? null
           setSessionToken(newSession?.access_token ?? null)
@@ -136,17 +146,9 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = data.session?.user ?? null
         setSessionToken(data.session?.access_token ?? null)
 
-        // Register 401 callback: on forced signOut, redirect to Login.
+        // Erzwungene Abmeldung nach 401: Store leeren, zum Login.
         register401SignOutCallback(() => {
-          void signOut()
-          // Router redirect happens inside signOut or via the route guard.
-          // Use dynamic import to avoid circular store→router dependency.
-          import('../router').then((m) => {
-            const router = m.default
-            if (router) {
-              router.push({ name: 'Login', query: { next: window.location.pathname } }).catch(() => {/* route may not exist yet in part A */})
-            }
-          }).catch(() => {/* ignore */})
+          void signOut().finally(() => { void goToLogin() })
         })
       }
     }
@@ -154,9 +156,32 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await loadWorkspaces()
     } catch {
-      // Workspaces nicht ladbar (z.B. Legacy ohne Datenbank): Start nicht
-      // blockieren; der Guard und die Views sehen keinen aktiven Workspace.
+      // Legacy (z.B. ohne Datenbank): Start nicht blockieren.
     }
+    // Wiederhergestellte Session ohne aktiven Workspace (Liste nicht ladbar,
+    // Bootstrap abgelehnt): nicht als angemeldet gelten lassen, sonst liefen
+    // alle Anfragen ohne X-Agora-Workspace. Neu anmelden lädt erneut.
+    if (session.value && !activeWorkspaceId.value) {
+      await signOut()
+    }
+  }
+
+  /** Router dynamisch laden (Zyklus store → router → store vermeiden). */
+  async function goToLogin(): Promise<void> {
+    try {
+      const { default: router } = await import('../router')
+      const current = router.currentRoute.value
+      if (current.name === 'Login') return
+      await router.push({ name: 'Login', query: { next: current.fullPath } })
+    } catch {
+      // Router nicht verfügbar (Tests) — nichts zu tun.
+    }
+  }
+
+  function clearWorkspaceState(): void {
+    workspaces.value = []
+    activeWorkspaceId.value = null
+    setActiveWorkspaceId(null)
   }
 
   // Einmaliger Start: der Router-Guard wartet darauf, bevor er die erste
@@ -204,6 +229,7 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     user.value = null
     setSessionToken(null)
+    clearWorkspaceState()
   }
 
   async function requestPasswordReset(email: string): Promise<void> {
@@ -275,6 +301,7 @@ export const useAuthStore = defineStore('auth', () => {
     // computed
     jwtEnabled,
     isAuthenticated,
+    operatorAccess,
     tokenExpiry,
     roles,
     // actions

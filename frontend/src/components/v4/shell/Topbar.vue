@@ -23,6 +23,7 @@
       <slot name="actions">
         <!-- Protokoll → oeffnet den Log-Drawer (Redesign PR 2: ex-FAB in App.vue) -->
         <button
+          v-if="logsAvailable"
           class="topbar__icon-btn"
           type="button"
           :aria-label="t('logs.drawer.toggle')"
@@ -79,7 +80,7 @@ import { ShellTestId } from '@/contracts/testIds'
 
 const { t } = useI18n()
 const { open: openPalette } = useCommandPalette()
-const { toggle: toggleLogDrawer } = useLogDrawer()
+const { toggle: toggleLogDrawer, available: logsAvailable } = useLogDrawer()
 const shellStore = useShellStore()
 
 withDefaults(
