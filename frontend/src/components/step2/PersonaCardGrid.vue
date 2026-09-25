@@ -26,9 +26,11 @@ interface Props {
   getIssuesFor: (username: string) => ReviewIssue[]
   highestSeverityFor: (username: string) => string
   profileKey: (profile: any) => string
+  /** Speichern in die Persona-Bibliothek (operator_only, #1617). */
+  canSave?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { canSave: true })
 
 const emit = defineEmits<{
   select: [persona: any]
@@ -94,6 +96,7 @@ const { t } = useI18n()
         @click.stop="emit('remove', p.username)"
       >×</button>
       <button
+        v-if="props.canSave"
         class="persona-save"
         type="button"
         :title="t('step2.cardGrid.save')"

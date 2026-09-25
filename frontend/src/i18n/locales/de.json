@@ -2049,7 +2049,8 @@
       "submitting": "Wird angemeldet…",
       "forgotPassword": "Passwort vergessen?",
       "toRegister": "Noch kein Konto? Jetzt registrieren",
-      "errorGeneric": "Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten."
+      "errorGeneric": "Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.",
+      "resetDone": "Passwort geändert. Bitte melde dich neu an."
     },
     "register": {
       "title": "Konto erstellen",

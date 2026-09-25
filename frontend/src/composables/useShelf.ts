@@ -4,6 +4,7 @@ import { listReports } from '../api/report'
 import { listProjects } from '../api/graph'
 import { listPersonaTemplates, type PersonaTemplateRecord } from '../api/simulation'
 import { resolveStatusMessage } from '../i18n/statusMessage'
+import { useOperatorAccess } from './useOperatorAccess'
 import type { RunDetail } from '../contracts/runsContract'
 import type { Report } from '../contracts/reportContract'
 import type { ProjectResponse } from '../api/graph'
@@ -353,6 +354,9 @@ export function buildShelfObjects(
 }
 
 export function useShelf(t: Translate, te?: TranslateExists) {
+  // Persona-Bibliothek ist Betreiber-Zustand (operator_only, #1617): für
+  // Supabase-Nutzer nicht anfragen, statt jedes Laden mit 403 zu beginnen.
+  const operatorAccess = useOperatorAccess()
   const objects = ref<ShelfObject[]>([])
   const jobs = ref<ShelfJobRow[]>([])
   const filter = ref<ShelfFilter>('alle')
@@ -382,7 +386,9 @@ export function useShelf(t: Translate, te?: TranslateExists) {
       listRuns({ limit: 200 }),
       listReports({ limit: 100 }),
       listProjects({ limit: 100 }),
-      listPersonaTemplates(),
+      operatorAccess.value
+        ? listPersonaTemplates()
+        : Promise.resolve({ success: true as const, data: { templates: [] as PersonaTemplateRecord[] } }),
     ])
     const runs: RunDetail[] =
       runsRes.status === 'fulfilled' ? ((runsRes.value as { data?: { runs?: RunDetail[] } }).data?.runs ?? []) : []

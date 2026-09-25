@@ -17,6 +17,8 @@ const email = ref('')
 const password = ref('')
 const pending = ref(false)
 const errorMsg = ref('')
+// Nach dem Passwort-Reset ohne aktivierbaren Workspace (#1617).
+const resetDone = route.query.reset === 'done'
 
 async function submit(): Promise<void> {
   errorMsg.value = ''
@@ -61,6 +63,10 @@ async function submit(): Promise<void> {
             :disabled="pending"
           />
         </div>
+
+        <p v-if="resetDone && !errorMsg" class="auth-info" role="status">
+          {{ t('auth.login.resetDone') }}
+        </p>
 
         <div
           v-if="errorMsg"
@@ -137,6 +143,14 @@ async function submit(): Promise<void> {
 
 .form-group input:focus-visible {
   outline: 2px solid var(--color-accent, #89b4fa);
+}
+
+.auth-info {
+  font-size: var(--text-sm, 0.875rem);
+  margin-bottom: var(--space-4, 1rem);
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  border: 1px solid var(--color-border, #313244);
+  border-radius: var(--radius-sm, 6px);
 }
 
 .auth-error {

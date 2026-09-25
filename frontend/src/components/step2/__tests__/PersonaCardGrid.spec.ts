@@ -382,3 +382,25 @@ describe('PersonaCardGrid', () => {
     expect(badge?.attributes('title')).toBe('LLM-Generierung nach 3 Versuchen fehlgeschlagen')
   })
 })
+
+describe('PersonaCardGrid ohne Bibliotheks-Zugang (#1617)', () => {
+  it('blendet den Speichern-Knopf aus, wenn canSave false ist', async () => {
+    const wrapper = mount(PersonaCardGrid, {
+      props: { ...makeDefaultProps(), personas: [makePersona({ username: 'u1' })], canSave: false },
+      global: globalConfig,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.persona-save').exists()).toBe(false)
+  })
+
+  it('zeigt ihn standardmäßig weiter', async () => {
+    const wrapper = mount(PersonaCardGrid, {
+      props: { ...makeDefaultProps(), personas: [makePersona({ username: 'u1' })] },
+      global: globalConfig,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.persona-save').exists()).toBe(true)
+  })
+})

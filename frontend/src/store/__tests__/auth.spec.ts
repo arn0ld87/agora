@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => {
   const _svcGet = vi.fn()
   const _svcPost = vi.fn()
   const _sbSignIn = vi.fn()
-  return { _sbGetSession, _sbOnAuthStateChange, _sbSignOut, _sbRefreshSession, _svcGet, _svcPost, _sbSignIn }
+  const _sbUpdateUser = vi.fn()
+  return { _sbGetSession, _sbOnAuthStateChange, _sbSignOut, _sbRefreshSession, _svcGet, _svcPost, _sbSignIn, _sbUpdateUser }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -35,7 +36,7 @@ vi.mock('@supabase/supabase-js', () => ({
       refreshSession: mocks._sbRefreshSession,
       signInWithPassword: mocks._sbSignIn,
       signUp: vi.fn(),
-      updateUser: vi.fn(),
+      updateUser: mocks._sbUpdateUser,
       resetPasswordForEmail: vi.fn(),
     },
   })),
@@ -77,7 +78,7 @@ const routerMock = vi.hoisted(() => ({
 vi.mock('../../router', () => ({ default: routerMock }))
 
 import { useApiAuth } from '../../composables/useApiAuth'
-import { useAuthStore, _setReloadPage } from '../auth'
+import { PasswordUpdatedSignInRequired, useAuthStore, _setReloadPage } from '../auth'
 import { getSessionToken } from '../../auth/sessionState'
 import { _resetSupabaseClient } from '../../auth/supabaseClient'
 
@@ -526,5 +527,51 @@ describe('Codex-Runde 5 (#1617)', () => {
     expect(store.passwordRecovery).toBe(true)
     expect(mocks._sbSignOut).not.toHaveBeenCalled()
     expect(getSessionToken()).toBe('recovery')
+  })
+})
+
+describe('Codex-Runde 6 (#1617)', () => {
+  function recoveryInit() {
+    mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
+      cb('PASSWORD_RECOVERY', { access_token: 'recovery', user: { id: 'u1' }, expires_at: 9999 })
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'recovery', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._sbUpdateUser.mockResolvedValue({ data: {}, error: null })
+  }
+
+  it('lädt nach dem Reset den Workspace nach, wenn er beim Start fehlte', async () => {
+    recoveryInit()
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ success: true, data: [WS_A] })
+    const store = useAuthStore()
+    await store.init()
+    expect(store.activeWorkspaceId).toBeNull()
+
+    await store.updatePassword('ein-neues-langes-passwort')
+
+    expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
+    expect(store.passwordRecovery).toBe(false)
+    expect(mocks._sbSignOut).not.toHaveBeenCalled()
+  })
+
+  it('meldet nach dem Reset ab, wenn weiterhin kein Workspace aktivierbar ist', async () => {
+    recoveryInit()
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockRejectedValueOnce(new Error('network'))
+    const store = useAuthStore()
+    await store.init()
+
+    await expect(store.updatePassword('ein-neues-langes-passwort')).rejects.toBeInstanceOf(PasswordUpdatedSignInRequired)
+
+    expect(mocks._sbSignOut).toHaveBeenCalledTimes(1)
+    expect(store.session).toBeNull()
+    expect(getSessionToken()).toBeNull()
   })
 })

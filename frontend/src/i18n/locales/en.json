@@ -2049,7 +2049,8 @@
       "submitting": "Signing in…",
       "forgotPassword": "Forgot password?",
       "toRegister": "No account yet? Register now",
-      "errorGeneric": "Sign-in failed. Please check your credentials."
+      "errorGeneric": "Sign-in failed. Please check your credentials.",
+      "resetDone": "Password changed. Please sign in again."
     },
     "register": {
       "title": "Create account",

@@ -638,3 +638,24 @@ describe('useShelf.reload', () => {
     expect(activeObjects.value[0].active?.runId).toBe('run_active')
   })
 })
+
+describe('useShelf.reload mit Supabase-Session (#1617)', () => {
+  it('fragt die Betreiber-Persona-Bibliothek nicht an und meldet keinen Teilausfall', async () => {
+    const { createPinia, setActivePinia } = await import('pinia')
+    const { useAuthStore } = await import('../../store/auth')
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k' }
+    auth.session = { access_token: 'x' } as never
+    runsApi.listRuns.mockResolvedValue({ success: true, data: { runs: [], total: 0, aggregation: null } })
+    reportApi.listReports.mockResolvedValue({ success: true, data: [] })
+    graphApi.listProjects.mockResolvedValue({ success: true, data: [] })
+    simulationApi.listPersonaTemplates.mockReset()
+
+    const { reload, error } = useShelf(t)
+    await reload()
+
+    expect(simulationApi.listPersonaTemplates).not.toHaveBeenCalled()
+    expect(error.value).not.toContain('shelf.partialLoad')
+  })
+})

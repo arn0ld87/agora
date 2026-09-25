@@ -51,6 +51,14 @@ function _persistWorkspaceId(id: string | null): void {
   }
 }
 
+/** Passwort gesetzt, aber kein Workspace aktivierbar: neu anmelden (#1617). */
+export class PasswordUpdatedSignInRequired extends Error {
+  constructor() {
+    super('password_updated_sign_in_required')
+    this.name = 'PasswordUpdatedSignInRequired'
+  }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   // --- State ---
   const config = ref<AuthConfigResponse | null>(null)
@@ -259,6 +267,20 @@ export const useAuthStore = defineStore('auth', () => {
     const { error } = await supabase.auth.updateUser({ password })
     if (error) throw error
     passwordRecovery.value = false
+    // Die Recovery-Session blieb ohne Workspace bestehen, falls der Start
+    // keinen aktivieren konnte. Jetzt nachladen; klappt das nicht, keine
+    // halbe Anmeldung zurücklassen, sondern regulär neu anmelden lassen.
+    if (!activeWorkspaceId.value) {
+      try {
+        await loadWorkspaces()
+      } catch {
+        // unten behandelt
+      }
+      if (!activeWorkspaceId.value) {
+        await signOut()
+        throw new PasswordUpdatedSignInRequired()
+      }
+    }
   }
 
   // Gleichzeitige Aufrufe (signIn und SIGNED_IN) teilen einen Lauf.

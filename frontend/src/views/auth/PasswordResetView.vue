@@ -10,7 +10,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '../../store/auth'
+import { PasswordUpdatedSignInRequired, useAuthStore } from '../../store/auth'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -47,7 +47,12 @@ async function submit(): Promise<void> {
     try {
       await auth.updatePassword(newPassword.value)
       await router.replace('/')
-    } catch {
+    } catch (err) {
+      if (err instanceof PasswordUpdatedSignInRequired) {
+        // Passwort ist gesetzt; der Workspace kommt mit der Anmeldung.
+        await router.replace({ name: 'Login', query: { reset: 'done' } })
+        return
+      }
       errorMsg.value = t('auth.reset.errorGeneric')
     } finally {
       pending.value = false
