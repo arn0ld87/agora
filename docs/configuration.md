@@ -53,6 +53,17 @@ Geheimnisse niemals committen, in Logs ausgeben oder in Run-/Report-Artefakte sc
 | `AGORA_SECRET_KEY` 🔐 | Fernet-Master-Key für gespeicherte LLM-Provider-Secrets |
 | `AGORA_FERNET_KEY` 🔐 | Fernet-Key u. a. für persistierte Agora-API-Keys / Hash-Secret-Fallback |
 | `AGORA_TICKET_RATE_LIMIT_MAX`, `AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS` | Signed-Ticket-Rate-Limit |
+| `AGORA_AUTH_BACKEND` | `legacy`, `hybrid` (Default) oder `supabase` ([ADR-0018](decisions/0018-multi-user-before-1-0.md)). Ein unbekannter Wert ist ein Startfehler |
+| `AGORA_SUPABASE_JWT_ISSUER` | Issuer der Supabase-Access-Tokens, z. B. `https://<host>/auth/v1`. Mit diesem Wert wird der JWT-Zweig aktiv. Ohne ihn verhält sich `hybrid` wie `legacy` |
+| `AGORA_SUPABASE_JWT_AUDIENCE` | erwartete `aud`, Default `authenticated` |
+| `AGORA_SUPABASE_JWKS_URL` | JWKS-Endpunkt von GoTrue (RS256/ES256). Genau eine Schlüsselquelle ist erlaubt |
+| `AGORA_SUPABASE_JWT_SECRET` 🔐 | HS256-Secret (Supabase `JWT_SECRET`, mindestens 32 Zeichen), alternativ zur JWKS-URL |
+
+**Supabase-JWT (ADR-0018, #1613).**
+- Ist `AGORA_SUPABASE_JWT_ISSUER` gesetzt, verlangt `Config.validate()` zusätzlich alle fünf Metadaten-Schalter auf `postgres` und `DATABASE_URL`, weil die Datei-Backends keine Workspace-Isolation kennen.
+- `AGORA_ALLOW_ANONYMOUS` und `AGORA_AUTH_BACKEND=legacy` sind mit JWT unvereinbar.
+- `supabase` ohne JWT-Konfiguration ist ein Startfehler.
+- **Solange die Repositories nicht nach Workspace filtern (#1614), lehnt `Config.validate()` jede JWT-Konfiguration ab.** Umgeschaltet ist damit nichts.
 
 Die beiden Fernet-Keys erfüllen unterschiedliche Persistenzaufgaben und sind nicht bloß zwei Namen für `SECRET_KEY`. Lebenszyklus/Recovery: [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
 

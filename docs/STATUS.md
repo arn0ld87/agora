@@ -397,6 +397,18 @@ Seit #1612 gibt es `agora.workspaces` und `agora.workspace_members` (Alembic-Rev
 
 **Umgeschaltet ist nichts.** Kein bestehender Store liest oder schreibt `workspace_id`; Projekte, Simulationen, Runs und Reports bleiben ohne Workspace-Bezug. `Principal` hat noch keinen Aufrufer, der ihn befüllt.
 
+
+### Auth: Supabase-JWT und Principal (#1613)
+
+Seit #1613 kennt der Guard `AGORA_AUTH_BACKEND=legacy|hybrid|supabase` (`backend/app/utils/auth.py`, ADR-0018). Der Default ist `hybrid`. Ohne `AGORA_SUPABASE_JWT_ISSUER` verhält sich `hybrid` exakt wie `legacy`; der Startlog sagt das.
+
+- **JWT-Prüfung:** `backend/app/security/supabase_jwt.py` prüft Signatur (JWKS oder HS256), `iss`, `aud`, `exp`, `nbf` und `sub`.
+- **Workspace-Wahl:** Sie läuft über `X-Agora-Workspace` und die Mitgliedschaft in `agora.workspace_members`.
+- **Principal:** Jeder zugelassene Request legt einen `Principal` ab. `require_scope` leitet die Scopes aus der Rolle ab, Tickets sind an ihren Aussteller gebunden.
+- **Betreiber-Endpunkte:** Settings, LLM-Profile, API-Keys, Logs, Onboarding, Profil und Modell-Stream sind für JWT-Nutzer gesperrt.
+
+**Umgeschaltet ist nichts:** Bis die Repositories nach Workspace filtern (#1614), lehnt `Config.validate()` jede JWT-Konfiguration ab. Verifiziert ist das mit Unit-Tests für Verifier, Guard, Scopes und Tickets sowie mit einem Integrationstest der Mitgliedschaftsprüfung gegen PostgreSQL.
+
 ### Readiness: `/readyz` kennt den PostgreSQL-Zustand
 
 Seit #1581 trägt `/readyz` (`backend/app/readiness.py`) einen zusätzlichen Check `postgres` mit einem maschinenlesbaren `state` (`ok`/`unavailable`/`disabled`, Vertrag `app/contracts/readiness_contract.py::PostgresReadinessCheck`). `disabled` gilt, solange kein `AGORA_*_BACKEND` auf `postgres` steht — dann wird **keine** Verbindung aufgebaut, nicht einmal eine Engine, und der Check macht `/readyz` nicht rot. Steht mindestens ein Backend auf `postgres`, probt der Check `SELECT 1` über eine kurzlebige `Database`-Instanz mit kleinem Verbindungs-Timeout (statt des langlebigen Prozess-Singletons) und meldet bei Fehlschlag `unavailable` (503). Fehlerdetails im Response-Body sind immer generisch — Host, Port, User, Passwort und Datenbankname aus `DATABASE_URL` tauchen weder dort noch im Log auf.

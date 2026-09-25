@@ -15,6 +15,20 @@ Endpoints, deren URL der Browser nicht signieren kann (SSE, Anchor-Downloads),
 können sich mit ``@allow_ticket_auth(scope_fn)`` markieren. Der Guard
 akzeptiert dann zusätzlich ein ``?ticket=<signed>``-Query-Param, validiert
 und konsumiert es via :mod:`app.utils.signed_ticket`.
+
+Seit ADR-0018 (#1613) kennt der Guard ``AGORA_AUTH_BACKEND``:
+
+* ``legacy`` — genau der Pfad oben.
+* ``hybrid`` (Default) — zusätzlich und zuerst ein Supabase-JWT im
+  ``Authorization: Bearer``-Header, sofern JWT konfiguriert ist. Ohne diese
+  Konfiguration ist ``hybrid`` gleich ``legacy``.
+* ``supabase`` — JWT und ``ago_``-Keys; der Master-Token wird abgelehnt, einen
+  offenen Modus gibt es nicht.
+
+Jeder erfolgreiche Zugang legt einen ``Principal`` ab
+(:mod:`app.security.principal_context`). Tickets tragen den Principal ihres
+Ausstellers in der signierten Scope-Bindung; mit aktivem JWT gilt nur ein
+gebundenes Ticket.
 """
 
 from __future__ import annotations
@@ -28,6 +42,19 @@ from flask import Blueprint, Flask, current_app, request
 
 from . import signed_ticket
 from .api_responses import json_error
+from ..config import Config, supabase_jwt_configured, supabase_jwt_settings
+from ..contracts.auth_contract import AuthType, Principal
+from ..security.principal_context import (
+    WORKSPACE_HEADER,
+    current_principal,
+    WorkspaceSelectionError,
+    get_jwt_verifier,
+    legacy_principal,
+    resolve_jwt_principal,
+    set_principal,
+    split_bound_scope,
+)
+from ..security.supabase_jwt import JwtVerificationError, looks_like_jwt
 from ..services.api_keys_store import get_api_keys_store
 from .logger import get_logger
 
@@ -36,8 +63,28 @@ _TICKET_SCOPE_ATTR = "_agora_ticket_scope_fn"
 _TICKET_SINGLE_USE_ATTR = "_agora_ticket_single_use"
 
 
-def _auth_error():
-    return json_error("unauthorized", status=401, code="auth_required")
+def _auth_error(code: str = "auth_required"):
+    return json_error("unauthorized", status=401, code=code)
+
+
+def _jwt_enabled() -> bool:
+    """JWT-Zweig aktiv: Modus ``hybrid``/``supabase`` und JWT konfiguriert.
+
+    ``Config.validate()`` stellt sicher, dass dann alle Metadaten-Backends auf
+    PostgreSQL stehen (ADR-0018, Punkt 3).
+    """
+    return Config.AUTH_BACKEND in ("hybrid", "supabase") and supabase_jwt_configured(Config)
+
+
+def _master_token_allowed() -> bool:
+    return Config.AUTH_BACKEND != "supabase"
+
+
+def _bearer_value() -> str:
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return ""
 
 
 def _expected_token() -> str:
@@ -107,20 +154,103 @@ def _ticket_view_metadata() -> tuple[str, bool] | None:
     return scope, single_use
 
 
-def _try_consume_ticket() -> bool:
+def _try_consume_ticket(jwt_enabled: bool) -> Principal | None:
+    """Principal eines gültigen Tickets oder ``None``.
+
+    Der Scope im Ticket ist ``<basis>`` oder ``<basis>@<bindung>``; die
+    Signatur deckt beides. Die Basis muss zum Endpunkt passen. Mit aktivem
+    JWT gilt nur ein gebundenes Ticket — ein ungebundenes käme sonst mit
+    Owner-Rechten im Default-Workspace durch.
+    """
     ticket = request.args.get("ticket", "").strip()
     if not ticket:
-        return False
+        return None
     meta = _ticket_view_metadata()
     if meta is None:
-        return False
+        return None
     expected_scope, single_use = meta
     secret = current_app.config.get("SECRET_KEY") or ""
     if not secret:
-        return False
+        return None
+    full_scope = signed_ticket.scope_of(ticket)
+    if full_scope is None:
+        return None
+    base_scope, principal = split_bound_scope(full_scope)
+    if base_scope != expected_scope:
+        return None
+    if principal is None:
+        if jwt_enabled or "@" in full_scope:
+            return None
+        principal = legacy_principal(AuthType.MASTER_TOKEN)
     if single_use:
-        return signed_ticket.consume(secret, ticket, expected_scope)
-    return signed_ticket.verify(secret, ticket, expected_scope)
+        ok = signed_ticket.consume(secret, ticket, full_scope)
+    else:
+        ok = signed_ticket.verify(secret, ticket, full_scope)
+    return principal if ok else None
+
+
+def _authenticate_jwt(token: str):
+    settings = supabase_jwt_settings(Config)
+    assert settings is not None  # _jwt_enabled() hat das geprüft
+    try:
+        claims = get_jwt_verifier(settings).verify(token)
+    except JwtVerificationError as exc:
+        # Nur der Code, nie Token oder Claims.
+        _logger.info("auth: JWT rejected (%s) on %s", exc.code.value, request.path)
+        return _auth_error("invalid_token")
+    from ..repositories.workspace_repository import get_workspace_repository
+
+    try:
+        principal = resolve_jwt_principal(
+            claims, request.headers.get(WORKSPACE_HEADER), get_workspace_repository()
+        )
+    except WorkspaceSelectionError as exc:
+        return json_error(exc.code, status=exc.status, code=exc.code)
+    set_principal(principal)
+    return None
+
+
+def _authenticate(*, allow_tickets: bool):
+    """Gemeinsamer Kern von Blueprint-Guard und ``token_required``.
+
+    Gibt ``None`` zurück, wenn der Request zugelassen ist (der Principal liegt
+    dann in ``flask.g``), sonst die Fehlerantwort.
+    """
+    jwt_enabled = _jwt_enabled()
+
+    # 1. Supabase-JWT. Ein Bearer in JWT-Form wird nie als Master-Token
+    #    verglichen: ist er ungültig, ist der Request abgelehnt.
+    bearer = _bearer_value()
+    if jwt_enabled and bearer and looks_like_jwt(bearer):
+        return _authenticate_jwt(bearer)
+
+    expected = _expected_token() if _master_token_allowed() else ""
+    got = _extract_token()
+
+    # 2. Master-Token (nicht im Modus ``supabase``)
+    if expected and got and hmac.compare_digest(got, expected):
+        set_principal(legacy_principal(AuthType.MASTER_TOKEN))
+        return None
+
+    # 3. Workspace-API-Keys
+    if got and _check_api_key(got):
+        set_principal(legacy_principal(AuthType.API_KEY))
+        return None
+
+    # 4. Signierte Tickets
+    if allow_tickets:
+        principal = _try_consume_ticket(jwt_enabled)
+        if principal is not None:
+            set_principal(principal)
+            return None
+
+    # 5. Offener Modus: nur ohne Master-Token, ohne JWT und nicht im Modus
+    #    ``supabase``.
+    if not expected and not jwt_enabled and _master_token_allowed():
+        set_principal(legacy_principal(AuthType.ANONYMOUS))
+        return None
+
+    return _auth_error()
 
 
 def _check_api_key(token: str) -> bool:
@@ -137,26 +267,15 @@ def _check_api_key(token: str) -> bool:
 
 
 def token_required(view):
-    """Decorator für einzelne Views. Kein-Op wenn ``AGORA_AUTH_TOKEN`` leer ist."""
+    """Decorator für einzelne Views; dieselben Regeln wie der Blueprint-Guard,
+    ohne Tickets."""
 
     @wraps(view)
     def wrapper(*args, **kwargs):
-        expected = _expected_token()
-        got = _extract_token()
-
-        # 1. AGORA_AUTH_TOKEN (Master)
-        if expected and got and hmac.compare_digest(got, expected):
-            return view(*args, **kwargs)
-
-        # 2. Workspace API Keys (ago_...)
-        if got and _check_api_key(got):
-            return view(*args, **kwargs)
-
-        # 3. Open mode fallback (only if no master token configured)
-        if not expected:
-            return view(*args, **kwargs)
-
-        return _auth_error()
+        denied = _authenticate(allow_tickets=False)
+        if denied is not None:
+            return denied
+        return view(*args, **kwargs)
 
     return wrapper
 
@@ -166,12 +285,14 @@ def token_required(view):
 # Singletons und können von mehreren Apps/Tests wiederverwendet werden).
 _GUARD_INSTALLED_ATTR = "_agora_guard_installed"
 _GUARD_TOKEN_ONLY_ATTR = "_agora_guard_token_only"  # noqa: S105 - Attributname, kein Secret
+_GUARD_TENANT_ACCESS_ATTR = "_agora_guard_tenant_access"
 
 
 def install_blueprint_guard(
     bp: Blueprint,
     *,
     token_only_endpoints: frozenset[str] | None = None,
+    tenant_access: bool = True,
 ) -> None:
     """Hängt den Token-Check als ``before_request``-Hook an ein Blueprint.
 
@@ -185,14 +306,21 @@ def install_blueprint_guard(
     POST /api/auth/ticket benötigt kein gültiges Ticket, aber einen gültigen
     Session-Token (Master-Token oder API-Key).
 
+    ``tenant_access=False`` sperrt das Blueprint für Supabase-Nutzer (JWT):
+    es verwaltet prozessweiten Zustand (Provider-Keys, API-Keys, Logs,
+    Onboarding), der allen Workspaces gemeinsam ist. Zugang haben dann nur
+    Master-Token, ``ago_``-Keys und der offene Modus (ADR-0018).
+
     Idempotent: Der Hook wird genau einmal pro Blueprint installiert; weitere
-    Aufrufe aktualisieren nur ``token_only_endpoints`` (letzter Aufruf gewinnt).
+    Aufrufe aktualisieren nur ``token_only_endpoints`` und ``tenant_access``
+    (letzter Aufruf gewinnt).
     Funktioniert auch, wenn das Blueprint bereits auf einer App registriert
     wurde (z. B. weiteres ``create_app()`` im selben Prozess oder geteilte
     Blueprint-Singletons in Tests): In dem Fall greift der Guard für alle
     *künftigen* Registrierungen; bereits registrierte Apps bleiben unverändert.
     """
     setattr(bp, _GUARD_TOKEN_ONLY_ATTR, token_only_endpoints or frozenset())
+    setattr(bp, _GUARD_TENANT_ACCESS_ATTR, tenant_access)
     if getattr(bp, _GUARD_INSTALLED_ATTR, False):
         return
 
@@ -203,27 +331,18 @@ def install_blueprint_guard(
         if request.method == "OPTIONS":
             return None
 
-        expected = _expected_token()
-        got = _extract_token()
-
-        # 1. Master Token
-        if expected and got and hmac.compare_digest(got, expected):
-            return None
-
-        # 2. Workspace API Keys
-        if got and _check_api_key(got):
-            return None
-
-        # 3. Signed Tickets — übersprungen für token_only_endpoints
         _token_only = getattr(bp, _GUARD_TOKEN_ONLY_ATTR, frozenset())
-        if request.endpoint not in _token_only and _try_consume_ticket():
-            return None
-
-        # 4. Open mode fallback
-        if not expected:
-            return None
-
-        return _auth_error()
+        denied = _authenticate(allow_tickets=request.endpoint not in _token_only)
+        if denied is not None:
+            return denied
+        principal = current_principal()
+        if (
+            not getattr(bp, _GUARD_TENANT_ACCESS_ATTR, True)
+            and principal is not None
+            and principal.auth_type == AuthType.JWT
+        ):
+            return json_error("forbidden", status=403, code="operator_only")
+        return None
 
     if bp._got_registered_once:
         # Flask verbietet ``bp.before_request()`` nach der ersten Registrierung
@@ -248,6 +367,22 @@ def _allow_anonymous() -> bool:
 
 
 def log_auth_mode(app: Flask, logger) -> None:
+    mode = Config.AUTH_BACKEND
+    if _jwt_enabled():
+        logger.info(
+            "Auth: AGORA_AUTH_BACKEND=%s — Supabase-JWT aktiv (Issuer konfiguriert), "
+            "Workspace-Isolation über PostgreSQL.",
+            mode,
+        )
+    elif mode == "hybrid":
+        # ADR-0018: ohne JWT-Konfiguration ist hybrid exakt legacy — das
+        # soll im Log stehen, nicht erraten werden.
+        logger.info(
+            "Auth: AGORA_AUTH_BACKEND=hybrid ohne AGORA_SUPABASE_JWT_ISSUER — "
+            "JWT-Zweig inaktiv, Verhalten wie legacy."
+        )
+    if mode == "supabase":
+        return
     if _expected_token():
         logger.info("Auth: AGORA_AUTH_TOKEN aktiv — /api/* verlangt Token.")
         return

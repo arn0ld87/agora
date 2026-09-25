@@ -37,6 +37,8 @@ from typing import Callable
 from flask import g, jsonify, request
 
 from ..contracts.api_keys_contract import ApiKeyModel
+from ..contracts.auth_contract import AuthType
+from ..security.principal_context import current_principal, scopes_for_roles
 from ..services.api_keys_store import get_api_keys_store
 
 # Synthetisches Admin-Modell für den Master-Token-Pfad (lazy, thread-safe via GIL)
@@ -141,6 +143,20 @@ def _scopes_cover(have: list[str], required: str) -> bool:
     return False
 
 
+def _scope_missing(required: str, have: list[str]):
+    return (
+        jsonify(
+            {
+                "error": "forbidden",
+                "code": "scope_missing",
+                "required": required,
+                "have": have,
+            }
+        ),
+        403,
+    )
+
+
 def require_scope(required: str) -> Callable:
     """Decorator: 401 wenn kein API-Key/Master-Token, 403 wenn Scopes nicht ausreichen.
 
@@ -158,26 +174,30 @@ def require_scope(required: str) -> Callable:
     def deco(fn: Callable) -> Callable:
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            # Open-Mode: kein AGORA_AUTH_TOKEN konfiguriert → kein Scope-Check
-            # (konsistent mit install_blueprint_guard open-mode fallback)
-            if not os.environ.get("AGORA_AUTH_TOKEN", ""):
+            principal = current_principal()
+            if principal is not None:
+                # Der Guard hat authentifiziert (ADR-0018, #1613); die Scopes
+                # folgen aus dem Principal statt aus erneutem Header-Lesen.
+                if principal.auth_type == AuthType.ANONYMOUS:
+                    return fn(*args, **kwargs)
+                if principal.auth_type == AuthType.MASTER_TOKEN:
+                    g.api_key = _get_sentinel_admin()
+                    return fn(*args, **kwargs)
+                if principal.auth_type == AuthType.JWT:
+                    have = scopes_for_roles(principal.roles)
+                    if not _scopes_cover(have, required):
+                        return _scope_missing(required, have)
+                    return fn(*args, **kwargs)
+                # API-Key: Scopes stehen am Key, weiter unten.
+            elif not os.environ.get("AGORA_AUTH_TOKEN", ""):
+                # Ohne Guard (Alt-Pfad): Open-Mode wie bisher.
                 return fn(*args, **kwargs)
 
             key = _resolve_active_api_key(request)
             if key is None:
                 return jsonify({"error": "unauthorized", "code": "no_api_key"}), 401
             if not _scopes_cover(list(key.scopes), required):
-                return (
-                    jsonify(
-                        {
-                            "error": "forbidden",
-                            "code": "scope_missing",
-                            "required": required,
-                            "have": list(key.scopes),
-                        }
-                    ),
-                    403,
-                )
+                return _scope_missing(required, list(key.scopes))
             g.api_key = key
             return fn(*args, **kwargs)
 
