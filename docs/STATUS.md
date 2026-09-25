@@ -529,6 +529,8 @@ Priorität vor neuen Features:
 
 Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines Plugin-System oder ein weiterer großer Frontend-Rewrite.
 
+**Multi-User nach 1.0 ([ADR-0019](decisions/0019-multi-user-after-1-0.md), 25.09.2026):** Der unter Epic #1610 gemergte Code (Workspaces, Supabase-JWT, RLS, Workspace-API, Frontend-Login, Realtime) bleibt im Repository und ist per Default inaktiv: ohne `AGORA_SUPABASE_JWT_ISSUER` verhält sich `hybrid` wie `legacy`, `AGORA_SUPABASE_REALTIME` ist aus. Vor 1.0 wird er nicht eingeschaltet und nicht weiter ausgebaut.
+
 ## Dokumentationspflege
 
 - Produkt und Einstieg: [`../README.md`](../README.md) / [`../README.de.md`](../README.de.md)

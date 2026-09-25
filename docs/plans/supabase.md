@@ -44,9 +44,13 @@ keinen Adapter (siehe Tabelle).
 | PR 15 | Cutover Metadaten-Backend | Prüfskript gemergt (#1608, Issue #1590), Cutover armserver #1592 |
 | — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); Rollback-Gate gemergt (#1609, Issue #1589) |
 
-**Vorgezogen (ADR-0018, 25.09.2026):** PR 5 und §16 (Workspaces), PR 10–12
-und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime)
-laufen jetzt unter Epic [#1610](https://github.com/arn0ld87/agora/issues/1610).
+**Vorgezogen (ADR-0018, 25.09.2026), dann wieder zurückgestellt (ADR-0019,
+25.09.2026):** PR 5 und §16 (Workspaces), PR 10–12 und §14/15/17/18 (Supabase
+Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime) stehen unter Epic
+[#1610](https://github.com/arn0ld87/agora/issues/1610). Gemergt ist der Stand
+aus der Tabelle oben; er bleibt per Default inaktiv (kein
+`AGORA_SUPABASE_JWT_ISSUER`, `AGORA_SUPABASE_REALTIME` aus). **Multi-User folgt
+erst nach 1.0**; bis dahin kein weiterer Ausbau, nur Fehlerbehebungen.
 Abweichend vom Planentwurf: Auth-Default `hybrid`, offene Registrierung mit
 §37-Härtung, Realtime nur für Listen-Projektionen.
 
