@@ -12,7 +12,7 @@
 # Verwendung — beide Variablen sind Pflicht, damit kein stiller Default
 # zurueckkehrt:
 #
-#   export AGORA_DNS_PRIMARY=192.168.1.1
+#   export AGORA_DNS_PRIMARY=<PRIMARY_DNS_IP>
 #   export AGORA_DNS_SECONDARY=9.9.9.9
 #   docker compose \
 #     -f docker-compose.yml \

@@ -187,6 +187,18 @@ graphify-out/
 # (z. B. opencode.jsonc.bak.20260720-080351).
 *.bak.[0-9]*
 
+# Lokale Backups, Datenbankdateien und Dumps; bereits versionierte
+# Referenz-Fixtures bleiben von Ignore-Regeln unberuehrt.
+*.bak
+*.old
+*.tmp
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.pgdump
+*.sql.gz
+
 # Lokale Opencode-Konfiguration (persoenliches Setup, nicht repo-weit gueltig)
 opencode.jsonc
 
