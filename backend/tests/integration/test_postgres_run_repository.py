@@ -293,9 +293,10 @@ def test_unreadable_row_is_skipped_before_the_limit(repo, migrated_db):
     with migrated_db.session() as session:
         session.execute(
             text(
-                'INSERT INTO agora.runs (id, updated_at, payload) '
+                'INSERT INTO agora.runs (id, updated_at, payload, workspace_id) '
                 "VALUES ('run_kaputt000001', '2026-09-09T00:00:00', "
-                '\'{"run_id": "run_kaputt000001", "progress": "keine Zahl"}\'::jsonb)'
+                '\'{"run_id": "run_kaputt000001", "progress": "keine Zahl"}\'::jsonb, '
+                "'00000000-0000-0000-0000-000000000001')"
             )
         )
 
@@ -395,9 +396,9 @@ def test_non_object_payload_counts_as_unreadable(repo, migrated_db, payload):
     with migrated_db.session() as session:
         session.execute(
             text(
-                'INSERT INTO agora.runs (id, updated_at, payload) '
+                'INSERT INTO agora.runs (id, updated_at, payload, workspace_id) '
                 "VALUES ('run_skalar000001', '2026-09-09T00:00:00', "
-                f"'{payload}'::jsonb)"
+                f"'{payload}'::jsonb, '00000000-0000-0000-0000-000000000001')"
             )
         )
 

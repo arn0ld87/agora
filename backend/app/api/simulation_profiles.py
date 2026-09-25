@@ -25,7 +25,7 @@ from ..services.persona_review_service import (
     PersonaReviewService,
 )
 from ..services.simulation_manager import SimulationManager
-from ..utils.auth import allow_ticket_auth
+from ..utils.auth import allow_ticket_auth, operator_only
 from ..utils.validation import validate_simulation_id
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -147,6 +147,7 @@ def get_simulation_profiles(simulation_id: str):
 
 
 @simulation_bp.route('/persona-library', methods=['GET'])
+@operator_only
 @handle_api_errors(log_prefix="Failed to list persona templates")
 def list_persona_templates():
     """List reusable persona templates stored on this machine."""
@@ -155,6 +156,7 @@ def list_persona_templates():
 
 
 @simulation_bp.route('/persona-library', methods=['POST'])
+@operator_only
 @handle_api_errors(log_prefix="Failed to save persona template")
 def save_persona_template():
     """Persist a generated or manually authored persona for later simulations."""
@@ -170,6 +172,7 @@ def save_persona_template():
 
 
 @simulation_bp.route('/persona-library/<template_id>', methods=['DELETE'])
+@operator_only
 @handle_api_errors(log_prefix="Failed to delete persona template")
 def delete_persona_template(template_id: str):
     """Remove a reusable persona template."""

@@ -332,7 +332,7 @@ Seit dem zweiten Teil von PR 6 gibt es den zweiten Adapter: `PostgresProjectRepo
 
 **Umgeschaltet ist nichts.** `AGORA_PROJECT_BACKEND` schaltet die Ablage getrennt von `AGORA_METADATA_BACKEND` und `AGORA_LLM_PROFILE_BACKEND` und steht im Default auf `file`; in dieser Installation ist keine Migration gelaufen. `Config.validate()` lehnt `postgres` ohne gesetzte `DATABASE_URL` beim Start ab. Der Adapter ist gegen eine echte PostgreSQL-17-Instanz verifiziert (17 Integrationstests, darunter ein Roundtrip über alle Vertragsfelder), nicht gegen einen produktiven Bestand.
 
-Drei Festlegungen des Schemas: `project_id` behält sein Format `proj_<12 Hexstellen>` und wird **keine** `uuid`, weil es der Verzeichnisname unter `uploads/projects/` ist — die Kennung erzeugt seitdem der Port, damit beide Adapter dieselbe Form liefern. `created_at`/`updated_at` sind `text` und nicht `timestamptz`, weil der Vertrag ISO-Zeichenketten führt und ein Umweg über `timestamptz` beim Lesen eine andere Zeichenkette ergäbe. Und `workspace_id` kommt nicht vor, weil Multi-User eine eigene, freizugebende Phase ist.
+Drei Festlegungen des Schemas: `project_id` behält sein Format `proj_<12 Hexstellen>` und wird **keine** `uuid`, weil es der Verzeichnisname unter `uploads/projects/` ist — die Kennung erzeugt seitdem der Port, damit beide Adapter dieselbe Form liefern. `created_at`/`updated_at` sind `text` und nicht `timestamptz`, weil der Vertrag ISO-Zeichenketten führt und ein Umweg über `timestamptz` beim Lesen eine andere Zeichenkette ergäbe. `workspace_id` kam damals nicht vor; seit #1614 gehört jedes Projekt einem Workspace (siehe „Workspace-Isolation der Metadaten“).
 
 ### Simulationsmetadaten: Vertrag, Port, zwei Adapter
 
@@ -409,10 +409,30 @@ Seit #1613 kennt der Guard `AGORA_AUTH_BACKEND=legacy|hybrid|supabase` (`backend
 - **Principal:** Jeder zugelassene Request legt einen `Principal` ab. `require_scope` leitet die Scopes aus der Rolle ab, Tickets sind an ihren Aussteller gebunden.
 - **Betreiber-Endpunkte:** Settings, LLM-Profile, API-Keys, Logs, Onboarding, Profil und Modell-Stream sind für JWT-Nutzer gesperrt.
 
-**Umgeschaltet ist nichts:** Bis die Repositories nach Workspace filtern (#1614), lehnt `Config.validate()` jede JWT-Konfiguration ab. Verifiziert ist das mit Unit-Tests für Verifier, Guard, Scopes und Tickets sowie mit einem Integrationstest der Mitgliedschaftsprüfung gegen PostgreSQL.
+**Umgeschaltet ist nichts:** `AGORA_SUPABASE_JWT_ISSUER` ist nicht gesetzt. Verifiziert ist das mit Unit-Tests für Verifier, Guard, Scopes und Tickets sowie mit einem Integrationstest der Mitgliedschaftsprüfung gegen PostgreSQL.
+
+
+### Workspace-Isolation der Metadaten (#1614)
+
+Seit #1614 gehören Projekte, Simulationen, Runs und Reports je einem Workspace.
+- **Migration:** Die Alembic-Revision `14d60476b8ce` legt `workspace_id` an, schreibt den Bestand auf den Default-Workspace zurück und setzt danach `NOT NULL`.
+- **Fremdschlüssel:** Verweise sind zusammengesetzt (`(project_id, workspace_id)`, `(simulation_id, workspace_id)`) und können keine Workspace-Grenze überschreiten. `ON DELETE SET NULL (<spalte>)` lässt dabei die `workspace_id` stehen.
+- **Adapter:** Die PostgreSQL-Adapter lesen, listen, schreiben und löschen im Request nur im Workspace des Principals. Außerhalb eines Requests (Hintergrund, Migration) erbt eine neue Zeile den Workspace ihres Elternteils.
+- **Guard:** Für Supabase-Nutzer prüft er jede Kennung im Request vor der View (`app/security/resource_guard.py`).
+- **LLM-Profile** bleiben prozessweit und sind Betreibern vorbehalten.
+
+Verifiziert gegen PostgreSQL mit:
+- Backfill eines Bestands samt `alembic check` und Rückweg
+- abgelehnten Verweisen über die Workspace-Grenze
+- Request-Isolation und System-Kontext
+- Verweisprüfung im Guard
+
+**Umgeschaltet ist nichts.**
+
 ### Metadaten-Migration: Rollback-Gate
 
 Seit #1589 prüft `backend/tests/integration/test_metadata_migration_rollback.py` den ganzen Weg in einem Test (Plan §36): Ein Legacy-Bestand aus LLM-Profil (SQLite), Projekt, Simulation, Run und Report wird mit allen `migrate_*_to_postgres.py` übertragen, und jedes `--verify` muss mit Exit 0 enden. Dann startet `create_app()` mit allen fünf Schaltern auf `postgres`, während die Legacy-Metadateien versteckt sind. Anschließend startet die App erneut mit allen Schaltern auf Legacy. Die Antworten von zehn Lese-Endpunkten (Einzelabruf und Liste je Domäne) müssen in beiden Phasen gleich sein, und jeder Datensatz muss mit unveränderter Kennung da sein. Ein zweiter Test belegt, dass `Config.validate()` einen Rückweg in falscher Reihenfolge ablehnt. Der Test läuft im CI-Integration-Job gegen PostgreSQL; **umgeschaltet ist nichts**.
+
 ### Metadaten-Cutover: Sammelprüfung
 
 Seit #1590 fährt `backend/scripts/verify_metadata_cutover.py` alle Prüfungen des Cutovers in einer Reihenfolge: Schalter-Konsistenz (dieselben Regeln wie `Config.validate()`, Fremdschlüssel-Reihenfolge LLM-Profile → Projekte → Simulationen → Runs → Reports), Alembic-Head (dieselbe Funktion wie das Start-Gate), das `verify` der fünf Migrationsskripte und `migration_baseline.py --compare`. Exit 0 nur, wenn jeder Schritt `OK` ist; `FEHLER` gibt 1, `UNGEPRÜFT` (etwa ohne `--baseline`) 2. Ein Schritt, der wirft, scheitert allein und nennt nur den Ausnahmetyp. Das Skript liest ausschließlich. [`runbooks/metadata-postgres-cutover.md`](runbooks/metadata-postgres-cutover.md) fasst die fünf Einzel-Runbooks in Cutover-Reihenfolge zusammen, samt Rückweg in umgekehrter Reihenfolge. Verifiziert mit Unit-Tests je Schritt und einem Integrationstest gegen PostgreSQL; **umgeschaltet ist nichts**, der Cutover auf dem Produktivhost ist #1592.

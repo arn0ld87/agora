@@ -155,6 +155,23 @@ def split_bound_scope(scope: str) -> tuple[str, Optional[Principal]]:
     return base, principal
 
 
+# -- Tenant-Modus ------------------------------------------------------------
+
+
+def tenant_mode_active() -> bool:
+    """Supabase-JWT ist aktiv: Modus ``hybrid``/``supabase``, JWT konfiguriert
+    **und** die Invariante aus ADR-0018 erfüllt (sonst bleibt JWT aus).
+
+    Nur in diesem Modus gibt es mehrere Workspaces mit Nutzern; ohne ihn ist
+    Agora einmandantig und alles liegt im Default-Workspace.
+    """
+    from ..config import Config, supabase_jwt_configured, validate_auth_backend
+
+    if Config.AUTH_BACKEND not in ('hybrid', 'supabase') or not supabase_jwt_configured(Config):
+        return False
+    return not validate_auth_backend(Config)
+
+
 # -- Verifier ----------------------------------------------------------------
 
 _verifier_lock = threading.Lock()

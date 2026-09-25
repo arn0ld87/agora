@@ -42,12 +42,7 @@ from flask import Blueprint, Flask, current_app, request
 
 from . import signed_ticket
 from .api_responses import json_error
-from ..config import (
-    Config,
-    supabase_jwt_configured,
-    supabase_jwt_settings,
-    validate_auth_backend,
-)
+from ..config import Config, supabase_jwt_configured, supabase_jwt_settings
 from ..contracts.auth_contract import AuthType, Principal
 from ..security.principal_context import (
     WORKSPACE_HEADER,
@@ -58,13 +53,16 @@ from ..security.principal_context import (
     resolve_jwt_principal,
     set_principal,
     split_bound_scope,
+    tenant_mode_active,
 )
+from ..security.resource_guard import first_foreign_reference
 from ..security.supabase_jwt import JwtVerificationError, looks_like_jwt
 from ..services.api_keys_store import get_api_keys_store
 from .logger import get_logger
 
 _logger = get_logger("agora.auth")
 _TICKET_SCOPE_ATTR = "_agora_ticket_scope_fn"
+_OPERATOR_ONLY_ATTR = "_agora_operator_only"
 _TICKET_SINGLE_USE_ATTR = "_agora_ticket_single_use"
 
 
@@ -83,19 +81,13 @@ def _jwt_enabled() -> bool:
     """
     if Config.AUTH_BACKEND not in ("hybrid", "supabase") or not supabase_jwt_configured(Config):
         return False
-    return _jwt_invariant_holds()
-
-
-def _jwt_invariant_holds() -> bool:
-    errors = validate_auth_backend(Config)
-    if errors:
-        _logger.error(
-            "auth: Supabase-JWT bleibt aus — Konfiguration verletzt ADR-0018 (%d Fehler, "
-            "siehe Config.validate()).",
-            len(errors),
-        )
-        return False
-    return True
+    if tenant_mode_active():
+        return True
+    _logger.error(
+        "auth: Supabase-JWT bleibt aus — Konfiguration verletzt ADR-0018 "
+        "(siehe Config.validate())."
+    )
+    return False
 
 
 def _master_token_allowed() -> bool:
@@ -155,6 +147,20 @@ def allow_ticket_auth(scope_fn: Callable[..., str], *, single_use: bool = True):
         return view
 
     return decorator
+
+
+def operator_only(view):
+    """Einzelne View in einem Workspace-Blueprint, die prozessweiten Zustand
+    verwaltet (z. B. die gemeinsame Persona-Bibliothek): für JWT-Nutzer
+    gesperrt, wie ``install_blueprint_guard(..., tenant_access=False)``."""
+    setattr(view, _OPERATOR_ONLY_ATTR, True)
+    return view
+
+
+def _view_is_operator_only() -> bool:
+    endpoint = request.endpoint
+    view = current_app.view_functions.get(endpoint) if endpoint else None
+    return bool(getattr(view, _OPERATOR_ONLY_ATTR, False))
 
 
 def _ticket_view_metadata() -> tuple[str, bool] | None:
@@ -358,12 +364,14 @@ def install_blueprint_guard(
         if denied is not None:
             return denied
         principal = current_principal()
-        if (
-            not getattr(bp, _GUARD_TENANT_ACCESS_ATTR, True)
-            and principal is not None
-            and principal.auth_type == AuthType.JWT
-        ):
+        if principal is None or principal.auth_type != AuthType.JWT:
+            return None
+        if not getattr(bp, _GUARD_TENANT_ACCESS_ATTR, True) or _view_is_operator_only():
             return json_error("forbidden", status=403, code="operator_only")
+        # Jede Kennung im Request muss im Workspace des Nutzers liegen, bevor
+        # eine View Dateien, Graphen oder Metadaten dazu liest (#1614).
+        if first_foreign_reference(principal.workspace_id) is not None:
+            return json_error("not found", status=404, code="not_found")
         return None
 
     if bp._got_registered_once:

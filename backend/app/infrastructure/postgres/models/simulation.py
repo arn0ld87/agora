@@ -32,10 +32,11 @@ Phase.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import AGORA_SCHEMA, Base
@@ -52,13 +53,30 @@ class SimulationModel(Base):
         ),
         # ``list(project_id=...)`` ist der häufigste Lesepfad.
         Index('ix_simulations_project_id', 'project_id'),
+        # Ziel der zusammengesetzten Fremdschlüssel: ein Verweis kann nie
+        # in einen anderen Workspace zeigen (Plan §18).
+        UniqueConstraint('id', 'workspace_id'),
+        # Verweis nur innerhalb desselben Workspace. ``SET NULL (project_id)``
+        # löst nur den Verweis; ``workspace_id`` bleibt (PostgreSQL ≥ 15).
+        ForeignKeyConstraint(
+            ['project_id', 'workspace_id'],
+            [f'{AGORA_SCHEMA}.projects.id', f'{AGORA_SCHEMA}.projects.workspace_id'],
+            ondelete='SET NULL (project_id)',
+        ),
         {'schema': AGORA_SCHEMA},
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Workspace der Zeile (ADR-0018, #1614). Der Bestand vor #1614 steht im
+    # Default-Workspace; Löschen eines Workspace mit Daten scheitert.
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f'{AGORA_SCHEMA}.workspaces.id'),
+        nullable=False,
+        index=True,
+    )
     project_id: Mapped[str | None] = mapped_column(
         Text,
-        ForeignKey(f'{AGORA_SCHEMA}.projects.id', ondelete='SET NULL'),
         nullable=True,
     )
     graph_id: Mapped[str] = mapped_column(Text, nullable=False)

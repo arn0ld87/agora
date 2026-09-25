@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, List, Optional
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -37,6 +38,7 @@ from ....utils.logger import get_logger
 from ..models.project import ProjectModel
 from ..models.simulation import SimulationModel
 from ..session import Database, get_database
+from ..workspace_scope import active_workspace_id, scoped, visible, workspace_for_write
 
 logger = get_logger('agora.simulations.postgres')
 
@@ -135,11 +137,20 @@ class PostgresSimulationRepository:
     def save(self, record: SimulationRecord) -> None:
         record.updated_at = _now()
         values = _to_row_values(record)
+        workspace_id = active_workspace_id()
         try:
             with self.db.session() as session:
                 row = session.get(SimulationModel, record.simulation_id)
+                target = workspace_for_write(
+                    session,
+                    row,
+                    workspace_id,
+                    parent_model=ProjectModel,
+                    parent_id=values['project_id'],
+                    record_label=f'simulation {record.simulation_id}',
+                )
                 if row is None:
-                    session.add(SimulationModel(**values))
+                    session.add(SimulationModel(**values, workspace_id=target))
                     return
                 if _was_detached_from_deleted_project(session, row, values):
                     # ``ON DELETE SET NULL`` hat den Verweis gelöst, während
@@ -162,7 +173,9 @@ class PostgresSimulationRepository:
                 ) from exc
             raise
 
-    def add_existing(self, record: SimulationRecord) -> bool:
+    def add_existing(
+        self, record: SimulationRecord, workspace_id: Optional[UUID] = None
+    ) -> bool:
         """Legt eine Simulation mit **bestehender** Kennung und ihren
         Zeitstempeln an. ``False``, wenn die Kennung schon vorhanden ist.
 
@@ -176,9 +189,18 @@ class PostgresSimulationRepository:
             if session.get(SimulationModel, record.simulation_id) is not None:
                 return False
 
+        values = _to_row_values(record)
         try:
             with self.db.session() as session:
-                session.add(SimulationModel(**_to_row_values(record)))
+                # Ohne Angabe: Workspace des Requests, sonst der des Projekts.
+                target = workspace_id or workspace_for_write(
+                    session,
+                    None,
+                    active_workspace_id(),
+                    parent_model=ProjectModel,
+                    parent_id=values['project_id'],
+                )
+                session.add(SimulationModel(**values, workspace_id=target))
         except IntegrityError as exc:
             if _is_project_fk_violation(exc):
                 raise SimulationProjectMissing(
@@ -196,7 +218,7 @@ class PostgresSimulationRepository:
 
     def get(self, simulation_id: str) -> Optional[SimulationRecord]:
         with self.db.session() as session:
-            row = session.get(SimulationModel, simulation_id)
+            row = visible(session.get(SimulationModel, simulation_id), active_workspace_id())
             return None if row is None else _to_contract(row)
 
     def list(self, project_id: Optional[str] = None) -> List[SimulationRecord]:
@@ -207,7 +229,9 @@ class PostgresSimulationRepository:
         Ein unlesbarer Datensatz lässt die Liste stehen und wird mit seiner
         Kennung protokolliert, wie beim Dateiadapter.
         """
-        query = select(SimulationModel).order_by(SimulationModel.created_at.desc())
+        query = scoped(
+            select(SimulationModel), SimulationModel, active_workspace_id()
+        ).order_by(SimulationModel.created_at.desc())
         if project_id is not None:
             if project_id:
                 query = query.where(SimulationModel.project_id == project_id)
@@ -231,7 +255,9 @@ class PostgresSimulationRepository:
             func.nullif(SimulationModel.root_simulation_id, ''),
             SimulationModel.id,
         )
-        query = select(SimulationModel).where(family_root == root_id)
+        query = scoped(
+            select(SimulationModel), SimulationModel, active_workspace_id()
+        ).where(family_root == root_id)
         with self.db.session() as session:
             return self._readable(session.scalars(query).all())
 

@@ -28,10 +28,11 @@ Phase; der Weg zum Nachrüsten steht in der Entscheidung
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from sqlalchemy import CheckConstraint, Index, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import AGORA_SCHEMA, Base
@@ -67,10 +68,21 @@ class ProjectModel(Base):
         # Die Projektliste zeigt das Neueste oben und ist der einzige
         # Lesepfad, der über alle Zeilen geht.
         Index('ix_projects_created_at', text('created_at DESC')),
+        # Ziel der zusammengesetzten Fremdschlüssel: ein Verweis kann nie
+        # in einen anderen Workspace zeigen (Plan §18).
+        UniqueConstraint('id', 'workspace_id'),
         {'schema': AGORA_SCHEMA},
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Workspace der Zeile (ADR-0018, #1614). Der Bestand vor #1614 steht im
+    # Default-Workspace; Löschen eines Workspace mit Daten scheitert.
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f'{AGORA_SCHEMA}.workspaces.id'),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     graph_id: Mapped[str | None] = mapped_column(Text, nullable=True)

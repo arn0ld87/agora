@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Optional
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +34,7 @@ from ....repositories.project_repository import new_project_id
 from ....utils.logger import get_logger
 from ..models.project import ProjectModel
 from ..session import Database, get_database
+from ..workspace_scope import active_workspace_id, scoped, visible, workspace_for_write
 
 logger = get_logger('agora.projects.postgres')
 
@@ -122,11 +124,17 @@ class PostgresProjectRepository:
             created_at=now,
             updated_at=now,
         )
+        workspace_id = active_workspace_id()
         with self.db.session() as session:
-            session.add(ProjectModel(**_to_row_values(project)))
+            session.add(
+                ProjectModel(
+                    **_to_row_values(project),
+                    workspace_id=workspace_for_write(session, None, workspace_id),
+                )
+            )
         return project
 
-    def add_existing(self, project: Project) -> bool:
+    def add_existing(self, project: Project, workspace_id: Optional[UUID] = None) -> bool:
         """Legt ein Projekt mit seiner **bestehenden** Kennung und ihren
         Zeitstempeln an. ``False``, wenn die Kennung schon vorhanden ist.
 
@@ -145,6 +153,9 @@ class PostgresProjectRepository:
         Primärschlüsselverletzung zusätzlich abgefangen und als „schon da"
         gewertet — die Datenbank ist hier die verlässlichere Instanz als ein
         vorheriger Blick.
+
+        ``workspace_id`` legt den Workspace fest; ohne Angabe gilt der des
+        Requests, im System-Kontext (Migration) der Default-Workspace.
         """
         with self.db.session() as session:
             if session.get(ProjectModel, project.project_id) is not None:
@@ -152,7 +163,10 @@ class PostgresProjectRepository:
 
         try:
             with self.db.session() as session:
-                session.add(ProjectModel(**_to_row_values(project)))
+                target = workspace_id or workspace_for_write(
+                    session, None, active_workspace_id()
+                )
+                session.add(ProjectModel(**_to_row_values(project), workspace_id=target))
         except IntegrityError:
             logger.info(
                 'Project %s was inserted concurrently — treated as existing',
@@ -165,7 +179,9 @@ class PostgresProjectRepository:
         project.updated_at = _now()
         values = _to_row_values(project)
         with self.db.session() as session:
-            row = session.get(ProjectModel, project.project_id)
+            row = visible(
+                session.get(ProjectModel, project.project_id), active_workspace_id()
+            )
             if row is None:
                 raise ProjectNotStored(
                     f'project {project.project_id} does not exist'
@@ -176,7 +192,7 @@ class PostgresProjectRepository:
     def delete(self, project_id: str) -> bool:
         """Entfernt nur die Zeile. Artefakte raeumt der Aufrufer ab."""
         with self.db.session() as session:
-            row = session.get(ProjectModel, project_id)
+            row = visible(session.get(ProjectModel, project_id), active_workspace_id())
             if row is None:
                 return False
             session.delete(row)
@@ -186,7 +202,7 @@ class PostgresProjectRepository:
 
     def get(self, project_id: str) -> Optional[Project]:
         with self.db.session() as session:
-            row = session.get(ProjectModel, project_id)
+            row = visible(session.get(ProjectModel, project_id), active_workspace_id())
             return None if row is None else _to_contract(row)
 
     def list(self, limit: int = 50) -> list[Project]:
@@ -204,9 +220,10 @@ class PostgresProjectRepository:
         heisst nicht verschwiegen; jeder Fall wird mit seiner Kennung
         protokolliert.
         """
+        query = scoped(select(ProjectModel), ProjectModel, active_workspace_id())
         with self.db.session() as session:
             rows = session.scalars(
-                select(ProjectModel)
+                query
                 .order_by(ProjectModel.created_at.desc())
                 # Ein negativer Wert waere in SQL ein Fehler, im Dateiadapter
                 # dagegen ein Python-Slice. Hier gleichgezogen.

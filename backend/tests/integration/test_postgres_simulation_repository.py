@@ -290,9 +290,10 @@ def test_unreadable_row_does_not_break_the_list(repo, migrated_db):
         session.execute(
             text(
                 'INSERT INTO agora.simulations '
-                '(id, graph_id, status, created_at, updated_at, payload) '
+                '(id, graph_id, status, created_at, updated_at, payload, workspace_id) '
                 "VALUES ('sim_kaputt000001', 'g', 'created', 'x', 'x', "
-                "'{\"entities_count\": \"keine Zahl\"}'::jsonb)"
+                "'{\"entities_count\": \"keine Zahl\"}'::jsonb, "
+                "'00000000-0000-0000-0000-000000000001')"
             )
         )
 
