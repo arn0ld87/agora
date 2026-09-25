@@ -22,7 +22,8 @@ const mocks = vi.hoisted(() => {
   const _sbRefreshSession = vi.fn()
   const _svcGet = vi.fn()
   const _svcPost = vi.fn()
-  return { _sbGetSession, _sbOnAuthStateChange, _sbSignOut, _sbRefreshSession, _svcGet, _svcPost }
+  const _sbSignIn = vi.fn()
+  return { _sbGetSession, _sbOnAuthStateChange, _sbSignOut, _sbRefreshSession, _svcGet, _svcPost, _sbSignIn }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -32,7 +33,7 @@ vi.mock('@supabase/supabase-js', () => ({
       onAuthStateChange: mocks._sbOnAuthStateChange,
       signOut: mocks._sbSignOut,
       refreshSession: mocks._sbRefreshSession,
-      signInWithPassword: vi.fn(),
+      signInWithPassword: mocks._sbSignIn,
       signUp: vi.fn(),
       updateUser: vi.fn(),
       resetPasswordForEmail: vi.fn(),
@@ -275,5 +276,59 @@ describe('onAuthStateChange — session sync', () => {
 
     const configCalls = mocks._svcGet.mock.calls.filter((c) => c[0] === '/api/auth/config')
     expect(configCalls).toHaveLength(1)
+  })
+})
+
+describe('Reihenfolge und Anmeldung (#1617, Codex)', () => {
+  it('abonniert onAuthStateChange vor getSession()', async () => {
+    const order: string[] = []
+    mocks._sbOnAuthStateChange.mockImplementation(() => {
+      order.push('subscribe')
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._sbGetSession.mockImplementation(async () => {
+      order.push('getSession')
+      return { data: { session: null } }
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ data: [] })
+
+    await useAuthStore().init()
+
+    expect(order).toEqual(['subscribe', 'getSession'])
+  })
+
+  it('signIn kehrt erst mit gewähltem Workspace zurück', async () => {
+    mocks._sbOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [WS_A, WS_B] })
+    const store = useAuthStore()
+    await store.init()
+    mocks._sbSignIn.mockResolvedValue({
+      data: { session: { access_token: 'tok-signin', user: { id: 'u1' }, expires_at: 9999 } },
+      error: null,
+    })
+
+    await store.signIn('a@example.test', 'ein-langes-passwort')
+
+    expect(getSessionToken()).toBe('tok-signin')
+    expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
+  })
+
+  it('bündelt gleichzeitige loadWorkspaces-Aufrufe', async () => {
+    let release: (v: unknown) => void = () => {}
+    mocks._svcGet.mockReturnValueOnce(new Promise((r) => { release = r }))
+    const store = useAuthStore()
+
+    const first = store.loadWorkspaces()
+    const second = store.loadWorkspaces()
+    release({ data: [WS_A] })
+    await Promise.all([first, second])
+
+    const listCalls = mocks._svcGet.mock.calls.filter((c) => c[0] === '/api/workspaces')
+    expect(listCalls).toHaveLength(1)
+    expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
   })
 })

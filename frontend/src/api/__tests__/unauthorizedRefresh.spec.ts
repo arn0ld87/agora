@@ -12,7 +12,7 @@ vi.mock('../../auth/supabaseClient', () => ({
   getSupabaseClient: vi.fn(() => ({ auth: sb })),
 }))
 
-import service, { register401SignOutCallback } from '../index'
+import service, { authFetch, register401SignOutCallback } from '../index'
 import { getSessionToken, setSessionToken } from '../../auth/sessionState'
 
 type Rejected = (error: unknown) => Promise<unknown>
@@ -49,7 +49,7 @@ describe('401 mit Supabase-Session', () => {
     expect(result).toBe('retried')
     expect(sb.refreshSession).toHaveBeenCalledTimes(1)
     expect(getSessionToken()).toBe('new-token')
-    expect(retry).toHaveBeenCalledWith(config)
+    expect(retry).toHaveBeenCalledWith({ ...config, _agoraAuthRetried: true })
   })
 
   it('signs out when the refresh fails and does not retry', async () => {
@@ -66,16 +66,32 @@ describe('401 mit Supabase-Session', () => {
     expect(getSessionToken()).toBeNull()
   })
 
-  it('does not refresh a request that was already retried', async () => {
+  it('does not refresh again when the retry (a cloned config) gets a 401', async () => {
     sb.refreshSession.mockResolvedValue({ data: { session: { access_token: 'new-token' } }, error: null })
-    vi.spyOn(service, 'request').mockResolvedValue('retried' as never)
-    const config = { url: '/api/z' }
-    await rejectedHandler()(unauthorized(config))
+    const retry = vi.spyOn(service, 'request').mockResolvedValue('retried' as never)
+    await rejectedHandler()(unauthorized({ url: '/api/z' }))
     sb.refreshSession.mockClear()
+    // Axios klont die Config: der zweite 401 trägt ein neues Objekt.
+    const retriedConfig = { ...(retry.mock.calls[0][0] as object) }
 
-    await expect(rejectedHandler()(unauthorized(config))).rejects.toBeTruthy()
+    await expect(rejectedHandler()(unauthorized(retriedConfig))).rejects.toBeTruthy()
 
     expect(sb.refreshSession).not.toHaveBeenCalled()
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares one refresh between concurrent 401s', async () => {
+    let resolveRefresh: (v: unknown) => void = () => {}
+    sb.refreshSession.mockReturnValue(new Promise((r) => { resolveRefresh = r }))
+    vi.spyOn(service, 'request').mockResolvedValue('retried' as never)
+
+    const a = rejectedHandler()(unauthorized({ url: '/api/a' }))
+    const b = rejectedHandler()(unauthorized({ url: '/api/b' }))
+    await new Promise((r) => setTimeout(r, 0))
+    resolveRefresh({ data: { session: { access_token: 'new-token' } }, error: null })
+
+    await expect(Promise.all([a, b])).resolves.toEqual(['retried', 'retried'])
+    expect(sb.refreshSession).toHaveBeenCalledTimes(1)
   })
 
   it('leaves legacy token mode alone', async () => {
@@ -85,5 +101,51 @@ describe('401 mit Supabase-Session', () => {
 
     expect(sb.refreshSession).not.toHaveBeenCalled()
     expect(sb.signOut).not.toHaveBeenCalled()
+  })
+})
+
+describe('authFetch()', () => {
+  it('refreshes once on 401 and retries with the new token', async () => {
+    sb.refreshSession.mockResolvedValue({ data: { session: { access_token: 'fresh' } }, error: null })
+    const seen: string[] = []
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const auth = (init?.headers as Record<string, string>)['Authorization']
+      seen.push(auth)
+      return new Response('{}', { status: auth === 'Bearer fresh' ? 200 : 401 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await authFetch('/api/graph/g/diff')
+
+    expect(res.status).toBe(200)
+    expect(seen).toEqual(['Bearer old-token', 'Bearer fresh'])
+    vi.unstubAllGlobals()
+  })
+
+  it('signs out when the refresh fails', async () => {
+    sb.refreshSession.mockResolvedValue({ data: { session: null }, error: new Error('expired') })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })))
+    const onSignOut = vi.fn()
+    register401SignOutCallback(onSignOut)
+
+    const res = await authFetch('/api/x')
+
+    expect(res.status).toBe(401)
+    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    expect(onSignOut).toHaveBeenCalledTimes(1)
+    expect(getSessionToken()).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('leaves legacy mode alone', async () => {
+    setSessionToken(null)
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await authFetch('/api/x')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(sb.refreshSession).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })

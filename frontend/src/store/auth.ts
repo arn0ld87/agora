@@ -111,25 +111,26 @@ export const useAuthStore = defineStore('auth', () => {
     if (jwtEnabled.value && config.value) {
       const supabase = initSupabaseClient(config.value)
       if (supabase) {
-        const { data } = await supabase.auth.getSession()
-        session.value = data.session
-        user.value = data.session?.user ?? null
-        if (data.session?.access_token) {
-          setSessionToken(data.session.access_token)
-        }
-
+        // Erst abonnieren, dann getSession(): der Client liest beim Init die
+        // URL (Bestätigungs- oder Reset-Link) und meldet PASSWORD_RECOVERY
+        // bzw. SIGNED_IN, bevor getSession() zurückkehrt.
         supabase.auth.onAuthStateChange((event, newSession) => {
           if (event === 'PASSWORD_RECOVERY') passwordRecovery.value = true
           session.value = newSession
           user.value = newSession?.user ?? null
           setSessionToken(newSession?.access_token ?? null)
           if (event === 'SIGNED_IN') {
-            // Nach der Anmeldung (Formular oder Bestätigungslink) die eigenen
-            // Workspaces laden, beim ersten Mal mit Bootstrap. Außerhalb des
-            // Callbacks, weil supabase-js darin keine weiteren Aufrufe mag.
+            // Anmeldung über einen Link: Workspaces nachladen. Außerhalb des
+            // Callbacks, weil supabase-js darin keine weiteren Aufrufe mag;
+            // loadWorkspaces() bündelt gleichzeitige Aufrufe.
             setTimeout(() => { void loadWorkspaces() }, 0)
           }
         })
+
+        const { data } = await supabase.auth.getSession()
+        session.value = data.session
+        user.value = data.session?.user ?? null
+        setSessionToken(data.session?.access_token ?? null)
 
         // Register 401 callback: on forced signOut, redirect to Login.
         register401SignOutCallback(() => {
@@ -164,8 +165,16 @@ export const useAuthStore = defineStore('auth', () => {
   async function signIn(email: string, password: string): Promise<void> {
     const supabase = getSupabaseClient()
     if (!supabase) throw new Error('Supabase not initialised (jwt_enabled=false)')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
+    if (data?.session) {
+      session.value = data.session
+      user.value = data.session.user ?? null
+      setSessionToken(data.session.access_token)
+    }
+    // Erst mit gewähltem Workspace weiter: sonst fehlt Folgeanfragen der
+    // Header X-Agora-Workspace (Bootstrap beim ersten Login).
+    await loadWorkspaces()
   }
 
   async function signUp(email: string, password: string): Promise<void> {
@@ -202,7 +211,18 @@ export const useAuthStore = defineStore('auth', () => {
     passwordRecovery.value = false
   }
 
-  async function loadWorkspaces(): Promise<void> {
+  // Gleichzeitige Aufrufe (signIn und SIGNED_IN) teilen einen Lauf.
+  let workspacesInFlight: Promise<void> | null = null
+  function loadWorkspaces(): Promise<void> {
+    if (!workspacesInFlight) {
+      workspacesInFlight = fetchWorkspaces().finally(() => {
+        workspacesInFlight = null
+      })
+    }
+    return workspacesInFlight
+  }
+
+  async function fetchWorkspaces(): Promise<void> {
     try {
       const raw = (await service.get('/api/workspaces')) as WorkspacesEnvelope
       const payload = (raw as { data?: unknown })?.data ?? raw

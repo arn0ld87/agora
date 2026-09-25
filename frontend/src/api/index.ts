@@ -98,8 +98,67 @@ service.interceptors.request.use(
   }
 )
 
-// 401-Retry-State: tracks which requests have already been retried to avoid infinite loops.
-const _retried = new WeakSet<object>()
+/** Config-Markierung für den einen Retry nach einem Refresh (#1617). */
+const AUTH_RETRY_FLAG = '_agoraAuthRetried'
+
+let _refreshInFlight: Promise<boolean> | null = null
+
+/**
+ * Einmal `refreshSession()`; gleichzeitige 401er teilen denselben Versuch.
+ * `true`, wenn ein neuer Access-Token gesetzt ist.
+ */
+export function refreshSessionOnce(): Promise<boolean> {
+  if (!_refreshInFlight) {
+    _refreshInFlight = (async () => {
+      try {
+        // Lazy-Import gegen den Zyklus api → auth → contracts beim Laden.
+        const { getSupabaseClient } = await import('../auth/supabaseClient')
+        const supabase = getSupabaseClient()
+        if (!supabase) return false
+        const { data, error } = await supabase.auth.refreshSession()
+        if (error || !data?.session?.access_token) return false
+        // Sofort setzen, nicht auf onAuthStateChange warten.
+        setSessionToken(data.session.access_token)
+        return true
+      } catch {
+        return false
+      }
+    })().finally(() => {
+      _refreshInFlight = null
+    })
+  }
+  return _refreshInFlight
+}
+
+/** Refresh gescheitert: Token verwerfen, abmelden, Store informieren. */
+async function forceSignOut(): Promise<void> {
+  setSessionToken(null)
+  try {
+    const { getSupabaseClient } = await import('../auth/supabaseClient')
+    await getSupabaseClient()?.auth.signOut()
+  } catch {
+    /* ignore */
+  }
+  if (_on401SignOut) _on401SignOut()
+}
+
+/**
+ * `fetch` mit denselben Auth-Headern und derselben 401-Behandlung wie der
+ * Axios-Client (für Pfade, die rohe Responses brauchen).
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const send = () =>
+    fetch(input, {
+      credentials: 'same-origin',
+      ...init,
+      headers: { ...(init.headers as Record<string, string> | undefined), ...authHeaders() },
+    })
+  const res = await send()
+  if (res.status !== 401 || !getSessionToken()) return res
+  if (await refreshSessionOnce()) return send()
+  await forceSignOut()
+  return res
+}
 
 // Response interceptor (EPIC-09 Sub-Slice 5: surfaces ApiError with `code`).
 // reason: interceptor intentionally returns response.data (the envelope body)
@@ -138,42 +197,19 @@ service.interceptors.response.use(
       message?: string
     }
 
+    const failedConfig = axiosError.config as (Record<string, unknown> | undefined)
     if (
       axiosError?.response?.status === 401 &&
       getSessionToken() &&
-      axiosError.config &&
-      !_retried.has(axiosError.config)
+      failedConfig &&
+      !failedConfig[AUTH_RETRY_FLAG]
     ) {
-      _retried.add(axiosError.config)
-      try {
-        // Lazy-import to avoid circular dependency at module load time
-        const { getSupabaseClient } = await import('../auth/supabaseClient')
-        const supabase = getSupabaseClient()
-        if (supabase) {
-          const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
-          if (!refreshError && refreshed?.session?.access_token) {
-            // Neuen Token sofort setzen, nicht auf onAuthStateChange warten;
-            // der Request-Interceptor hängt ihn beim Retry an.
-            setSessionToken(refreshed.session.access_token)
-            return service.request(axiosError.config as Parameters<typeof service.request>[0])
-          }
-        }
-      } catch {
-        // Refresh failed — fall through to signOut
+      if (await refreshSessionOnce()) {
+        // Die Markierung überlebt das Klonen der Config durch Axios: ein
+        // zweiter 401 auf den Retry löst keinen weiteren Refresh aus.
+        return service.request({ ...failedConfig, [AUTH_RETRY_FLAG]: true } as Parameters<typeof service.request>[0])
       }
-      // Refresh failed: Token verwerfen, signOut und zum Login.
-      setSessionToken(null)
-      try {
-        const { getSupabaseClient } = await import('../auth/supabaseClient')
-        const supabase = getSupabaseClient()
-        if (supabase) {
-          await supabase.auth.signOut()
-        }
-      } catch { /* ignore */ }
-      // Notify the auth store via callback if registered
-      if (_on401SignOut) {
-        _on401SignOut()
-      }
+      await forceSignOut()
     }
 
     // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
