@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 #: Feste UUID des Default-Workspace. Die Alembic-Revision ``5c2913c7ba4f``
 #: legt ihn an; Legacy-Principals (Master-Token, ``ago_``-Keys) und der
@@ -54,4 +54,56 @@ class WorkspaceMembership(BaseModel):
     created_at: datetime
 
 
-__all__ = ['DEFAULT_WORKSPACE_ID', 'Workspace', 'WorkspaceMembership', 'WorkspaceRole']
+class WorkspaceSummary(BaseModel):
+    """Ein Workspace aus Sicht eines Nutzers: mit seiner Rolle darin
+    (``GET /api/workspaces``, #1616)."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    workspace_id: UUID
+    name: str
+    slug: str
+    role: WorkspaceRole
+
+
+class WorkspaceBootstrapRequest(BaseModel):
+    """``POST /api/workspaces/bootstrap``: optionaler Anzeigename."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class WorkspaceMemberUpsert(BaseModel):
+    """``PUT /api/workspaces/current/members/<user_id>``."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    role: WorkspaceRole
+
+
+class AuthConfigResponse(BaseModel):
+    """``GET /api/auth/config`` — öffentlich, ohne Geheimnisse (#1616).
+
+    ``supabase_anon_key`` ist der öffentliche Anon-Key; er ist für den Browser
+    bestimmt und gewährt allein keinen Zugriff auf Agora-Daten.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    auth_backend: str
+    jwt_enabled: bool
+    supabase_url: str | None = None
+    supabase_anon_key: str | None = None
+
+
+__all__ = [
+    'DEFAULT_WORKSPACE_ID',
+    'AuthConfigResponse',
+    'Workspace',
+    'WorkspaceBootstrapRequest',
+    'WorkspaceMemberUpsert',
+    'WorkspaceMembership',
+    'WorkspaceRole',
+    'WorkspaceSummary',
+]

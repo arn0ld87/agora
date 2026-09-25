@@ -30,6 +30,21 @@ Wichtige Funktionen:
 - signierte Tickets für Browser-Streams/Downloads
 - API-Key-Erzeugung, Widerruf und Scope-Prüfung
 - Mastertoken-/API-Key-Auflösung über die zentrale Auth-/Scope-Schicht
+- `GET /api/auth/config` (öffentlich): `auth_backend`, `jwt_enabled` und nur bei aktivem JWT `supabase_url` und `supabase_anon_key` für den Browser-Client. Kein Geheimnis (#1616).
+
+### Workspaces — `/api/workspaces` (#1616)
+
+Der aktive Workspace kommt immer aus dem Principal (`X-Agora-Workspace`, vom Guard gegen die Mitgliedschaft geprüft), nie aus dem Pfad.
+
+| Methode und Pfad | Wer | Wirkung |
+|---|---|---|
+| `GET /api/workspaces` | jeder angemeldete Nutzer, auch ohne Workspace | eigene Workspaces mit Rolle; Betreiber sehen den Default-Workspace |
+| `POST /api/workspaces/bootstrap` | Supabase-Nutzer | legt beim ersten Aufruf genau einen persönlichen Workspace an (Owner), danach idempotent (`created: false`). Body optional `{"name": "..."}`. Betreiber: `400 not_applicable` |
+| `GET /api/workspaces/current/members` | jedes Mitglied | Mitglieder des aktiven Workspace |
+| `PUT /api/workspaces/current/members/<user_id>` | Owner, Admin | Mitglied anlegen oder Rolle ändern, Body `{"role": "owner"\|"admin"\|"member"\|"viewer"}` |
+| `DELETE /api/workspaces/current/members/<user_id>` | Owner, Admin, jeder für sich selbst | Mitglied entfernen |
+
+Regeln: Owner-Rollen vergibt und entzieht nur ein Owner (`403 owner_required`); der letzte Owner bleibt (`409 last_owner`); Member und Viewer verwalten niemanden (`403 role_required`). `POST`, `PUT` und `DELETE` sind rate-limitiert (`AGORA_WORKSPACE_RATE_LIMIT_*`, `429` mit `Retry-After`).
 
 ### Onboarding & Profil
 

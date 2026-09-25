@@ -37,6 +37,7 @@ keinen Adapter (siehe Tabelle).
 | PR 10/11 | Supabase Auth, JWT, Principal im Guard | gemergt (#1621 über #1622, Issue #1613) |
 | — | Workspace-Isolation der Metadaten | `workspace_id` auf Projekten, Simulationen, Runs, Reports; Verweisprüfung im Guard gemergt (#1623, Issue #1614) |
 | PR 12 | Row Level Security, RLS-Testmatrix | `FORCE`-Policies, Session-Kontext, Rollen-Gate gemergt (#1624, Issue #1615) |
+| — | Offene Registrierung, Workspace-API | Bootstrap, Mitgliederverwaltung, GoTrue-Härtung nach §37: PR offen (Issue #1616) |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
 | PR 15 | Cutover Metadaten-Backend | Prüfskript gemergt (#1608, Issue #1590), Cutover armserver #1592 |
 | — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); Rollback-Gate gemergt (#1609, Issue #1589) |

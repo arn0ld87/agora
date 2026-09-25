@@ -51,6 +51,7 @@ from ..security.principal_context import (
     get_jwt_verifier,
     legacy_principal,
     resolve_jwt_principal,
+    set_identity,
     set_principal,
     split_bound_scope,
     tenant_mode_active,
@@ -63,6 +64,7 @@ from .logger import get_logger
 _logger = get_logger("agora.auth")
 _TICKET_SCOPE_ATTR = "_agora_ticket_scope_fn"
 _OPERATOR_ONLY_ATTR = "_agora_operator_only"
+_IDENTITY_ONLY_ATTR = "_agora_identity_only"
 _TICKET_SINGLE_USE_ATTR = "_agora_ticket_single_use"
 
 
@@ -157,6 +159,22 @@ def operator_only(view):
     return view
 
 
+def identity_only(view):
+    """View, die für Supabase-Nutzer nur die geprüfte Identität braucht, keinen
+    Workspace: Workspace-Liste und -Bootstrap (#1616). Ein neuer Nutzer hat
+    noch keinen Workspace, ein Nutzer mit mehreren wählt ihn erst. Der Guard
+    legt dann statt eines Principals die Identität ab (``current_identity``).
+    """
+    setattr(view, _IDENTITY_ONLY_ATTR, True)
+    return view
+
+
+def _view_is_identity_only() -> bool:
+    endpoint = request.endpoint
+    view = current_app.view_functions.get(endpoint) if endpoint else None
+    return bool(getattr(view, _IDENTITY_ONLY_ATTR, False))
+
+
 def _view_is_operator_only() -> bool:
     endpoint = request.endpoint
     view = current_app.view_functions.get(endpoint) if endpoint else None
@@ -226,6 +244,9 @@ def _authenticate_jwt(token: str):
         # Nur der Code, nie Token oder Claims.
         _logger.info("auth: JWT rejected (%s) on %s", exc.code.value, request.path)
         return _auth_error("invalid_token")
+    if _view_is_identity_only():
+        set_identity(claims)
+        return None
     from ..repositories.workspace_repository import get_workspace_repository
 
     try:

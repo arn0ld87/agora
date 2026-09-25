@@ -110,6 +110,12 @@ Ohne gesetzten Env-Wert verhält sich der Server wie vorher, gibt aber beim Star
 - **Keine fremde Kennung erreicht eine View (#1614):** Für JWT-Nutzer prüft der Guard jede `project_id`, `graph_id`, `simulation_id`, `sim_id`, `run_id` und `report_id` in Pfad, Query und JSON-Body, auch in Listenfeldern wie `simulation_ids`, gegen den Workspace des Principals. Fremde und unbekannte Kennungen ergeben dasselbe `404 not_found`. Das schützt auch Dateien (Report-Inhalte, Uploads) und Neo4j-Graphen, die nicht in PostgreSQL liegen. In-Memory-Tasks sind auf den eigenen Workspace gefiltert, die gemeinsame Persona-Bibliothek ist Betreibern vorbehalten.
 - **Prozessweiter Zustand** (Provider-Keys, LLM-Profile, API-Keys, Logs, Onboarding, Profil, Modell-Stream) ist für JWT-Nutzer gesperrt (`operator_only`).
 - **Tickets** sind an den Principal ihres Ausstellers gebunden. Mit aktivem JWT gilt kein ungebundenes Ticket.
+- **Offene Registrierung (#1616, Plan §37):**
+  - GoTrue verlangt die bestätigte E-Mail-Adresse (`ENABLE_EMAIL_AUTOCONFIRM=false`), vorher gibt es kein Token. Ohne SMTP scheitert jede Registrierung beim Versand, es entsteht kein Zugang.
+  - Passwort mindestens 12 Zeichen, Refresh-Token-Rotation mit Wiederverwendungsfenster, Stundenlimits für Mails, Verifikation, OTP und Token-Refresh (`supabase/docker-compose.yml`).
+  - Ein neuer Nutzer bekommt über `POST /api/workspaces/bootstrap` genau einen persönlichen Workspace und keinen Zugang zu fremden. Der Slug hängt an der Nutzer-ID, deshalb ist der Bootstrap auch bei gleichzeitigen Aufrufen idempotent.
+  - Mitgliederverwaltung: Owner-Rollen nur durch Owner, der letzte Owner bleibt (Sperre `FOR UPDATE` gegen gleichzeitige Herabstufung). Bootstrap und Mitgliederverwaltung sind rate-limitiert.
+  - `AGORA_CORS_ALLOW_ALL=true` schaltet JWT ab: sonst dürfte jede Origin im Namen eines angemeldeten Nutzers anfragen.
 
 ## Phase 3 — Endpoint-Härtung
 

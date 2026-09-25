@@ -1,0 +1,3 @@
+### Security
+
+- **Offene Registrierung** — Neue Endpunkte `/api/workspaces` (Liste, `POST /bootstrap`, Mitgliederverwaltung unter `/current/members`) und das öffentliche `GET /api/auth/config`. Jeder bestätigte Supabase-Nutzer bekommt genau einen persönlichen Workspace und keinen Zugang zu fremden. Owner-Rollen vergibt nur ein Owner, und der letzte Owner bleibt. Bootstrap und Mitgliederverwaltung sind rate-limitiert (`AGORA_WORKSPACE_RATE_LIMIT_*`). `AGORA_CORS_ALLOW_ALL=true` schaltet JWT ab. GoTrue verlangt die E-Mail-Bestätigung, Passwörter ab 12 Zeichen und rotiert Refresh-Tokens; dazu kommen Stundenlimits und SMTP-Variablen. Neue Variablen: `AGORA_SUPABASE_URL`, `AGORA_SUPABASE_ANON_KEY`. Runbook: `docs/runbooks/offene-registrierung.md`. (#1616)

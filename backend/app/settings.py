@@ -197,6 +197,12 @@ class AgoraSettings(BaseSettings):
     agora_report_rate_limit_window_seconds: int = Field(
         default=60, alias="AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"
     )
+    agora_workspace_rate_limit_max: int = Field(
+        default=30, alias="AGORA_WORKSPACE_RATE_LIMIT_MAX"
+    )
+    agora_workspace_rate_limit_window_seconds: int = Field(
+        default=60, alias="AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS"
+    )
 
     # ------------------------------------------------------------- ProxyFix
     agora_proxy_fix_x_for: int = Field(default=0, alias="AGORA_PROXY_FIX_X_FOR")

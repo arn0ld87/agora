@@ -54,6 +54,23 @@ def current_principal() -> Optional[Principal]:
     return g.get(_G_ATTR)
 
 
+_G_IDENTITY_ATTR = 'agora_identity'
+
+
+def set_identity(claims: SupabaseJwtClaims) -> None:
+    """Geprüfte Identität eines Supabase-Nutzers, auch ohne Workspace.
+
+    Nur für Endpunkte mit ``@identity_only`` (Workspace-Liste und -Bootstrap,
+    #1616): Dort gibt es noch keinen oder mehrere Workspaces, also keinen
+    Principal.
+    """
+    setattr(g, _G_IDENTITY_ATTR, claims)
+
+
+def current_identity() -> Optional[SupabaseJwtClaims]:
+    return g.get(_G_IDENTITY_ATTR)
+
+
 def legacy_principal(auth_type: AuthType) -> Principal:
     """Principal für Master-Token, ``ago_``-Key und offenen Modus."""
     return Principal(

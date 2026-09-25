@@ -185,6 +185,17 @@ def test_jwt_and_anonymous_mode_are_exclusive(isolation, monkeypatch):
     assert any('AGORA_ALLOW_ANONYMOUS' in e for e in errors)
 
 
+def test_jwt_and_cors_allow_all_are_exclusive(isolation, monkeypatch):
+    """Offene Registrierung (#1616): keine fremde Origin im Namen eines Nutzers."""
+    monkeypatch.setenv('AGORA_CORS_ALLOW_ALL', 'true')
+
+    errors = validate_auth_backend(_jwt_ready())
+
+    assert any('AGORA_CORS_ALLOW_ALL' in e for e in errors)
+    monkeypatch.setenv('AGORA_CORS_ALLOW_ALL', 'false')
+    assert validate_auth_backend(_jwt_ready()) == []
+
+
 def test_invalid_jwt_settings_do_not_echo_the_secret(isolation):
     short = 'geheim-und-kurz'
     errors = validate_auth_backend(_jwt_ready(SUPABASE_JWT_SECRET=short))

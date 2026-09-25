@@ -59,15 +59,28 @@ class WorkspaceRepository(Protocol):
         """Die Mitgliedschaft des Nutzers in diesem Workspace, oder ``None``."""
         ...
 
-    def add_member(
-        self, workspace_id: UUID, user_id: UUID, role: WorkspaceRole
-    ) -> WorkspaceMembership:
-        """Legt die Mitgliedschaft an oder aktualisiert ihre Rolle, wenn sie
-        bereits existiert."""
+    def list_members(self, workspace_id: UUID) -> List[WorkspaceMembership]:
+        """Alle Mitgliedschaften eines Workspace."""
         ...
 
-    def remove_member(self, workspace_id: UUID, user_id: UUID) -> bool:
-        """``True``, wenn eine Mitgliedschaft entfernt wurde."""
+    def add_member(
+        self,
+        workspace_id: UUID,
+        user_id: UUID,
+        role: WorkspaceRole,
+        *,
+        keep_owner: bool = False,
+    ) -> WorkspaceMembership:
+        """Legt die Mitgliedschaft an oder aktualisiert ihre Rolle, wenn sie
+        bereits existiert. ``keep_owner=True`` verweigert das Herabstufen des
+        letzten Owners (``LastOwnerError``)."""
+        ...
+
+    def remove_member(
+        self, workspace_id: UUID, user_id: UUID, *, keep_owner: bool = False
+    ) -> bool:
+        """``True``, wenn eine Mitgliedschaft entfernt wurde.
+        ``keep_owner=True`` verweigert das Entfernen des letzten Owners."""
         ...
 
 
