@@ -34,12 +34,17 @@ keinen Adapter (siehe Tabelle).
 | PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter und Datenmigration gemergt (#1605, Issue #1587) |
 | PR 9 | Report-Metadaten | Port gemergt (#1601, Issue #1580), Direktzugriffe über den Port gemergt (#1604, Issue #1588 Teil 1), Adapter und Datenmigration gemergt (#1607, Issue #1588) |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
-| PR 15 | Cutover Metadaten-Backend | Prüfskript #1590, Cutover armserver #1592 |
-| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); Rollback-Gate: PR offen (Issue #1589) |
+| PR 15 | Cutover Metadaten-Backend | Prüfskript: PR offen (Issue #1590), Cutover armserver #1592 |
+| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); offen: #1589 |
 
-**Zurückgestellt (ROADMAP: nicht vor 1.0):** PR 5 und §16 (Workspaces), PR 10–12
-und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime),
-§24/25 (pgvector, `PostgresGraphStorage`), §26 (LLM-Secrets in DB/Vault).
+**Vorgezogen (ADR-0018, 25.09.2026):** PR 5 und §16 (Workspaces), PR 10–12
+und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime)
+laufen jetzt unter Epic [#1610](https://github.com/arn0ld87/agora/issues/1610).
+Abweichend vom Planentwurf: Auth-Default `hybrid`, offene Registrierung mit
+§37-Härtung, Realtime nur für Listen-Projektionen.
+
+**Weiter zurückgestellt (ROADMAP: nicht vor 1.0):** §24/25 (pgvector,
+`PostgresGraphStorage`), §26 (LLM-Secrets in DB/Vault).
 
 **Abstimmung mit 0.10.0:** [`plans/active/0.10.0-rc-plan.md`](active/0.10.0-rc-plan.md)
 führt die Linie unter E5 als pausiert (19.09.2026) und außerhalb des 0.10.0-Scopes.

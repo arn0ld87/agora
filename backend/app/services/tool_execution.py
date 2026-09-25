@@ -76,6 +76,38 @@ def _run_interview_agents(
     return structured_result, structured_result.to_text()
 
 
+def _record_and_annotate(
+    *,
+    tool_name: str,
+    parameters: Dict[str, Any],
+    structured_result: Any,
+    rendered: str,
+    section_index: int,
+    record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], Optional[Dict[int, str]]]],
+    annotate_rendered: Optional[Callable[[Any, str], str]],
+) -> str:
+    """Evidence registrieren, dann den gerenderten Text nachbearbeiten."""
+    if record_evidence is not None:
+        recorded_evidence_ids = record_evidence(
+            tool_name,
+            parameters,
+            structured_result,
+            rendered,
+            section_index,
+        )
+        # Issue #1300 (Review-Finding Codex, P1): die ``ev_``-ID einer
+        # Interviewantwort entsteht erst beim Registrieren oben — der
+        # ReACT-Loop sieht sonst nur den zuvor gerenderten Text ohne ID
+        # und kann ein Zitat daraus nie gueltig verankern. Der zweite
+        # ``to_text()``-Aufruf reichert das bereits Registrierte nur mit
+        # der jetzt bekannten ID an, ohne erneut zu registrieren.
+        if tool_name == "interview_agents" and recorded_evidence_ids:
+            rendered = structured_result.to_text(evidence_ids=recorded_evidence_ids)
+    if annotate_rendered is not None:
+        rendered = annotate_rendered(structured_result, rendered)
+    return rendered
+
+
 def execute_tool(
     *,
     tool_name: str,
@@ -89,6 +121,7 @@ def execute_tool(
     record_evidence: Optional[Callable[[str, Dict[str, Any], Any, str, int], Optional[Dict[int, str]]]] = None,
     section_index: int = 0,
     on_terminal_failure: Optional[Callable[[str, str], None]] = None,
+    annotate_rendered: Optional[Callable[[Any, str], str]] = None,
 ) -> str:
     """Dispatcht einen Tool-Aufruf und liefert das gerenderte Resultat als String.
 
@@ -110,6 +143,9 @@ def execute_tool(
             wird der Interview-Text damit angereichert neu gerendert.
         section_index: Index der aktuellen Report-Section, wird an den
             Evidence-Callback weitergereicht.
+        annotate_rendered: optionaler Callback ``(structured_result, rendered)``
+            → ``rendered``, der das Ergebnis nach dem Registrieren kennzeichnet
+            (Issue #1240: Szenario-/Erwartungstext des Eingabedokuments).
 
     Returns:
         Gerendertes Ergebnis als String. Bei unbekanntem Tool oder Exception
@@ -241,23 +277,15 @@ def execute_tool(
                 "tools: insight_forge, panorama_search, quick_search"
             )
 
-        if record_evidence is not None:
-            recorded_evidence_ids = record_evidence(
-                tool_name,
-                parameters,
-                structured_result,
-                rendered,
-                section_index,
-            )
-            # Issue #1300 (Review-Finding Codex, P1): die ``ev_``-ID einer
-            # Interviewantwort entsteht erst beim Registrieren oben — der
-            # ReACT-Loop sieht sonst nur den zuvor gerenderten Text ohne ID
-            # und kann ein Zitat daraus nie gueltig verankern. Der zweite
-            # ``to_text()``-Aufruf reichert das bereits Registrierte nur mit
-            # der jetzt bekannten ID an, ohne erneut zu registrieren.
-            if tool_name == "interview_agents" and recorded_evidence_ids:
-                rendered = structured_result.to_text(evidence_ids=recorded_evidence_ids)
-        return rendered
+        return _record_and_annotate(
+            tool_name=tool_name,
+            parameters=parameters,
+            structured_result=structured_result,
+            rendered=rendered,
+            section_index=section_index,
+            record_evidence=record_evidence,
+            annotate_rendered=annotate_rendered,
+        )
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         # Issue #978: Budgetabbruch (#764) ist kein Tool-Fehler — hart

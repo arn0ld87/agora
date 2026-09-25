@@ -46,6 +46,25 @@ class RoleConflict(BaseModel):
     )
 
 
+class RoleConflictTally(BaseModel):
+    """Zählung markierter Rollenwechsel-Konflikte eines Laufs (Slice 5.2).
+
+    Wird von ``SimulationRunState`` in ``run_state.json`` und in die
+    ``/run-status``-Antworten serialisiert. Altbestand ohne diese Felder lädt
+    mit Nullwerten.
+    """
+
+    model_config = _STRICT
+
+    role_conflict_count: int = Field(
+        default=0, ge=0, description="Markierte Aktionen mit Rollenwechsel-Verdacht"
+    )
+    role_conflicts_by_reason: dict[ConflictReason, int] = Field(
+        default_factory=dict,
+        description="Markierte Aktionen je reason-Kategorie",
+    )
+
+
 class RoleLeakagePlatformSummary(BaseModel):
     """Zusammenfassung je Plattform."""
 

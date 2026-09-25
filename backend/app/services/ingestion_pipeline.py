@@ -32,6 +32,7 @@ def extract_entities_and_relations(
     text: str,
     ontology: Dict[str, Any],
     tally: Optional[ChunkExtractionTally] = None,
+    chunk_context: str = "",
 ) -> Dict[str, Any]:
     """Phase 1 — NER + Relation-Extraction.
 
@@ -45,6 +46,9 @@ def extract_entities_and_relations(
             Ein Chunk ohne jede Extraktion ist für sich unauffällig; erst
             der Anteil über den ganzen Build zeigt, ob das Dokument
             überhaupt erfasst wurde.
+        chunk_context: optionaler Vorlauftext (letzte Überschrift + Chunk-Ende
+            des Vorgängers) — wird lesend an den NER weitergegeben, damit
+            Pronomen und Rückverweise aufgelöst werden können (Issue #1470).
 
     Returns:
         Extraction-Dict mit den Schlüsseln ``"entities"`` und ``"relations"``
@@ -52,7 +56,13 @@ def extract_entities_and_relations(
         ursprünglichen ``add_text``-Verhalten.
     """
     logger.info(f"[ingestion] Starting NER extraction for chunk ({len(text)} chars)...")
-    extraction = ner.extract(text, ontology)
+    # Ohne Kontext bleibt der Aufruf der bisherige — eigene NER-Implementierungen
+    # ohne ``context``-Parameter laufen damit unverändert weiter.
+    extraction = (
+        ner.extract(text, ontology, context=chunk_context)
+        if chunk_context
+        else ner.extract(text, ontology)
+    )
     entities = extraction.get("entities", [])
     relations = extraction.get("relations", [])
     logger.info(

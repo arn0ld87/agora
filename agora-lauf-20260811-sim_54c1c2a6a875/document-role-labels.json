@@ -1,0 +1,20 @@
+{
+  "Betriebsrat existiert seit 2023, hat bei der letzten Softwareeinführung (Zeiterfassung) ein Mitbestimmungsverfahren geführt.": "domain_fact",
+  "Betriebsrat prüft, ob der Assistent Leistungs- oder Verhaltenskontrolle der Dozenten ermöglicht.": "domain_fact",
+  "Der Assistent beantwortet Fachfragen aus unserem eigenen Kursmaterial, erfasst Lernstände und erzeugt Übungsaufgaben im Stil der IHK-Abschlussprüfung.": "domain_fact",
+  "Dozent kritisiert die Chatbot-Nutzung: 'Meine Teilnehmer können kein Deutsch schreiben, die sollen jetzt mit einem Chatbot lernen?'": "domain_fact",
+  "Honorarkräfte werden nach Unterrichtsstunde bezahlt und arbeiten für den TrainingProvider.": "domain_fact",
+  "KI-Lernassistent bei einem Umschulungsträger": "domain_fact",
+  "KI-Lernassistent wird als selbstgehosteter Assistent in der IT-Umschulung eingeführt": "domain_fact",
+  "Sorge: ein Träger, der KI-generierte Übungsaufgaben einsetzt, trainiert auf die Prüfung statt auf den Beruf.": "domain_fact",
+  "Wenn der Assistent die einfachen Fragen abfängt, bleibt für den Dozenten nur das Schwierige — mehr Qualität, aber auch mehr Dichte.": "domain_fact",
+  "Wir führen zum Kursstart Februar 2027 einen selbstgehosteten KI-Lernassistenten in unseren IT-Umschulungen ein.": "domain_fact",
+  "Wir sind ein AZAV-zertifizierter Umschulungsträger in Sachsen-Anhalt und wollen zum Kursstart im Februar 2027 einen selbstgehosteten KI-Lernassistenten für unsere Umschülerinnen und Umschüler einführen.": "domain_fact",
+  "Der Betriebsrat wird zustimmen, weil keine Dozentendaten erhoben werden.": "expected_result",
+  "Die IHK sieht generierte Übungsaufgaben unkritisch.": "expected_result",
+  "Honorarkräfte lehnen stärker ab als Festangestellte, weil sie keinen Anteil an der Entlastung haben.": "expected_result",
+  "Behandle die Aussagen der Geschäftsführung (Abschnitt 7 des Seed-Dokuments) als unbelegte Behauptung, nicht als Datenlage.": "requirement",
+  "Simuliere die Reaktion der beteiligten Gruppen: Umschüler in ihren verschiedenen Ausgangslagen, festangestellte Dozenten, Honorarkräfte, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss, Betriebsrat und aufnehmende Betriebe.": "requirement",
+  "Simuliere die Reaktion von Umschülern, festangestellten Dozenten, Honorarkräften, Geschäftsführung, Kostenträger, IHK-Prüfungsausschuss und Betriebsrat.": "requirement",
+  "der Konflikt Honorarkräfte ↔ Geschäftsführung braucht Gegenrede": "scenario_statement"
+}
