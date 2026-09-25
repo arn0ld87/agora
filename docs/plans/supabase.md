@@ -33,9 +33,11 @@ keinen Adapter (siehe Tabelle).
 | PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter und Datenmigration gemergt (#1598, Issue #1585) |
 | PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter und Datenmigration gemergt (#1605, Issue #1587) |
 | PR 9 | Report-Metadaten | Port gemergt (#1601, Issue #1580), Direktzugriffe über den Port gemergt (#1604, Issue #1588 Teil 1), Adapter und Datenmigration gemergt (#1607, Issue #1588) |
+| PR 5 | Workspaces | Tabellen, Default-Workspace, Principal-Vertrag gemergt (#1621, Issue #1612) |
+| PR 10/11 | Supabase Auth, JWT, Principal im Guard | gemergt (#1621 über #1622, Issue #1613); JWT gesperrt bis #1614 |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
-| PR 15 | Cutover Metadaten-Backend | Prüfskript: PR offen (Issue #1590), Cutover armserver #1592 |
-| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); offen: #1589 |
+| PR 15 | Cutover Metadaten-Backend | Prüfskript gemergt (#1608, Issue #1590), Cutover armserver #1592 |
+| — | CI-Postgres, Readiness, Alembic-Drift, Backup, Rollback-Gate | CI gemergt (#1594, Issue #1577); Readiness gemergt (#1600, Issue #1581); Alembic-Drift-Startgate gemergt (#1599, Issue #1582); Backup/Restore gemergt (#1602, Issue #1583); Rollback-Gate gemergt (#1609, Issue #1589) |
 
 **Vorgezogen (ADR-0018, 25.09.2026):** PR 5 und §16 (Workspaces), PR 10–12
 und §14/15/17/18 (Supabase Auth, JWT, RLS), §22/23 (Frontend-Client, Realtime)

@@ -5,7 +5,11 @@ Loads configuration from .env file in project root directory
 
 import json
 import os
+from typing import TYPE_CHECKING, Any
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    from .security.supabase_jwt import SupabaseJwtSettings
 
 
 KNOWN_EMBEDDING_DIMS = {
@@ -319,6 +323,161 @@ def validate_report_backend(
     return []
 
 
+
+#: Auth-Modi (ADR-0018, Issue #1613). ``legacy`` ist der Pfad vor ADR-0018,
+#: ``hybrid`` nimmt zusaetzlich Supabase-JWTs an, ``supabase`` lehnt den
+#: Master-Token ab.
+AUTH_BACKENDS = frozenset({'legacy', 'hybrid', 'supabase'})
+
+#: Die Metadaten-Schalter, die fuer JWT-Nutzer alle auf ``postgres`` stehen
+#: muessen. Die Datei-Backends kennen keine Workspaces; mit einem von ihnen
+#: saehe ein angemeldeter Nutzer die Daten aller anderen (ADR-0018, Punkt 3).
+WORKSPACE_SCOPED_BACKENDS: tuple[tuple[str, str], ...] = (
+    ('AGORA_LLM_PROFILE_BACKEND', 'LLM_PROFILE_BACKEND'),
+    ('AGORA_PROJECT_BACKEND', 'PROJECT_BACKEND'),
+    ('AGORA_SIMULATION_BACKEND', 'SIMULATION_BACKEND'),
+    ('AGORA_RUN_BACKEND', 'RUN_BACKEND'),
+    ('AGORA_REPORT_BACKEND', 'REPORT_BACKEND'),
+)
+
+
+def validate_master_token_policy(debug: bool, auth_backend: str) -> list[str]:
+    """Ausserhalb von FLASK_DEBUG: Token oder bewusstes Opt-out.
+
+    Verhindert offene ``/api/*``-Deployments durch reines „Token vergessen“.
+    Im Modus ``supabase`` gibt es keinen Master-Token; die Identitaet kommt
+    aus dem JWT (``validate_auth_backend`` verlangt dessen Konfiguration).
+    """
+    if debug or (auth_backend or '').strip().lower() == 'supabase':
+        return []
+    auth_token = os.environ.get('AGORA_AUTH_TOKEN', '').strip()
+    allow_anon = os.environ.get('AGORA_ALLOW_ANONYMOUS', 'false').lower() in ('true', '1', 'yes')
+    if not auth_token and not allow_anon:
+        return [
+            "AGORA_AUTH_TOKEN missing in non-debug mode "
+            "(set AGORA_ALLOW_ANONYMOUS=true to opt out explicitly)"
+        ]
+    return []
+
+
+#: Filtern die Repositories nach ``workspace_id``? Solange nicht (#1614), darf
+#: kein JWT-Nutzer zugelassen werden — er saehe den Bestand aller Workspaces.
+#: #1614 setzt den Wert, wenn die Isolation steht.
+TENANT_ISOLATION_AVAILABLE = False
+
+
+def supabase_jwt_configured(config: Any) -> bool:
+    """``True``, sobald ein Issuer gesetzt ist — ab dann gilt die Invariante."""
+    return bool((getattr(config, 'SUPABASE_JWT_ISSUER', '') or '').strip())
+
+
+def supabase_jwt_settings(config: Any) -> 'SupabaseJwtSettings | None':
+    """Die Pruef-Einstellungen oder ``None``, wenn JWT nicht konfiguriert ist.
+
+    Wirft ``ValueError`` bei unvollstaendiger Konfiguration; ``validate()``
+    faengt das vorher ab.
+    """
+    from pydantic import SecretStr
+
+    from .security.supabase_jwt import SupabaseJwtSettings
+
+    if not supabase_jwt_configured(config):
+        return None
+    secret = (getattr(config, 'SUPABASE_JWT_SECRET', '') or '').strip()
+    jwks_url = (getattr(config, 'SUPABASE_JWKS_URL', '') or '').strip()
+    return SupabaseJwtSettings(
+        issuer=config.SUPABASE_JWT_ISSUER.strip(),
+        audience=(getattr(config, 'SUPABASE_JWT_AUDIENCE', '') or 'authenticated').strip(),
+        jwks_url=jwks_url or None,
+        secret=SecretStr(secret) if secret else None,
+    )
+
+
+def validate_auth_backend(config: Any) -> list[str]:
+    """Prueft ``AGORA_AUTH_BACKEND`` und die JWT-Einstellungen (ADR-0018).
+
+    * Ein unbekannter Modus ist ein Fehler, kein Rueckfall auf ``legacy``.
+    * JWT-Einstellungen ohne Issuer sind halb konfiguriert und damit ein
+      Fehler — sonst waere unklar, ob der JWT-Zweig aktiv ist.
+    * Mit JWT muessen alle fuenf Metadaten-Schalter auf ``postgres`` stehen
+      und ``DATABASE_URL`` gesetzt sein; ``legacy`` mit JWT ist ein
+      Widerspruch, ``supabase`` ohne JWT sperrt jeden Nutzer aus.
+    * Mit JWT gibt es keinen offenen Modus: ``AGORA_ALLOW_ANONYMOUS`` waere
+      ein Principal ohne Identitaet im Default-Workspace.
+    """
+    backend = (getattr(config, 'AUTH_BACKEND', '') or '').strip().lower()
+    if backend not in AUTH_BACKENDS:
+        return [
+            f"AGORA_AUTH_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(AUTH_BACKENDS))})"
+        ]
+
+    configured = supabase_jwt_configured(config)
+    if not configured:
+        stray = [
+            env_name
+            for env_name, attr in (
+                ('AGORA_SUPABASE_JWKS_URL', 'SUPABASE_JWKS_URL'),
+                ('AGORA_SUPABASE_JWT_SECRET', 'SUPABASE_JWT_SECRET'),
+            )
+            if (getattr(config, attr, '') or '').strip()
+        ]
+        if stray:
+            return [
+                f"{', '.join(stray)} set without AGORA_SUPABASE_JWT_ISSUER "
+                '(JWT verification is either fully configured or off)'
+            ]
+        if backend == 'supabase':
+            return [
+                'AGORA_AUTH_BACKEND=supabase requires Supabase JWT settings '
+                '(AGORA_SUPABASE_JWT_ISSUER plus AGORA_SUPABASE_JWKS_URL or '
+                'AGORA_SUPABASE_JWT_SECRET)'
+            ]
+        return []
+
+    errors: list[str] = []
+    if not TENANT_ISOLATION_AVAILABLE:
+        errors.append(
+            'Supabase JWT auth is not available yet: repositories do not filter '
+            'by workspace until #1614 — unset AGORA_SUPABASE_JWT_ISSUER'
+        )
+    if backend == 'legacy':
+        errors.append(
+            'AGORA_AUTH_BACKEND=legacy ignores Supabase JWT settings — use '
+            'hybrid or supabase, or unset AGORA_SUPABASE_JWT_ISSUER'
+        )
+    from pydantic import ValidationError
+
+    try:
+        supabase_jwt_settings(config)
+    except ValidationError as exc:
+        # Nur die Regeltexte: ``str(exc)`` enthielte die Eingabe und damit
+        # das Secret im Klartext.
+        reasons = '; '.join(
+            str(err['msg'])
+            for err in exc.errors(include_url=False, include_input=False, include_context=False)
+        )
+        errors.append(f'Supabase JWT settings invalid: {reasons}')
+
+    not_postgres = [
+        env_name
+        for env_name, attr in WORKSPACE_SCOPED_BACKENDS
+        if (getattr(config, attr, '') or '').strip().lower() != 'postgres'
+    ]
+    if not_postgres:
+        errors.append(
+            'Supabase JWT auth requires every metadata backend on postgres '
+            '(file backends have no workspace isolation); not postgres: '
+            + ', '.join(not_postgres)
+        )
+    if not (getattr(config, 'DATABASE_URL', '') or '').strip():
+        errors.append('Supabase JWT auth requires DATABASE_URL')
+    if os.environ.get('AGORA_ALLOW_ANONYMOUS', 'false').lower() in ('true', '1', 'yes'):
+        errors.append(
+            'AGORA_ALLOW_ANONYMOUS cannot be combined with Supabase JWT auth'
+        )
+    return errors
+
 #: f005 (ADR-0016): globaler Zustand der Decision-Layer-Pilotierung. Ein
 #: einziger Pilot-Use-Case in dieser Slice — je-Use-Case-Granularitaet ist
 #: ausdruecklich zukuenftige Arbeit (ADR-0016, "Was dieser Entwurf nicht
@@ -525,6 +684,15 @@ class Config:
     REPORT_BACKEND = os.environ.get(
         'AGORA_REPORT_BACKEND', 'file'
     ).strip().lower()
+
+    # Auth-Modus (ADR-0018, Issue #1613). Default 'hybrid': Supabase-JWTs
+    # werden angenommen, sobald AGORA_SUPABASE_JWT_ISSUER gesetzt ist; ohne
+    # diese Einstellung verhaelt sich 'hybrid' exakt wie 'legacy'.
+    AUTH_BACKEND = os.environ.get('AGORA_AUTH_BACKEND', 'hybrid').strip().lower()
+    SUPABASE_JWT_ISSUER = os.environ.get('AGORA_SUPABASE_JWT_ISSUER', '')
+    SUPABASE_JWT_AUDIENCE = os.environ.get('AGORA_SUPABASE_JWT_AUDIENCE', 'authenticated')
+    SUPABASE_JWKS_URL = os.environ.get('AGORA_SUPABASE_JWKS_URL', '')
+    SUPABASE_JWT_SECRET = os.environ.get('AGORA_SUPABASE_JWT_SECRET', '')
 
     # f005 (ADR-0016): Decision-Layer-Pilotierung, Default 'disabled' haelt
     # jeden bestehenden Use-Case-Pfad unveraendert.
@@ -841,20 +1009,9 @@ class Config:
                 "NEO4J_PASSWORD uses a placeholder value. Acceptable in debug only.",
             )
 
-        # Auth-Policy: außerhalb FLASK_DEBUG verlangen wir entweder einen
-        # Token oder eine bewusste Opt-out-Entscheidung. Verhindert offene
-        # /api/*-Deployments durch reines „Token vergessen“.
-        if not cls.DEBUG:
-            auth_token = os.environ.get('AGORA_AUTH_TOKEN', '').strip()
-            allow_anon = (
-                os.environ.get('AGORA_ALLOW_ANONYMOUS', 'false').lower()
-                in ('true', '1', 'yes')
-            )
-            if not auth_token and not allow_anon:
-                errors.append(
-                    "AGORA_AUTH_TOKEN missing in non-debug mode "
-                    "(set AGORA_ALLOW_ANONYMOUS=true to opt out explicitly)"
-                )
+        # Auth-Policy: außerhalb FLASK_DEBUG entweder ein Token oder eine
+        # bewusste Opt-out-Entscheidung.
+        errors.extend(validate_master_token_policy(cls.DEBUG, cls.AUTH_BACKEND))
 
         # PostgreSQL-Grundlage (docs/plans/supabase.md §8).
         errors.extend(validate_database_settings(cls.METADATA_BACKEND, cls.DATABASE_URL))
@@ -879,6 +1036,8 @@ class Config:
                 cls.REPORT_BACKEND, cls.DATABASE_URL, cls.SIMULATION_BACKEND
             )
         )
+        # Auth-Modus und Supabase-JWT (ADR-0018).
+        errors.extend(validate_auth_backend(cls))
         # Decision-Layer-Pilotierung (f005, ADR-0016).
         errors.extend(validate_decision_layer_mode(cls.DECISION_LAYER_MODE))
         # Job-Lease (Issue #1472).

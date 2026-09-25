@@ -57,6 +57,10 @@ dependencies = [
     "Pillow>=10.0.0",
     # HTTP client for web tools (Tavily)
     "requests>=2.28.0",
+    # Prüfung von Supabase-Access-Tokens (ADR-0018, app/security/supabase_jwt.py).
+    # Bisher nur transitiv vorhanden; ein direkter Import gehört direkt
+    # deklariert. ``crypto`` bringt RS256/ES256 für JWKS.
+    "PyJWT[crypto]>=2.10.0",
     # Direkt verwendet von app/security/outbound_http.py: der gepinnte
     # Verbindungsaufbau braucht die Connection-Pools, die `requests` nur
     # transitiv mitbringt. Direkte Imports gehoeren als direkte Abhaengigkeit

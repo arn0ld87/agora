@@ -393,6 +393,23 @@ Seit Teil 2 von #1588 gibt es den zweiten Adapter: `PostgresReportRepository` (`
 
 **Umgeschaltet ist nichts.** `AGORA_REPORT_BACKEND` steht im Default auf `file`. `Config.validate()` lehnt `postgres` bei `AGORA_SIMULATION_BACKEND=file` und ohne `DATABASE_URL` ab. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (Integrationstests für Adapter, Migrations-Roundtrip, Löschen über `ReportManager` und einen mit beiden Backends byte-gleichen Export), nicht gegen einen produktiven Bestand.
 
+### Workspaces: Tabellen und Principal-Vertrag
+
+Seit #1612 gibt es `agora.workspaces` und `agora.workspace_members` (Alembic-Revision `5c2913c7ba4f`, linear auf `8d6e0b3c2f15`), inklusive Default-Workspace (`00000000-0000-0000-0000-000000000001`/Slug `default`/Name `Standard`), den die Migration selbst einfügt. `workspace_members.role` ist per Check-Constraint auf `owner|admin|member|viewer` begrenzt, `slug` per Check-Constraint auf `^[a-z0-9][a-z0-9-]{0,62}$` und eindeutig. `workspace_members.user_id` trägt **keinen** Fremdschlüssel auf `auth.users` — CI und lokale Testläufe laufen gegen reines PostgreSQL ohne das Supabase-`auth`-Schema, die referenzielle Integrität dorthin ist Sache der Anwendungsschicht. Dazu kommen der Port `WorkspaceRepository` (`backend/app/repositories/workspace_repository.py`) und der Adapter `PostgresWorkspaceRepository` (`backend/app/infrastructure/postgres/repositories/workspace_repository.py`, `get`/`get_by_slug`/`create`/`list_for_user`/`membership`/`add_member`/`remove_member`) sowie die Verträge `Workspace`/`WorkspaceMembership`/`WorkspaceRole` (`backend/app/contracts/workspace_contract.py`) und `Principal`/`AuthType` (`backend/app/contracts/auth_contract.py`). Anders als bei den übrigen Ports gibt es keinen Dateiadapter und kein Backend-Flag: `get_workspace_repository()` liefert immer den PostgreSQL-Adapter und verlangt nur `DATABASE_URL`.
+
+**Umgeschaltet ist nichts.** Kein bestehender Store liest oder schreibt `workspace_id`; Projekte, Simulationen, Runs und Reports bleiben ohne Workspace-Bezug. `Principal` hat noch keinen Aufrufer, der ihn befüllt.
+
+
+### Auth: Supabase-JWT und Principal (#1613)
+
+Seit #1613 kennt der Guard `AGORA_AUTH_BACKEND=legacy|hybrid|supabase` (`backend/app/utils/auth.py`, ADR-0018). Der Default ist `hybrid`. Ohne `AGORA_SUPABASE_JWT_ISSUER` verhält sich `hybrid` exakt wie `legacy`; der Startlog sagt das.
+
+- **JWT-Prüfung:** `backend/app/security/supabase_jwt.py` prüft Signatur (JWKS oder HS256), `iss`, `aud`, `exp`, `nbf` und `sub`.
+- **Workspace-Wahl:** Sie läuft über `X-Agora-Workspace` und die Mitgliedschaft in `agora.workspace_members`.
+- **Principal:** Jeder zugelassene Request legt einen `Principal` ab. `require_scope` leitet die Scopes aus der Rolle ab, Tickets sind an ihren Aussteller gebunden.
+- **Betreiber-Endpunkte:** Settings, LLM-Profile, API-Keys, Logs, Onboarding, Profil und Modell-Stream sind für JWT-Nutzer gesperrt.
+
+**Umgeschaltet ist nichts:** Bis die Repositories nach Workspace filtern (#1614), lehnt `Config.validate()` jede JWT-Konfiguration ab. Verifiziert ist das mit Unit-Tests für Verifier, Guard, Scopes und Tickets sowie mit einem Integrationstest der Mitgliedschaftsprüfung gegen PostgreSQL.
 ### Metadaten-Migration: Rollback-Gate
 
 Seit #1589 prüft `backend/tests/integration/test_metadata_migration_rollback.py` den ganzen Weg in einem Test (Plan §36): Ein Legacy-Bestand aus LLM-Profil (SQLite), Projekt, Simulation, Run und Report wird mit allen `migrate_*_to_postgres.py` übertragen, und jedes `--verify` muss mit Exit 0 enden. Dann startet `create_app()` mit allen fünf Schaltern auf `postgres`, während die Legacy-Metadateien versteckt sind. Anschließend startet die App erneut mit allen Schaltern auf Legacy. Die Antworten von zehn Lese-Endpunkten (Einzelabruf und Liste je Domäne) müssen in beiden Phasen gleich sein, und jeder Datensatz muss mit unveränderter Kennung da sein. Ein zweiter Test belegt, dass `Config.validate()` einen Rückweg in falscher Reihenfolge ablehnt. Der Test läuft im CI-Integration-Job gegen PostgreSQL; **umgeschaltet ist nichts**.
