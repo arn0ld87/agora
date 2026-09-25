@@ -219,3 +219,39 @@ describe('useApiAuth', () => {
     expect(mockPost).toHaveBeenCalledWith('/api/auth/ticket', { scope: 'sse:sim_ttl', ttl_seconds: 120 })
   })
 })
+
+describe('Ticket-Cache bei Principal-Wechsel (#1617)', () => {
+  beforeEach(() => {
+    mockPost.mockReset()
+    useApiAuth._clearCache()
+  })
+
+  it('cacht kein Ticket, dessen Request vor dem Leeren gestartet wurde', async () => {
+    let resolveOld: (v: unknown) => void = () => {}
+    mockPost.mockReturnValueOnce(new Promise((r) => { resolveOld = r }))
+    const stale = useApiAuth.fetchTicket('sse:sim_x')
+
+    useApiAuth._clearCache()
+    resolveOld(makeTicketResponse('v1.ticket-alter-nutzer'))
+    await stale
+
+    mockPost.mockResolvedValueOnce(makeTicketResponse('v1.ticket-neuer-nutzer'))
+    const fresh = await useApiAuth.fetchTicket('sse:sim_x')
+
+    expect(fresh).toBe('v1.ticket-neuer-nutzer')
+    expect(mockPost).toHaveBeenCalledTimes(2)
+  })
+
+  it('teilt nach dem Leeren keinen alten In-Flight-Request', async () => {
+    let resolveOld: (v: unknown) => void = () => {}
+    mockPost.mockReturnValueOnce(new Promise((r) => { resolveOld = r }))
+    void useApiAuth.fetchTicket('sse:sim_y')
+
+    useApiAuth._clearCache()
+    mockPost.mockResolvedValueOnce(makeTicketResponse('v1.ticket-neu'))
+    const fresh = useApiAuth.fetchTicket('sse:sim_y')
+    resolveOld(makeTicketResponse('v1.ticket-alt'))
+
+    await expect(fresh).resolves.toBe('v1.ticket-neu')
+  })
+})

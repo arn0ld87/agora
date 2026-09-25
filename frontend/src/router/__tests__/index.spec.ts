@@ -345,6 +345,11 @@ describe('Router – Struktur-Integrität', () => {
       // Flag entscheidet nur, wohin '/' umleitet.
       'Shelf',
       'ShelfObject',
+      // #1617: Supabase-Anmeldung, nur mit JWT erreichbar.
+      'Login',
+      'Register',
+      'PasswordReset',
+      'EmailConfirm',
       'NotFound',
     ].sort()
 

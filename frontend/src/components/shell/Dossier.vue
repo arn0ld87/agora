@@ -106,7 +106,7 @@
                 <span v-if="row.hint" class="dossier__ov-system-hint">{{ row.hint }}</span>
               </li>
             </ul>
-            <router-link :to="{ name: 'SettingsGeneral' }" class="dossier__ov-link">{{ t('views.shelf.overview.openSettings') }}</router-link>
+            <router-link v-if="operatorAccess" :to="{ name: 'SettingsGeneral' }" class="dossier__ov-link">{{ t('views.shelf.overview.openSettings') }}</router-link>
           </section>
         </div>
       </div>
@@ -307,6 +307,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { useOperatorAccess } from '../../composables/useOperatorAccess'
 import { DossierTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfObject } from '../../types/shelf'
 import { useCancelAction } from './useCancelAction'
@@ -336,6 +337,8 @@ const props = defineProps<{ object: ShelfObject | null; shelf: ReturnType<typeof
 
 const { t, te, locale } = useI18n()
 const router = useRouter()
+// Einstellungen sind Betreiber-Zustand: für Supabase-Nutzer ausgeblendet (#1617).
+const operatorAccess = useOperatorAccess()
 const cancelAction = useCancelAction()
 
 // Details werden erst beim Auswaehlen geholt, nicht fuer jede Zeile.

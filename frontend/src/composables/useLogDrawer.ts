@@ -9,7 +9,8 @@
  *
  * Persistenz via localStorage, damit ein Reload den Drawer-Zustand haelt.
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useOperatorAccess } from './useOperatorAccess'
 
 const STORAGE_KEY = 'agora.ui.logDrawer.open'
 
@@ -33,7 +34,13 @@ function persistOpen(): void {
 }
 
 export function useLogDrawer() {
+  // Logs sind Betreiber-Zustand (operator_only, #1617): für Supabase-Nutzer
+  // weder Knopf noch Hotkey noch Drawer.
+  const available = useOperatorAccess()
+  const visible = computed(() => isOpen.value && available.value)
+
   function open(): void {
+    if (!available.value) return
     isOpen.value = true
     persistOpen()
   }
@@ -56,6 +63,7 @@ export function useLogDrawer() {
    *  angehaengt wird. */
   function handleHotkey(e: KeyboardEvent): void {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
+      if (!available.value) return
       e.preventDefault()
       toggle()
     }
@@ -63,6 +71,8 @@ export function useLogDrawer() {
 
   return {
     isOpen,
+    available,
+    visible,
     open,
     close,
     toggle,

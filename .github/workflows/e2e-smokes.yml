@@ -118,7 +118,9 @@ jobs:
         uses: ./.github/actions/setup-playwright-chromium
       - name: Run Playwright Health-Smoke
         working-directory: frontend
-        run: npx playwright test health.spec.ts --reporter=list,github
+        # auth-login.spec.ts (#1617): Supabase-Login gegen per page.route
+        # gemockte Endpunkte; braucht nur das ausgelieferte Frontend.
+        run: npx playwright test health.spec.ts auth-login.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

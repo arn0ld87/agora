@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { ApiError } from './envelope'
+import { getSessionToken, getActiveWorkspaceId, setSessionToken } from '../auth/sessionState'
 
 // Create axios instance
 const service: AxiosInstance = axios.create({
@@ -44,13 +45,50 @@ export const getAgoraToken = (): string => {
   )
 }
 
-// Request interceptor — hängt Token-Header an, wenn einer bekannt ist.
+/**
+ * Returns the correct auth headers for the current authentication mode.
+ *
+ * - Supabase session present: `Authorization: Bearer <access_token>` and,
+ *   if set, `X-Agora-Workspace`. Does NOT send `X-Agora-Token`.
+ * - Legacy mode (no session): `X-Agora-Token` header if a token exists.
+ * - No credentials: empty object.
+ */
+export function authHeaders(): Record<string, string> {
+  const sessionToken = getSessionToken()
+  if (sessionToken) {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${sessionToken}`,
+    }
+    const workspaceId = getActiveWorkspaceId()
+    if (workspaceId) {
+      headers['X-Agora-Workspace'] = workspaceId
+    }
+    return headers
+  }
+  // Legacy token mode
+  const legacyToken = getAgoraToken()
+  if (legacyToken) {
+    return { 'X-Agora-Token': legacyToken }
+  }
+  return {}
+}
+
+/**
+ * Returns true if there are any credentials available (legacy token or Supabase session).
+ */
+export function hasCredentials(): boolean {
+  return !!(getSessionToken() || getAgoraToken())
+}
+
+// Request interceptor — hängt Auth-Header an, wenn einer bekannt ist.
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = getAgoraToken()
-    if (token) {
+    const headers = authHeaders()
+    if (Object.keys(headers).length > 0) {
       config.headers = config.headers || {} as typeof config.headers
-      config.headers['X-Agora-Token'] = token
+      for (const [key, value] of Object.entries(headers)) {
+        config.headers[key] = value
+      }
     }
     return config
   },
@@ -59,6 +97,72 @@ service.interceptors.request.use(
     return Promise.reject(error)
   }
 )
+
+/** Config-Markierung für den einen Retry nach einem Refresh (#1617). */
+const AUTH_RETRY_FLAG = '_agoraAuthRetried'
+
+let _refreshInFlight: Promise<boolean> | null = null
+
+/**
+ * Einmal `refreshSession()`; gleichzeitige 401er teilen denselben Versuch.
+ * `true`, wenn ein neuer Access-Token gesetzt ist.
+ */
+export function refreshSessionOnce(): Promise<boolean> {
+  if (!_refreshInFlight) {
+    _refreshInFlight = (async () => {
+      try {
+        // Lazy-Import gegen den Zyklus api → auth → contracts beim Laden.
+        const { getSupabaseClient } = await import('../auth/supabaseClient')
+        const supabase = getSupabaseClient()
+        if (!supabase) return false
+        const { data, error } = await supabase.auth.refreshSession()
+        if (error || !data?.session?.access_token) return false
+        // Sofort setzen, nicht auf onAuthStateChange warten.
+        setSessionToken(data.session.access_token)
+        return true
+      } catch {
+        return false
+      }
+    })().finally(() => {
+      _refreshInFlight = null
+    })
+  }
+  return _refreshInFlight
+}
+
+/** Refresh gescheitert: Token verwerfen, abmelden, Store informieren. */
+async function forceSignOut(): Promise<void> {
+  setSessionToken(null)
+  try {
+    const { getSupabaseClient } = await import('../auth/supabaseClient')
+    await getSupabaseClient()?.auth.signOut()
+  } catch {
+    /* ignore */
+  }
+  if (_on401SignOut) _on401SignOut()
+}
+
+/**
+ * `fetch` mit denselben Auth-Headern und derselben 401-Behandlung wie der
+ * Axios-Client (für Pfade, die rohe Responses brauchen).
+ */
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const send = () =>
+    fetch(input, {
+      credentials: 'same-origin',
+      ...init,
+      headers: { ...(init.headers as Record<string, string> | undefined), ...authHeaders() },
+    })
+  const res = await send()
+  if (res.status !== 401 || !getSessionToken()) return res
+  if (await refreshSessionOnce()) {
+    const retried = await send()
+    if (retried.status === 401) await forceSignOut()
+    return retried
+  }
+  await forceSignOut()
+  return res
+}
 
 // Response interceptor (EPIC-09 Sub-Slice 5: surfaces ApiError with `code`).
 // reason: interceptor intentionally returns response.data (the envelope body)
@@ -87,13 +191,32 @@ service.interceptors.response.use(
 
     return res
   },
-  (error: unknown) => {
-    // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
+  async (error: unknown) => {
+    // 401 handling: wenn ein Supabase-Session-Token vorhanden ist und der
+    // Request noch nicht retryed wurde, einmal refreshSession + retry.
     const axiosError = error as {
       response?: { data?: Record<string, unknown>; status?: number }
+      config?: object
       code?: string
       message?: string
     }
+
+    const failedConfig = axiosError.config as (Record<string, unknown> | undefined)
+    if (axiosError?.response?.status === 401 && getSessionToken() && failedConfig) {
+      // Auch der Retry mit frischem Token abgelehnt: kein zweiter Refresh,
+      // sondern abmelden — sonst scheitert jede weitere Anfrage gleich.
+      if (failedConfig[AUTH_RETRY_FLAG]) {
+        await forceSignOut()
+      } else if (await refreshSessionOnce()) {
+        // Die Markierung überlebt das Klonen der Config durch Axios: ein
+        // zweiter 401 auf den Retry löst keinen weiteren Refresh aus.
+        return service.request({ ...failedConfig, [AUTH_RETRY_FLAG]: true } as Parameters<typeof service.request>[0])
+      } else {
+        await forceSignOut()
+      }
+    }
+
+    // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
     const data = axiosError?.response?.data
     if (data && data['success'] === false) {
       const err = new ApiError({
@@ -112,11 +235,11 @@ service.interceptors.response.use(
 
     // Kein Envelope verfügbar (z.B. Network Error, Timeout): heuristischer Code.
     let code = 'unknown_error'
-    let message = axiosError.message || 'Unbekannter Fehler'
-    if (axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout')) {
+    let message = (axiosError as { message?: string }).message || 'Unbekannter Fehler'
+    if (axiosError.code === 'ECONNABORTED' || (axiosError as { message?: string }).message?.includes('timeout')) {
       code = 'timeout'
       message = 'Zeitüberschreitung — Backend antwortet zu langsam'
-    } else if (axiosError.message === 'Network Error') {
+    } else if ((axiosError as { message?: string }).message === 'Network Error') {
       code = 'service_unavailable'
       message = 'Backend offline oder nicht erreichbar'
     }
@@ -130,6 +253,13 @@ service.interceptors.response.use(
     return Promise.reject(wrapped)
   }
 )
+
+// Callback registered by the auth store for 401-triggered signOut+redirect.
+let _on401SignOut: (() => void) | null = null
+
+export function register401SignOutCallback(cb: () => void): void {
+  _on401SignOut = cb
+}
 
 // Retry-Klassifizierung: nur transport-/server-seitige Fehler sind retry-tauglich.
 // 4xx-Client-Errors (Validation, Auth) wiederholen sich nicht — retry liefert

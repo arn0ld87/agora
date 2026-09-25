@@ -10,7 +10,7 @@ const TRANSITION_DURATION = { enter: 400, leave: 160 }
 // useLogDrawer.ts (single source of truth). Die frueher hier gerenderte
 // FAB ist raus; die Kopfzeilen-Icons in Topbar.vue/ShellRoot.vue toggeln
 // denselben Composable-State.
-const { isOpen: logDrawerOpen, close: closeLogDrawer, handleHotkey } = useLogDrawer()
+const { visible: logDrawerOpen, close: closeLogDrawer, handleHotkey } = useLogDrawer()
 onMounted(() => window.addEventListener('keydown', handleHotkey))
 onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 </script>

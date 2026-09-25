@@ -6,6 +6,7 @@ import i18n from './i18n'
 import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
+import { useAuthStore } from './store/auth'
 
 // Self-hosted Webfonts (Block B1): Archivo traegt die Oberflaeche,
 // Newsreader den Berichts-Fliesstext inkl. kursiver Zitate.
@@ -36,6 +37,9 @@ document.documentElement.setAttribute('data-ui-version', uiVersion)
 const app = createApp(App)
 
 app.use(createPinia())
+// Auth-Init starten, bevor der Router navigiert (#1617). Der Guard wartet
+// auf dasselbe Promise; im Legacy-Modus endet es sofort ohne JWT.
+void useAuthStore().ensureInit()
 app.use(router)
 app.use(i18n)
 

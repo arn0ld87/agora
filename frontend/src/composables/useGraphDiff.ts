@@ -1,5 +1,6 @@
 import { ref, type Ref } from "vue";
 import { GraphDiffSchema, type GraphDiff } from "../contracts/graphDiffContract";
+import { authFetch } from "../api/index";
 
 export function useGraphDiff() {
   const diff: Ref<GraphDiff | null> = ref(null);
@@ -15,7 +16,7 @@ export function useGraphDiff() {
     error.value = null;
     try {
       const url = `/api/graph/${encodeURIComponent(graphId)}/diff?snapshot_a=${encodeURIComponent(snapshotA)}&snapshot_b=${encodeURIComponent(snapshotB)}`;
-      const res = await fetch(url, { credentials: "same-origin" });
+      const res = await authFetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         if (res.status === 404) {

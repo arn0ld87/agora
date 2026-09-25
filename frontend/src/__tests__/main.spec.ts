@@ -41,6 +41,10 @@ vi.mock('pinia', () => ({
   createPinia: vi.fn(() => ({ install: vi.fn() })),
 }))
 
+// auth store mock — main.ts startet ensureInit() vor dem Router (#1617)
+const authMock = vi.hoisted(() => ({ ensureInit: vi.fn(async () => {}) }))
+vi.mock('../store/auth', () => ({ useAuthStore: () => authMock }))
+
 // vue mock — nur createApp brauchen wir
 vi.mock('vue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue')>()
@@ -61,6 +65,7 @@ describe('main.ts Bootstrap', () => {
   // festgehalten werden statt sie spaeter aus dem (dann geleerten) Mock
   // zu lesen.
   let initFrontendTracingCallCount = -1
+  let ensureInitCallCount = -1
 
   beforeAll(async () => {
     // Stelle sicher, dass #app im DOM vorhanden ist
@@ -75,6 +80,11 @@ describe('main.ts Bootstrap', () => {
 
     const { initFrontendTracing } = await import('../observability/tracing')
     initFrontendTracingCallCount = (initFrontendTracing as ReturnType<typeof vi.fn>).mock.calls.length
+    ensureInitCallCount = authMock.ensureInit.mock.calls.length
+  })
+
+  it('startet den Auth-Store genau einmal (#1617)', () => {
+    expect(ensureInitCallCount).toBe(1)
   })
 
   // Block B1 (18.08.2026): Agora ist dark-first. Der Wert wird zweimal

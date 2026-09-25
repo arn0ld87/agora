@@ -15,6 +15,7 @@ import AddPersonaModal from '../../step2/AddPersonaModal.vue'
 import PersonaDetailModal from '../../step2/PersonaDetailModal.vue'
 import PersonaCardGrid from '../../step2/PersonaCardGrid.vue'
 import PersonaLibraryPanel from '../../step2/PersonaLibraryPanel.vue'
+import { useOperatorAccess } from '../../../composables/useOperatorAccess'
 import EnvSetupModelPanel from '../../step2/EnvSetupModelPanel.vue'
 import SimulationStartConfig from '../../step2/SimulationStartConfig.vue'
 import AgentCapControl from '../../step2/AgentCapControl.vue'
@@ -136,6 +137,7 @@ const {
   fetchProfilesRealtime,
   addLog,
 })
+const operatorAccess = useOperatorAccess()
 
 // ----- Persona-Filter -----
 const {
@@ -220,7 +222,8 @@ function handleStart() {
 
 onMounted(async () => {
   loadModels()
-  loadPersonaLibrary()
+  // Persona-Bibliothek ist Betreiber-Zustand (operator_only, #1617).
+  if (operatorAccess.value) loadPersonaLibrary()
   try {
     const effectiveModelSel = useEffectiveModelSelection()
     await effectiveModelSel.ensureLoaded()
@@ -330,18 +333,19 @@ onMounted(async () => {
           :highest-severity-for="personaReview.highestSeverityFor"
           :profile-key="profileKey"
           @select="selectedProfile = $event"
+          :can-save="operatorAccess"
           @remove="removePersona"
           @save="savePersona"
         />
 
         <div v-if="phase >= 2" class="persona-actions">
           <Button variant="ghost" @click="showAddPersonaModal = true">+ {{ t('step2.addPersona.title') }}</Button>
-          <Button variant="ghost" :disabled="!profiles.length" @click="saveAllPersonas">
+          <Button v-if="operatorAccess" variant="ghost" :disabled="!profiles.length" @click="saveAllPersonas">
             {{ t('step2.personas.saveAll') }}
           </Button>
         </div>
         <PersonaLibraryPanel
-          v-if="phase >= 2"
+          v-if="phase >= 2 && operatorAccess"
           :templates="personaTemplates"
           :loading="isLoadingPersonaLibrary"
           :error="personaLibraryError"

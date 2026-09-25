@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "WorkspaceRole": {
+      "description": "Rolle einer Mitgliedschaft. Werte identisch zum Check-Constraint\n``ck_workspace_members_role_valid``.",
+      "enum": [
+        "owner",
+        "admin",
+        "member",
+        "viewer"
+      ],
+      "title": "WorkspaceRole",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/workspace-membership.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Mitgliedschaft eines Nutzers in genau einem Workspace mit einer Rolle.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "role": {
+      "$ref": "#/$defs/WorkspaceRole"
+    },
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "user_id",
+    "role",
+    "created_at"
+  ],
+  "title": "WorkspaceMembership",
+  "type": "object"
+}

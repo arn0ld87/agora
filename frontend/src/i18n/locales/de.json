@@ -929,7 +929,15 @@
       "triggerUnknown": "Nutzermenü öffnen",
       "profile": "Profil",
       "settings": "Einstellungen",
-      "help": "Hilfe"
+      "help": "Hilfe",
+      "workspaces": "Workspace",
+      "signOut": "Abmelden",
+      "role": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Mitglied",
+        "viewer": "Lesend"
+      }
     }
   },
   "logs": {
@@ -2031,5 +2039,54 @@
   },
   "stepper": {
     "stepAria": "Schritt {n}: {label}"
+  },
+  "auth": {
+    "login": {
+      "title": "Anmelden",
+      "emailLabel": "E-Mail-Adresse",
+      "passwordLabel": "Passwort",
+      "submit": "Anmelden",
+      "submitting": "Wird angemeldet…",
+      "forgotPassword": "Passwort vergessen?",
+      "toRegister": "Noch kein Konto? Jetzt registrieren",
+      "errorGeneric": "Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.",
+      "resetDone": "Passwort geändert. Bitte melde dich neu an."
+    },
+    "register": {
+      "title": "Konto erstellen",
+      "emailLabel": "E-Mail-Adresse",
+      "passwordLabel": "Passwort",
+      "passwordHint": "Mindestens 12 Zeichen",
+      "confirmLabel": "Passwort bestätigen",
+      "submit": "Registrieren",
+      "submitting": "Wird registriert…",
+      "toLogin": "Bereits registriert? Jetzt anmelden",
+      "successMessage": "Bitte bestätige deine E-Mail-Adresse. Wir haben dir einen Bestätigungslink zugeschickt.",
+      "errorPasswordTooShort": "Das Passwort muss mindestens 12 Zeichen lang sein.",
+      "errorPasswordMismatch": "Die Passwörter stimmen nicht überein.",
+      "errorGeneric": "Registrierung fehlgeschlagen. Bitte versuche es erneut."
+    },
+    "reset": {
+      "title": "Passwort zurücksetzen",
+      "emailLabel": "E-Mail-Adresse",
+      "newPasswordLabel": "Neues Passwort",
+      "confirmPasswordLabel": "Neues Passwort bestätigen",
+      "passwordHint": "Mindestens 12 Zeichen",
+      "submitRequest": "Link anfordern",
+      "submitNew": "Passwort setzen",
+      "submitting": "Wird verarbeitet…",
+      "toLogin": "Zurück zur Anmeldung",
+      "successMessage": "Falls ein Konto mit dieser E-Mail-Adresse existiert, haben wir dir einen Link zum Zurücksetzen zugeschickt.",
+      "errorPasswordTooShort": "Das Passwort muss mindestens 12 Zeichen lang sein.",
+      "errorPasswordMismatch": "Die Passwörter stimmen nicht überein.",
+      "errorGeneric": "Passwort konnte nicht gesetzt werden. Bitte fordere einen neuen Link an."
+    },
+    "confirm": {
+      "title": "E-Mail bestätigen",
+      "checking": "Bestätigung wird geprüft…",
+      "successMessage": "Deine E-Mail-Adresse wurde erfolgreich bestätigt. Du wirst weitergeleitet…",
+      "errorInvalidLink": "Der Bestätigungslink ist ungültig oder abgelaufen.",
+      "toLogin": "Zur Anmeldung"
+    }
   }
 }
