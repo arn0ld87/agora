@@ -130,10 +130,11 @@ unverändert die Wahrheit. Änderungen, die nach dem Umschalten in PostgreSQL
 entstanden sind, stehen nicht in den Dateien — wer zurückgeht, verliert sie.
 
 Beim Rückweg der Projekte (`AGORA_PROJECT_BACKEND=file`) muss dieser Schalter
-**zuerst** zurück; sonst verweigert `Config.validate()` den Start. Steht
-`AGORA_RUN_BACKEND` auf `postgres`, muss wiederum dieser vor
-`AGORA_SIMULATION_BACKEND` zurück
-([`run-postgres-umstellung.md`](run-postgres-umstellung.md)).
+**zuerst** zurück; sonst verweigert `Config.validate()` den Start. Stehen
+`AGORA_RUN_BACKEND` oder `AGORA_REPORT_BACKEND` auf `postgres`, müssen
+wiederum diese vor `AGORA_SIMULATION_BACKEND` zurück
+([`run-postgres-umstellung.md`](run-postgres-umstellung.md),
+[`report-postgres-umstellung.md`](report-postgres-umstellung.md)).
 
 Das Schema lässt sich zurücknehmen, solange noch nichts umgeschaltet war:
 

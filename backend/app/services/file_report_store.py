@@ -97,6 +97,17 @@ class FileReportRepository:
         write_json_atomic(self._meta_path(record.report_id), record.to_dict())
         return record
 
+    def delete(self, report_id: str) -> bool:
+        """Entfernt ``meta.json`` (Ordnerformat) und ``<id>.json``
+        (Legacy-Flachformat). Den Ordner mit den Inhalten raeumt
+        ``ReportManager.delete_report`` ab."""
+        removed = False
+        for path in (self._meta_path(report_id), self._legacy_flat_path(report_id)):
+            if os.path.exists(path):
+                os.remove(path)
+                removed = True
+        return removed
+
     def list_ids(self) -> List[str]:
         """Ablageschluessel aller Reports: Ordnernamen (aktuelles Format) und
         ``<id>.json`` ohne Endung (Legacy-Flachformat).
