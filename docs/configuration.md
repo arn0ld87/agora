@@ -63,7 +63,7 @@ Geheimnisse niemals committen, in Logs ausgeben oder in Run-/Report-Artefakte sc
 - Ist `AGORA_SUPABASE_JWT_ISSUER` gesetzt, verlangt `Config.validate()` zusätzlich alle fünf Metadaten-Schalter auf `postgres` und `DATABASE_URL`, weil die Datei-Backends keine Workspace-Isolation kennen.
 - `AGORA_ALLOW_ANONYMOUS` und `AGORA_AUTH_BACKEND=legacy` sind mit JWT unvereinbar.
 - `supabase` ohne JWT-Konfiguration ist ein Startfehler.
-- **Solange die Repositories nicht nach Workspace filtern (#1614), lehnt `Config.validate()` jede JWT-Konfiguration ab.** Umgeschaltet ist damit nichts.
+- Seit #1614 filtern die Repositories nach Workspace, und JWT ist zulässig. Der Default bleibt ohne Issuer; **umgeschaltet ist damit nichts.**
 
 Die beiden Fernet-Keys erfüllen unterschiedliche Persistenzaufgaben und sind nicht bloß zwei Namen für `SECRET_KEY`. Lebenszyklus/Recovery: [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
 

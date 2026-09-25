@@ -32,6 +32,7 @@ Spalte bleibt dann ``NULL``; der Verweis im Manifest bleibt erhalten.
 from __future__ import annotations
 
 from typing import Any, List, Optional
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -42,6 +43,7 @@ from ....utils.logger import get_logger
 from ..models.run import RunModel
 from ..models.simulation import SimulationModel
 from ..session import Database, get_database
+from ..workspace_scope import active_workspace_id, scoped, visible, workspace_for_write
 
 logger = get_logger('agora.runs.postgres')
 
@@ -128,8 +130,18 @@ class PostgresRunRepository:
         values = _to_row_values(record)
         try:
             with self.db.session() as session:
-                self._resolve_simulation(session, values)
-                statement = insert(RunModel).values(**values)
+                target = workspace_for_write(
+                    session,
+                    session.get(RunModel, values['id']),
+                    active_workspace_id(),
+                    parent_model=SimulationModel,
+                    parent_id=values['simulation_id'],
+                    record_label=f"run {values['id']}",
+                )
+                self._resolve_simulation(session, values, target)
+                statement = insert(RunModel).values(**values, workspace_id=target)
+                # ``workspace_id`` steht bewusst nicht im Update: eine Zeile
+                # wechselt nie den Workspace.
                 statement = statement.on_conflict_do_update(
                     index_elements=[RunModel.id],
                     set_={
@@ -146,7 +158,7 @@ class PostgresRunRepository:
             raise
         return record
 
-    def add_existing(self, record: RunRecord) -> bool:
+    def add_existing(self, record: RunRecord, workspace_id: Optional[UUID] = None) -> bool:
         """Legt einen Run mit **bestehender** Kennung an. ``False``, wenn die
         Kennung schon vorhanden ist.
 
@@ -169,9 +181,16 @@ class PostgresRunRepository:
                     and session.get(SimulationModel, values['simulation_id']) is None
                 ):
                     raise self._missing(record, values)
+                target = workspace_id or workspace_for_write(
+                    session,
+                    None,
+                    active_workspace_id(),
+                    parent_model=SimulationModel,
+                    parent_id=values['simulation_id'],
+                )
                 statement = (
                     insert(RunModel)
-                    .values(**values)
+                    .values(**values, workspace_id=target)
                     .on_conflict_do_nothing(index_elements=[RunModel.id])
                     .returning(RunModel.id)
                 )
@@ -182,7 +201,9 @@ class PostgresRunRepository:
             raise
         return inserted is not None
 
-    def _resolve_simulation(self, session: Any, values: dict[str, Any]) -> None:
+    def _resolve_simulation(
+        self, session: Any, values: dict[str, Any], workspace_id: UUID
+    ) -> None:
         """Prüft den Simulationsverweis vor dem Schreiben.
 
         Fehlt die Simulation, entscheidet, ob der Run schon existiert: ein
@@ -190,7 +211,10 @@ class PostgresRunRepository:
         ``simulation_id = NULL``.
         """
         wanted = values['simulation_id']
-        if wanted is None or session.get(SimulationModel, wanted) is not None:
+        # Nur eine Simulation im selben Workspace zählt; eine fremde ist für
+        # diesen Run nicht vorhanden (der zusammengesetzte Fremdschlüssel
+        # lehnte sie ohnehin ab).
+        if wanted is None or visible(session.get(SimulationModel, wanted), workspace_id):
             return
         if session.get(RunModel, values['id']) is None:
             raise RunSimulationMissing(
@@ -218,7 +242,7 @@ class PostgresRunRepository:
         """Record oder ``None``. Ein unlesbares Manifest zählt als fehlend —
         dieselbe Semantik wie beim Dateiadapter."""
         with self.db.session() as session:
-            row = session.get(RunModel, run_id)
+            row = visible(session.get(RunModel, run_id), active_workspace_id())
             if row is None:
                 return None
             return self._readable(row)
@@ -240,7 +264,7 @@ class PostgresRunRepository:
             '',
         )
         query = (
-            select(RunModel)
+            scoped(select(RunModel), RunModel, active_workspace_id())
             .order_by(sort_key.desc(), RunModel.id.desc())
             .execution_options(yield_per=500)
         )

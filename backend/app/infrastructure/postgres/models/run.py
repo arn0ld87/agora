@@ -41,10 +41,11 @@ Phase.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Text, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import AGORA_SCHEMA, Base
@@ -61,16 +62,30 @@ class RunModel(Base):
         ),
         # ``list_runs(simulation_id=...)`` und der Report-Status lesen danach.
         Index('ix_runs_simulation_id', 'simulation_id'),
+        # Verweis nur innerhalb desselben Workspace. ``SET NULL (simulation_id)``
+        # löst nur den Verweis; ``workspace_id`` bleibt (PostgreSQL ≥ 15).
+        ForeignKeyConstraint(
+            ['simulation_id', 'workspace_id'],
+            [f'{AGORA_SCHEMA}.simulations.id', f'{AGORA_SCHEMA}.simulations.workspace_id'],
+            ondelete='SET NULL (simulation_id)',
+        ),
         {'schema': AGORA_SCHEMA},
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Workspace der Zeile (ADR-0018, #1614). Der Bestand vor #1614 steht im
+    # Default-Workspace; Löschen eines Workspace mit Daten scheitert.
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f'{AGORA_SCHEMA}.workspaces.id'),
+        nullable=False,
+        index=True,
+    )
     run_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     entity_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str | None] = mapped_column(Text, nullable=True)
     simulation_id: Mapped[str | None] = mapped_column(
         Text,
-        ForeignKey(f'{AGORA_SCHEMA}.simulations.id', ondelete='SET NULL'),
         nullable=True,
     )
     started_at: Mapped[str | None] = mapped_column(Text, nullable=True)

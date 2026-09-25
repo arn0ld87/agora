@@ -105,7 +105,8 @@ Ohne gesetzten Env-Wert verhält sich der Server wie vorher, gibt aber beim Star
   - Die Algorithmus-Allowlist hängt an der Schlüsselquelle: JWKS nur RS256/ES256, Secret nur HS256. `alg=none` und die HS/RS-Verwechslung werden vor jedem Schlüsselabruf abgelehnt.
   - Anonyme Supabase-Sitzungen (`is_anonymous`) werden abgelehnt.
 - **Keine Tokens im Log:** Weder Token noch Claims landen im Log. Fehler tragen nur einen Code. Auch Konfigurationsfehler nennen das Secret nicht, denn Pydantic-Eingaben werden aus den Meldungen entfernt.
-- **Keine Isolation ohne PostgreSQL:** JWT verlangt alle fünf Metadaten-Backends auf `postgres` und schließt `AGORA_ALLOW_ANONYMOUS` aus. Bis die Repositories nach Workspace filtern (#1614), lehnt `Config.validate()` JWT ganz ab.
+- **Keine Isolation ohne PostgreSQL:** JWT verlangt alle fünf Metadaten-Backends auf `postgres` und schließt `AGORA_ALLOW_ANONYMOUS` aus. Ohne die Workspace-Isolation der Repositories (#1614, `TENANT_ISOLATION_AVAILABLE`) lehnt `Config.validate()` JWT ganz ab.
+- **Keine fremde Kennung erreicht eine View (#1614):** Für JWT-Nutzer prüft der Guard jede `project_id`, `graph_id`, `simulation_id`, `sim_id`, `run_id` und `report_id` in Pfad, Query und JSON-Body, auch in Listenfeldern wie `simulation_ids`, gegen den Workspace des Principals. Fremde und unbekannte Kennungen ergeben dasselbe `404 not_found`. Das schützt auch Dateien (Report-Inhalte, Uploads) und Neo4j-Graphen, die nicht in PostgreSQL liegen. In-Memory-Tasks sind auf den eigenen Workspace gefiltert, die gemeinsame Persona-Bibliothek ist Betreibern vorbehalten.
 - **Prozessweiter Zustand** (Provider-Keys, LLM-Profile, API-Keys, Logs, Onboarding, Profil, Modell-Stream) ist für JWT-Nutzer gesperrt (`operator_only`).
 - **Tickets** sind an den Principal ihres Ausstellers gebunden. Mit aktivem JWT gilt kein ungebundenes Ticket.
 

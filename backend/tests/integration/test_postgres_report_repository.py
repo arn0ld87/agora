@@ -205,9 +205,9 @@ def test_unreadable_row_does_not_break_the_list(repo, migrated_db):
     with migrated_db.session() as session:
         session.execute(
             text(
-                'INSERT INTO agora.reports (id, report_id, status, payload) '
+                'INSERT INTO agora.reports (id, report_id, status, payload, workspace_id) '
                 "VALUES ('report_kaputt001', 'report_kaputt001', 'completed', "
-                '\'{"report_id": "report_kaputt001"}\'::jsonb)'
+                '\'{"report_id": "report_kaputt001"}\'::jsonb, \'00000000-0000-0000-0000-000000000001\')'
             )
         )
 
@@ -295,9 +295,9 @@ def test_non_object_payload_counts_as_unreadable(repo, migrated_db, payload):
     with migrated_db.session() as session:
         session.execute(
             text(
-                'INSERT INTO agora.reports (id, report_id, status, payload) '
+                'INSERT INTO agora.reports (id, report_id, status, payload, workspace_id) '
                 "VALUES ('report_skalar001', 'report_skalar001', 'completed', "
-                f"'{payload}'::jsonb)"
+                f"'{payload}'::jsonb, '00000000-0000-0000-0000-000000000001')"
             )
         )
 

@@ -32,6 +32,7 @@ Projektverweis der Simulationen, Codex-Review auf #1598).
 from __future__ import annotations
 
 from typing import Any, List, Optional
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
@@ -42,6 +43,7 @@ from ....utils.logger import get_logger
 from ..models.report import ReportModel
 from ..models.simulation import SimulationModel
 from ..session import Database, get_database
+from ..workspace_scope import active_workspace_id, scoped, visible, workspace_for_write
 
 logger = get_logger('agora.reports.postgres')
 
@@ -102,10 +104,21 @@ class PostgresReportRepository:
     def save(self, record: ReportRecord) -> ReportRecord:
         try:
             with self.db.session() as session:
-                key = self._storage_key(session, record.report_id)
+                workspace_id = active_workspace_id()
+                key = self._storage_key(session, record.report_id, workspace_id)
                 values = _to_row_values(key, record)
-                self._resolve_simulation(session, values)
-                statement = insert(ReportModel).values(**values)
+                target = workspace_for_write(
+                    session,
+                    session.get(ReportModel, key),
+                    workspace_id,
+                    parent_model=SimulationModel,
+                    parent_id=values['simulation_id'],
+                    record_label=f'report {record.report_id}',
+                )
+                self._resolve_simulation(session, values, target)
+                # ``workspace_id`` steht bewusst nicht im Update: eine Zeile
+                # wechselt nie den Workspace.
+                statement = insert(ReportModel).values(**values, workspace_id=target)
                 statement = statement.on_conflict_do_update(
                     index_elements=[ReportModel.id],
                     set_={
@@ -123,7 +136,7 @@ class PostgresReportRepository:
         return record
 
     @staticmethod
-    def _storage_key(session: Any, report_id: str) -> str:
+    def _storage_key(session: Any, report_id: str, workspace_id: Optional[UUID]) -> str:
         """Unter welchem Ablageschlüssel ``save`` schreibt.
 
         Normalfall: die ``report_id``. Ein migrierter Altbestand liegt aber
@@ -138,11 +151,15 @@ class PostgresReportRepository:
         if session.get(ReportModel, report_id) is not None:
             return report_id
         keys = session.scalars(
-            select(ReportModel.id).where(ReportModel.report_id == report_id).limit(2)
+            scoped(select(ReportModel.id), ReportModel, workspace_id)
+            .where(ReportModel.report_id == report_id)
+            .limit(2)
         ).all()
         return keys[0] if len(keys) == 1 else report_id
 
-    def add_existing(self, key: str, record: ReportRecord) -> bool:
+    def add_existing(
+        self, key: str, record: ReportRecord, workspace_id: Optional[UUID] = None
+    ) -> bool:
         """Legt einen Report unter seinem **bestehenden** Ablageschlüssel an.
         ``False``, wenn der Schlüssel schon vorhanden ist.
 
@@ -164,9 +181,16 @@ class PostgresReportRepository:
                     and session.get(SimulationModel, values['simulation_id']) is None
                 ):
                     raise _missing(key, values['simulation_id'])
+                target = workspace_id or workspace_for_write(
+                    session,
+                    None,
+                    active_workspace_id(),
+                    parent_model=SimulationModel,
+                    parent_id=values['simulation_id'],
+                )
                 statement = (
                     insert(ReportModel)
-                    .values(**values)
+                    .values(**values, workspace_id=target)
                     .on_conflict_do_nothing(index_elements=[ReportModel.id])
                     .returning(ReportModel.id)
                 )
@@ -179,15 +203,17 @@ class PostgresReportRepository:
 
     def delete(self, report_id: str) -> bool:
         """Entfernt nur die Zeile. Die Inhalte räumt ``ReportManager`` ab."""
+        workspace_id = active_workspace_id()
         with self.db.session() as session:
-            result = session.execute(
-                delete(ReportModel)
-                .where(ReportModel.id == report_id)
-                .returning(ReportModel.id)
-            )
+            statement = delete(ReportModel).where(ReportModel.id == report_id)
+            if workspace_id is not None:
+                statement = statement.where(ReportModel.workspace_id == workspace_id)
+            result = session.execute(statement.returning(ReportModel.id))
             return result.scalar_one_or_none() is not None
 
-    def _resolve_simulation(self, session: Any, values: dict[str, Any]) -> None:
+    def _resolve_simulation(
+        self, session: Any, values: dict[str, Any], workspace_id: UUID
+    ) -> None:
         """Prüft den Simulationsverweis vor dem Schreiben.
 
         Fehlt die Simulation, entscheidet, ob der Report schon existiert: ein
@@ -195,7 +221,9 @@ class PostgresReportRepository:
         ``simulation_id = NULL``; der Verweis im Datensatz bleibt erhalten.
         """
         wanted = values['simulation_id']
-        if wanted is None or session.get(SimulationModel, wanted) is not None:
+        # Nur eine Simulation im selben Workspace zählt (zusammengesetzter
+        # Fremdschlüssel, #1614).
+        if wanted is None or visible(session.get(SimulationModel, wanted), workspace_id):
             return
         if session.get(ReportModel, values['id']) is None:
             raise _missing(values['id'], wanted)
@@ -213,15 +241,14 @@ class PostgresReportRepository:
         """Datensatz unter dem Ablageschlüssel oder ``None``. Ein unlesbarer
         Datensatz zählt als fehlend — dieselbe Semantik wie beim Dateiadapter."""
         with self.db.session() as session:
-            row = session.get(ReportModel, report_id)
+            row = visible(session.get(ReportModel, report_id), active_workspace_id())
             return None if row is None else self._readable(row)
 
     def list_ids(self) -> List[str]:
         """Ablageschlüssel aller Reports, nach Schlüssel sortiert."""
         with self.db.session() as session:
-            return list(
-                session.scalars(select(ReportModel.id).order_by(ReportModel.id)).all()
-            )
+            query = scoped(select(ReportModel.id), ReportModel, active_workspace_id())
+            return list(session.scalars(query.order_by(ReportModel.id)).all())
 
     def list(self, simulation_id: Optional[str] = None) -> List[ReportRecord]:
         """Alle lesbaren Reports, optional nach Simulation gefiltert.
@@ -230,7 +257,9 @@ class PostgresReportRepository:
         Fremdschlüsselspalte — siehe Modul-Docstring. Reihenfolge: nach
         Schlüssel; der Port verspricht keine, ``ReportManager`` sortiert selbst.
         """
-        query = select(ReportModel).order_by(ReportModel.id)
+        query = scoped(select(ReportModel), ReportModel, active_workspace_id()).order_by(
+            ReportModel.id
+        )
         if simulation_id is not None:
             query = query.where(
                 ReportModel.payload['simulation_id'].astext == simulation_id

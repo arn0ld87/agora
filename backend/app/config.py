@@ -360,10 +360,11 @@ def validate_master_token_policy(debug: bool, auth_backend: str) -> list[str]:
     return []
 
 
-#: Filtern die Repositories nach ``workspace_id``? Solange nicht (#1614), darf
-#: kein JWT-Nutzer zugelassen werden — er saehe den Bestand aller Workspaces.
-#: #1614 setzt den Wert, wenn die Isolation steht.
-TENANT_ISOLATION_AVAILABLE = False
+#: Filtern die Repositories nach ``workspace_id``? Seit #1614 ja: Projekte,
+#: Simulationen, Runs und Reports sind workspace-gebunden, und der Guard
+#: prueft jede Kennung im Request (``app/security/resource_guard.py``).
+#: Ohne diese Isolation darf kein JWT-Nutzer zugelassen werden.
+TENANT_ISOLATION_AVAILABLE = True
 
 
 def supabase_jwt_configured(config: Any) -> bool:

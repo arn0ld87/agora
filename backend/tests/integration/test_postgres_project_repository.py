@@ -299,8 +299,10 @@ def test_the_migration_can_be_taken_back(postgres_database_url, monkeypatch):
         engine.dispose()
 
 
-def test_the_table_carries_no_workspace_or_auth_column(repo):
-    """Multi-User ist eine eigene, freizugebende Phase."""
+def test_the_table_carries_a_workspace_but_no_auth_column(repo):
+    """Seit #1614 gehört jedes Projekt einem Workspace (ADR-0018, löst die
+    frühere Zusage „kein ``workspace_id``“ ab). Auth-Spalten gibt es weiter
+    nicht: wer Mitglied ist, steht in ``agora.workspace_members``."""
     with repo.db.session() as session:
         spalten = {
             row[0]
@@ -312,7 +314,7 @@ def test_the_table_carries_no_workspace_or_auth_column(repo):
             )
         }
 
-    assert 'workspace_id' not in spalten
+    assert 'workspace_id' in spalten
     assert not {s for s in spalten if 'auth' in s or 'user' in s}
 
     # Und der Primaerschluessel bleibt text, weil er ein Verzeichnisname ist.

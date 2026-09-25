@@ -15,6 +15,19 @@ from ..utils.graph_diff_helpers import build_pydantic_graph_diff
 from ..utils.scopes import require_scope
 from ..services.graph_export import GraphExportService
 
+def _task_visible(metadata: object) -> bool:
+    """Tasks leben im Prozessspeicher, ohne Workspace. Ein Supabase-Nutzer
+    sieht nur Tasks seines Workspace (``resource_guard.task_visible``, #1614)."""
+    from ..contracts.auth_contract import AuthType
+    from ..security.principal_context import current_principal
+    from ..security.resource_guard import task_visible
+
+    principal = current_principal()
+    if principal is None or principal.auth_type != AuthType.JWT:
+        return True
+    return task_visible(metadata, principal.workspace_id)
+
+
 @graph_bp.route('/task/<task_id>', methods=['GET'])
 @handle_api_errors
 def get_task(task_id: str):
@@ -23,7 +36,7 @@ def get_task(task_id: str):
         return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     task = TaskManager().get_task(task_id)
-    if not task:
+    if not task or not _task_visible(task.metadata):
         return json_error(ApiErrorCode.NOT_FOUND, status=404, message=f"Task does not exist: {task_id}")
 
     response = TaskStatusResponse.model_validate(task.to_dict())
@@ -38,7 +51,7 @@ def list_tasks():
     # ``t.to_dict()`` hier waere ein ``AttributeError`` auf einem Dict.
     # Vor #1466 unbemerkt, weil kein Test diesen Endpunkt mit befuellten
     # Tasks aufrief.
-    tasks = TaskManager().list_tasks()
+    tasks = [t for t in TaskManager().list_tasks() if _task_visible(t.get("metadata"))]
     responses = [TaskStatusResponse.model_validate(t) for t in tasks]
     return json_success([r.model_dump(mode="json") for r in responses], count=len(responses))
 

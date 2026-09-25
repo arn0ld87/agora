@@ -71,12 +71,21 @@ def isolation(monkeypatch):
     monkeypatch.setattr('app.config.TENANT_ISOLATION_AVAILABLE', True)
 
 
-def test_jwt_is_refused_until_workspace_isolation_exists():
-    """Bis #1614 filtert kein Repository nach Workspace; ein JWT-Nutzer sähe
-    den ganzen Bestand. Der Schalter bleibt deshalb gesperrt."""
+def test_jwt_is_refused_without_workspace_isolation(monkeypatch):
+    """Ohne Workspace-Isolation sähe ein JWT-Nutzer den ganzen Bestand. Die
+    Sperre bleibt als Mechanismus erhalten, falls die Isolation je fehlt."""
+    monkeypatch.setattr('app.config.TENANT_ISOLATION_AVAILABLE', False)
+
     errors = validate_auth_backend(_jwt_ready())
 
     assert any('not available yet' in e and '#1614' in e for e in errors)
+
+
+def test_workspace_isolation_is_available_since_1614():
+    from app.config import TENANT_ISOLATION_AVAILABLE
+
+    assert TENANT_ISOLATION_AVAILABLE is True
+    assert validate_auth_backend(_jwt_ready()) == []
 
 
 def test_modes_are_exactly_legacy_hybrid_supabase():
