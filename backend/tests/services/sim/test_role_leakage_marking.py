@@ -174,23 +174,72 @@ def test_state_conflict_count_incremented(tmp_path: Path) -> None:
 # 4. Alte run_state.json ohne role_conflict_count lädt mit Default 0
 # ---------------------------------------------------------------------------
 
+def _load_from_dict(data: dict) -> SimulationRunState:
+    from app.services.sim import run_state_store
+
+    store = MagicMock()
+    store.exists.return_value = True
+    store.read_json.return_value = data
+    with patch(
+        "app.services.artifact_store.resolve_default_store", return_value=store
+    ):
+        state = run_state_store.load_run_state("sim_x", "/unused")
+    assert state is not None
+    return state
+
+
 def test_load_run_state_without_conflict_count() -> None:
     """Backward-Compat: run_state ohne role_conflict_count lädt mit Default 0."""
-    from app.services.sim.run_state_store import SimulationRunState
-
-    # Simuliere alten run_state ohne die neuen Felder
-    state = SimulationRunState(simulation_id="sim_old")
-    d = state.to_dict()
-    # Entferne die neuen Felder wie in altem run_state.json
+    d = SimulationRunState(simulation_id="sim_old").to_dict()
     d.pop("role_conflict_count", None)
     d.pop("role_conflicts_by_reason", None)
 
-    # Manuelles Laden wie in load_run_state
-    restored_count = d.get("role_conflict_count", 0)
-    restored_by_reason = d.get("role_conflicts_by_reason", {})
+    state = _load_from_dict(d)
 
-    assert restored_count == 0
-    assert restored_by_reason == {}
+    assert state.role_conflict_count == 0
+    assert state.role_conflicts_by_reason == {}
+
+
+def test_run_status_serialisiert_konflikte_ueber_den_contract() -> None:
+    """Codex-Review PR #1620 (P1): /run-status gibt ``to_dict()`` direkt aus —
+    die neuen Felder laufen über ``RoleConflictTally``."""
+    from pydantic import ValidationError
+
+    from app.contracts.role_leakage_contract import RoleConflictTally
+
+    state = SimulationRunState(simulation_id="sim_c")
+    state.role_conflict_count = 2
+    state.role_conflicts_by_reason = {"foreign_role": 2}
+    payload = state.to_dict()
+    tally = RoleConflictTally.model_validate(
+        {k: payload[k] for k in ("role_conflict_count", "role_conflicts_by_reason")}
+    )
+    assert tally.role_conflicts_by_reason == {"foreign_role": 2}
+
+    state.role_conflicts_by_reason = {"erfunden": 1}  # type: ignore[dict-item]
+    try:
+        state.to_dict()
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("unbekannte Konfliktkategorie darf nicht serialisiert werden")
+
+
+def test_load_run_state_verwirft_ungueltige_konfliktdaten() -> None:
+    """Kaputte Zählung oder unbekannte Markierung kostet nicht den ganzen Zustand."""
+    d = SimulationRunState(simulation_id="sim_bad").to_dict()
+    d["role_conflict_count"] = -3
+    d["role_conflicts_by_reason"] = {"erfunden": 1}
+    d["recent_actions"] = [
+        _make_action_dict(agent_id=0, agent_name="A", content="x") | {"role_conflict": "erfunden"},
+        _make_action_dict(agent_id=1, agent_name="B", content="y") | {"role_conflict": "foreign_role"},
+    ]
+
+    state = _load_from_dict(d)
+
+    assert state.role_conflict_count == 0
+    assert state.role_conflicts_by_reason == {}
+    assert [a.role_conflict for a in state.recent_actions] == [None, "foreign_role"]
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +335,55 @@ def test_report_evidence_skips_foreign_role() -> None:
     action_items = [i for i in items if i.get("type") == "agent_action"]
     assert len(action_items) == 1
     assert action_clean["agent_name"] in action_items[0]["snippet"]
+
+
+def test_report_evidence_filtert_vor_dem_sampling() -> None:
+    """Codex-Review PR #1620 (P1): Wurde erst nach dem Sampling gefiltert,
+    verlor jeder Zeit-Bin, dessen längster Beitrag markiert war, seine
+    Evidence — obwohl saubere Aktionen im selben Bin lagen."""
+    from app.services.report_agent.agent import ReportAgent
+
+    actions = []
+    for round_num in range(1, 17):
+        foreign = round_num % 2 == 1
+        text = (
+            "Als Betriebsratsvorsitzende war es mir wichtig, die Mitglieder "
+            "ausführlich und frühzeitig zu informieren."
+            if foreign
+            else f"Kurzer Beitrag {round_num}."
+        )
+        action = MagicMock()
+        action.to_dict.return_value = {
+            "platform": "reddit",
+            "round_num": round_num,
+            "agent_id": round_num,
+            "agent_name": f"Agent{round_num}",
+            "action_type": "CREATE_POST",
+            "action_args": {"content": text},
+            "timestamp": f"2026-01-01T{round_num:02d}:00:00",
+            "result": None,
+            "success": True,
+            "role_conflict": "foreign_role" if foreign else None,
+        }
+        actions.append(action)
+
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.simulation_id = "test-sim"
+    with (
+        patch(
+            "app.services.simulation_runner.SimulationRunner.get_all_actions",
+            return_value=actions,
+        ),
+        patch("app.services.network_analytics.NetworkAnalyticsService") as mock_analytics,
+    ):
+        mock_analytics.return_value.compute_metrics.return_value.to_dict.return_value = {
+            "status": "insufficient_data"
+        }
+        items = agent._collect_simulation_evidence_items()
+
+    action_items = [i for i in items if i.get("type") == "agent_action"]
+    assert len(action_items) == 8, "jeder Bin liefert eine saubere Aktion"
+    assert all("Kurzer Beitrag" in i["snippet"] for i in action_items)
 
 
 # ---------------------------------------------------------------------------

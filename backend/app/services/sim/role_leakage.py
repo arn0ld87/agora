@@ -391,7 +391,7 @@ def detect_role_conflict(
     platform: str,
     action_dict: dict,
     profiles: list[dict],
-) -> Optional[str]:
+) -> Optional[ConflictReason]:
     """Prüft einen Action-Dict auf Rollenvertauschung und gibt den Grund zurück.
 
     Parameters
@@ -408,8 +408,8 @@ def detect_role_conflict(
 
     Returns
     -------
-    str | None
-        ``RoleConflict.reason`` als Zeichenkette (z. B. ``"foreign_role"``,
+    ConflictReason | None
+        ``RoleConflict.reason`` (z. B. ``"foreign_role"``,
         ``"foreign_name_signature"``, ``"unmatched_self_reference"``), oder
         ``None`` wenn kein Konflikt erkannt wurde.
     """

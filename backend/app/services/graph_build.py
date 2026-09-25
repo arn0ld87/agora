@@ -719,7 +719,7 @@ class GraphBuildService:
                             chunk_ids=chunk_ids,
                             run_id=run_record["run_id"],
                             checkpoint_callback=record_checkpoint,
-                            chunk_contexts=build_chunk_contexts(chunks),
+                            chunk_contexts=build_chunk_contexts(chunks, document_ids),
                         )
                     except GraphBuildCancelled as cancel_exc:
                         _finish_cancelled_build(cancel_exc.episode_uuids)
@@ -908,7 +908,7 @@ class GraphBuildService:
         )
         # Kontext für verbleibende Chunks aus der GESAMTEN Chunk-Liste ableiten
         # (Vorgänger-Kontext muss auch bereits abgeschlossene Chunks berücksichtigen).
-        _all_contexts = build_chunk_contexts(chunks)
+        _all_contexts = build_chunk_contexts(chunks, document_ids)
         remaining_chunk_contexts = [_all_contexts[idx] for idx in remaining_original_indices]
 
         from .run_lifecycle import RunLifecycle

@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Tuple
 from pydantic import ValidationError
 
 from ...config import Config
+from ...contracts.role_leakage_contract import ConflictReason
 from ...contracts.sim_action_log_contract import RoundEndEvent
 from ...utils.logger import get_logger
 from .role_leakage import detect_role_conflict, load_profiles
@@ -85,7 +86,7 @@ def _build_action_with_marking(
     profiles: List[dict],
 ) -> AgentAction:
     """Erstellt einen ``AgentAction`` und setzt ``role_conflict`` wenn Markierung aktiv."""
-    conflict_reason: Optional[str] = None
+    conflict_reason: Optional[ConflictReason] = None
     if marking_enabled and profiles:
         conflict_reason = detect_role_conflict(
             platform=platform,
@@ -356,7 +357,7 @@ def read_actions_from_file(
                 if round_num is not None and data.get("round") != round_num:
                     continue
 
-                conflict_reason_file: Optional[str] = None
+                conflict_reason_file: Optional[ConflictReason] = None
                 if profiles:
                     conflict_reason_file = detect_role_conflict(
                         platform=record_platform,

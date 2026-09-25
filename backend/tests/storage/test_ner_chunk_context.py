@@ -58,6 +58,44 @@ def _extractor_with_capture(captured: list, return_entities=None, return_relatio
 # Tests: build_chunk_contexts
 # ---------------------------------------------------------------------------
 
+
+def test_kontext_endet_an_der_document_id_grenze():
+    """Codex-Review PR #1620 (P1): kein Vorlauf aus Dokument A im ersten
+    Chunk von Dokument B — sonst löst die NER ein Pronomen gegen eine
+    fremde Entität auf und schreibt die Relation mit Bs Provenance."""
+    chunks = [
+        "# Klinikum Nord\nDie Geschäftsführerin Dr. Weber plant den Start.",
+        "Sie verantwortet das Budget.",
+        "Er lehnt den Zeitplan ab.",
+        "Der Betriebsrat fordert eine Vereinbarung.",
+    ]
+    contexts = build_chunk_contexts(chunks, ["doc_a", "doc_a", "doc_b", "doc_b"])
+    assert "Dr. Weber" in contexts[1]
+    assert contexts[2] == ""
+    assert "Weber" not in contexts[3] and "Klinikum Nord" not in contexts[3]
+    assert "Er lehnt den Zeitplan ab." in contexts[3]
+
+
+def test_kontext_endet_am_dokument_marker_ohne_manifest():
+    """Altprojekte und Neustart-Pfad: der ``=== name ===``-Marker am
+    Chunk-Anfang ist die Dokumentgrenze."""
+    chunks = [
+        "=== a.md ===\nDie Geschäftsführerin Dr. Weber plant den Start.",
+        "Sie verantwortet das Budget.",
+        "=== b.md ===\nEr lehnt den Zeitplan ab.",
+        "Der Betriebsrat fordert eine Vereinbarung.",
+    ]
+    contexts = build_chunk_contexts(chunks)
+    assert contexts[2] == ""
+    assert contexts[3].startswith("=== b.md ===")
+    assert "a.md" not in contexts[3] and "Budget" not in contexts[3]
+
+
+def test_document_ids_mit_falscher_laenge_werden_abgelehnt():
+    with pytest.raises(ValueError):
+        build_chunk_contexts(["a", "b"], ["doc_a"])
+
+
 class TestBuildChunkContexts:
     def test_first_chunk_has_empty_context(self):
         chunks = ["# Einleitung\nErster Text.", "Zweiter Text."]
