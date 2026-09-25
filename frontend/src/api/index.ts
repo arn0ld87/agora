@@ -130,16 +130,26 @@ export function refreshSessionOnce(): Promise<boolean> {
   return _refreshInFlight
 }
 
-/** Refresh gescheitert: Token verwerfen, abmelden, Store informieren. */
+/**
+ * Refresh gescheitert: Token verwerfen und abmelden. Ist der Auth-Store
+ * registriert, meldet nur er ab (ein Aufruf bei Supabase, lokales Aufräumen,
+ * Login); sonst übernimmt diese Funktion die Abmeldung selbst.
+ */
 async function forceSignOut(): Promise<void> {
   setSessionToken(null)
-  try {
-    const { getSupabaseClient } = await import('../auth/supabaseClient')
-    await getSupabaseClient()?.auth.signOut()
-  } catch {
-    /* ignore */
+  if (_on401SignOut) {
+    _on401SignOut()
+    return
   }
-  if (_on401SignOut) _on401SignOut()
+  const { getSupabaseClient, clearPersistedSession } = await import('../auth/supabaseClient')
+  let failed = false
+  try {
+    const result = await getSupabaseClient()?.auth.signOut()
+    failed = !!result?.error
+  } catch {
+    failed = true
+  }
+  if (failed) clearPersistedSession()
 }
 
 /**
@@ -257,7 +267,7 @@ service.interceptors.response.use(
 // Callback registered by the auth store for 401-triggered signOut+redirect.
 let _on401SignOut: (() => void) | null = null
 
-export function register401SignOutCallback(cb: () => void): void {
+export function register401SignOutCallback(cb: (() => void) | null): void {
   _on401SignOut = cb
 }
 

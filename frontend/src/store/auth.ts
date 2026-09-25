@@ -14,7 +14,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { getAgoraToken, register401SignOutCallback } from '../api/index'
 import { bootstrapWorkspace, fetchAuthConfig, listWorkspaces } from '../api/workspaces'
 import { setSessionToken, setActiveWorkspaceId } from '../auth/sessionState'
-import { initSupabaseClient, getSupabaseClient } from '../auth/supabaseClient'
+import { initSupabaseClient, getSupabaseClient, clearPersistedSession } from '../auth/supabaseClient'
 import type { AuthConfigResponse } from '../contracts/authConfigContract'
 import type { WorkspaceSummary } from '../contracts/workspaceContract'
 import { useApiAuth } from '../composables/useApiAuth'
@@ -84,6 +84,9 @@ export const useAuthStore = defineStore('auth', () => {
   /** Betreiber-Zugang: Legacy-Token oder offener Modus, keine Supabase-Session.
    *  Prozessweite Bereiche (Logs, Einstellungen) sind für JWT gesperrt. */
   const operatorAccess = computed(() => !(jwtEnabled.value && session.value))
+  // Session ohne aktiven Workspace (Recovery-Link, Start gescheitert): kein
+  // regulärer Zugang, Tenant-Anfragen liefen ohne X-Agora-Workspace.
+  const sessionWithoutWorkspace = computed(() => !!session.value && !activeWorkspaceId.value)
 
   const tokenExpiry = computed<number | null>(() => {
     if (!session.value?.expires_at) return null
@@ -245,13 +248,28 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function signOut(): Promise<void> {
     const supabase = getSupabaseClient()
-    if (supabase) {
-      await supabase.auth.signOut()
+    try {
+      if (supabase) {
+        // supabase-js entfernt die gespeicherte Session auch bei einer
+        // Fehlerantwort des Servers, aber nicht, wenn der Aufruf wirft. Dann
+        // den Speicher direkt leeren — ohne zweiten Netzaufruf.
+        let failed = false
+        try {
+          const result = await supabase.auth.signOut()
+          failed = !!result?.error
+        } catch {
+          failed = true
+        }
+        if (failed) clearPersistedSession()
+      }
+    } finally {
+      // Lokaler Zustand wird immer verworfen, sonst hielte der Guard den
+      // Nutzer trotz erzwungener Abmeldung in der App.
+      session.value = null
+      user.value = null
+      setSessionToken(null)
+      clearWorkspaceState()
     }
-    session.value = null
-    user.value = null
-    setSessionToken(null)
-    clearWorkspaceState()
   }
 
   async function requestPasswordReset(email: string): Promise<void> {
@@ -338,6 +356,7 @@ export const useAuthStore = defineStore('auth', () => {
     jwtEnabled,
     isAuthenticated,
     operatorAccess,
+    sessionWithoutWorkspace,
     tokenExpiry,
     roles,
     // actions

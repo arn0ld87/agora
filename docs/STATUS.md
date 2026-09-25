@@ -454,6 +454,8 @@ Verifiziert gegen PostgreSQL mit signierten Tokens (`tests/integration/test_work
 Seit #1617 meldet sich das Frontend bei aktivem JWT über `@supabase/supabase-js` an. Der Client dient nur der Anmeldung, Fachdaten laufen weiter über Flask.
 - **Store und Header:** Der Pinia-Store `auth` hält Konfiguration, Session, Workspaces und aktiven Workspace. Der Interceptor sendet `Authorization: Bearer` und `X-Agora-Workspace`, bei `401` erst einmal ein Refresh.
 - **Views:** Login, Registrierung, Passwort-Reset und E-Mail-Bestätigung unter `/auth/*`. Ohne Session leitet der Guard auf den Login. Workspace-Wechsel und Abmelden stehen im Nutzermenü.
+- **Session ohne Workspace:** Eine Session ohne aktiven Workspace (etwa die Recovery-Session aus dem Reset-Link) erreicht nur Passwort-Reset und Login, auch keine anderen `/auth/*`-Routen. Der Guard führt bei laufendem Reset zum Reset, sonst zum Login.
+- **Abmelden:** Session, Token, Workspace und SSE-Tickets werden immer lokal verworfen. Scheitert die Abmeldung bei Supabase, löscht das Frontend die gespeicherte Session (`agora-supabase-auth`) direkt, ohne zweiten Netzaufruf. Eine Session unter dem früheren Standardschlüssel `sb-<ref>-auth-token` übernimmt der Client beim Start.
 - **Legacy-Modus unverändert:** Ohne JWT bleiben Master-Token, Routen und Menü wie bisher.
 
 Verifiziert mit Vitest (Store, Interceptor, Guard, Views, Nutzermenü) und dem Playwright-Smoke `auth-login.spec.ts` gegen gemockte Auth-Endpunkte, inklusive axe und 320-px-Prüfung.

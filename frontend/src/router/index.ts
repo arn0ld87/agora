@@ -308,6 +308,13 @@ router.beforeEach(async (to) => {
 
   // JWT-Modus (#1617): ohne Session nur öffentliche Routen.
   if (auth?.jwtEnabled) {
+    // Session ohne Workspace (Passwort-Reset über den Mail-Link): nur Reset
+    // und Login sind erreichbar, auch keine anderen öffentlichen Routen.
+    if (auth.sessionWithoutWorkspace) {
+      if (to.name === 'PasswordReset' || to.name === 'Login') return true
+      if (auth.passwordRecovery) return { name: 'PasswordReset' }
+      return to.meta?.public ? { name: 'Login' } : { name: 'Login', query: { next: to.fullPath } }
+    }
     if (to.meta?.public) {
       if (to.name === 'Login' && auth.isAuthenticated) return safeNext(to.query.next)
       return true
