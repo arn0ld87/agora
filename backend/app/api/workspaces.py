@@ -17,6 +17,7 @@ vom Guard gegen die Mitgliedschaft geprüft), nie aus einem Pfad.
 
 from __future__ import annotations
 
+from functools import wraps
 from uuid import UUID
 
 from flask import Blueprint, current_app, request
@@ -29,6 +30,7 @@ from ..contracts.workspace_contract import (
     DEFAULT_WORKSPACE_ID,
     AuthConfigResponse,
     WorkspaceBootstrapRequest,
+    WorkspaceMemberRemoval,
     WorkspaceMemberUpsert,
     WorkspaceRole,
     WorkspaceSummary,
@@ -52,7 +54,6 @@ auth_public_bp = Blueprint('auth_public', __name__)
 workspaces_bp = Blueprint('workspaces', __name__)
 
 _MANAGERS = frozenset({WorkspaceRole.OWNER, WorkspaceRole.ADMIN})
-_MUTATING = frozenset({'POST', 'PUT', 'DELETE'})
 
 
 def _repository():
@@ -92,27 +93,46 @@ def _json_object() -> dict | None:
     return body if isinstance(body, dict) else None
 
 
-@workspaces_bp.before_request
-def _limit_mutations():
-    """Rate-Limit auf Bootstrap und Mitgliederverwaltung (Plan §37)."""
-    if request.method not in _MUTATING:
-        return None
-    result = workspace_rate_limiter.check(
-        build_rate_limit_key('workspaces'),
-        max_requests=current_app.config.get('AGORA_WORKSPACE_RATE_LIMIT_MAX', Config.AGORA_WORKSPACE_RATE_LIMIT_MAX),
-        window_seconds=current_app.config.get(
-            'AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS', Config.AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS
-        ),
-    )
-    if result.allowed:
-        return None
-    response, status = json_error(
-        ApiErrorCode.RATE_LIMITED,
-        status=429,
-        extra={'retry_after_seconds': result.retry_after_seconds},
-    )
-    response.headers['Retry-After'] = str(result.retry_after_seconds)
-    return response, status
+def _rate_limit_key() -> str:
+    """Nach der Anmeldung: je Nutzer, sonst je Client-Adresse (Betreiber)."""
+    identity = current_identity()
+    principal = current_principal()
+    user_id = identity.user_id if identity is not None else (principal.user_id if principal else None)
+    if user_id is not None:
+        return f'workspaces:user:{user_id}'
+    return build_rate_limit_key('workspaces')
+
+
+def _rate_limited(view):
+    """Rate-Limit auf Bootstrap und Mitgliederverwaltung (Plan §37).
+
+    Als Decorator an der View, nicht als ``before_request``: so läuft es erst
+    nach dem Guard. Anfragen ohne gültige Anmeldung verbrauchen den Topf
+    eines Nutzers nicht.
+    """
+
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        result = workspace_rate_limiter.check(
+            _rate_limit_key(),
+            max_requests=current_app.config.get(
+                'AGORA_WORKSPACE_RATE_LIMIT_MAX', Config.AGORA_WORKSPACE_RATE_LIMIT_MAX
+            ),
+            window_seconds=current_app.config.get(
+                'AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS', Config.AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS
+            ),
+        )
+        if not result.allowed:
+            response, status = json_error(
+                ApiErrorCode.RATE_LIMITED,
+                status=429,
+                extra={'retry_after_seconds': result.retry_after_seconds},
+            )
+            response.headers['Retry-After'] = str(result.retry_after_seconds)
+            return response, status
+        return view(*args, **kwargs)
+
+    return wrapper
 
 
 def _personal_slug(user_id: UUID) -> str:
@@ -157,6 +177,7 @@ def list_workspaces():
 
 @workspaces_bp.route('/bootstrap', methods=['POST'])
 @identity_only
+@_rate_limited
 def bootstrap_workspace():
     identity = current_identity()
     if identity is None:
@@ -231,6 +252,7 @@ def _parse_user_id(raw: str):
 
 
 @workspaces_bp.route('/current/members/<user_id>', methods=['PUT'])
+@_rate_limited
 def upsert_member(user_id: str):
     principal, error = _require_principal()
     if error:
@@ -282,6 +304,7 @@ def upsert_member(user_id: str):
 
 
 @workspaces_bp.route('/current/members/<user_id>', methods=['DELETE'])
+@_rate_limited
 def remove_member(user_id: str):
     principal, error = _require_principal()
     if error:
@@ -310,4 +333,4 @@ def remove_member(user_id: str):
         repo.remove_member(principal.workspace_id, target, keep_owner=True)
     except LastOwnerError:
         return json_error('last owner', status=409, code='last_owner')
-    return json_success({'removed': str(target)})
+    return json_success(WorkspaceMemberRemoval(user_id=target).model_dump(mode='json'))

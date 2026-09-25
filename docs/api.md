@@ -42,9 +42,9 @@ Der aktive Workspace kommt immer aus dem Principal (`X-Agora-Workspace`, vom Gua
 | `POST /api/workspaces/bootstrap` | Supabase-Nutzer | legt beim ersten Aufruf genau einen persönlichen Workspace an (Owner), danach idempotent (`created: false`). Body optional `{"name": "..."}`. Betreiber: `400 not_applicable` |
 | `GET /api/workspaces/current/members` | jedes Mitglied | Mitglieder des aktiven Workspace |
 | `PUT /api/workspaces/current/members/<user_id>` | Owner, Admin | Mitglied anlegen oder Rolle ändern, Body `{"role": "owner"\|"admin"\|"member"\|"viewer"}` |
-| `DELETE /api/workspaces/current/members/<user_id>` | Owner, Admin, jeder für sich selbst | Mitglied entfernen |
+| `DELETE /api/workspaces/current/members/<user_id>` | Owner, Admin, jeder für sich selbst | Mitglied entfernen, Antwort `{"user_id": ...}` (`WorkspaceMemberRemoval`) |
 
-Regeln: Owner-Rollen vergibt und entzieht nur ein Owner (`403 owner_required`); der letzte Owner bleibt (`409 last_owner`); Member und Viewer verwalten niemanden (`403 role_required`). Ein neues Mitglied muss in `auth.users` existieren (`404 not_found`), ist `auth.users` nicht lesbar: `503 user_directory_unavailable`. Ohne `DATABASE_URL` antworten Bootstrap und Mitgliederpfade mit `503 workspaces_unavailable`. Ein Body, der kein JSON-Objekt ist, ergibt `400`. `POST`, `PUT` und `DELETE` sind rate-limitiert (`AGORA_WORKSPACE_RATE_LIMIT_*`, `429` mit `Retry-After`).
+Regeln: Owner-Rollen vergibt und entzieht nur ein Owner (`403 owner_required`); der letzte Owner bleibt (`409 last_owner`); Member und Viewer verwalten niemanden (`403 role_required`). Ein neues Mitglied muss in `auth.users` existieren (`404 not_found`), ist `auth.users` nicht lesbar: `503 user_directory_unavailable`. Ohne `DATABASE_URL` antworten Bootstrap und Mitgliederpfade mit `503 workspaces_unavailable`. Ein Body, der kein JSON-Objekt ist, ergibt `400`. `POST`, `PUT` und `DELETE` sind rate-limitiert (`AGORA_WORKSPACE_RATE_LIMIT_*`, `429` mit `Retry-After`), erst nach dem Guard und je Nutzer; Anfragen ohne gültige Anmeldung zählen nicht.
 
 ### Onboarding & Profil
 

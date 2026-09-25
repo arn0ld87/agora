@@ -368,3 +368,27 @@ def test_mutations_are_rate_limited(client, team):
     assert statuses == [200, 200, 429]
     # Lesen bleibt unbegrenzt.
     assert client.get('/api/workspaces', headers=_headers(ALICE)).status_code == 200
+
+
+def test_unauthenticated_mutations_do_not_spend_a_users_budget(client, team):
+    """Das Limit greift erst nach dem Guard und zählt je Nutzer."""
+    client.application.config['AGORA_WORKSPACE_RATE_LIMIT_MAX'] = 2
+    workspace_rate_limiter.reset_for_tests()
+
+    for _ in range(5):
+        assert client.post('/api/workspaces/bootstrap', json={}).status_code == 401
+        assert client.post(
+            '/api/workspaces/bootstrap', headers={'Authorization': 'Bearer kaputt'}, json={}
+        ).status_code == 401
+
+    assert _put(client, ALICE, team, CAROL, 'member').status_code == 200
+    assert _put(client, ALICE, team, CAROL, 'member').status_code == 200
+    assert _put(client, ALICE, team, CAROL, 'member').status_code == 429
+    # Ein anderer Nutzer hat seinen eigenen Topf.
+    assert _put(client, BOB, team, CAROL, 'viewer').status_code == 200
+
+
+def test_member_removal_answers_with_the_contract(client, team):
+    response = _delete(client, ALICE, team, CAROL)
+
+    assert response.get_json()['data'] == {'user_id': str(CAROL)}

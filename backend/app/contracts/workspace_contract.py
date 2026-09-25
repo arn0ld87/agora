@@ -82,6 +82,14 @@ class WorkspaceMemberUpsert(BaseModel):
     role: WorkspaceRole
 
 
+class WorkspaceMemberRemoval(BaseModel):
+    """``DELETE /api/workspaces/current/members/<user_id>``: wer entfernt wurde."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    user_id: UUID
+
+
 class AuthConfigResponse(BaseModel):
     """``GET /api/auth/config`` — öffentlich, ohne Geheimnisse (#1616).
 
@@ -102,6 +110,7 @@ __all__ = [
     'AuthConfigResponse',
     'Workspace',
     'WorkspaceBootstrapRequest',
+    'WorkspaceMemberRemoval',
     'WorkspaceMemberUpsert',
     'WorkspaceMembership',
     'WorkspaceRole',
