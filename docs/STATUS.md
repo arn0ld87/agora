@@ -559,3 +559,4 @@ Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines 
 - Repository-Hygiene: Ein unreferenzierter Playwright-MCP-Snapshot vom Mai 2026 ist entfernt; neue lokale Backups und Datenbank-Dumps werden ignoriert. Die bewusst versionierten Datenbanken des Referenzlaufs bleiben erhalten. Beispielkonfiguration und DNS-Overlay verwenden Platzhalter beziehungsweise eine gekennzeichnete Dokumentationsadresse statt privater Hostadressen.
 - historische Pläne/Audits: nicht als Current-State-Quelle verwenden
 - Historische Arbeits-Prompts vom Mai 2026 ohne Code- oder Workflow-Referenz sind entfernt. Der Voice-Register-Katalog unter `prompts/` bleibt, weil `backend/scripts/check_voice.py` ihn prüft.
+- ADR-0010 verlinkt die inzwischen entfernten Vue-Routen und Tests auf den verifizierten Stand der ADR-Erstellung; der aktuelle Router bleibt die Tatsachenquelle.
