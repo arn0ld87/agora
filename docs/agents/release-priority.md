@@ -27,7 +27,8 @@ Priorität vor neuen Features:
 
 ## Nicht vor 1.0 priorisieren
 
-- SaaS/gehosteter Betrieb (Multi-User mit Workspaces ist seit ADR-0018 Teil von 1.0, Epic #1610)
+- Multi-User mit Workspaces, Supabase Auth, RLS und Realtime (ADR-0019, Epic #1610; gemergter Code bleibt inaktiv)
+- SaaS/gehosteter Betrieb
 - Kubernetes/Helm
 - Federation
 - allgemeines Plugin-System

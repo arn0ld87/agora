@@ -1,6 +1,6 @@
 # ADR-0018: Multi-User vor 1.0 — Workspaces, Supabase Auth, RLS, Realtime
 
-- Status: Accepted (Owner-Entscheidung 2026-09-25, Sign-off über den Merge dieses ADR)
+- Status: Zeitpunkt abgelöst durch [ADR-0019](0019-multi-user-after-1-0.md) (2026-09-25): Multi-User erst nach 1.0. Die technischen Entscheidungen bleiben das Zielbild.
 - Datum: 2026-09-25
 - Löst ab: [ADR-0001](0001-auth-model.md) (Auth-Zielbild Single-User für v1.0),
   ROADMAP-Regel 4 („Kein Multi-User-/SaaS-/Kubernetes-Ausbau vor einem

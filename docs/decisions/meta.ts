@@ -22,6 +22,7 @@ export default {
   "psycopg-under-gevent-worker",
   "single-web-worker-hardstop",
   "multi-user-before-1-0",
+  "multi-user-after-1-0",
   "README"
 ],
 };
