@@ -30,7 +30,7 @@ haben noch keinen Adapter (siehe Tabelle).
 | PR 4 | Postgres-Adapter LLM-Profile, Datenmigration | gemergt (#1517), Fernet-Store pro Profil (#1516) |
 | PR 6 | Projekt-Vertrag, Port, Postgres-Adapter, Datenmigration | gemergt (#1519, #1522) |
 | PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter und Datenmigration gemergt (#1598, Issue #1585) |
-| PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter und Datenmigration: PR offen (Issue #1587) |
+| PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter und Datenmigration gemergt (#1605, Issue #1587) |
 | PR 9 | Report-Metadaten | Port gemergt (#1601, Issue #1580), Adapter: #1588 |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
 | PR 15 | Cutover Metadaten-Backend | Prüfskript #1590, Cutover armserver #1592 |
