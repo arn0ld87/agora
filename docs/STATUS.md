@@ -375,7 +375,11 @@ laufen NICHT über den Port — sie werden weiterhin direkt über
 keine Aufrufstelle außerhalb von `ReportManager` wurde angefasst. Der Port
 liefert neben `list()` auch `list_ids()` mit den Ablageschlüsseln: Altbestände
 mit abweichendem Ordnernamen finden ihre Artefakte weiter über den Ordner, nicht
-über die `report_id` im Manifest. Der PostgreSQL-Adapter folgt in #1588.
+über die `report_id` im Manifest. Seit Teil 1 von #1588 lesen auch
+`branching_service.create_branch` (Report-Kopie in einen Zweig) und
+`simulation_history._get_report_id_for_simulation` die Metadaten über den Port
+statt `meta.json` direkt zu öffnen; der Zweig kopiert den Report-Ordner unter
+dem Ablageschlüssel. Der PostgreSQL-Adapter folgt mit Teil 2 von #1588.
 
 ### Readiness: `/readyz` kennt den PostgreSQL-Zustand
 
