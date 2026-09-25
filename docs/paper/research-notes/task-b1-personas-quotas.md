@@ -3,6 +3,7 @@
 Untersuchungs-Slice: Persona-Generierung und -Identität (nicht die gesamte Simulation).
 Repo-HEAD: `7e42ae34` (Branch `feat/1152-document-chunk-provenance`).
 Datum: 2026-08-09.
+Code-Links sind auf den untersuchten Commit gepinnt, damit die Zeilenanker stabil bleiben.
 
 ## Sources
 
@@ -10,29 +11,29 @@ Source-Type: official (Agora-Backend-Code und -Tests am genannten HEAD).
 
 | # | Referenz | Inhalt |
 |---|---|---|
-| S1 | [oasis_profile_generator.py:361-403](backend/app/services/oasis_profile_generator.py) | `OasisProfileGenerator.__init__` — Provider-Binding, Destatis-Quota-Default |
-| S2 | [oasis_profile_generator.py:405-488](backend/app/services/oasis_profile_generator.py) | `generate_profile_from_entity` — Persona-Bau aus Entity, user_id von außen |
-| S3 | [oasis_profile_generator.py:490-498](backend/app/services/oasis_profile_generator.py) | `_generate_username` — handle + random 3-stelliger Suffix |
-| S4 | [oasis_profile_generator.py:52-76](backend/app/services/oasis_profile_generator.py) | `PersonaProfileSchema` — striktes Pydantic-Schema für LLM-JSON |
-| S5 | [oasis_profile_generator.py:668-783](backend/app/services/oasis_profile_generator.py) | `_generate_profile_with_llm` — chat_json, Temperature, Retries |
-| S6 | [oasis_profile_generator.py:119-165](backend/app/services/oasis_profile_generator.py) | `OasisAgentProfile`-Dataclass — Felder inkl. `source_entity_uuid`, `segment`, `generation_source` |
-| S7 | [persona_quota_defaults.py:1-111](backend/app/services/persona_quota_defaults.py) | `default_dach_industry_quota` — Destatis WZ 2008 Branchen-Quota, IT-Cap ≤12 % |
-| S8 | [persona_quota_defaults.py:114-181](backend/app/services/persona_quota_defaults.py) | `build_industry_quota_prompt_block` (DE/EN) — Prompt-Injektion der Soll-Verteilung |
-| S9 | [persona_demographics.py:1-80](backend/app/services/persona_demographics.py) | `DACH_NAME_ORIGIN_QUOTAS` — Destatis Mikrozensus 2024, BFS, Statistik Austria |
-| S10 | [simulation_config_generator.py:1072-1085](backend/app/services/simulation_config_generator.py) | `_validate_persona_quota` — Simulation-Floor ≥30 Personas |
-| S11 | [simulation_config_generator.py:1087-1099](backend/app/services/simulation_config_generator.py) | `_ensure_skeptic_quota` — ≥20 % `stance="opposing"` |
-| S12 | [prepare_service.py:506-634](backend/app/services/prepare_service.py) | `_apply_persona_floor_to_quota_plan` + `_validate_persona_quota` |
-| S13 | [evidence_migrations.py:491-554](backend/app/services/evidence_migrations.py) | `_map_profile_to_persona` — `persona_id = f"persona_{user_id}"`, Segment-Aggregation |
-| S14 | [report_agent/agent.py:372-413](backend/app/services/report_agent/agent.py) | `stakeholder_group`-Zuweisung bei Interview-Evidence |
-| S15 | [report_contract.py:170-238](backend/app/contracts/report_contract.py) | `persona_stakeholder_group`-Pflichtfeld für `agent_quote` |
-| S16 | [confidence_calculator.py:336-355](backend/app/services/confidence_calculator.py) | Cross-Stakeholder-Count aus `persona_stakeholder_group` |
-| S17 | [report_prompts/sections.py:116-208](backend/app/services/report_prompts/sections.py) | `<simulated_quote persona_id="..." seed_anchor="...">`-Format |
-| S18 | [test_persona_name_distribution.py:62-106](backend/tests/eval/test_persona_name_distribution.py) | DACH-Namens-Quoten- und Migrationsanteil-Tests |
-| S19 | [test_persona_target.py:1-113](backend/tests/test_persona_target.py) | `compute_persona_target` — Nenner-Logik (Issue #1034) |
-| S20 | [test_persona_industry_distribution.py:57-60](backend/tests/services/test_persona_industry_distribution.py) | `default_dach_industry_quota`-Pydantic-Validität |
-| S21 | [test_report_agent_quote_anchors.py:101-186](backend/tests/services/test_report_agent_quote_anchors.py) | `persona_id`-Validierung in Quotes (fehlend/unbekannt) |
-| S22 | [test_persona_entity_context_api.py:1-60](backend/tests/api/test_persona_entity_context_api.py) | Entity-Context-API, `source_entity_uuid`-Pfad vs. Legacy-Fallback |
-| S23 | [persona_quality_service.py:1-90](backend/app/services/persona_quality_service.py) | Detektoren: `missing_entity_link`, `role_diversity`, `mbti_diversity` |
+| S1 | [oasis_profile_generator.py:361-403](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/oasis_profile_generator.py#L361-L403) | `OasisProfileGenerator.__init__` — Provider-Binding, Destatis-Quota-Default |
+| S2 | [oasis_profile_generator.py:405-488](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/oasis_profile_generator.py#L405-L488) | `generate_profile_from_entity` — Persona-Bau aus Entity, user_id von außen |
+| S3 | [oasis_profile_generator.py:490-498](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/oasis_profile_generator.py#L490-L498) | `_generate_username` — handle + random 3-stelliger Suffix |
+| S4 | [oasis_profile_generator.py:52-76](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/oasis_profile_generator.py#L52-L76) | `PersonaProfileSchema` — striktes Pydantic-Schema für LLM-JSON |
+| S5 | [oasis_profile_generator.py:668-783](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/oasis_profile_generator.py#L668-L783) | `_generate_profile_with_llm` — chat_json, Temperature, Retries |
+| S6 | [oasis_profile_generator.py:119-165](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/oasis_profile_generator.py#L119-L165) | `OasisAgentProfile`-Dataclass — Felder inkl. `source_entity_uuid`, `segment`, `generation_source` |
+| S7 | [persona_quota_defaults.py:1-111](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/persona_quota_defaults.py#L1-L111) | `default_dach_industry_quota` — Destatis WZ 2008 Branchen-Quota, IT-Cap ≤12 % |
+| S8 | [persona_quota_defaults.py:114-181](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/persona_quota_defaults.py#L114-L181) | `build_industry_quota_prompt_block` (DE/EN) — Prompt-Injektion der Soll-Verteilung |
+| S9 | [persona_demographics.py:1-80](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/persona_demographics.py#L1-L80) | `DACH_NAME_ORIGIN_QUOTAS` — Destatis Mikrozensus 2024, BFS, Statistik Austria |
+| S10 | [simulation_config_generator.py:1072-1085](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/simulation_config_generator.py#L1072-L1085) | `_validate_persona_quota` — Simulation-Floor ≥30 Personas |
+| S11 | [simulation_config_generator.py:1087-1099](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/simulation_config_generator.py#L1087-L1099) | `_ensure_skeptic_quota` — ≥20 % `stance="opposing"` |
+| S12 | [prepare_service.py:506-634](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/prepare_service.py#L506-L634) | `_apply_persona_floor_to_quota_plan` + `_validate_persona_quota` |
+| S13 | [evidence_migrations.py:491-554](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/evidence_migrations.py#L491-L554) | `_map_profile_to_persona` — `persona_id = f"persona_{user_id}"`, Segment-Aggregation |
+| S14 | [report_agent/agent.py:372-413](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/report_agent/agent.py#L372-L413) | `stakeholder_group`-Zuweisung bei Interview-Evidence |
+| S15 | [report_contract.py:170-238](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/contracts/report_contract.py#L170-L238) | `persona_stakeholder_group`-Pflichtfeld für `agent_quote` |
+| S16 | [confidence_calculator.py:336-355](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/confidence_calculator.py#L336-L355) | Cross-Stakeholder-Count aus `persona_stakeholder_group` |
+| S17 | [report_prompts/sections.py:116-208](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/report_prompts/sections.py#L116-L208) | `<simulated_quote persona_id="..." seed_anchor="...">`-Format |
+| S18 | [test_persona_name_distribution.py:62-106](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/tests/eval/test_persona_name_distribution.py#L62-L106) | DACH-Namens-Quoten- und Migrationsanteil-Tests |
+| S19 | [test_persona_target.py:1-113](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/tests/test_persona_target.py#L1-L113) | `compute_persona_target` — Nenner-Logik (Issue #1034) |
+| S20 | [test_persona_industry_distribution.py:57-60](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/tests/services/test_persona_industry_distribution.py#L57-L60) | `default_dach_industry_quota`-Pydantic-Validität |
+| S21 | [test_report_agent_quote_anchors.py:101-186](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/tests/services/test_report_agent_quote_anchors.py#L101-L186) | `persona_id`-Validierung in Quotes (fehlend/unbekannt) |
+| S22 | [test_persona_entity_context_api.py:1-60](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/tests/api/test_persona_entity_context_api.py#L1-L60) | Entity-Context-API, `source_entity_uuid`-Pfad vs. Legacy-Fallback |
+| S23 | [persona_quality_service.py:1-90](https://github.com/arn0ld87/agora/blob/7e42ae34ff2e6649570384e844f91cb05bccdbe7/backend/app/services/persona_quality_service.py#L1-L90) | Detektoren: `missing_entity_link`, `role_diversity`, `mbti_diversity` |
 
 ## Findings
 
