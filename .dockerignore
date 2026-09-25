@@ -45,7 +45,6 @@ error.log
 # graphify-out/ 35 MB, backend/instance/ 8 MB.
 snapshots
 graphify-out
-agora-logo-animation
 .ctx-mode
 .token-optimizer
 
