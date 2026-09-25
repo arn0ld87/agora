@@ -7,7 +7,8 @@ Diese Doku ist die einseitige Antwort: **Wir migrieren nicht**. Hier die Gründe
 damit die Entscheidung später nicht ohne Kontext aus dem Boden gezogen wird.
 Versionsangaben und Komponentenpfade beschreiben den Stand vom 15.05.2026;
 der [UI-Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md)
-zeigt den späteren Stand.
+zeigt die spätere Ausgangslage vor dem Redesign. Für den aktuellen Stand
+gilt [`docs/STATUS.md`](../STATUS.md).
 
 ## TL;DR
 
@@ -162,4 +163,4 @@ abgreifen, dann in `v4/`-Style nachbauen.
 - [`component-audit.md`](./component-audit.md) — Komponentenliste + Empfehlungen
 - [`ui-rules.md`](./ui-rules.md) — Implementierungsregeln
 - Top-Level [`CLAUDE.md`](../../CLAUDE.md) — Branch-/PR-/Verbots-Regeln
-- UI-Audit: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)
+- Redesign-Ausgangslage: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)

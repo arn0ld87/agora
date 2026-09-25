@@ -2,8 +2,9 @@
 
 Diese Regeln gehen auf die v4-Codebasis vom 15.05.2026 (Commit `de933b9`)
 zurück. Die Verzeichnisliste und die Prüfkommandos wurden mit dem Stand vom
-25.09.2026 abgeglichen. Für visuelle Änderungen gilt zusätzlich der
-[UI-Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md).
+25.09.2026 abgeglichen. Der [UI-Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md)
+dokumentiert die Ausgangslage vor dem abgeschlossenen Redesign; der aktuelle
+Frontend-Stand steht in [`docs/STATUS.md`](../STATUS.md).
 
 ## Verzeichnis-Regeln
 
@@ -168,4 +169,4 @@ bun run build
 - Design-Language: [`design-language-v4.md`](./design-language-v4.md)
 - Component-Audit: [`component-audit.md`](./component-audit.md)
 - shadcn-vue-Entscheidung: [`shadcn-vue-evaluation.md`](./shadcn-vue-evaluation.md)
-- UI-Audit: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)
+- Redesign-Ausgangslage: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)

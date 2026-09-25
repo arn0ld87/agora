@@ -1,8 +1,10 @@
 # Agora Design Language v4 — Snapshot vom 15.05.2026
 
 Diese Doku hält die **damals im Code vorhandene** Design Language v4 fest.
-Quelle: `frontend/src/` auf `origin/main` @ `de933b9`. Für den
-aktuellen UI-Stand siehe den [visuellen Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md).
+Quelle: `frontend/src/` auf `origin/main` @ `de933b9`. Der
+[visuelle Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md)
+hält die Ausgangslage vor dem abgeschlossenen Redesign fest. Der aktuelle
+Frontend-Stand steht in [`docs/STATUS.md`](../STATUS.md).
 
 ## Ziel
 
@@ -152,7 +154,7 @@ Pro Komponente: `<style scoped>` mit `var(--token-name, fallback)`.
 
 ## Referenzen
 
-- Aktueller UI-Audit: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)
+- Redesign-Ausgangslage: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)
 - Source-of-Truth-Designs: [`design/v3-source/`](../../design/v3-source/)
 - Showcase live: `bun run dev` → `http://localhost:5173/design/v3/`
 - Component-Audit: [`component-audit.md`](./component-audit.md)
