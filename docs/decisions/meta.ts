@@ -21,6 +21,7 @@ export default {
   "seed-corpus-document-anchor",
   "psycopg-under-gevent-worker",
   "single-web-worker-hardstop",
+  "multi-user-before-1-0",
   "README"
 ],
 };
