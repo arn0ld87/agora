@@ -22,8 +22,11 @@ jobs:
           ref: docs/hollerau-showcase-run
           fetch-depth: 0
 
-      - name: Install media helper
-        run: python -m pip install --disable-pip-version-check pillow
+      - name: Install media helpers
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
 
       - name: Fetch processed showcase transport assets
         run: |
