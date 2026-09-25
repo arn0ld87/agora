@@ -339,6 +339,7 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
         chunk_ids=None,
         run_id=None,
         checkpoint_callback=None,
+        chunk_contexts=None,
     ):
         # Simulate two chunks completing. ``degradations`` und
         # ``extraction_tally`` wurden mit PR #1030 (Issue #1029), ``document_ids``

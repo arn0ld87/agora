@@ -15,6 +15,7 @@ from ..tool_validation import (
 )
 
 
+from .scenario_marking import annotate_scenario_facts
 from .tool_circuit_breaker import breaker_for
 
 
@@ -117,6 +118,11 @@ def execute_tool_call(agent: Any, tool_name: str, parameters: Dict[str, Any], re
         record_evidence=agent._record_tool_evidence,
         section_index=agent._current_section_index or 0,
         on_terminal_failure=breaker.trip,
+        # Issue #1240: Szenario-Text sichtbar machen, bevor das Modell ihn
+        # als Befund in den Fließtext übernimmt.
+        annotate_rendered=lambda result, rendered: annotate_scenario_facts(
+            result, rendered, getattr(agent, "document_roles", None)
+        ),
     )
 
 

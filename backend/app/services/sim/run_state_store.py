@@ -21,8 +21,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, get_args
 
+from pydantic import ValidationError
+
+from ...contracts.role_leakage_contract import ConflictReason, RoleConflictTally
 from ...utils.logger import get_logger
 from ...utils.path_safety import safe_join_within_root, validate_path_id
 
@@ -59,9 +62,12 @@ class AgentAction:
     action_args: Dict[str, Any] = field(default_factory=dict)
     result: Optional[str] = None
     success: bool = True
+    # Slice 5.2: Markierung bei Rollenwechsel-Verdacht — None = kein Konflikt
+    # oder Prüfung deaktiviert.
+    role_conflict: Optional[ConflictReason] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "round_num": self.round_num,
             "timestamp": self.timestamp,
             "platform": self.platform,
@@ -72,6 +78,9 @@ class AgentAction:
             "result": self.result,
             "success": self.success,
         }
+        if self.role_conflict is not None:
+            d["role_conflict"] = self.role_conflict
+        return d
 
 
 @dataclass
@@ -148,6 +157,11 @@ class SimulationRunState:
     # Process ID (for stopping)
     process_pid: Optional[int] = None
 
+    # Slice 5.2: Zählung markierter Rollenwechsel-Konflikte
+    # Rückwärtskompatibel: alte run_state.json ohne dieses Feld lädt mit Default 0.
+    role_conflict_count: int = 0
+    role_conflicts_by_reason: Dict[ConflictReason, int] = field(default_factory=dict)
+
     def add_action(self, action: AgentAction) -> None:
         """Add action to recent actions list"""
         self.recent_actions.insert(0, action)
@@ -187,6 +201,10 @@ class SimulationRunState:
             "completed_at": self.completed_at,
             "error": self.error,
             "process_pid": self.process_pid,
+            **RoleConflictTally(
+                role_conflict_count=self.role_conflict_count,
+                role_conflicts_by_reason=self.role_conflicts_by_reason,
+            ).model_dump(mode="json"),
         }
 
     def to_detail_dict(self) -> Dict[str, Any]:
@@ -200,6 +218,26 @@ class SimulationRunState:
 # ---------------------------------------------------------------------------
 # Module-level I/O functions
 # ---------------------------------------------------------------------------
+
+
+_CONFLICT_REASONS = frozenset(get_args(ConflictReason))
+
+
+def _parse_conflict_reason(value: Any) -> Optional[ConflictReason]:
+    """Unbekannte Markierungen verwerfen statt den ganzen Zustand zu verlieren."""
+    return value if value in _CONFLICT_REASONS else None
+
+
+def _load_role_conflict_tally(data: Dict[str, Any]) -> RoleConflictTally:
+    """Liest die Konfliktzählung über den Contract; Altbestand → Nullwerte."""
+    try:
+        return RoleConflictTally(
+            role_conflict_count=data.get("role_conflict_count", 0),
+            role_conflicts_by_reason=data.get("role_conflicts_by_reason") or {},
+        )
+    except ValidationError as exc:
+        logger.warning("run_state: ungültige Rollenkonflikt-Zählung verworfen: %s", exc)
+        return RoleConflictTally()
 
 
 def load_run_state(
@@ -225,6 +263,7 @@ def load_run_state(
         if not data:
             return None
 
+        tally = _load_role_conflict_tally(data)
         state = SimulationRunState(
             simulation_id=run_id,
             runner_status=RunnerStatus(data.get("runner_status", "idle")),
@@ -248,6 +287,8 @@ def load_run_state(
             completed_at=data.get("completed_at"),
             error=data.get("error"),
             process_pid=data.get("process_pid"),
+            role_conflict_count=tally.role_conflict_count,
+            role_conflicts_by_reason=tally.role_conflicts_by_reason,
         )
 
         # Load recent actions
@@ -263,6 +304,7 @@ def load_run_state(
                     action_args=a.get("action_args", {}),
                     result=a.get("result"),
                     success=a.get("success", True),
+                    role_conflict=_parse_conflict_reason(a.get("role_conflict")),
                 )
             )
 

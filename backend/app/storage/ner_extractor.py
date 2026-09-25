@@ -29,6 +29,30 @@ logger = logging.getLogger('agora.ner_extractor')
 
 _PYDANTIC_TOLERANT = ConfigDict(extra="ignore", str_strip_whitespace=True)
 
+# ---------------------------------------------------------------------------
+# Pronomen- und Rückverweis-Blockliste (Issue #1470, Slice 4.4).
+#
+# Entitäten, deren Name ein reines Pronomen oder Rückverweis ist, liefern
+# keinen informativen Graphknoten und verschlechtern die Alias-Auflösung.
+# Die Liste enthält nur Einzel-Token (keine Phrasen) und ist bewusst klein
+# gehalten — Erweiterung hier, nicht an anderen Stellen duplizieren.
+# ---------------------------------------------------------------------------
+_PRONOUN_BLOCKLIST: frozenset[str] = frozenset(
+    {
+        # Deutsch — Personalpronomen
+        "er", "sie", "es", "ihr", "ihm", "ihn", "wir", "uns", "man",
+        # Deutsch — Demonstrativpronomen / Rückverweise
+        "dieser", "diese", "dieses", "diesem", "diesen",
+        "derselbe", "dieselbe", "dasselbe",
+        "jener", "jene", "jenes",
+        # Deutsch — Reflexivpronomen (oft als Subjekt falsch extrahiert)
+        "sich",
+        # Englisch
+        "he", "she", "they", "it", "we", "us", "him", "her", "them",
+        "this", "that", "these", "those",
+    }
+)
+
 
 class NerEntity(BaseModel):
     """Eine extrahierte Entität. Tolerant gegen unsaubere LLM-Outputs
@@ -62,13 +86,14 @@ class NerExtractionResult(BaseModel):
     entities: List[NerEntity] = Field(default_factory=list)
     relations: List[NerRelation] = Field(default_factory=list)
 
-# System prompt template for NER/RE extraction
+# System prompt template for NER/RE extraction.
+# {context_block} wird durch _build_context_block() befüllt oder bleibt leer.
 _SYSTEM_PROMPT = """You are a Named Entity Recognition and Relation Extraction system.
 Given a text and an ontology (entity types + relation types), extract all entities and relations.
 
 ONTOLOGY:
 {ontology_description}
-
+{context_block}
 RULES:
 1. Use the ontology types as preferred labels. If a relation clearly exists in the text but
    no matching ontology type fits, use the most descriptive UPPER_SNAKE_CASE label you can
@@ -81,6 +106,11 @@ RULES:
 5. If no entities or relations are found, return empty lists.
 6. Extract every relation that is explicitly stated or strongly implied. When in doubt, include
    the relation — it is better to include a borderline relation than to omit one.
+7. Pronouns and back-references ("er", "sie", "die Behörde", "der Träger", "he", "she", "they"
+   and similar) must be resolved to the entity named in the context or chunk — NEVER extract
+   them as standalone entities.
+8. Extract entities ONLY from the current chunk, not from the context block.
+9. Table rows and list items often contain named entities — extract them too.
 
 EXAMPLES of well-formed relation output:
   Text: "Müller GmbH übernahm Schmidt KG am 1. Januar 2024 für 5 Mio EUR."
@@ -108,9 +138,23 @@ Return ONLY valid JSON in this exact format:
   ]
 }}"""
 
+_CONTEXT_BLOCK_TEMPLATE = """
+[Kontext — nur zum Verständnis, daraus nichts extrahieren]
+{context}
+[Ende Kontext]
+"""
+
 _USER_PROMPT = """Extract entities and relations from the following text:
 
 {text}"""
+
+
+def _build_context_block(context: str) -> str:
+    """Gibt den Kontext-Block für den System-Prompt zurück, oder '' wenn leer."""
+    stripped = context.strip()
+    if not stripped:
+        return ""
+    return _CONTEXT_BLOCK_TEMPLATE.format(context=stripped)
 
 
 class NERExtractor:
@@ -120,13 +164,22 @@ class NERExtractor:
         self.llm = llm_client or LLMClient()
         self.max_retries = max_retries
 
-    def extract(self, text: str, ontology: Dict[str, Any]) -> Dict[str, Any]:
+    def extract(
+        self,
+        text: str,
+        ontology: Dict[str, Any],
+        context: str = "",
+    ) -> Dict[str, Any]:
         """
         Extract entities and relations from text, guided by ontology.
 
         Args:
             text: Input text chunk
             ontology: Dict with 'entity_types' and 'relation_types' from graph
+            context: Optional read-only context for the NER (Issue #1470).
+                Contains the last heading and tail of the previous chunk.
+                Used only to help resolve pronouns and back-references;
+                entities are extracted from *text* only.
 
         Returns:
             Dict with 'entities' and 'relations' lists:
@@ -139,7 +192,11 @@ class NERExtractor:
             return {"entities": [], "relations": []}
 
         ontology_desc = self._format_ontology(ontology)
-        system_msg = _SYSTEM_PROMPT.format(ontology_description=ontology_desc)
+        context_block = _build_context_block(context)
+        system_msg = _SYSTEM_PROMPT.format(
+            ontology_description=ontology_desc,
+            context_block=context_block,
+        )
         user_msg = _USER_PROMPT.format(text=text.strip())
 
         messages = [
@@ -161,7 +218,7 @@ class NERExtractor:
                     max_tokens=8192,
                     schema=NerExtractionResult,
                 )
-                return self._validate_and_clean(result, ontology)
+                return self._validate_and_clean(result, ontology, source_text=text)
 
             except ValueError as e:
                 last_error = e
@@ -225,7 +282,7 @@ class NERExtractor:
         return "\n".join(parts)
 
     def _validate_and_clean(
-        self, result: Dict[str, Any], ontology: Dict[str, Any]
+        self, result: Dict[str, Any], ontology: Dict[str, Any], source_text: str = ""
     ) -> Dict[str, Any]:
         """Validate and normalize LLM output."""
         entities = result.get("entities", [])
@@ -246,73 +303,89 @@ class NERExtractor:
             else:
                 valid_relation_types.add(str(rt).strip())
 
-        # Clean entities
-        cleaned_entities = []
-        seen_names = set()
-        for entity in entities:
-            if not isinstance(entity, dict):
-                continue
-            name = str(entity.get("name", "")).strip()
-            etype = str(entity.get("type", "Entity")).strip()
-            if not name:
-                continue
+        cleaned_entities = _clean_entities(entities, valid_entity_types)
+        cleaned_relations = _clean_relations(relations, cleaned_entities)
 
-            # Deduplicate by normalized name
-            name_lower = name.lower()
-            if name_lower in seen_names:
-                continue
-            seen_names.add(name_lower)
-
-            # If ontology has types, warn but keep entities with unknown types
-            if valid_entity_types and etype not in valid_entity_types:
-                logger.debug(f"Entity '{name}' has type '{etype}' not in ontology, keeping anyway")
-
-            cleaned_entities.append({
-                "name": name,
-                "type": etype,
-                "attributes": entity.get("attributes", {}),
-            })
-
-        # Clean relations
-        cleaned_relations = []
-        entity_names_lower = {e["name"].lower() for e in cleaned_entities}
-        for relation in relations:
-            if not isinstance(relation, dict):
-                continue
-            source = str(relation.get("source", "")).strip()
-            target = str(relation.get("target", "")).strip()
-            rtype = str(relation.get("type", "RELATED_TO")).strip()
-            fact = str(relation.get("fact", "")).strip()
-
-            if not source or not target:
-                continue
-
-            # Ensure source and target entities exist
-            # (they might not if LLM hallucinated a relation without the entity)
-            if source.lower() not in entity_names_lower:
-                cleaned_entities.append({
-                    "name": source,
-                    "type": "Entity",
-                    "attributes": {},
-                })
-                entity_names_lower.add(source.lower())
-
-            if target.lower() not in entity_names_lower:
-                cleaned_entities.append({
-                    "name": target,
-                    "type": "Entity",
-                    "attributes": {},
-                })
-                entity_names_lower.add(target.lower())
-
-            cleaned_relations.append({
-                "source": source,
-                "target": target,
-                "type": rtype,
-                "fact": fact or f"{source} {rtype} {target}",
-            })
+        # 0-Entitäten-Warnung bei substantiellem Chunk (Issue #1470, #1292)
+        if not cleaned_entities and len(source_text) > 200:
+            logger.warning(
+                "NER: Kein Entity extrahiert aus substantiellem Chunk "
+                "(chunk_len=%d, relations=%d) — möglicher Extraktionsfehler",
+                len(source_text),
+                len(cleaned_relations),
+            )
 
         return {
             "entities": cleaned_entities,
             "relations": cleaned_relations,
         }
+
+
+def _is_pronoun(name: str) -> bool:
+    """Reines Pronomen oder Rückverweis — kein Graphknoten (Issue #1470)."""
+    return name.strip().lower() in _PRONOUN_BLOCKLIST
+
+
+def _clean_entities(entities: List[Any], valid_entity_types: set) -> List[Dict[str, Any]]:
+    """Entitäten normalisieren, Pronomen verwerfen, nach Namen deduplizieren."""
+    cleaned: List[Dict[str, Any]] = []
+    seen_names: set = set()
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        name = str(entity.get("name", "")).strip()
+        etype = str(entity.get("type", "Entity")).strip()
+        if not name:
+            continue
+        # Pronomen und Rückverweise verwerfen (Issue #1470)
+        if _is_pronoun(name):
+            logger.debug("NER: Pronomen/Rückverweis verworfen name=%r type=%r", name, etype)
+            continue
+        name_lower = name.lower()
+        if name_lower in seen_names:
+            continue
+        seen_names.add(name_lower)
+        # If ontology has types, warn but keep entities with unknown types
+        if valid_entity_types and etype not in valid_entity_types:
+            logger.debug(f"Entity '{name}' has type '{etype}' not in ontology, keeping anyway")
+        cleaned.append({
+            "name": name,
+            "type": etype,
+            "attributes": entity.get("attributes", {}),
+        })
+    return cleaned
+
+
+def _clean_relations(
+    relations: List[Any], cleaned_entities: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Relationen normalisieren; fehlende Endpunkte als ``Entity`` nachtragen.
+
+    Relationen mit einem Pronomen als Endpunkt fallen weg — sonst legte das
+    Nachtragen fehlender Endpunkte genau die Entität wieder an, die
+    ``_clean_entities`` verworfen hat (Issue #1470).
+    """
+    cleaned: List[Dict[str, Any]] = []
+    entity_names_lower = {e["name"].lower() for e in cleaned_entities}
+    for relation in relations:
+        if not isinstance(relation, dict):
+            continue
+        source = str(relation.get("source", "")).strip()
+        target = str(relation.get("target", "")).strip()
+        rtype = str(relation.get("type", "RELATED_TO")).strip()
+        fact = str(relation.get("fact", "")).strip()
+        if not source or not target or _is_pronoun(source) or _is_pronoun(target):
+            continue
+        # Ensure source and target entities exist
+        # (they might not if LLM hallucinated a relation without the entity)
+        for endpoint in (source, target):
+            if endpoint.lower() not in entity_names_lower:
+                cleaned_entities.append({"name": endpoint, "type": "Entity", "attributes": {}})
+                entity_names_lower.add(endpoint.lower())
+        cleaned.append({
+            "source": source,
+            "target": target,
+            "type": rtype,
+            "fact": fact or f"{source} {rtype} {target}",
+        })
+    return cleaned

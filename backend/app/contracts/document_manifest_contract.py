@@ -37,10 +37,17 @@ class DocumentRole(str, Enum):
     Herkunftsgattung sagt *woher*, die Rolle sagt *welche Art Aussage*.
     """
 
+    #: Fallbeschreibung und Domänenfakten — auch die Beschreibung des
+    #: Vorhabens selbst („Wir führen zum Kursstart … ein"). Stützt Claims.
     domain_fact = "domain_fact"
+    #: Meta-Text über die Konstruktion des Testfalls („Der Fall ist so
+    #: gebaut, dass …"). NICHT die Fallbeschreibung — die ist ``domain_fact``.
     scenario_statement = "scenario_statement"
+    #: Fragestellung bzw. Auftrag an die Simulation („Simuliere …").
     requirement = "requirement"
+    #: Erwartete Ergebnisse / Lösungsschlüssel des Testfalls.
     expected_result = "expected_result"
+    #: Hintergrundmaterial ohne Fallbezug. Stützt Claims wie ``domain_fact``.
     background = "background"
 
 

@@ -190,3 +190,28 @@ def test_restart_graph_build_no_cancel_completes_normally(env):
     new_run = env["registry"].get_run(result["run_id"])
     assert new_run["status"] == "completed"
     assert new_run.get("termination_reason") is None
+
+
+def test_restart_graph_build_passes_chunk_contexts(env):
+    """Codex-Review PR #1620 (P2): der Restart lief ohne NER-Kontext und
+    erzeugte bei gleichem Seed einen anderen Graphen als Erst- und
+    Resume-Build (#1470)."""
+    project = _fake_project()
+    project.chunk_size = 120
+    project.chunk_overlap = 10
+    builder = MagicMock()
+    builder.create_graph.return_value = "graph-restart-ctx"
+    builder.get_graph_data.return_value = {"node_count": 1, "edge_count": 0}
+    builder.add_text_batches.return_value = ["ep1"]
+
+    run = _create_graph_build_run(env["registry"])
+    _run_with_patched_env(run, project, builder)
+
+    call = builder.add_text_batches.call_args
+    chunks = call.args[1]
+    contexts = call.kwargs.get("chunk_contexts")
+    assert contexts is not None, "Restart muss den NER-Kontext mitgeben"
+    assert len(contexts) == len(chunks)
+    assert len(chunks) > 1, "Testtext muss mehrere Chunks ergeben"
+    assert contexts[0] == ""
+    assert any(contexts[1:]), "Folge-Chunks tragen den Vorlauf ihres Vorgängers"
