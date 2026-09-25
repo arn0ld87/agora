@@ -36,9 +36,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+from pydantic import BaseModel, Field
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -55,14 +56,17 @@ from app.services.file_report_store import FileReportRepository  # noqa: E402
 META_FILENAME = 'meta.json'
 
 
-@dataclass
-class Summary:
-    """Zusammenfassung nach §33: jede Zahl einzeln, Fehler mit Kennung."""
+class Summary(BaseModel):
+    """Zusammenfassung nach §33: jede Zahl einzeln, Fehler mit Kennung.
+
+    Pydantic statt ``dataclass`` nach der Projektregel (AGENTS.md,
+    Codex-Review auf #1607).
+    """
 
     scanned: int = 0
     inserted: int = 0
     skipped: int = 0
-    failures: List[str] = field(default_factory=list)
+    failures: List[str] = Field(default_factory=list)
 
     @property
     def failed(self) -> int:
@@ -155,13 +159,12 @@ def migrate(
     return summary
 
 
-@dataclass
-class VerifyResult:
+class VerifyResult(BaseModel):
     """Ergebnis von ``verify``: geprüfte Datensätze, abweichende Schlüssel, Details."""
 
     checked: int = 0
-    mismatched: set[str] = field(default_factory=set)
-    deviations: List[str] = field(default_factory=list)
+    mismatched: set[str] = Field(default_factory=set)
+    deviations: List[str] = Field(default_factory=list)
 
     @property
     def verified(self) -> int:
