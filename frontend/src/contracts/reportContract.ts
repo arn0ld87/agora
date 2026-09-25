@@ -19,6 +19,11 @@ export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 1;
 export const ConfidenceLabelSchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
 export type ConfidenceLabel = z.infer<typeof ConfidenceLabelSchema>;
 
+// Issue #1400: Art der Aussage — spiegelt backend report_contract.ClaimType.
+// Nicht mit report_v3 Claim.confidence_scope "empirical" verwechseln.
+export const ClaimTypeSchema = z.enum(["empirical", "analytical", "recommendation", "structural"]);
+export type ClaimType = z.infer<typeof ClaimTypeSchema>;
+
 export const EvidenceTypeSchema = z.enum([
   "graph_fact",
   "graph_metric",
@@ -186,6 +191,8 @@ export const ReportClaimSchema = z.object({
   evidence: z.array(ClaimEvidenceBindingSchema).max(10).default([]),
   audit_trail: z.array(z.record(z.string(), z.unknown())).default([]),
   notes: z.string().optional().nullable(),
+  // Issue #1400: null/undefined = vor der Typisierung entstanden.
+  claim_type: ClaimTypeSchema.optional().nullable(),
 }).strict().superRefine((value, ctx) => {
   const supportingEvidenceCount = value.evidence.filter(
     (binding) => binding.supports_claim === true,
@@ -223,6 +230,8 @@ export const ReportSectionHypothesisSchema = z.object({
   hypothesis_text: z.string().min(8).max(1000),
   rationale: z.string().min(8).max(1000),
   suggested_evidence: z.array(z.string()).max(5).default([]),
+  // Issue #1400: Typ des Ursprungs-Claims (unbelegte Empfehlung != Hypothese).
+  claim_type: ClaimTypeSchema.optional().nullable(),
 }).strict();
 export type ReportSectionHypothesis = z.infer<typeof ReportSectionHypothesisSchema>;
 

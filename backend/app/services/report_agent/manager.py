@@ -165,6 +165,30 @@ def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> N
     )
 
 
+#: Werte von ``report_contract.ClaimType`` (Issue #1400); Unbekanntes faellt
+#: auf ``None`` statt die v3-Validierung zu sprengen.
+_CLAIM_TYPES = frozenset({"empirical", "analytical", "recommendation", "structural"})
+
+
+def _claim_type_of(
+    claim: Dict[str, Any],
+) -> Literal["empirical", "analytical", "recommendation", "structural"] | None:
+    value = claim.get("claim_type")
+    return value if value in _CLAIM_TYPES else None  # type: ignore[return-value]
+
+
+def _wording_confidence(
+    claim_type: Optional[str],
+    confidence: Literal["speculative", "low", "medium", "high", "verified"],
+) -> Literal["speculative", "low", "medium", "high", "verified"] | None:
+    """Issue #1400: der Wortlaut-Hinweis gilt nur Tatsachenbehauptungen.
+
+    Das Label wird unabhaengig vom Typ abgesenkt; nur eine Tatsache kann
+    sicherer formuliert sein, als ihr Label traegt.
+    """
+    return confidence if claim_type in (None, "empirical") else None
+
+
 def _extract_claims_for_section(
     raw_claims: Any,
     *,
@@ -220,8 +244,9 @@ def _extract_claims_for_section(
         single_source_text_confidence: Literal[
             "speculative", "low", "medium", "high", "verified"
         ] | None = None
+        claim_type = _claim_type_of(claim)
         if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
-            single_source_text_confidence = confidence
+            single_source_text_confidence = _wording_confidence(claim_type, confidence)
             confidence = "low"
         # strict: speculative/low-confidence Claims werden gedroppt
         if report_mode == "strict" and confidence in {"speculative", "low"}:
@@ -251,6 +276,7 @@ def _extract_claims_for_section(
                 _text_confidence_for(claim, confidence)
                 or single_source_text_confidence
             ),
+            claim_type=claim_type,
         ))
     return claims
 

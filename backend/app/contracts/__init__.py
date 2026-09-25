@@ -16,6 +16,7 @@ from .decision_contract import (
 )
 from .report_contract import (
     ClaimEvidenceBindingModel,
+    ClaimType,
     ConfidenceLabel,
     EvidenceCoverageEntry,
     EvidenceDegradationModel,
@@ -208,6 +209,7 @@ __all__ = [
     "ClaimEvidenceBindingModel",
     "ChoiceQuestion",
     "ComparisonDeltas",
+    "ClaimType",
     "ConfidenceLabel",
     "DecisionQuestion",
     "DecisionResult",

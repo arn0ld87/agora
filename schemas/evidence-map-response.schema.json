@@ -124,6 +124,17 @@
       "title": "ClaimEvidenceBindingModel",
       "type": "object"
     },
+    "ClaimType": {
+      "description": "Art der Aussage \u2014 nicht ihr Beleggrad (Issue #1400).\n\n``empirical`` heisst hier \u201eTatsachenbehauptung \u00fcber Quelle oder\nSimulation\" und ist nicht zu verwechseln mit ``Claim.confidence_scope =\n\"empirical\"`` in ``report_v3`` (reale Erhebungsdaten). Nur empirische\nClaims werden voll gegen den Evidence-Index abgewertet; die anderen drei\nTypen erhalten einen Confidence-Boden, der nie ueber ``low`` hinausgeht\n(ADR-0002 Anker 4/5 bleiben die einzige Route zu ``high``).",
+      "enum": [
+        "empirical",
+        "analytical",
+        "recommendation",
+        "structural"
+      ],
+      "title": "ClaimType",
+      "type": "string"
+    },
     "ConfidenceLabel": {
       "enum": [
         "low",
@@ -669,6 +680,17 @@
           "title": "Claim Text",
           "type": "string"
         },
+        "claim_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "confidence_label": {
           "$ref": "#/$defs/ConfidenceLabel"
         },
@@ -769,6 +791,17 @@
       "additionalProperties": false,
       "description": "ADR-0002 hypothesis slot \u2014 reasoning without evidence, not a claim.\n\nHypothesen duerfen nicht in ``claims[]`` formuliert werden, weil sie keine\nEvidence tragen. Dieses DTO macht den separaten Slot maschinenlesbar, ohne\ndie bestehenden Claim-/Evidence-Validatoren zu schwaechen.",
       "properties": {
+        "claim_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "hypothesis_id": {
           "pattern": "^hypothesis_\\d{2,}$",
           "title": "Hypothesis Id",

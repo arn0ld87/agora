@@ -161,10 +161,12 @@ class ReportClaim:
     confidence_label: str
     evidence: List[Dict[str, Any]]
     notes: str = ""
+    # Issue #1400: empirical | analytical | recommendation | structural.
+    claim_type: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         score = round(max(0.0, min(1.0, self.confidence_score)), 2)
-        return {
+        data: Dict[str, Any] = {
             "claim_id": self.claim_id,
             "claim": self.claim_text,
             "claim_text": self.claim_text,
@@ -176,6 +178,9 @@ class ReportClaim:
             "evidence_items": self.evidence,
             "notes": self.notes,
         }
+        if self.claim_type is not None:
+            data["claim_type"] = self.claim_type
+        return data
 
 
 __all__ = [

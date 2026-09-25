@@ -101,6 +101,24 @@
           "title": "Aggregation Basis",
           "type": "string"
         },
+        "claim_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "empirical",
+                "analytical",
+                "recommendation",
+                "structural"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Claim Type"
+        },
         "confidence": {
           "enum": [
             "speculative",

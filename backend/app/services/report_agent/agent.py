@@ -7,7 +7,8 @@ from pydantic import ValidationError
 
 from ...utils.llm_client import LLMClient
 from ..claim_atomizer import split_claim_chunks
-from ..confidence_calculator import compute_confidence
+from ..claim_type_classifier import classify_claim_type
+from ..confidence_calculator import apply_claim_type_floor, compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
 from ..evidence_entailment import EntailmentJudge
 from ..evidence_identity import build_producer_key
@@ -183,6 +184,40 @@ _GAP_SUGGESTED_FIX: Dict[str, str] = {
 _GAP_SUGGESTED_FIX_DEFAULT = (
     "Beleglage prüfen und passende Quelle nachreichen oder die Aussage streichen."
 )
+
+
+#: Claim-Typen ohne Wahrheitswert über die Welt (Issue #1400). Ohne Beleg
+#: werden sie Hypothese, aber keine Datenlücke. ``analytical`` fehlt bewusst:
+#: eine Analyse stützt sich auf Tatsachen-Prämissen.
+_NON_FACTUAL_CLAIM_TYPES = frozenset({"recommendation", "structural"})
+
+
+def _is_non_factual_claim(claim: Dict[str, Any]) -> bool:
+    return claim.get("claim_type") in _NON_FACTUAL_CLAIM_TYPES
+
+
+def _typed_confidence(
+    chunk: str,
+    score: float,
+    label: str,
+    audit_trail: List[Dict[str, Any]],
+) -> tuple[str, float, str]:
+    """Typisiert den Claim und wendet den Typ-Boden an (Issue #1400).
+
+    Jede Anhebung landet im ``audit_trail``, damit sichtbar bleibt, dass das
+    Label aus dem Typ und nicht aus der Evidence stammt.
+    """
+    claim_type = classify_claim_type(chunk).value
+    floored = apply_claim_type_floor(claim_type, score, label)
+    if floored != (score, label):
+        audit_trail.append({
+            "type": "claim_type_floor_applied",
+            "claim_type": claim_type,
+            "from_label": label,
+            "value": floored[0],
+            "source": "confidence_calculator.apply_claim_type_floor",
+        })
+    return claim_type, floored[0], floored[1]
 
 
 class ReportAgent:
@@ -885,6 +920,13 @@ class ReportAgent:
                     "snippet": "no_direct_evidence_bound",
                     "raw": {"reason": "no_direct_evidence_bound"},
                 })
+            # Issue #1400: Empfehlungen, Analysen und Struktursätze sind keine
+            # unbelegten Tatsachenbehauptungen. Sie bekommen einen Boden, der
+            # nie über ``low`` hinausreicht; ``medium`` und höher bleiben
+            # allein über Evidence erreichbar.
+            claim_type, confidence_score, confidence_label = _typed_confidence(
+                chunk, confidence_score, confidence_label, audit_trail
+            )
             # Hinweis fürs Test-Backwards-Compat: support_count wird nicht
             # mehr genutzt, bleibt aber lokal für ggf. Logging.
             support_count = direct_count + len(global_items)  # noqa: F841
@@ -895,6 +937,7 @@ class ReportAgent:
                 confidence_score=confidence_score,
                 confidence_label=confidence_label,
                 notes="Section-chunk level evidence mapping (schema_version 3).",
+                claim_type=claim_type,
             ).to_dict()
             claim_dict["audit_trail"] = audit_trail
             claims.append(claim_dict)
@@ -933,7 +976,18 @@ class ReportAgent:
             or "No evidence-bound claim text available.",
             1000,
         )
-        if related_only:
+        claim_type = claim.get("claim_type")
+        non_factual = _is_non_factual_claim(claim)
+        if non_factual:
+            # Issue #1400: Eine Empfehlung oder Gliederung ist keine
+            # Tatsachenbehauptung. Ohne stützende Quelle bleibt sie trotzdem
+            # außerhalb von claims[] (ADR-0002: jeder Claim braucht einen
+            # Beleg), wird aber nicht als fehlende Information ausgewiesen.
+            rationale = (
+                f"Keine Tatsachenbehauptung (claim_type={claim_type}); ohne "
+                "stützende Quelle nicht als validierter Claim geführt."
+            )
+        elif related_only:
             rationale = (
                 f"{related_only} Quelle(n) sind thematisch verwandt, "
                 "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
@@ -945,12 +999,23 @@ class ReportAgent:
                 "validierter Claim persistiert."
             )
         hypothesis_id = f"hypothesis_{index:02d}"
-        hypotheses.append({
+        hypothesis: Dict[str, Any] = {
             "hypothesis_id": hypothesis_id,
             "hypothesis_text": claim_text,
             "rationale": rationale,
             "suggested_evidence": self._suggested_evidence_from_claim_audit(claim),
-        })
+        }
+        if claim_type:
+            hypothesis["claim_type"] = claim_type
+        hypotheses.append(hypothesis)
+        if non_factual:
+            gate_decisions.append({
+                "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                "violation": "no_supporting_evidence",
+                "action": "moved_to_hypotheses",
+                "detail": f"[non_factual:{claim_type}] {rationale}"[:500],
+            })
+            return
         gap_kind = self._append_data_gap_if_absent(
             claim_text,
             related_evidence_count=related_only,

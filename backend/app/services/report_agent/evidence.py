@@ -352,6 +352,12 @@ def _record_text_confidence_downgrade(
     entstanden ist. Ein spaeteres ``medium`` waere bereits abgestuft und
     damit die falsche Referenz.
     """
+    # Issue #1400: Nur eine Tatsachenbehauptung kann sicherer formuliert sein,
+    # als ihr Label traegt. Eine Empfehlung, Analyse oder Gliederung ist
+    # naturgemaess ungehedgt; der Hinweis waere dort falscher Alarm.
+    # Untypisierte Alt-Claims bleiben beim bisherigen Verhalten.
+    if claim.get("claim_type") not in (None, "empirical"):
+        return
     trail = claim.get("audit_trail")
     if not isinstance(trail, list):
         trail = []
