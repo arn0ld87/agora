@@ -84,6 +84,9 @@ export const useAuthStore = defineStore('auth', () => {
   /** Betreiber-Zugang: Legacy-Token oder offener Modus, keine Supabase-Session.
    *  Prozessweite Bereiche (Logs, Einstellungen) sind für JWT gesperrt. */
   const operatorAccess = computed(() => !(jwtEnabled.value && session.value))
+  // Session ohne aktiven Workspace (Recovery-Link, Start gescheitert): kein
+  // regulärer Zugang, Tenant-Anfragen liefen ohne X-Agora-Workspace.
+  const sessionWithoutWorkspace = computed(() => !!session.value && !activeWorkspaceId.value)
 
   const tokenExpiry = computed<number | null>(() => {
     if (!session.value?.expires_at) return null
@@ -244,13 +247,33 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function signOut(): Promise<void> {
     const supabase = getSupabaseClient()
-    if (supabase) {
-      await supabase.auth.signOut()
+    try {
+      if (supabase) {
+        // Scheitert die Abmeldung beim Server (Netz), bleibt die Session im
+        // Supabase-Speicher; dann wenigstens lokal verwerfen.
+        let failed = false
+        try {
+          const result = await supabase.auth.signOut()
+          failed = !!result?.error
+        } catch {
+          failed = true
+        }
+        if (failed) {
+          try {
+            await supabase.auth.signOut({ scope: 'local' })
+          } catch {
+            // Lokales Verwerfen ist best effort; der Zustand unten zählt.
+          }
+        }
+      }
+    } finally {
+      // Lokaler Zustand wird immer verworfen, sonst hielte der Guard den
+      // Nutzer trotz erzwungener Abmeldung in der App.
+      session.value = null
+      user.value = null
+      setSessionToken(null)
+      clearWorkspaceState()
     }
-    session.value = null
-    user.value = null
-    setSessionToken(null)
-    clearWorkspaceState()
   }
 
   async function requestPasswordReset(email: string): Promise<void> {
@@ -337,6 +360,7 @@ export const useAuthStore = defineStore('auth', () => {
     jwtEnabled,
     isAuthenticated,
     operatorAccess,
+    sessionWithoutWorkspace,
     tokenExpiry,
     roles,
     // actions

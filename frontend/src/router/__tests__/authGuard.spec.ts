@@ -23,6 +23,8 @@ const fakeAuth = vi.hoisted(() => ({
   jwtEnabled: false,
   isAuthenticated: false,
   operatorAccess: true,
+  sessionWithoutWorkspace: false,
+  passwordRecovery: false,
   ensureInit: vi.fn(async () => {}),
 }))
 vi.mock('../../store/auth', () => ({ useAuthStore: () => fakeAuth }))
@@ -52,6 +54,8 @@ beforeEach(async () => {
   fakeAuth.jwtEnabled = false
   fakeAuth.isAuthenticated = false
   fakeAuth.operatorAccess = true
+  fakeAuth.sessionWithoutWorkspace = false
+  fakeAuth.passwordRecovery = false
   fakeAuth.ensureInit.mockClear()
   vi.mocked(getAgoraToken).mockReturnValue('')
   await go('/dashboard')
@@ -131,5 +135,36 @@ describe('Betreiber-Routen im JWT-Modus', () => {
     vi.mocked(getAgoraToken).mockReturnValue('master')
     await go('/settings/general')
     expect(router.currentRoute.value.name).toBe('SettingsGeneral')
+  })
+})
+
+describe('Session ohne Workspace im JWT-Modus (Recovery)', () => {
+  beforeEach(() => {
+    fakeAuth.jwtEnabled = true
+    fakeAuth.isAuthenticated = true
+    fakeAuth.operatorAccess = false
+    fakeAuth.sessionWithoutWorkspace = true
+    fakeAuth.passwordRecovery = true
+  })
+
+  it('lässt den Passwort-Reset zu', async () => {
+    await go('/auth/reset')
+    expect(router.currentRoute.value.name).toBe('PasswordReset')
+  })
+
+  it('leitet geschützte Routen auf den Reset zurück', async () => {
+    await go('/ablage')
+    expect(router.currentRoute.value.name).toBe('PasswordReset')
+  })
+
+  it('schickt den Login-Link nicht in die App', async () => {
+    await go('/auth/login?next=/ablage')
+    expect(router.currentRoute.value.name).toBe('Login')
+  })
+
+  it('leitet ohne Recovery auf den Login', async () => {
+    fakeAuth.passwordRecovery = false
+    await go('/ablage')
+    expect(router.currentRoute.value.name).toBe('Login')
   })
 })
