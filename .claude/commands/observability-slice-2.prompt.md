@@ -25,7 +25,7 @@ Du bist Senior Backend/Observability-Engineer mit Spezialisierung auf OpenTeleme
 
 ## Plan-Override-Notiz
 
-Plan [`docs/plans/2026-05-15-observability-slice-2-metrics.md`](docs/plans/2026-05-15-observability-slice-2-metrics.md) Z.5 sagt "Trigger frühestens nach 2026-05-22". User hat 2026-05-15 entschieden: **trotzdem heute starten**. Begründung muss im Worklog-Header stehen (z.B. Slice-1-Momentum nutzen, Capacity-Window jetzt offen). Plan-Datum-Override ist Lead-Entscheidung, kein Subagent-Default.
+Plan [`docs/plans/active/2026-05-15-observability-slice-2-metrics.md`](../../docs/plans/active/2026-05-15-observability-slice-2-metrics.md) Z.5 sagt "Trigger frühestens nach 2026-05-22". User hat 2026-05-15 entschieden: **trotzdem heute starten**. Begründung muss im Worklog-Header stehen (z.B. Slice-1-Momentum nutzen, Capacity-Window jetzt offen). Plan-Datum-Override ist Lead-Entscheidung, kein Subagent-Default.
 
 ## Ziel
 
