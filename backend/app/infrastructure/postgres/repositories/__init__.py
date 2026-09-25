@@ -13,6 +13,7 @@ from .simulation_repository import (
     PostgresSimulationRepository,
     SimulationProjectMissing,
 )
+from .workspace_repository import PostgresWorkspaceRepository, WorkspaceSlugTaken
 
 __all__ = [
     "PostgresLlmProfileRepository",
@@ -20,8 +21,10 @@ __all__ = [
     "PostgresReportRepository",
     "PostgresRunRepository",
     "PostgresSimulationRepository",
+    "PostgresWorkspaceRepository",
     "ProjectNotStored",
     "ReportSimulationMissing",
     "RunSimulationMissing",
     "SimulationProjectMissing",
+    "WorkspaceSlugTaken",
 ]
