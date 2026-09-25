@@ -929,7 +929,15 @@
       "triggerUnknown": "Open user menu",
       "profile": "Profile",
       "settings": "Settings",
-      "help": "Help"
+      "help": "Help",
+      "workspaces": "Workspace",
+      "signOut": "Sign out",
+      "role": {
+        "owner": "Owner",
+        "admin": "Admin",
+        "member": "Member",
+        "viewer": "Viewer"
+      }
     }
   },
   "logs": {

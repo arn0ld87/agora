@@ -121,3 +121,18 @@ describe('onboardingGuard', () => {
     expect(result).toBe(true)
   })
 })
+
+describe('onboardingGuard mit Supabase-Session (#1617)', () => {
+  it('lädt kein Betreiber-Profil und leitet nicht um', async () => {
+    const { setSessionToken } = await import('../../auth/sessionState')
+    setSessionToken('jwt')
+    try {
+      vi.mocked(getProfile).mockClear()
+      const result = await onboardingGuard({ name: 'Dashboard', meta: {} } as never)
+      expect(result).toBe(true)
+      expect(getProfile).not.toHaveBeenCalled()
+    } finally {
+      setSessionToken(null)
+    }
+  })
+})

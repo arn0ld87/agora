@@ -209,6 +209,21 @@ Sicherheitsgrenze:
 
 Agora besitzt aktuell keinen vollständigen Benutzer-Login mit HttpOnly-Session-Cookie und CSRF-Modell. Ein solcher Ausbau gehört in ein späteres Multi-User-/Identity-Design und ist **nicht** Voraussetzung dafür, den aktuellen Single-User-Stack korrekt zu betreiben.
 
+### Supabase-Login im Frontend (#1617)
+
+Ist JWT aktiv (`GET /api/auth/config` → `jwt_enabled: true`), meldet sich der Browser über `@supabase/supabase-js` an. Der Client dient **nur** der Anmeldung (Login, Registrierung, Abmelden, Refresh, Passwort-Reset). Fachdaten laufen weiter über Flask.
+
+- **Header:** Mit Session sendet `authHeaders()` `Authorization: Bearer <access_token>` und `X-Agora-Workspace`, aber nie `X-Agora-Token`. Ohne Session bleibt der Legacy-Pfad unverändert. Tickets und rohe `fetch`-Aufrufe nutzen dieselben Header.
+- **Speicher:**
+  - Supabase hält die Session per PKCE-Flow in `localStorage` (`persistSession`, `autoRefreshToken`). Für diesen Speicher gilt dieselbe XSS-Grenze wie oben.
+  - Der aktive Workspace liegt unter `agora_workspace`.
+- **401:** Einmal `refreshSession()` und Retry. Scheitert der Refresh, wird der Token verworfen, der Nutzer abgemeldet und zum Login geleitet.
+- **Routen:**
+  - `/auth/login`, `/auth/register`, `/auth/reset` und `/auth/confirm` sind öffentlich und nur mit JWT erreichbar.
+  - Ohne Session leitet der Guard jede andere Route auf den Login. `next` ist auf interne Pfade beschränkt (`safeNext`).
+- **Workspace-Wechsel** im Nutzermenü: Die Auswahl wird gespeichert, der Ticket-Cache geleert und die Seite neu geladen. So hält kein Store Daten des vorherigen Workspace.
+- Profil, Einstellungen und Onboarding sind Betreiber-Zustand (`operator_only`). Für Supabase-Nutzer sind sie ausgeblendet, der Onboarding-Guard lädt sie dann nicht.
+
 ---
 
 ## 10. Praktische Beispiele

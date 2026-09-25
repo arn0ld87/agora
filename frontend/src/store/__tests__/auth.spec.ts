@@ -204,6 +204,49 @@ describe('onAuthStateChange — session sync', () => {
     expect(store.session).toEqual(newSession)
   })
 
+  it('lädt nach SIGNED_IN die Workspaces neu (Bootstrap beim ersten Login)', async () => {
+    const captured: { cb: ((event: string, session: unknown) => void) | null } = { cb: null }
+    mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
+    mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
+      captured.cb = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] })
+    mocks._svcPost.mockResolvedValueOnce({ data: WS_A })
+
+    const store = useAuthStore()
+    await store.init()
+    expect(mocks._svcPost).not.toHaveBeenCalled()
+
+    captured.cb?.('SIGNED_IN', { access_token: 'tok', user: { id: 'u9' }, expires_at: 9999 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks._svcPost).toHaveBeenCalledWith('/api/workspaces/bootstrap', {})
+    expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
+  })
+
+  it('lädt bei TOKEN_REFRESHED keine Workspaces', async () => {
+    const captured: { cb: ((event: string, session: unknown) => void) | null } = { cb: null }
+    mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
+    mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
+      captured.cb = cb
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ data: [] })
+    const store = useAuthStore()
+    await store.init()
+    const before = mocks._svcGet.mock.calls.length
+
+    captured.cb?.('TOKEN_REFRESHED', { access_token: 'tok2', user: { id: 'u9' }, expires_at: 9999 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks._svcGet.mock.calls.length).toBe(before)
+  })
+
   it('merkt sich PASSWORD_RECOVERY für die Reset-View', async () => {
     const captured: { cb: ((event: string, session: unknown) => void) | null } = { cb: null }
     mocks._sbGetSession.mockResolvedValue({ data: { session: null } })

@@ -123,6 +123,12 @@ export const useAuthStore = defineStore('auth', () => {
           session.value = newSession
           user.value = newSession?.user ?? null
           setSessionToken(newSession?.access_token ?? null)
+          if (event === 'SIGNED_IN') {
+            // Nach der Anmeldung (Formular oder Bestätigungslink) die eigenen
+            // Workspaces laden, beim ersten Mal mit Bootstrap. Außerhalb des
+            // Callbacks, weil supabase-js darin keine weiteren Aufrufe mag.
+            setTimeout(() => { void loadWorkspaces() }, 0)
+          }
         })
 
         // Register 401 callback: on forced signOut, redirect to Login.

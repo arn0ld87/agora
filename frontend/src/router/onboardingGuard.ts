@@ -10,6 +10,7 @@
  */
 import type { RouteLocationNormalized, RouteLocationRaw } from 'vue-router'
 import { useUserProfileStore } from '../store/userProfile'
+import { getSessionToken } from '../auth/sessionState'
 
 const EXEMPT_ROUTE_NAMES = new Set(['Onboarding', 'NotFound'])
 
@@ -22,6 +23,12 @@ export async function onboardingGuard(
   }
 
   if (to.name != null && EXEMPT_ROUTE_NAMES.has(String(to.name))) {
+    return true
+  }
+
+  // Supabase-Nutzer: Profil und Onboarding sind Betreiber-Zustand
+  // (operator_only, 403 für JWT) — kein Onboarding-Redirect (#1617).
+  if (getSessionToken()) {
     return true
   }
 

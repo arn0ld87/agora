@@ -21,14 +21,48 @@
     </template>
     <template #default="{ close }">
       <div class="user-menu__items" role="group" :data-testid="ShellTestId.userMenu">
-        <DropdownMenuItem @select="() => { close(); goTo('SettingsProfile') }">
-          {{ t('topbar.userMenu.profile') }}
-        </DropdownMenuItem>
-        <DropdownMenuItem @select="() => { close(); goTo('SettingsGeneral') }">
-          {{ t('topbar.userMenu.settings') }}
-        </DropdownMenuItem>
+        <template v-if="hasSession">
+          <p v-if="accountEmail" class="user-menu__account">{{ accountEmail }}</p>
+          <div
+            v-if="auth.workspaces.length > 0"
+            class="user-menu__workspaces"
+            role="group"
+            :aria-label="t('topbar.userMenu.workspaces')"
+            data-testid="user-menu-workspaces"
+          >
+            <p class="user-menu__group-label" aria-hidden="true">{{ t('topbar.userMenu.workspaces') }}</p>
+            <DropdownMenuItem
+              v-for="ws in auth.workspaces"
+              :key="ws.workspace_id"
+              :aria-current="ws.workspace_id === auth.activeWorkspaceId ? 'true' : undefined"
+              :data-testid="`user-menu-workspace-${ws.slug}`"
+              @select="() => { close(); selectWorkspace(ws.workspace_id) }"
+            >
+              <span class="user-menu__check" aria-hidden="true">{{ ws.workspace_id === auth.activeWorkspaceId ? '✓' : '' }}</span>
+              {{ ws.name }}
+              <span class="user-menu__role">{{ t(`topbar.userMenu.role.${ws.role}`) }}</span>
+            </DropdownMenuItem>
+          </div>
+        </template>
+        <!-- Profil und Einstellungen sind prozessweiter Betreiber-Zustand
+             (operator_only): für Supabase-Nutzer ausgeblendet (#1617). -->
+        <template v-else>
+          <DropdownMenuItem @select="() => { close(); goTo('SettingsProfile') }">
+            {{ t('topbar.userMenu.profile') }}
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="() => { close(); goTo('SettingsGeneral') }">
+            {{ t('topbar.userMenu.settings') }}
+          </DropdownMenuItem>
+        </template>
         <DropdownMenuItem @select="() => { close(); openHelp() }">
           {{ t('topbar.userMenu.help') }}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          v-if="hasSession"
+          data-testid="user-menu-sign-out"
+          @select="() => { close(); void signOut() }"
+        >
+          {{ t('topbar.userMenu.signOut') }}
         </DropdownMenuItem>
       </div>
     </template>
@@ -43,6 +77,7 @@ import DropdownMenu from '../v4/forms/DropdownMenu.vue'
 import DropdownMenuItem from '../v4/forms/DropdownMenuItem.vue'
 import { ShellTestId } from '../../contracts/testIds'
 import { useUserProfileStore } from '../../store/userProfile'
+import { useAuthStore } from '../../store/auth'
 
 /**
  * UserMenu — das Nutzermenue oben rechts.
@@ -65,6 +100,21 @@ const HELP_URL = 'https://github.com/arn0ld87/agora#readme'
 const { t } = useI18n()
 const router = useRouter()
 const userProfileStore = useUserProfileStore()
+const auth = useAuthStore()
+
+/** Supabase-Session: Workspace-Wechsel und Abmelden statt Betreiber-Menü. */
+const hasSession = computed(() => auth.jwtEnabled && !!auth.session)
+const accountEmail = computed(() => auth.user?.email ?? '')
+
+function selectWorkspace(id: string): void {
+  if (id === auth.activeWorkspaceId) return
+  void auth.switchWorkspace(id)
+}
+
+async function signOut(): Promise<void> {
+  await auth.signOut()
+  await router.replace({ name: 'Login' })
+}
 
 const displayName = computed(() => userProfileStore.profile?.display_name?.trim() || '')
 
@@ -135,5 +185,35 @@ function openHelp(): void {
   display: flex;
   flex-direction: column;
   min-width: 180px;
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+.user-menu__account,
+.user-menu__group-label {
+  margin: 0;
+  padding: 6px 12px 2px;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  overflow-wrap: anywhere;
+}
+
+.user-menu__workspaces {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.user-menu__check {
+  display: inline-block;
+  width: 1.2em;
+}
+
+.user-menu__role {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
 }
 </style>

@@ -449,6 +449,15 @@ Seit #1616 gibt es `/api/workspaces` (Liste, Bootstrap, Mitglieder) und das öff
 
 Verifiziert gegen PostgreSQL mit signierten Tokens (`tests/integration/test_workspace_api.py`). **Umgeschaltet ist nichts:** ohne `AGORA_SUPABASE_JWT_ISSUER` bleibt Agora einmandantig.
 
+### Frontend-Login mit Supabase (#1617)
+
+Seit #1617 meldet sich das Frontend bei aktivem JWT über `@supabase/supabase-js` an. Der Client dient nur der Anmeldung, Fachdaten laufen weiter über Flask.
+- **Store und Header:** Der Pinia-Store `auth` hält Konfiguration, Session, Workspaces und aktiven Workspace. Der Interceptor sendet `Authorization: Bearer` und `X-Agora-Workspace`, bei `401` erst einmal ein Refresh.
+- **Views:** Login, Registrierung, Passwort-Reset und E-Mail-Bestätigung unter `/auth/*`. Ohne Session leitet der Guard auf den Login. Workspace-Wechsel und Abmelden stehen im Nutzermenü.
+- **Legacy-Modus unverändert:** Ohne JWT bleiben Master-Token, Routen und Menü wie bisher.
+
+Verifiziert mit Vitest (Store, Interceptor, Guard, Views, Nutzermenü) und dem Playwright-Smoke `auth-login.spec.ts` gegen gemockte Auth-Endpunkte, inklusive axe und 320-px-Prüfung.
+
 ### Metadaten-Migration: Rollback-Gate
 
 Seit #1589 prüft `backend/tests/integration/test_metadata_migration_rollback.py` den ganzen Weg in einem Test (Plan §36): Ein Legacy-Bestand aus LLM-Profil (SQLite), Projekt, Simulation, Run und Report wird mit allen `migrate_*_to_postgres.py` übertragen, und jedes `--verify` muss mit Exit 0 enden. Dann startet `create_app()` mit allen fünf Schaltern auf `postgres`, während die Legacy-Metadateien versteckt sind. Anschließend startet die App erneut mit allen Schaltern auf Legacy. Die Antworten von zehn Lese-Endpunkten (Einzelabruf und Liste je Domäne) müssen in beiden Phasen gleich sein, und jeder Datensatz muss mit unveränderter Kennung da sein. Ein zweiter Test belegt, dass `Config.validate()` einen Rückweg in falscher Reihenfolge ablehnt. Der Test läuft im CI-Integration-Job gegen PostgreSQL; **umgeschaltet ist nichts**.
