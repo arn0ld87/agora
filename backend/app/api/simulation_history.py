@@ -15,6 +15,7 @@ from . import simulation_bp
 from ..contracts.post_event_contract import Platform, PostCreatedEvent
 from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 from ..models.project import ProjectManager
+from ..repositories.report_repository import get_report_repository
 from ..services.ai_route_resolver import AiRouteResolutionError
 from ..services.entity_reader import EntityReader
 from ..services.llm_routing_seed import build_preview_stage_route, resolve_route_api_key
@@ -31,40 +32,21 @@ from .simulation_common import logger
 
 
 def _get_report_id_for_simulation(simulation_id: str) -> Optional[str]:
-    """Return the ``report_id`` of the most recent report linked to ``simulation_id``."""
-    reports_dir = ArtifactLocator.reports_dir()
-    if not os.path.exists(reports_dir):
-        return None
+    """Return the ``report_id`` of the most recent report linked to ``simulation_id``.
 
-    matching_reports = []
+    Issue #1588: liest ueber den ``ReportRepository``-Port statt per
+    os.listdir + open(meta.json) direkt auf der Ablage — im kuenftigen
+    Postgres-Adapter gibt es diese Datei nicht mehr.
+    ``ReportManager.get_report_by_simulation`` sortiert nicht nach
+    ``created_at`` (erster Treffer aus ``list_ids()``-Reihenfolge), deshalb
+    hier eigene Sortierung statt jener Fassade.
+    """
     try:
-        for report_folder in os.listdir(reports_dir):
-            meta_file = ArtifactLocator.report_file(report_folder, 'meta.json')
-            if not os.path.isdir(ArtifactLocator.report_dir(report_folder)):
-                continue
-            if not os.path.exists(meta_file):
-                continue
-
-            # Reports live outside the SimulationArtifactStore namespace
-            # (separate ReportStore on the roadmap). Inline JSON read keeps
-            # services-/api-layer free of json_io imports.
-            try:
-                with open(meta_file, "r", encoding="utf-8") as handle:
-                    meta = json.load(handle)
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.warning(f"Skipping unreadable report meta {meta_file}: {exc}")
-                continue
-            if meta and meta.get('simulation_id') == simulation_id:
-                matching_reports.append({
-                    'report_id': meta.get('report_id'),
-                    'created_at': meta.get('created_at', ''),
-                    'status': meta.get('status', ''),
-                })
-
-        if not matching_reports:
+        records = get_report_repository().list(simulation_id=simulation_id)
+        if not records:
             return None
-        matching_reports.sort(key=lambda item: item.get('created_at', ''), reverse=True)
-        return matching_reports[0].get('report_id')
+        records.sort(key=lambda record: record.created_at, reverse=True)
+        return records[0].report_id
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"Failed to find report for simulation {simulation_id}: {exc}")
         return None
