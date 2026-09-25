@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from . import prepare_service as _legacy
 from .degradation_collector import DegradationCollector
+from .entity_alias_resolution import resolve_aliases
 from .entity_reader import FilteredEntities
 
 if TYPE_CHECKING:
@@ -204,6 +205,23 @@ degradations :Optional [DegradationCollector ]=None ,
         filtered .entity_types ={
         entity .get_entity_type ()or "Entity"for entity in filtered .entities
         }
+
+    # Issue #1470 (Slice 4.2): Alias-Auflösung vor Dedupe/Cap.
+    # Entitäten, die dieselbe Person/Organisation benennen (z. B. „BFW",
+    # „BFW Leipzig", „Berufsförderungswerk Leipzig (BFW Leipzig)" oder
+    # „Dr. Miriam Vogt"/„Vogt"), werden zu einem Cluster zusammengefasst.
+    # Kein Merge über semantische Klassen hinweg; kein LLM-Aufruf. Der
+    # Resume-Pfad liest die kanonischen UUIDs aus dem Checkpoint und muss
+    # deshalb nicht erneut auflösen.
+    alias_resolved = resolve_aliases(filtered.entities)
+    if len(alias_resolved) < len(filtered.entities):
+        _legacy.logger.info(
+            "Alias-Aufloesung: %d → %d Entitaeten nach Cluster-Bildung",
+            len(filtered.entities),
+            len(alias_resolved),
+        )
+        filtered.entities = alias_resolved
+        filtered.filtered_count = len(alias_resolved)
 
         # Issue #1177: Vor dem Cap deduplizieren. Mehrfachnennungen derselben
         # Stakeholdergruppe belegten sonst die begrenzten Persona-Plaetze und
