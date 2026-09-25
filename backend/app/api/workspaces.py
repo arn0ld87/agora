@@ -20,6 +20,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from flask import Blueprint, current_app, request
+from werkzeug.exceptions import BadRequest
 from pydantic import ValidationError
 
 from ..config import Config
@@ -41,6 +42,7 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error, json_success
 from ..utils.auth import identity_only
 from ..utils.logger import get_logger
+from ..repositories.workspace_repository import WorkspaceBackendUnavailable
 from ..utils.rate_limit import build_rate_limit_key, workspace_rate_limiter
 
 logger = get_logger('agora.workspaces')
@@ -69,6 +71,25 @@ def auth_config():
         supabase_anon_key=(Config.SUPABASE_ANON_KEY or None) if jwt_enabled else None,
     )
     return json_success(response.model_dump(mode='json'))
+
+
+@workspaces_bp.errorhandler(WorkspaceBackendUnavailable)
+def _backend_unavailable(_exc):
+    # Einmandantig ohne DATABASE_URL gibt es nur den virtuellen
+    # Default-Workspace; Mitglieder und Bootstrap brauchen PostgreSQL.
+    return json_error('workspaces require DATABASE_URL', status=503, code='workspaces_unavailable')
+
+
+def _json_object() -> dict | None:
+    """Body als JSON-Objekt; leerer Body zählt als ``{}``, alles andere
+    (kaputtes JSON, Liste, Zahl) als ``None``."""
+    if not request.get_data(cache=True):
+        return {}
+    try:
+        body = request.get_json(force=True)
+    except BadRequest:
+        return None
+    return body if isinstance(body, dict) else None
 
 
 @workspaces_bp.before_request
@@ -140,8 +161,11 @@ def bootstrap_workspace():
     identity = current_identity()
     if identity is None:
         return json_error('only for signed-in users', status=400, code='not_applicable')
+    raw = _json_object()
+    if raw is None:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400)
     try:
-        body = WorkspaceBootstrapRequest.model_validate(request.get_json(silent=True) or {})
+        body = WorkspaceBootstrapRequest.model_validate(raw)
     except ValidationError:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400)
 
@@ -214,8 +238,11 @@ def upsert_member(user_id: str):
     target, error = _parse_user_id(user_id)
     if error:
         return error
+    raw = _json_object()
+    if raw is None:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400)
     try:
-        body = WorkspaceMemberUpsert.model_validate(request.get_json(silent=True) or {})
+        body = WorkspaceMemberUpsert.model_validate(raw)
     except ValidationError:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400)
     if not principal.roles & _MANAGERS:
@@ -230,7 +257,22 @@ def upsert_member(user_id: str):
     if touches_owner and not is_owner_actor:
         return json_error('forbidden', status=403, code='owner_required')
 
-    from ..infrastructure.postgres.repositories.workspace_repository import LastOwnerError
+    from ..infrastructure.postgres.repositories.workspace_repository import (
+        LastOwnerError,
+        UserDirectoryUnavailable,
+    )
+
+    if existing is None:
+        # Keine Phantom-Mitgliedschaft: ``user_id`` hat keinen Fremdschlüssel
+        # auf ``auth.users`` (reines PostgreSQL in der CI), die Prüfung liegt
+        # hier. Ohne ``auth``-Schema ist sie nicht möglich.
+        try:
+            known = repo.user_exists(target)
+        except UserDirectoryUnavailable:
+            logger.warning('workspace members: auth.users not readable for the runtime role')
+            return json_error('user directory unavailable', status=503, code='user_directory_unavailable')
+        if known is False:
+            return json_error(ApiErrorCode.NOT_FOUND, status=404)
 
     try:
         membership = repo.add_member(principal.workspace_id, target, body.role, keep_owner=True)

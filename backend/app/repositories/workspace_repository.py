@@ -63,6 +63,10 @@ class WorkspaceRepository(Protocol):
         """Alle Mitgliedschaften eines Workspace."""
         ...
 
+    def user_exists(self, user_id: UUID) -> Optional[bool]:
+        """Ob ``user_id`` ein Supabase-Nutzer ist; ``None`` ohne ``auth``-Schema."""
+        ...
+
     def add_member(
         self,
         workspace_id: UUID,

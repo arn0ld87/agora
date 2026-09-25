@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -55,6 +55,21 @@ def _to_membership(row: WorkspaceMemberModel) -> WorkspaceMembership:
 
 class LastOwnerError(ValueError):
     """Der letzte Owner eines Workspace würde entfernt oder herabgestuft."""
+
+
+class UserDirectoryUnavailable(RuntimeError):
+    """``auth.users`` existiert, ist für die Laufzeitrolle aber nicht lesbar."""
+
+
+_AUTH_USERS_STATE_SQL = text(
+    """
+    SELECT to_regclass('auth.users') IS NOT NULL AS present,
+           CASE WHEN to_regclass('auth.users') IS NULL THEN false
+                ELSE has_schema_privilege('auth', 'USAGE')
+                     AND has_column_privilege('auth.users', 'id', 'SELECT') END AS readable
+    """
+)
+_AUTH_USER_EXISTS_SQL = text('SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = :user_id)')
 
 
 class PostgresWorkspaceRepository:
@@ -126,6 +141,25 @@ class PostgresWorkspaceRepository:
         with self.db.session(system=True) as session:
             row = session.get(WorkspaceMemberModel, (workspace_id, user_id))
             return None if row is None else _to_membership(row)
+
+    def user_exists(self, user_id: uuid.UUID) -> Optional[bool]:
+        """Ob ``user_id`` ein Supabase-Nutzer ist (``auth.users``).
+
+        ``None``, wenn es kein Schema ``auth`` gibt (reines PostgreSQL ohne
+        Supabase): dann ist keine Prüfung möglich. Existiert die Tabelle, ist
+        aber nicht lesbar, wirft die Methode :class:`UserDirectoryUnavailable`
+        — ungeprüft wird dann nichts angelegt.
+        """
+        with self.db.session(system=True) as session:
+            state = session.execute(_AUTH_USERS_STATE_SQL).one()
+            if not state.present:
+                return None
+            if not state.readable:
+                raise UserDirectoryUnavailable(
+                    'auth.users is not readable for the runtime role '
+                    '(GRANT SELECT (id) ON auth.users, docs/runbooks/rls-rollen.md)'
+                )
+            return bool(session.execute(_AUTH_USER_EXISTS_SQL, {'user_id': user_id}).scalar())
 
     def list_members(self, workspace_id: uuid.UUID) -> List[WorkspaceMembership]:
         with self.db.session(system=True) as session:

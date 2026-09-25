@@ -37,6 +37,15 @@ Superuser, eine Rolle mit `BYPASSRLS` oder den Tabellen-Owner zeigt.
 
    `ALTER DEFAULT PRIVILEGES` gilt für Tabellen, die der ausführende Owner künftig anlegt. Laufen Migrationen unter einer anderen Rolle, braucht es `FOR ROLE <owner>`.
 
+   Auf Supabase zusätzlich, als `postgres` (#1616): Die Mitgliederverwaltung prüft neue Mitglieder gegen `auth.users`, damit keine Mitgliedschaft für eine unbekannte ID entsteht. Nötig ist nur die Spalte `id`:
+
+   ```sql
+   GRANT USAGE ON SCHEMA auth TO agora_app;
+   GRANT SELECT (id) ON auth.users TO agora_app;
+   ```
+
+   Ohne diesen Grant lehnt `PUT /api/workspaces/current/members/<user_id>` neue Mitglieder mit `503 user_directory_unavailable` ab.
+
 3. `.env` setzen und neu starten:
 
    ```bash

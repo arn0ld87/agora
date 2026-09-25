@@ -170,6 +170,41 @@ def test_bootstrap_rejects_unknown_fields(client):
     assert client.get('/api/workspaces', headers=_headers(ALICE)).get_json()['count'] == 0
 
 
+@pytest.mark.parametrize(
+    ('data', 'content_type'),
+    [('{kaputt', 'application/json'), ('[]', 'application/json'), ('7', 'application/json')],
+)
+def test_bootstrap_rejects_a_body_that_is_not_a_json_object(client, data, content_type):
+    response = client.post(
+        '/api/workspaces/bootstrap', headers=_headers(ALICE), data=data, content_type=content_type
+    )
+
+    assert response.status_code == 400
+    assert client.get('/api/workspaces', headers=_headers(ALICE)).get_json()['count'] == 0
+
+
+def test_bootstrap_accepts_an_empty_body(client):
+    response = client.post('/api/workspaces/bootstrap', headers=_headers(ALICE))
+
+    assert response.status_code == 200 and response.get_json()['created'] is True
+
+
+def test_members_without_database_are_unavailable_not_an_error(client, monkeypatch):
+    monkeypatch.setattr(Config, 'AUTH_BACKEND', 'legacy')
+    monkeypatch.setattr(Config, 'SUPABASE_JWT_ISSUER', '')
+    monkeypatch.setattr(Config, 'SUPABASE_JWT_SECRET', '')
+    monkeypatch.setattr(Config, 'DATABASE_URL', '')
+    master = {'X-Agora-Token': MASTER}
+
+    listed = client.get('/api/workspaces', headers=master)
+    members = client.get('/api/workspaces/current/members', headers=master)
+    upsert = client.put(f'/api/workspaces/current/members/{BOB}', headers=master, json={'role': 'member'})
+
+    assert listed.status_code == 200
+    for response in (members, upsert):
+        assert (response.status_code, response.get_json()['code']) == (503, 'workspaces_unavailable')
+
+
 def test_new_user_without_workspace_gets_an_empty_list(client):
     body = client.get('/api/workspaces', headers=_headers(CAROL)).get_json()
 
@@ -281,6 +316,35 @@ def test_bootstrap_adopts_an_orphaned_personal_workspace(client, database):
 
     assert body['data']['workspace_id'] == str(orphan.workspace_id)
     assert body['data']['role'] == 'owner'
+
+
+@pytest.fixture
+def auth_users(database):
+    """Ein minimales Supabase-``auth.users`` mit Alice, Bob und Carol."""
+    from sqlalchemy import text
+
+    with database.engine.begin() as c:
+        c.execute(text('CREATE SCHEMA auth'))
+        c.execute(text('CREATE TABLE auth.users (id uuid PRIMARY KEY)'))
+        for user in (ALICE, BOB, CAROL):
+            c.execute(text('INSERT INTO auth.users (id) VALUES (:id)'), {'id': user})
+    try:
+        yield
+    finally:
+        with database.engine.begin() as c:
+            c.execute(text('DROP SCHEMA auth CASCADE'))
+
+
+def test_unknown_users_are_not_added_as_members(client, auth_users):
+    ws = uuid.UUID(_bootstrap(client, ALICE)['data']['workspace_id'])
+
+    phantom = _put(client, ALICE, ws, uuid.uuid4(), 'member')
+    real = _put(client, ALICE, ws, BOB, 'member')
+
+    assert phantom.status_code == 404
+    assert real.status_code == 200
+    members = client.get('/api/workspaces/current/members', headers=_headers(ALICE, ws)).get_json()
+    assert {m['user_id'] for m in members['data']} == {str(ALICE), str(BOB)}
 
 
 def test_invalid_member_input_is_rejected(client, team):
