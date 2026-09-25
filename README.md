@@ -254,6 +254,8 @@ The current **visual end-to-end showcase** is [Reference run 8: Geburtshilfe Hol
 
 For Report-/Trust-pipeline regression work, [Reference run 7: AURORA with Red-Team review](./docs/reference-runs/2026-08-17-aurora-red-team/README.md) remains the technical reference. Run 8 deliberately does not hide its degradations: its exported ReportV3 contains 2 validated claims, 31 hypotheses, 6 data gaps, and five sections that failed generation because of LLM errors.
 
+[Reference-run index](./docs/reference-runs/README.md)
+
 ## Security
 
 Current security foundations include:

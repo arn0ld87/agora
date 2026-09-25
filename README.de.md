@@ -254,6 +254,8 @@ Der aktuelle **visuelle End-to-End-Vorzeigelauf** ist [Referenzlauf 8: Geburtshi
 
 Für Regressionen der Report-/Trust-Pipeline bleibt [Referenzlauf 7: AURORA mit Red-Team-Review](./docs/reference-runs/2026-08-17-aurora-red-team/README.de.md) die technische Referenz. Lauf 8 versteckt seine Degradationen bewusst nicht: Der exportierte ReportV3 enthält 2 validierte Claims, 31 Hypothesen, 6 Data Gaps und fünf wegen LLM-Fehlern nicht erzeugte Abschnitte.
 
+[Übersicht der Referenzläufe](./docs/reference-runs/README.md)
+
 ## Sicherheit
 
 Aktuelle Sicherheitsgrundlagen:
