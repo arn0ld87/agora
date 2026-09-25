@@ -35,12 +35,35 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 #: Statisches SQL; die Tabellennamen gehen über ``format('%I')`` in die DDL.
+#: ``public.agora_realtime_baseline`` hält den Vorzustand (``publish`` und
+#: schon veröffentlichte Tabellen), damit der Downgrade genau ihn wiederherstellt
+#: und keine Einstellung des Betreibers verwirft. Sie liegt außerhalb von
+#: ``agora`` und damit außerhalb von ``alembic check``.
 _UPGRADE = """
 DO $$
 DECLARE
   t text;
+  ops text[];
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE TABLE IF NOT EXISTS public.agora_realtime_baseline (
+      kind text NOT NULL,
+      value text NOT NULL,
+      PRIMARY KEY (kind, value)
+    );
+    IF NOT EXISTS (SELECT 1 FROM public.agora_realtime_baseline) THEN
+      SELECT array_remove(ARRAY[
+               CASE WHEN pubinsert THEN 'insert' END,
+               CASE WHEN pubupdate THEN 'update' END,
+               CASE WHEN pubdelete THEN 'delete' END,
+               CASE WHEN pubtruncate THEN 'truncate' END], NULL)
+        INTO ops FROM pg_publication WHERE pubname = 'supabase_realtime';
+      INSERT INTO public.agora_realtime_baseline VALUES ('publish', array_to_string(ops, ', '));
+      INSERT INTO public.agora_realtime_baseline
+        SELECT 'table', tablename FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'agora'
+          AND tablename = ANY (ARRAY['projects', 'simulations', 'runs', 'reports']);
+    END IF;
     -- FOR ALL TABLES enthält die Tabellen schon; ADD TABLE wäre ein Fehler.
     IF NOT (SELECT puballtables FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
       FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
@@ -62,20 +85,30 @@ _DOWNGRADE = """
 DO $$
 DECLARE
   t text;
+  kept text[] := '{}';
+  previous text;
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF to_regclass('public.agora_realtime_baseline') IS NOT NULL THEN
+      SELECT coalesce(array_agg(value), '{}') INTO kept
+        FROM public.agora_realtime_baseline WHERE kind = 'table';
+      SELECT value INTO previous
+        FROM public.agora_realtime_baseline WHERE kind = 'publish';
+    END IF;
     IF NOT (SELECT puballtables FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
       FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
-        IF EXISTS (SELECT 1 FROM pg_publication_tables
+        IF NOT (t = ANY (kept)) AND EXISTS (SELECT 1 FROM pg_publication_tables
                    WHERE pubname = 'supabase_realtime'
                      AND schemaname = 'agora' AND tablename = t) THEN
           EXECUTE format('ALTER PUBLICATION supabase_realtime DROP TABLE agora.%I', t);
         END IF;
       END LOOP;
     END IF;
-    -- Supabase legt die Publication mit allen Operationen an.
-    ALTER PUBLICATION supabase_realtime SET (publish = 'insert, update, delete, truncate');
+    -- Ohne Vorzustand: Supabase legt die Publication mit allen Operationen an.
+    EXECUTE format('ALTER PUBLICATION supabase_realtime SET (publish = %L)',
+                   coalesce(previous, 'insert, update, delete, truncate'));
   END IF;
+  DROP TABLE IF EXISTS public.agora_realtime_baseline;
 END
 $$;
 """

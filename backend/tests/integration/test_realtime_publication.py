@@ -149,6 +149,37 @@ def test_downgrade_removes_the_tables_and_restores_all_operations(db_url):
     assert tuple(flags) == (True, True, True, True)
 
 
+def test_downgrade_keeps_what_was_published_before(db_url):
+    command.upgrade(_alembic(), BEFORE_REALTIME)
+    with create_engine(db_url, isolation_level='AUTOCOMMIT').connect() as c:
+        # Betreiber-Vorzustand: eine Tabelle schon veröffentlicht, nur INSERT.
+        c.execute(
+            text("CREATE PUBLICATION supabase_realtime FOR TABLE agora.projects WITH (publish = 'insert')")
+        )
+    command.upgrade(_alembic(), 'head')
+    assert set(_published(db_url)) == TABLES
+
+    command.downgrade(_alembic(), BEFORE_REALTIME)
+
+    assert _published(db_url) == {'projects': (True, False, False, False)}
+    with create_engine(db_url).connect() as c:
+        baseline = c.execute(text("SELECT to_regclass('public.agora_realtime_baseline')")).scalar_one()
+    assert baseline is None
+
+
+def test_a_repeated_upgrade_keeps_the_first_baseline(db_url):
+    command.upgrade(_alembic(), BEFORE_REALTIME)
+    with create_engine(db_url, isolation_level='AUTOCOMMIT').connect() as c:
+        c.execute(text('CREATE PUBLICATION supabase_realtime'))
+    command.upgrade(_alembic(), 'head')
+    # Zweiter Lauf derselben Migration (z. B. nach manuellem Stempeln).
+    command.downgrade(_alembic(), BEFORE_REALTIME)
+    command.upgrade(_alembic(), 'head')
+    command.downgrade(_alembic(), BEFORE_REALTIME)
+
+    assert _published(db_url) == {}
+
+
 # -- RLS für authenticated (Realtime-Sicht) -------------------------------------------
 
 
