@@ -292,3 +292,57 @@ def test_start_gate_rejects_a_bypassing_role_in_tenant_mode(setup):
 def test_start_gate_accepts_a_restricted_role(setup):
     assert rls_role_violations(setup['login_url']) == []
     assert verify_rls_role(setup['login_url'], tenant_mode=True) == []
+
+
+def test_reference_ownership_is_decided_across_workspaces_under_rls(setup, monkeypatch):
+    """Die zentrale Verweisprüfung (#1614) läuft im System-Kontext. Unter
+    RLS sähe sie sonst nur den eigenen Workspace, und eine fremde
+    ``report_id`` gälte als „unbekannt“ und damit als erlaubt."""
+    from app.infrastructure.postgres import session as session_module
+    from app.infrastructure.postgres.workspace_scope import (
+        REFERENCE_FOREIGN,
+        REFERENCE_OWN,
+        REFERENCE_UNKNOWN,
+        reference_state,
+    )
+
+    monkeypatch.setattr(session_module, '_database', setup['db'])
+    ctx = _as(WS_B, BOB)
+    try:
+        assert reference_state('project_id', 'proj_aaaaaaaaaaaa', WS_B) == REFERENCE_FOREIGN
+        assert reference_state('project_id', 'proj_bbbbbbbbbbbb', WS_B) == REFERENCE_OWN
+        assert reference_state('report_id', 'report_gibtesnicht', WS_B) == REFERENCE_UNKNOWN
+    finally:
+        ctx.pop()
+
+
+def test_session_system_flag_sees_across_workspaces_inside_a_request(setup):
+    db = setup['db']
+    ctx = _as(WS_A)
+    try:
+        with db.session(system=True) as s:
+            ids = set(s.scalars(text('SELECT id FROM agora.projects')))
+        assert ids == {'proj_aaaaaaaaaaaa', 'proj_bbbbbbbbbbbb'}
+    finally:
+        ctx.pop()
+
+
+def test_membership_lookups_see_every_workspace_of_the_user(setup, monkeypatch):
+    """Der Workspace-Wechsel braucht alle Mitgliedschaften des Nutzers, auch
+    wenn der Request gerade in einem Workspace läuft."""
+    from app.infrastructure.postgres.repositories.workspace_repository import (
+        PostgresWorkspaceRepository,
+    )
+
+    repo = PostgresWorkspaceRepository(database=setup['db'])
+    with create_engine(setup['admin_url'], isolation_level='AUTOCOMMIT').connect() as c:
+        c.execute(
+            text("INSERT INTO agora.workspace_members (workspace_id, user_id, role) VALUES (:w, :u, 'member')"),
+            {'w': str(WS_B), 'u': str(ALICE)},
+        )
+    ctx = _as(WS_A)
+    try:
+        assert {w.workspace_id for w in repo.list_for_user(ALICE)} == {WS_A, WS_B}
+        assert repo.membership(WS_B, ALICE) is not None
+    finally:
+        ctx.pop()

@@ -55,7 +55,14 @@ def _to_membership(row: WorkspaceMemberModel) -> WorkspaceMembership:
 
 class PostgresWorkspaceRepository:
     """Workspaces und Mitgliedschaften in ``agora.workspaces``/
-    ``agora.workspace_members``."""
+    ``agora.workspace_members``.
+
+    Alle Abfragen laufen im System-Kontext der RLS-Policies (#1615): Sie
+    beantworten Identitätsfragen („in welchen Workspaces ist Nutzer X?“) über
+    Workspace-Grenzen hinweg und filtern selbst nach Nutzer bzw. Workspace.
+    Über welche Workspaces ein Nutzer verfügen darf, entscheiden die
+    Endpunkte (#1616) anhand des Principals.
+    """
 
     def __init__(self, database: Optional[Database] = None) -> None:
         self._database = database
@@ -69,12 +76,12 @@ class PostgresWorkspaceRepository:
     # -- Workspaces ------------------------------------------------------
 
     def get(self, workspace_id: uuid.UUID) -> Optional[Workspace]:
-        with self.db.session() as session:
+        with self.db.session(system=True) as session:
             row = session.get(WorkspaceModel, workspace_id)
             return None if row is None else _to_workspace(row)
 
     def get_by_slug(self, slug: str) -> Optional[Workspace]:
-        with self.db.session() as session:
+        with self.db.session(system=True) as session:
             row = session.scalar(
                 select(WorkspaceModel).where(WorkspaceModel.slug == slug)
             )
@@ -83,7 +90,7 @@ class PostgresWorkspaceRepository:
     def create(self, name: str, slug: str) -> Workspace:
         new_id = uuid.uuid4()
         try:
-            with self.db.session() as session:
+            with self.db.session(system=True) as session:
                 row = WorkspaceModel(id=new_id, name=name, slug=slug)
                 session.add(row)
                 session.flush()
@@ -95,7 +102,7 @@ class PostgresWorkspaceRepository:
         return workspace
 
     def list_for_user(self, user_id: uuid.UUID) -> List[Workspace]:
-        with self.db.session() as session:
+        with self.db.session(system=True) as session:
             rows = session.scalars(
                 select(WorkspaceModel)
                 .join(
@@ -112,14 +119,14 @@ class PostgresWorkspaceRepository:
     def membership(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> Optional[WorkspaceMembership]:
-        with self.db.session() as session:
+        with self.db.session(system=True) as session:
             row = session.get(WorkspaceMemberModel, (workspace_id, user_id))
             return None if row is None else _to_membership(row)
 
     def add_member(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, role: WorkspaceRole
     ) -> WorkspaceMembership:
-        with self.db.session() as session:
+        with self.db.session(system=True) as session:
             statement = insert(WorkspaceMemberModel).values(
                 workspace_id=workspace_id,
                 user_id=user_id,
@@ -138,7 +145,7 @@ class PostgresWorkspaceRepository:
             return _to_membership(row)
 
     def remove_member(self, workspace_id: uuid.UUID, user_id: uuid.UUID) -> bool:
-        with self.db.session() as session:
+        with self.db.session(system=True) as session:
             row = session.get(WorkspaceMemberModel, (workspace_id, user_id))
             if row is None:
                 return False

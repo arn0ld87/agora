@@ -64,8 +64,8 @@ def rls_context() -> tuple[str, str]:
     return '', 'on'
 
 
-def _bind_rls_context(session: Session) -> None:
-    workspace_id, system = rls_context()
+def _bind_rls_context(session: Session, *, system_context: bool = False) -> None:
+    workspace_id, system = ('', 'on') if system_context else rls_context()
     session.execute(_RLS_CONTEXT_SQL, {'workspace_id': workspace_id, 'system': system})
 
 
@@ -117,12 +117,17 @@ class Database:
         return self._engine
 
     @contextmanager
-    def session(self) -> Iterator[Session]:
+    def session(self, *, system: bool = False) -> Iterator[Session]:
         """Eine Session mit Transaktionsgrenze.
 
         Commit bei sauberem Austritt, Rollback bei jeder Exception, Close in
         beiden Fällen. Die Exception wird weitergereicht: ein fehlgeschlagener
         Schreibvorgang ist ein Fehler, keine leere Antwort.
+
+        ``system=True`` erzwingt den System-Kontext der RLS-Policies auch im
+        Request — nur für Prüfungen, die über Workspace-Grenzen hinweg
+        entscheiden müssen, etwa wem eine Kennung gehört (#1615). Liefert nie
+        Daten an einen Nutzer aus.
         """
         _ = self.engine  # baut Engine und Factory, falls noch nicht geschehen
         factory = self._session_factory
@@ -130,7 +135,7 @@ class Database:
             raise RuntimeError('session factory missing after engine initialisation')
         session = factory()
         try:
-            _bind_rls_context(session)
+            _bind_rls_context(session, system_context=system)
             yield session
             session.commit()
         except Exception:
