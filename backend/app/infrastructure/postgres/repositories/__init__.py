@@ -7,6 +7,7 @@ des Ports.
 
 from .llm_profile_repository import PostgresLlmProfileRepository
 from .project_repository import PostgresProjectRepository, ProjectNotStored
+from .run_repository import PostgresRunRepository, RunSimulationMissing
 from .simulation_repository import (
     PostgresSimulationRepository,
     SimulationProjectMissing,
@@ -15,7 +16,9 @@ from .simulation_repository import (
 __all__ = [
     "PostgresLlmProfileRepository",
     "PostgresProjectRepository",
+    "PostgresRunRepository",
     "PostgresSimulationRepository",
     "ProjectNotStored",
+    "RunSimulationMissing",
     "SimulationProjectMissing",
 ]

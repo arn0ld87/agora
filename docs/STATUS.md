@@ -300,7 +300,7 @@ Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config
 
 ### PostgreSQL-Grundlage: installiert, im Default ungenutzt
 
-`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit vier Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`, die vierte die Tabelle `agora.simulations`.
+`sqlalchemy`, `psycopg[binary]` und `alembic` sind Backend-Abhängigkeiten. Der zentrale Adapter liegt in `backend/app/infrastructure/postgres/` (`Database.session()` als einziger vorgesehener Weg zu einer Verbindung), Alembic unter `backend/migrations/` mit fünf Migrationen: die erste legt das Fachschema `agora` an, die zweite die Tabelle `agora.llm_profiles`, die dritte die Tabelle `agora.projects`, die vierte die Tabelle `agora.simulations`, die fünfte die Tabelle `agora.runs`.
 
 Wirksam wird davon im Default nichts: `AGORA_METADATA_BACKEND=legacy` ist gesetzt, und solange er gilt, wird keine Verbindung aufgebaut. `DATABASE_URL` hat bewusst keinen Default; `Config.validate()` lehnt `AGORA_METADATA_BACKEND=postgres` ohne URL, einen unbekannten Backend-Wert und ein `postgresql://`-Schema (psycopg2 ist nicht installiert) beim Start ab.
 
@@ -348,7 +348,7 @@ Bedingung dafür ist die Importreihenfolge: `gevent.monkey.patch_all()` muss vor
 
 Ungeprüft bleibt das Verhalten hinter Supavisor unter Last. Der HARDSTOP `--workers 1` bleibt aus den in `backend/gunicorn.conf.py` genannten Gründen unberührt.
 
-### Run-Registry: Vertrag und Port — ein Adapter
+### Run-Registry: Vertrag, Port, zwei Adapter
 
 `RunRegistry` delegiert seit #1579 die Datei-I/O an `FileRunRepository`
 (`backend/app/services/file_run_store.py`), hinter dem `RunRepository`-Protocol
@@ -357,7 +357,11 @@ Ungeprüft bleibt das Verhalten hinter Supavisor unter Last. Der HARDSTOP `--wor
 persistierten Manifest-Felder; Lease-Felder (`worker_pid`, `worker_token`,
 `heartbeat_at`, `lease_ttl_s`) bleiben in `metadata` und sind kein Bestandteil
 des Port-Vertrags.  `RunRegistry` bleibt Fassade (Singleton, Lock,
-canonical_status, Events, Aggregation).  Der PostgreSQL-Adapter folgt in #1587.
+canonical_status, Events, Aggregation).
+
+Seit #1587 gibt es den zweiten Adapter: `PostgresRunRepository` (`app/infrastructure/postgres/repositories/run_repository.py`) auf `agora.runs` (Revision `3f9b2d7e6a41`, linear auf `c4e8a1d93b56`). Anders als bei Projekten und Simulationen ist `payload jsonb` das vollständige Manifest aus `RunRecord.to_manifest()`, und die Spalten `run_type`, `entity_id`, `status`, `simulation_id`, `started_at`, `updated_at`, `completed_at` sind daraus abgeleitete Projektionen — der Vertrag unterscheidet "Feld fehlt" von "Feld ist `null`" (`exclude_unset`), das kann nur das Manifest tragen. `simulation_id` kommt aus `linked_ids.simulation_id` und ist Fremdschlüssel auf `agora.simulations(id)` (nullable für Graph-Build-Runs, `ON DELETE SET NULL`). Ein neuer Run mit unbekannter Simulation scheitert mit `RunSimulationMissing`; ein bestehender, dessen Simulation inzwischen fehlt, schreibt weiter. `save` ist ein `INSERT … ON CONFLICT DO UPDATE` und stempelt nichts, wie der Dateiadapter. Lease und Heartbeat bleiben im Manifest (`metadata`), ohne eigene Spalte. Der Prozess-Adapter (`get_database()`) hat seitdem einen Verbindungs-Timeout von 10 s, weil die Start-Reconciliation die Registry liest. `backend/scripts/migrate_runs_to_postgres.py` überträgt den Bestand mit `--dry-run`/`--verify`, idempotent, Dateien unberührt, Fehler (fehlende Simulation, abweichende `run_id`, unlesbares Manifest) einzeln; Ablauf und Rückweg in [`runbooks/run-postgres-umstellung.md`](runbooks/run-postgres-umstellung.md).
+
+**Umgeschaltet ist nichts.** `AGORA_RUN_BACKEND` steht im Default auf `file`. `Config.validate()` lehnt `postgres` bei `AGORA_SIMULATION_BACKEND=file` (der Fremdschlüssel zeigte ins Leere) und ohne `DATABASE_URL` ab. Der Adapter ist gegen eine echte PostgreSQL-Instanz verifiziert (Integrationstests für Adapter, Migrations-Roundtrip und `POST /api/runs/<id>/resume` samt `409 job_lease_active`), nicht gegen einen produktiven Bestand.
 
 ### Report-Metadaten: Vertrag und Port — ein Adapter
 

@@ -130,6 +130,13 @@ class Database:
 _database: Database | None = None
 _database_lock = threading.Lock()
 
+#: Verbindungs-Timeout (Sekunden) des Prozess-Adapters. Seit #1587 liest die
+#: Start-Reconciliation die Run-Registry — mit ``AGORA_RUN_BACKEND=postgres``
+#: ist das ein Datenbankzugriff im Startpfad. Ohne Timeout wartet psycopg bei
+#: einem stumm verworfenen Verbindungsaufbau rund 130 s (vgl. Schema-Gate,
+#: Codex-Review auf #1599).
+PROCESS_CONNECT_TIMEOUT = 10
+
 
 def get_database() -> Database:
     """Der Adapter dieses Prozesses.
@@ -148,7 +155,7 @@ def get_database() -> Database:
                         'DATABASE_URL is not configured — required before using '
                         'the PostgreSQL adapter (AGORA_METADATA_BACKEND=postgres)'
                     )
-                _database = Database(url)
+                _database = Database(url, connect_timeout=PROCESS_CONNECT_TIMEOUT)
     return _database
 
 

@@ -13,12 +13,13 @@ umgeschrieben. Offene Checkboxen in den Phasenabschnitten sind **kein**
 Fortschrittsanzeiger. Maßgeblich sind diese Tabelle, [`docs/STATUS.md`](../STATUS.md)
 und das Epic [#1576](https://github.com/arn0ld87/agora/issues/1576).
 
-**Umgeschaltet ist nichts.** Gebaut sind bisher drei PostgreSQL-Adapter,
-`PostgresLlmProfileRepository`, `PostgresProjectRepository` und
-`PostgresSimulationRepository`; alle sind per Default inaktiv
-(`AGORA_METADATA_BACKEND=legacy`, `AGORA_LLM_PROFILE_BACKEND=sqlite`,
-`AGORA_PROJECT_BACKEND=file`, `AGORA_SIMULATION_BACKEND=file`). Runs, Reports
-und Blobs haben noch keinen Adapter (siehe Tabelle).
+**Umgeschaltet ist nichts.** Gebaut sind bisher vier PostgreSQL-Adapter,
+`PostgresLlmProfileRepository`, `PostgresProjectRepository`,
+`PostgresSimulationRepository` und `PostgresRunRepository`; alle sind per
+Default inaktiv (`AGORA_METADATA_BACKEND=legacy`,
+`AGORA_LLM_PROFILE_BACKEND=sqlite`, `AGORA_PROJECT_BACKEND=file`,
+`AGORA_SIMULATION_BACKEND=file`, `AGORA_RUN_BACKEND=file`). Reports und Blobs
+haben noch keinen Adapter (siehe Tabelle).
 
 | Plan (§38) | Inhalt | Stand |
 |---|---|---|
@@ -29,7 +30,7 @@ und Blobs haben noch keinen Adapter (siehe Tabelle).
 | PR 4 | Postgres-Adapter LLM-Profile, Datenmigration | gemergt (#1517), Fernet-Store pro Profil (#1516) |
 | PR 6 | Projekt-Vertrag, Port, Postgres-Adapter, Datenmigration | gemergt (#1519, #1522) |
 | PR 7 | Simulationsmetadaten | Port gemergt (#1595, Issue #1578), Adapter und Datenmigration gemergt (#1598, Issue #1585) |
-| PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter: #1587 |
+| PR 8 | Run-Registry | Port gemergt (#1596, Issue #1579), Adapter und Datenmigration gemergt (#1605, Issue #1587) |
 | PR 9 | Report-Metadaten | Port gemergt (#1601, Issue #1580), Adapter: #1588 |
 | PR 13/14 | Blob-Store-Port, Supabase-Storage-Adapter | #1584, #1586 (optional) |
 | PR 15 | Cutover Metadaten-Backend | Prüfskript #1590, Cutover armserver #1592 |

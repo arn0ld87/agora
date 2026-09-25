@@ -110,13 +110,14 @@ Beide Provider brauchen weder eine Base-URL noch einen klassischen API-Key im Ag
 
 ## Metadaten-Backend (Supabase/PostgreSQL, optional)
 
-Vier unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf PostgreSQL wechseln. Sie werden **einzeln** umgestellt, nicht gemeinsam. Default in allen vier Fällen: PostgreSQL ist verfügbar, aber nicht aktiv — die JSON-/SQLite-Dateien bleiben die Wahrheit, bis der Operator bewusst umschaltet.
+Fünf unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf PostgreSQL wechseln. Sie werden **einzeln** umgestellt, nicht gemeinsam. Default in allen fünf Fällen: PostgreSQL ist verfügbar, aber nicht aktiv — die JSON-/SQLite-Dateien bleiben die Wahrheit, bis der Operator bewusst umschaltet.
 
 | Variable | Default | Werte | Zweck |
 |---|---|---|---|
 | `AGORA_METADATA_BACKEND` | `legacy` | `legacy`, `postgres` | Dateisystem/Neo4j vs. PostgreSQL für allgemeine Metadaten |
 | `AGORA_PROJECT_BACKEND` | `file` | `file`, `postgres` | `uploads/projects/<project_id>/project.json` vs. PostgreSQL |
 | `AGORA_SIMULATION_BACKEND` | `file` | `file`, `postgres` | `uploads/simulations/<simulation_id>/state.json` vs. PostgreSQL; `postgres` verlangt `AGORA_PROJECT_BACKEND=postgres` |
+| `AGORA_RUN_BACKEND` | `file` | `file`, `postgres` | `uploads/run_registry/<run_id>.json` vs. PostgreSQL; `postgres` verlangt `AGORA_SIMULATION_BACKEND=postgres` |
 | `AGORA_LLM_PROFILE_BACKEND` | `sqlite` | `sqlite`, `postgres` | `instance/llm_profiles.db` vs. PostgreSQL |
 | `DATABASE_URL` 🔐 | leer, kein Default | `postgresql+psycopg://user:password@host:5432/dbname` | Pflicht, sobald einer der Schalter auf `postgres` steht |
 
