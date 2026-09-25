@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from ..contracts.document_manifest_contract import NON_SUPPORTING_DOCUMENT_ROLES
 from .claim_atomizer import split_compound_claim
 from .quantifier_claims import (
     CHECK_CORE_SUPPORTED,
@@ -113,6 +114,11 @@ class EntailmentResult:
     @property
     def supports(self) -> bool:
         return self.verdict is EntailmentVerdict.SUPPORTED
+
+
+#: Begründungspräfix für Evidence aus Szenario-/Erwartungstext (#1240). Das
+#: Hypothesen-Routing erkennt daran, dass ein Claim nur am Testfall hing.
+SCENARIO_ROLE_REASON_PREFIX = "Szenario-/Erwartungstext des Eingabedokuments"
 
 
 # ---------------------------------------------------------------------------
@@ -1193,6 +1199,19 @@ def classify_evidence(
     if not claim or not evidence_text:
         return EntailmentResult(EntailmentVerdict.INSUFFICIENT, "leerer Claim oder Evidence-Text")
 
+    # Issue #1240: Szenario-, Frage- und Erwartungstext des Eingabedokuments
+    # beschreiben den Testfall, nicht die Domäne. Sie stützen nie — und
+    # widersprechen auch nie: eine erwartete Antwort, die die Simulation nicht
+    # zeigt, ist kein Gegenbeleg. Vor allen Regeln, damit der Judge dafür
+    # kein Budget verbraucht.
+    role = str(evidence_item.get("document_role") or "")
+    if role in NON_SUPPORTING_DOCUMENT_ROLES:
+        return EntailmentResult(
+            EntailmentVerdict.RELATED_ONLY,
+            f"{SCENARIO_ROLE_REASON_PREFIX} (document_role={role}) — Kontext, kein Beleg",
+            checks=["non_supporting_document_role"],
+        )
+
     checks: List[str] = []
     claim_facts = extract_numeric_facts(claim)
     evidence_facts = extract_numeric_facts(evidence_text)
@@ -1599,6 +1618,7 @@ __all__ = [
     "PREDICATE_MATCH_THRESHOLD",
     "QUALITATIVE_RELATED_THRESHOLD",
     "RETRIEVAL_RELEVANCE_THRESHOLD",
+    "SCENARIO_ROLE_REASON_PREFIX",
     "QUALITATIVE_SUPPORT_THRESHOLD",
     "TOPIC_MATCH_THRESHOLD",
     "classify_evidence",

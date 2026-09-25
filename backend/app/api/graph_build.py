@@ -5,6 +5,7 @@ Graph API: Ontology and graph building endpoints.
 import os
 import json
 from collections.abc import Mapping
+from typing import Any, Optional
 
 from flask import current_app, request
 from pydantic import ValidationError
@@ -21,7 +22,12 @@ from ..services.graph_build import (
     AiModelRefRoutingInputError,
     GraphBuildService,
 )
-from ..contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
+from ..contracts.document_manifest_contract import (
+    DocumentManifest,
+    DocumentManifestEntry,
+    DocumentRole,
+    parse_document_roles,
+)
 from ..utils.file_parser import FileParser, derive_document_id
 from ..services.text_processor import TextProcessor
 from ..utils.logger import get_logger
@@ -137,6 +143,26 @@ def _limit_upload_endpoint():
     response.headers["Retry-After"] = str(result.retry_after_seconds)
     return response, status
 
+def _parse_legacy_llm_form(form: Mapping[str, str]) -> tuple[Optional[str], Any, Optional[str]]:
+    """Legacy-Routingfelder ``llm_model``/``llm_provider``/``llm_profile_id``.
+
+    Aus ``generate_ontology`` gezogen (Komplexitäts-Gate, #1240); Verhalten
+    und Fehlermeldungen unverändert. Wirft ``ValueError`` mit der Meldung,
+    die der Endpoint als 400 zurückgibt.
+    """
+    llm_model_override = (form.get('llm_model') or '').strip() or None
+    llm_provider_raw = form.get('llm_provider')
+    llm_provider_payload = None
+    if llm_provider_raw:
+        try:
+            llm_provider_payload = json.loads(llm_provider_raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("llm_provider must be a valid JSON object") from exc
+    llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+    llm_profile_id = (form.get('llm_profile_id') or '').strip() or None
+    return llm_model_override, llm_runtime, llm_profile_id
+
+
 @graph_bp.route('/ontology/generate', methods=['POST'])
 @require_scope("graph:write")
 @handle_api_errors(log_prefix="Ontology generation failed")
@@ -166,25 +192,21 @@ def generate_ontology():
         llm_runtime = None
         llm_profile_id = None
     else:
-        llm_model_override = (request.form.get('llm_model') or '').strip() or None
-        llm_provider_raw = request.form.get('llm_provider')
-        llm_provider_payload = None
-        if llm_provider_raw:
-            try:
-                llm_provider_payload = json.loads(llm_provider_raw)
-            except json.JSONDecodeError:
-                return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="llm_provider must be a valid JSON object")
-
         try:
-            llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+            llm_model_override, llm_runtime, llm_profile_id = _parse_legacy_llm_form(request.form)
         except ValueError as exc:
             return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
-
-        llm_profile_id = (request.form.get('llm_profile_id') or '').strip() or None
 
     uploaded_files = request.files.getlist('files')
     if not uploaded_files or all(not f.filename for f in uploaded_files):
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Please upload at least one document file")
+
+    # Issue #1240: optionale Textsorte je Datei. Fehlt sie, gilt ein Dokument
+    # als Domänenfakt — das bisherige Verhalten.
+    try:
+        document_roles = parse_document_roles(request.form.get('document_roles'))
+    except ValueError as exc:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
 
     project = ProjectManager.create_project(name=project_name)
     project.simulation_requirement = simulation_requirement
@@ -239,6 +261,9 @@ def generate_ontology():
                         filename=file_info["original_filename"],
                         start_offset=start_offset,
                         end_offset=end_offset,
+                        document_role=document_roles.get(
+                            file_info["original_filename"], DocumentRole.domain_fact
+                        ),
                     )
                 )
 

@@ -16,11 +16,70 @@ Aufruf zum Schema-Dump:
 """
 from __future__ import annotations
 
+import json
+from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 _STRICT = ConfigDict(extra="forbid")
+
+
+class DocumentRole(str, Enum):
+    """Textsorte eines hochgeladenen Dokuments (Issue #1240, Plan-Entscheidung E2).
+
+    Ein Evaluationsdokument mischt sonst drei Textsorten: das Szenario, die
+    Fragestellung und die erwarteten Ergebnisse. Ingestiert landen alle drei
+    als Seed-Fakt im Graphen — der Report las die mitgelieferten Antworten
+    danach als Simulationsbefund.
+
+    Additiv zu ``EvidenceSourceKind`` (ADR-0002 Anker 3 bleibt unberührt): die
+    Herkunftsgattung sagt *woher*, die Rolle sagt *welche Art Aussage*.
+    """
+
+    domain_fact = "domain_fact"
+    scenario_statement = "scenario_statement"
+    requirement = "requirement"
+    expected_result = "expected_result"
+    background = "background"
+
+
+#: Rollen, deren Aussagen einen Claim nie stützen dürfen — sie beschreiben das
+#: Szenario, die Frage oder die erwartete Antwort, nicht die Domäne. Als
+#: Kontext bleiben sie abrufbar.
+NON_SUPPORTING_DOCUMENT_ROLES: frozenset[str] = frozenset({
+    DocumentRole.scenario_statement.value,
+    DocumentRole.requirement.value,
+    DocumentRole.expected_result.value,
+})
+
+
+_DOCUMENT_ROLES_ADAPTER: TypeAdapter[dict[str, DocumentRole]] = TypeAdapter(
+    dict[str, DocumentRole]
+)
+
+
+def parse_document_roles(raw: Optional[str]) -> dict[str, DocumentRole]:
+    """Upload-Formularfeld ``document_roles``: JSON ``{Dateiname: Rolle}``.
+
+    Leer oder fehlend → ``{}`` (alle Dokumente ``domain_fact``). Ungültiges
+    JSON oder eine unbekannte Rolle → ``ValueError`` mit lesbarer Meldung.
+    Eine stillschweigend verworfene Rolle würde Erwartungstext wieder als
+    Domänenfakt ingestieren — genau den Fehler aus #1240.
+    """
+    if raw is None or not raw.strip():
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("document_roles must be a valid JSON object") from exc
+    try:
+        return _DOCUMENT_ROLES_ADAPTER.validate_python(payload)
+    except ValidationError as exc:
+        allowed = ", ".join(role.value for role in DocumentRole)
+        raise ValueError(
+            f"document_roles must map file names to one of: {allowed}"
+        ) from exc
 
 
 class DocumentManifestEntry(BaseModel):
@@ -41,6 +100,13 @@ class DocumentManifestEntry(BaseModel):
     )
     end_offset: int = Field(
         ..., ge=0, description="Erstes Zeichen NACH dem Dokumentinhalt im Blob (exklusive)."
+    )
+    document_role: DocumentRole = Field(
+        default=DocumentRole.domain_fact,
+        description=(
+            "Textsorte des Dokuments (Issue #1240). Altbestand ohne Angabe "
+            "gilt als domain_fact."
+        ),
     )
 
 

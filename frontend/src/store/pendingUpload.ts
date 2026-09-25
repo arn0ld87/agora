@@ -13,6 +13,8 @@
  */
 import { reactive } from 'vue'
 
+import type { DocumentRole } from '../contracts/documentRoleContract'
+
 interface PendingUploadState {
   files: File[]
   simulationRequirement: string
@@ -20,6 +22,11 @@ interface PendingUploadState {
   numAgents: number
   /** Nur für den Upload-Payload in Schritt 1. Der Simulationsstart liest ``maxRounds`` aus der Query. */
   numRounds: number
+  /**
+   * Issue #1240: Textsorte je Dateiname. Fehlende Einträge gelten im Backend
+   * als ``domain_fact``; nur abweichende Rollen werden mitgeschickt.
+   */
+  documentRoles: Record<string, DocumentRole>
   isPending: boolean
 }
 
@@ -29,6 +36,7 @@ const state = reactive<PendingUploadState>({
   llmProfileId: null,
   numAgents: 30,
   numRounds: 10,
+  documentRoles: {},
   isPending: false
 })
 
@@ -38,8 +46,10 @@ export function setPendingUpload(
   llmProfileId: string | null = null,
   numAgents = 30,
   numRounds = 10,
+  documentRoles: Record<string, DocumentRole> = {},
 ): void {
   state.files = files
+  state.documentRoles = documentRoles
   state.simulationRequirement = requirement
   state.llmProfileId = llmProfileId
   state.numAgents = numAgents
@@ -54,6 +64,7 @@ export function getPendingUpload(): PendingUploadState {
     llmProfileId: state.llmProfileId,
     numAgents: state.numAgents,
     numRounds: state.numRounds,
+    documentRoles: state.documentRoles,
     isPending: state.isPending,
   }
 }
@@ -64,6 +75,7 @@ export function clearPendingUpload(): void {
   state.llmProfileId = null
   state.numAgents = 30
   state.numRounds = 10
+  state.documentRoles = {}
   state.isPending = false
 }
 

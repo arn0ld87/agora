@@ -10,13 +10,14 @@ from ..claim_atomizer import split_claim_chunks
 from ..claim_type_classifier import classify_claim_type
 from ..confidence_calculator import apply_claim_type_floor, compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
-from ..evidence_entailment import EntailmentJudge
+from ..evidence_entailment import SCENARIO_ROLE_REASON_PREFIX, EntailmentJudge
 from ..evidence_identity import build_producer_key
 from ..llm_entailment_judge import build_llm_judge
 from ..run_budget import reraise_if_budget_exceeded
 from .evidence import (
     build_seed_document_anchor,
     degrade_sections_for_violations,
+    document_role_of,
     downgrade_medium_without_agent_grounded,
     init_evidence_map,
     normalize_claims_for_contract,
@@ -196,6 +197,16 @@ def _is_non_factual_claim(claim: Dict[str, Any]) -> bool:
     return claim.get("claim_type") in _NON_FACTUAL_CLAIM_TYPES
 
 
+def _count_scenario_bindings(claim: Dict[str, Any]) -> int:
+    """Bindungen, die nur wegen ihrer Dokument-Rolle nicht stützen (#1240)."""
+    return sum(
+        1
+        for item in claim.get("evidence") or []
+        if isinstance(item, dict)
+        and str(item.get("entailment_reason") or "").startswith(SCENARIO_ROLE_REASON_PREFIX)
+    )
+
+
 def _typed_confidence(
     chunk: str,
     score: float,
@@ -254,6 +265,7 @@ class ReportAgent:
         llm_client: Optional[LLMClient] = None,
         graph_tools: Optional[GraphToolsService] = None,
         model_name: Optional[str] = None,
+        document_roles: Optional[Dict[str, str]] = None,
     ):
         """
         Initialize Report Agent
@@ -265,8 +277,11 @@ class ReportAgent:
             llm_client: LLM client (optional — overrides model_name if given)
             graph_tools: Graph tools service (optional, requires external GraphStorage injection)
             model_name: per-report model override (e.g. "deepseek-v3.2:cloud")
+            document_roles: ``document_id`` → Dokument-Rolle (Issue #1240),
+                siehe ``services.document_roles.load_document_roles``
         """
         self.graph_id = graph_id
+        self.document_roles: Dict[str, str] = dict(document_roles or {})
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
 
@@ -527,6 +542,11 @@ class ReportAgent:
                     str(provenance["document_id"]).strip(),
                     str(provenance.get("chunk_id")),
                 )
+            # Issue #1240: Die Textsorte hängt am Dokument, nicht am Anker —
+            # auch ein Fakt ohne Chunk-Nummer stammt aus seinem Dokument.
+            role = document_role_of(provenance, getattr(self, "document_roles", None))
+            if role:
+                item["document_role"] = role
             return item
 
         items: List[Dict[str, Any]] = []
@@ -993,6 +1013,15 @@ class ReportAgent:
                 "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
                 "— deshalb als Hypothese geführt."
             )
+            scenario_count = _count_scenario_bindings(claim)
+            if scenario_count:
+                # Issue #1240: sichtbar machen, dass die Aussage am Testfall
+                # hing — der Leser soll sie nicht für einen Befund halten.
+                rationale += (
+                    f" Davon {scenario_count} aus Szenario-/Erwartungstext des "
+                    "Eingabedokuments: das ist Vorgabe des Testfalls, kein "
+                    "Simulationsbefund."
+                )
         else:
             rationale = (
                 "Keine direkte Evidence gebunden; deshalb nicht als "

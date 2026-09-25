@@ -1472,7 +1472,15 @@
       "numRoundsLabel": "Sim-Runden",
       "numAgentsWarning": "Unter dem empfohlenen Floor (30). Aussagekraft reduziert.",
       "smallSimBadge": "SMALL_SIM",
-      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 ist aktiv — Slider geht bis 10 statt 30. Statistische Aussagekraft ist eingeschränkt."
+      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 ist aktiv — Slider geht bis 10 statt 30. Statistische Aussagekraft ist eingeschränkt.",
+      "documentRoleLabel": "Textsorte",
+      "documentRoles": {
+        "domain_fact": "Domänenfakten",
+        "scenario_statement": "Szenario-Beschreibung",
+        "requirement": "Fragestellung",
+        "expected_result": "Erwartetes Ergebnis",
+        "background": "Hintergrund"
+      }
     },
     "stats": {
       "activeRuns": "Aktive Runs",

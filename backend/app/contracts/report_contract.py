@@ -31,6 +31,8 @@ from pydantic import (
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema
 
+from .document_manifest_contract import DocumentRole
+
 
 # Strenger Default für Vertrags-Modelle
 _STRICT = ConfigDict(extra="forbid", populate_by_name=True)
@@ -241,6 +243,10 @@ class EvidenceItemModel(BaseModel):
     persona_role_family: Optional[str] = Field(
         default=None, min_length=1, max_length=120
     )
+    # Issue #1240: Textsorte des Quelldokuments. Szenario-, Frage- und
+    # Erwartungstext stuetzen keinen Claim (``classify_evidence``), bleiben
+    # aber als Kontext sichtbar. ``None`` = unbekannt/Altbestand.
+    document_role: Optional[DocumentRole] = None
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceItemModel":
@@ -315,6 +321,8 @@ class EvidenceRecordModel(BaseModel):
     persona_role_family: Optional[str] = Field(
         default=None, min_length=1, max_length=120
     )
+    # Issue #1240, siehe EvidenceItemModel.
+    document_role: Optional[DocumentRole] = None
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceRecordModel":

@@ -113,3 +113,41 @@ def test_ontology_generate_persists_requirement_files_and_text_length(
     assert reloaded.simulation_requirement == REQUIREMENT
     assert reloaded.files, "files-Liste muss die project.json überleben"
     assert reloaded.total_text_length and reloaded.total_text_length > 0
+
+
+def test_ontology_generate_persists_document_roles_in_manifest(client, persistence_mocks):
+    """Issue #1240: die Textsorte je Datei landet im Dokument-Manifest."""
+    response = client.post(
+        "/api/graph/ontology/generate",
+        data={
+            "simulation_requirement": REQUIREMENT,
+            "project_name": "rollen-check",
+            "document_roles": '{"erwartung.md": "expected_result"}',
+            "files": [
+                (io.BytesIO(b"Szenario und Domaenenfakten."), "szenario.md"),
+                (io.BytesIO(b"Der Betriebsrat wird zustimmen."), "erwartung.md"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200, response.get_json()
+    manifest = ProjectManager.get_document_manifest(response.get_json()["data"]["project_id"])
+    roles = {entry.filename: entry.document_role.value for entry in manifest.documents}
+    assert roles == {"szenario.md": "domain_fact", "erwartung.md": "expected_result"}
+
+
+def test_ontology_generate_rejects_unknown_document_role(client, persistence_mocks):
+    response = client.post(
+        "/api/graph/ontology/generate",
+        data={
+            "simulation_requirement": REQUIREMENT,
+            "project_name": "rollen-check",
+            "document_roles": '{"doc.txt": "loesung"}',
+            "files": (io.BytesIO(b"Document body."), "doc.txt"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert "document_roles" in response.get_json()["error"]

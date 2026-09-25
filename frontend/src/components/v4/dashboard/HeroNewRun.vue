@@ -22,6 +22,7 @@ import { preflightEstimate } from '../../../api/budget'
 import type { PreflightEstimateParams } from '../../../api/budget'
 import { setPendingUpload } from '../../../store/pendingUpload'
 import { toRunParamsQuery } from '../../../contracts/runParamsQuery'
+import { DocumentRoleSchema, type DocumentRole } from '../../../contracts/documentRoleContract'
 import { STORAGE_LANG } from '../../../composables/useEnvForm'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
@@ -269,7 +270,21 @@ function onDragLeave() {
 }
 
 function removeFile(i: number) {
-  files.value.splice(i, 1)
+  const [removed] = files.value.splice(i, 1)
+  if (removed && !files.value.some(f => f.name === removed.name)) {
+    delete documentRoles.value[removed.name]
+  }
+}
+
+// Issue #1240: Textsorte je Datei. Szenario-, Frage- und Erwartungstext
+// stützen im Report keinen Claim — sonst liest der Report die mitgelieferten
+// Antworten als Simulationsbefund.
+const DOCUMENT_ROLES = DocumentRoleSchema.options
+const documentRoles = ref<Record<string, DocumentRole>>({})
+
+function onPickRole(fileName: string, event: Event) {
+  const parsed = DocumentRoleSchema.safeParse((event.target as HTMLSelectElement).value)
+  if (parsed.success) documentRoles.value[fileName] = parsed.data
 }
 
 function formatBytes(bytes: number): string {
@@ -328,6 +343,7 @@ async function startSimulation() {
       profileId,
       numAgents.value,
       numRounds.value,
+      { ...documentRoles.value },
     )
     // Rundenzahl und Budget gehen in die Query, nicht in den Store: Schritt 1
     // leert ihn nach dem Upload (`clearPendingUpload`), Schritt 3 las danach
@@ -416,6 +432,18 @@ onMounted(() => {
             <ul class="hero-files">
               <li v-for="(f, i) in files" :key="`${f.name}-${i}`" class="hero-file">
                 <span class="hero-file__name">{{ f.name }}</span>
+                <select
+                  class="hero-file__role"
+                  :aria-label="`${$t('dashboard.hero.documentRoleLabel')}: ${f.name}`"
+                  :value="documentRoles[f.name] ?? 'domain_fact'"
+                  @click.stop
+                  @keydown.stop
+                  @change="onPickRole(f.name, $event)"
+                >
+                  <option v-for="role in DOCUMENT_ROLES" :key="role" :value="role">
+                    {{ $t(`dashboard.hero.documentRoles.${role}`) }}
+                  </option>
+                </select>
                 <span class="hero-file__size">{{ formatBytes(f.size) }}</span>
                 <button
                   type="button"
@@ -672,7 +700,7 @@ onMounted(() => {
 
 .hero-file {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 6px 8px;
@@ -691,6 +719,17 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.hero-file__role {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface-base, transparent);
+  border: 1px solid var(--border-subtle, currentColor);
+  border-radius: var(--r-3, 6px);
+  padding: 2px 6px;
+  max-width: 12rem;
 }
 
 .hero-file__size {

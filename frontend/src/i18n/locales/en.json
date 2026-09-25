@@ -1472,7 +1472,15 @@
       "numRoundsLabel": "Sim rounds",
       "numAgentsWarning": "Below recommended floor (30). Reduced statistical significance.",
       "smallSimBadge": "SMALL_SIM",
-      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 is active — slider goes down to 10 instead of 30. Statistical significance is limited."
+      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 is active — slider goes down to 10 instead of 30. Statistical significance is limited.",
+      "documentRoleLabel": "Document type",
+      "documentRoles": {
+        "domain_fact": "Domain facts",
+        "scenario_statement": "Scenario description",
+        "requirement": "Question / requirement",
+        "expected_result": "Expected result",
+        "background": "Background"
+      }
     },
     "stats": {
       "activeRuns": "Active runs",

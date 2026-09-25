@@ -170,6 +170,7 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       null,
       expect.anything(),
       expect.anything(),
+      {},
     )
   })
 
@@ -203,6 +204,7 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       null,
       expect.anything(),
       expect.anything(),
+      {},
     )
   })
 
@@ -254,6 +256,7 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       'abc',
       30,
       10,
+      {},
     )
     // Issue #1234: Rundenzahl und Budget reisen in der Query, nicht im Store.
     expect(pushSpy).toHaveBeenCalledWith({

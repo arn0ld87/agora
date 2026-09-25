@@ -7,6 +7,7 @@ from typing import Dict
 
 from flask import current_app
 
+from ..services.document_roles import load_document_roles
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.report_agent.output_contract import is_deliverable_report_status
 from ..services.run_lifecycle import RunLifecycle
@@ -381,6 +382,8 @@ class ReportGenerationService:
                     graph_tools=graph_tools,
                     llm_client=shared_llm_client,
                     model_name=resolved_route.model,
+                    # Issue #1240: Szenario-/Erwartungstext stützt keinen Claim.
+                    document_roles=load_document_roles(state.project_id),
                 )
                 def progress_callback(stage, progress, message):
                     task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")

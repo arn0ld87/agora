@@ -145,6 +145,18 @@
       "title": "ConfidenceLabel",
       "type": "string"
     },
+    "DocumentRole": {
+      "description": "Textsorte eines hochgeladenen Dokuments (Issue #1240, Plan-Entscheidung E2).\n\nEin Evaluationsdokument mischt sonst drei Textsorten: das Szenario, die\nFragestellung und die erwarteten Ergebnisse. Ingestiert landen alle drei\nals Seed-Fakt im Graphen \u2014 der Report las die mitgelieferten Antworten\ndanach als Simulationsbefund.\n\nAdditiv zu ``EvidenceSourceKind`` (ADR-0002 Anker 3 bleibt unber\u00fchrt): die\nHerkunftsgattung sagt *woher*, die Rolle sagt *welche Art Aussage*.",
+      "enum": [
+        "domain_fact",
+        "scenario_statement",
+        "requirement",
+        "expected_result",
+        "background"
+      ],
+      "title": "DocumentRole",
+      "type": "string"
+    },
     "EntailmentVerdict": {
       "description": "Urteil der zweiten Binding-Stufe.\n\nSpiegelt ``app.services.evidence_entailment.EntailmentVerdict``. Nur\n``SUPPORTED`` rechtfertigt ``supports_claim=True``; ``RELATED_ONLY`` und\n``INSUFFICIENT`` erh\u00f6hen die Confidence nie.",
       "enum": [
@@ -428,6 +440,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/AgentLogRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "document_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DocumentRole"
             },
             {
               "type": "null"

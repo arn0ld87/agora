@@ -8,6 +8,8 @@
  */
 import { z } from "zod";
 
+import { DocumentRoleSchema } from "./documentRoleContract";
+
 /**
  * ADR-0002: Claims brauchen mindestens ein stützendes Evidence-Item.
  * Eine einzelne Quelle trägt höchstens einen low Claim; ohne Quelle routet
@@ -18,6 +20,9 @@ export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 1;
 // === Enums ===
 export const ConfidenceLabelSchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
 export type ConfidenceLabel = z.infer<typeof ConfidenceLabelSchema>;
+
+// Issue #1240: Textsorte eines hochgeladenen Dokuments (eigenes Modul).
+export { DocumentRoleSchema, type DocumentRole } from "./documentRoleContract";
 
 // Issue #1400: Art der Aussage — spiegelt backend report_contract.ClaimType.
 // Nicht mit report_v3 Claim.confidence_scope "empirical" verwechseln.
@@ -120,6 +125,8 @@ const EvidenceSourceSchema = z.object({
   // "<provider>/<model_id>" (z. B. "ollama/qwen2.5:32b"). None bei
   // Pre-Slice-8-Daten — daher .nullable().optional().
   source_model: z.string().max(200).nullable().optional(),
+  // Issue #1240: Textsorte des Quelldokuments; null = unbekannt/Altbestand.
+  document_role: DocumentRoleSchema.optional().nullable(),
 }).strict();
 
 const validateEvidenceSource = (

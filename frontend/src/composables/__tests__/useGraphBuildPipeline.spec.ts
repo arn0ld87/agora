@@ -146,6 +146,40 @@ describe('useGraphBuildPipeline', () => {
     expect(pipeline.currentProjectId.value).toBe('project_42')
   })
 
+  // Issue #1240: nur abweichende Textsorten gehen mit; ohne Eintrag bleibt ein
+  // Dokument im Backend Domänenfakt.
+  it('sendet document_roles nur für abweichende Textsorten', async () => {
+    pendingUpload.getPendingUpload.mockReturnValue({
+      isPending: true,
+      files: [
+        new File(['s'], 'szenario.md', { type: 'text/markdown' }),
+        new File(['e'], 'erwartung.md', { type: 'text/markdown' }),
+      ],
+      simulationRequirement: 'Analyse',
+      llmProfileId: 'profile_42',
+      numAgents: 30,
+      numRounds: 10,
+      documentRoles: { 'szenario.md': 'domain_fact', 'erwartung.md': 'expected_result' },
+    })
+    const pipeline = useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
+
+    await pipeline.initialize()
+
+    const formData = graphApi.generateOntology.mock.calls[0][0] as FormData
+    expect(JSON.parse(String(formData.get('document_roles')))).toEqual({
+      'erwartung.md': 'expected_result',
+    })
+  })
+
+  it('lässt document_roles weg, wenn alle Dokumente Domänenfakten sind', async () => {
+    const pipeline = useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
+
+    await pipeline.initialize()
+
+    const formData = graphApi.generateOntology.mock.calls[0][0] as FormData
+    expect(formData.get('document_roles')).toBeNull()
+  })
+
   // Issue #1234: Der Replace auf die konkrete Projekt-ID liegt genau eine
   // Zeile hinter `clearPendingUpload()`. Verliert er die Query, sind die
   // Run-Parameter des Dashboard-Starts danach nirgends mehr.
