@@ -167,6 +167,19 @@ def test_downgrade_keeps_what_was_published_before(db_url):
     assert baseline is None
 
 
+def test_downgrade_leaves_a_publication_created_after_a_noop_upgrade(db_url):
+    command.upgrade(_alembic(), 'head')
+    with create_engine(db_url, isolation_level='AUTOCOMMIT').connect() as c:
+        # Erst nach dem Upgrade vom Betreiber angelegt und konfiguriert.
+        c.execute(
+            text("CREATE PUBLICATION supabase_realtime FOR TABLE agora.runs WITH (publish = 'insert')")
+        )
+
+    command.downgrade(_alembic(), BEFORE_REALTIME)
+
+    assert _published(db_url) == {'runs': (True, False, False, False)}
+
+
 def test_a_repeated_upgrade_keeps_the_first_baseline(db_url):
     command.upgrade(_alembic(), BEFORE_REALTIME)
     with create_engine(db_url, isolation_level='AUTOCOMMIT').connect() as c:

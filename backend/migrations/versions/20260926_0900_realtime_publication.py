@@ -85,16 +85,17 @@ _DOWNGRADE = """
 DO $$
 DECLARE
   t text;
-  kept text[] := '{}';
+  kept text[];
   previous text;
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
-    IF to_regclass('public.agora_realtime_baseline') IS NOT NULL THEN
-      SELECT coalesce(array_agg(value), '{}') INTO kept
-        FROM public.agora_realtime_baseline WHERE kind = 'table';
-      SELECT value INTO previous
-        FROM public.agora_realtime_baseline WHERE kind = 'publish';
-    END IF;
+  -- Ohne Vorzustand hat das Upgrade die Publication nicht angefasst (sie
+  -- fehlte damals); dann gehört auch eine später angelegte dem Betreiber.
+  IF to_regclass('public.agora_realtime_baseline') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    SELECT coalesce(array_agg(value), '{}') INTO kept
+      FROM public.agora_realtime_baseline WHERE kind = 'table';
+    SELECT value INTO previous
+      FROM public.agora_realtime_baseline WHERE kind = 'publish';
     IF NOT (SELECT puballtables FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
       FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
         IF NOT (t = ANY (kept)) AND EXISTS (SELECT 1 FROM pg_publication_tables
@@ -104,9 +105,7 @@ BEGIN
         END IF;
       END LOOP;
     END IF;
-    -- Ohne Vorzustand: Supabase legt die Publication mit allen Operationen an.
-    EXECUTE format('ALTER PUBLICATION supabase_realtime SET (publish = %L)',
-                   coalesce(previous, 'insert, update, delete, truncate'));
+    EXECUTE format('ALTER PUBLICATION supabase_realtime SET (publish = %L)', previous);
   END IF;
   DROP TABLE IF EXISTS public.agora_realtime_baseline;
 END
