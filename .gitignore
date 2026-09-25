@@ -129,6 +129,9 @@ backend/.cache/
 
 # Runtime artifacts and local instances
 /instance/
+# Lauf-Exporte gehören nicht ins Repository. Der bestehende, versionierte
+# Regressionstest-Datensatz bleibt trotz dieser Regel weiterhin getrackt.
+/agora-lauf-*/
 # Flask instance path with local run data, LLM traces, routing snapshots,
 # user uploads metadata, SQLite state, and other private runtime artifacts.
 backend/instance/
