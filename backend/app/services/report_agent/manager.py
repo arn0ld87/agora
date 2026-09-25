@@ -1273,27 +1273,28 @@ class ReportManager:
     
     @classmethod
     def delete_report(cls, report_id: str) -> bool:
-        """Delete a report (the entire report folder)."""
+        """Delete a report: metadata via the repository, contents on disk.
+
+        Issue #1588: die Metadaten laufen ueber das Repository — mit
+        ``AGORA_REPORT_BACKEND=postgres`` bliebe sonst die Zeile in
+        ``agora.reports`` stehen, und der geloeschte Report tauchte in jeder
+        Liste wieder auf. Die Inhalte (Ordner, Legacy-``.md``) bleiben Dateien.
+        """
         import shutil
-        
+
+        deleted = cls._get_repository().delete(report_id)
+
         folder_path = cls._get_report_folder(report_id)
-        
         # New format: delete the entire report folder
         if os.path.exists(folder_path) and os.path.isdir(folder_path):
             shutil.rmtree(folder_path)
             logger.info("Report folder deleted: %s", report_id)
-            return True
-        
-        # Backward-compatible format: delete the standalone JSON file
-        deleted = False
-        old_json_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.json")
-        old_md_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.md")
-        
-        if os.path.exists(old_json_path):
-            os.remove(old_json_path)
             deleted = True
+
+        # Backward-compatible format: the standalone Markdown file
+        old_md_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.md")
         if os.path.exists(old_md_path):
             os.remove(old_md_path)
             deleted = True
-        
+
         return deleted

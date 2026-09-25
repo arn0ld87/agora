@@ -27,10 +27,13 @@ Sortierung nach ``created_at`` (neueste zuerst) bleibt Sache von
 ``ReportManager.list_reports``, das seit jeher auf dem Domain-Objekt sortiert
 und nicht auf dem rohen Datensatz.
 
+``delete`` entfernt den Metadatensatz unter dem Ablageschluessel und gibt
+zurueck, ob einer da war (seit #1588). Die Report-Inhalte daneben raeumt
+``ReportManager.delete_report`` selbst ab — sie sind keine Metadaten.
+
 Die Fabrik ``get_report_repository`` ist die einzige Stelle, an der ein
-Consumer an ein Report-Repository kommt. Heute liefert sie ausschliesslich
-den Dateiadapter; der PostgreSQL-Adapter folgt in #1588 ohne
-Konfigurationsschalter in diesem Commit.
+Consumer an ein Report-Repository kommt. ``AGORA_REPORT_BACKEND`` waehlt
+zwischen Dateiadapter (Default ``file``) und PostgreSQL-Adapter (#1588).
 """
 
 from __future__ import annotations
@@ -38,8 +41,17 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Protocol, runtime_checkable
 
-from ..config import Config
+from ..config import REPORT_BACKENDS, Config
 from ..contracts.report_record_contract import ReportRecord
+
+
+class ReportBackendUnavailable(RuntimeError):
+    """``AGORA_REPORT_BACKEND`` traegt einen Wert, den keine Ablage bedient.
+
+    ``Config.validate()`` lehnt ihn beim Start ab; dieser Fehler faengt den
+    Weg ohne Validierung ab (Test, Skript), statt still auf die Datei
+    zurueckzufallen.
+    """
 
 
 @runtime_checkable
@@ -61,6 +73,14 @@ class ReportRepository(Protocol):
 
         Erstellt das Ablageverzeichnis bei Bedarf. Kein automatisches
         Stempeln — ``ReportRecord`` hat kein ``updated_at``-Feld.
+        """
+        ...
+
+    def delete(self, report_id: str) -> bool:
+        """Entfernt den Metadatensatz unter dem Ablageschluessel.
+
+        ``True``, wenn einer da war. Wirft nicht bei unbekanntem Schluessel.
+        Report-Inhalte (Klasse B) bleiben Sache des Aufrufers.
         """
         ...
 
@@ -92,10 +112,21 @@ def get_report_repository(reports_dir: Optional[str] = None) -> ReportRepository
     er auf ``<UPLOAD_FOLDER>/reports`` zurueck — denselben Pfad, den
     ``ReportManager.REPORTS_DIR`` bildet.
 
-    Heute wird ausschliesslich der Dateiadapter geliefert. Ein
-    Konfigurationsschalter kommt nicht — der PostgreSQL-Adapter folgt in
-    #1588.
+    ``AGORA_REPORT_BACKEND=postgres`` liefert den PostgreSQL-Adapter;
+    ``reports_dir`` bleibt dann fuer die Metadaten unbenutzt. Die
+    Report-Inhalte liegen weiter unter ``reports_dir``.
     """
+    backend = Config.REPORT_BACKEND
+    if backend not in REPORT_BACKENDS:
+        raise ReportBackendUnavailable(
+            f"AGORA_REPORT_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(REPORT_BACKENDS))})"
+        )
+    if backend == "postgres":
+        from ..infrastructure.postgres.repositories import PostgresReportRepository
+
+        return PostgresReportRepository()
+
     if reports_dir is None:
         reports_dir = os.path.join(Config.UPLOAD_FOLDER, "reports")
 
@@ -104,4 +135,4 @@ def get_report_repository(reports_dir: Optional[str] = None) -> ReportRepository
     return FileReportRepository(reports_dir)
 
 
-__all__ = ["ReportRepository", "get_report_repository"]
+__all__ = ["ReportBackendUnavailable", "ReportRepository", "get_report_repository"]
