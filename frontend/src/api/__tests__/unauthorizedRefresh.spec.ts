@@ -66,6 +66,21 @@ describe('401 mit Supabase-Session', () => {
     expect(getSessionToken()).toBeNull()
   })
 
+  it('signs out when the retry with the refreshed token also gets a 401', async () => {
+    sb.refreshSession.mockResolvedValue({ data: { session: { access_token: 'new-token' } }, error: null })
+    const retry = vi.spyOn(service, 'request').mockResolvedValue('retried' as never)
+    const onSignOut = vi.fn()
+    register401SignOutCallback(onSignOut)
+    await rejectedHandler()(unauthorized({ url: '/api/r' }))
+    const retriedConfig = { ...(retry.mock.calls[0][0] as object) }
+
+    await expect(rejectedHandler()(unauthorized(retriedConfig))).rejects.toBeTruthy()
+
+    expect(sb.signOut).toHaveBeenCalledTimes(1)
+    expect(onSignOut).toHaveBeenCalledTimes(1)
+    expect(getSessionToken()).toBeNull()
+  })
+
   it('does not refresh again when the retry (a cloned config) gets a 401', async () => {
     sb.refreshSession.mockResolvedValue({ data: { session: { access_token: 'new-token' } }, error: null })
     const retry = vi.spyOn(service, 'request').mockResolvedValue('retried' as never)
@@ -134,6 +149,20 @@ describe('authFetch()', () => {
     expect(sb.signOut).toHaveBeenCalledTimes(1)
     expect(onSignOut).toHaveBeenCalledTimes(1)
     expect(getSessionToken()).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('signs out when the retried fetch is still unauthorized', async () => {
+    sb.refreshSession.mockResolvedValue({ data: { session: { access_token: 'fresh' } }, error: null })
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 401 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await authFetch('/api/x')
+
+    expect(res.status).toBe(401)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(sb.refreshSession).toHaveBeenCalledTimes(1)
+    expect(sb.signOut).toHaveBeenCalledTimes(1)
     vi.unstubAllGlobals()
   })
 

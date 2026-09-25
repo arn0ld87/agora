@@ -11,11 +11,12 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Session, User } from '@supabase/supabase-js'
 
-import service, { getAgoraToken, register401SignOutCallback } from '../api/index'
+import { getAgoraToken, register401SignOutCallback } from '../api/index'
+import { bootstrapWorkspace, fetchAuthConfig, listWorkspaces } from '../api/workspaces'
 import { setSessionToken, setActiveWorkspaceId } from '../auth/sessionState'
 import { initSupabaseClient, getSupabaseClient } from '../auth/supabaseClient'
-import { AuthConfigResponseSchema, type AuthConfigResponse } from '../contracts/authConfigContract'
-import { WorkspaceSummarySchema, type WorkspaceSummary } from '../contracts/workspaceContract'
+import type { AuthConfigResponse } from '../contracts/authConfigContract'
+import type { WorkspaceSummary } from '../contracts/workspaceContract'
 import { useApiAuth } from '../composables/useApiAuth'
 
 // Isolierter Reload-Hook — testbar, da überschreibbar.
@@ -50,10 +51,6 @@ function _persistWorkspaceId(id: string | null): void {
   }
 }
 
-interface WorkspacesEnvelope {
-  data?: unknown
-}
-
 export const useAuthStore = defineStore('auth', () => {
   // --- State ---
   const config = ref<AuthConfigResponse | null>(null)
@@ -68,9 +65,13 @@ export const useAuthStore = defineStore('auth', () => {
   // --- Computed ---
   const jwtEnabled = computed(() => config.value?.jwt_enabled ?? false)
 
-  const isAuthenticated = computed(
-    () => !!(getAgoraToken() || session.value),
-  )
+  // Im Modus `supabase` lehnt das Backend den Master-Token ab: dort zählt
+  // nur eine Session. `hybrid`/`legacy` akzeptieren weiter den Token.
+  const isAuthenticated = computed(() => {
+    if (session.value) return true
+    if (config.value?.auth_backend === 'supabase') return false
+    return !!getAgoraToken()
+  })
 
   const tokenExpiry = computed<number | null>(() => {
     if (!session.value?.expires_at) return null
@@ -87,21 +88,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   // --- Actions ---
 
+  const LEGACY_CONFIG: AuthConfigResponse = {
+    auth_backend: 'legacy',
+    jwt_enabled: false,
+    supabase_url: null,
+    supabase_anon_key: null,
+  }
+
   async function loadConfig(): Promise<void> {
     try {
-      const raw = await service.get('/api/auth/config')
-      const parsed = AuthConfigResponseSchema.safeParse(
-        (raw as { data?: unknown })?.data ?? raw,
-      )
-      if (!parsed.success) {
-        // Treat as jwt disabled (legacy behaviour unchanged)
-        config.value = { auth_backend: 'legacy', jwt_enabled: false, supabase_url: null, supabase_anon_key: null }
-        return
-      }
-      config.value = parsed.data
+      config.value = await fetchAuthConfig()
     } catch {
-      // On failure treat as jwt disabled — legacy behaviour unchanged.
-      config.value = { auth_backend: 'legacy', jwt_enabled: false, supabase_url: null, supabase_anon_key: null }
+      // Nicht erreichbar oder ungültig: JWT aus, Legacy-Verhalten unverändert.
+      config.value = LEGACY_CONFIG
     }
   }
 
@@ -123,7 +122,12 @@ export const useAuthStore = defineStore('auth', () => {
             // Anmeldung über einen Link: Workspaces nachladen. Außerhalb des
             // Callbacks, weil supabase-js darin keine weiteren Aufrufe mag;
             // loadWorkspaces() bündelt gleichzeitige Aufrufe.
-            setTimeout(() => { void loadWorkspaces() }, 0)
+            setTimeout(() => {
+              loadWorkspaces().catch(() => {
+                // Fehlt der Workspace, lehnen Folgeanfragen ab; der nächste
+                // Login oder Seitenaufruf lädt erneut.
+              })
+            }, 0)
           }
         })
 
@@ -147,7 +151,12 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
-    await loadWorkspaces()
+    try {
+      await loadWorkspaces()
+    } catch {
+      // Workspaces nicht ladbar (z.B. Legacy ohne Datenbank): Start nicht
+      // blockieren; der Guard und die Views sehen keinen aktiven Workspace.
+    }
   }
 
   // Einmaliger Start: der Router-Guard wartet darauf, bevor er die erste
@@ -173,8 +182,10 @@ export const useAuthStore = defineStore('auth', () => {
       setSessionToken(data.session.access_token)
     }
     // Erst mit gewähltem Workspace weiter: sonst fehlt Folgeanfragen der
-    // Header X-Agora-Workspace (Bootstrap beim ersten Login).
+    // Header X-Agora-Workspace (Bootstrap beim ersten Login). Ein Fehler
+    // beim Laden lässt den Login scheitern; ein erneuter Versuch lädt neu.
     await loadWorkspaces()
+    if (!activeWorkspaceId.value) throw new Error('workspace_unavailable')
   }
 
   async function signUp(email: string, password: string): Promise<void> {
@@ -222,43 +233,23 @@ export const useAuthStore = defineStore('auth', () => {
     return workspacesInFlight
   }
 
+  /**
+   * Liste laden, beim ersten Login mit Bootstrap, dann den Workspace wählen.
+   * Fehler werden weitergereicht: signIn() darf ohne aktiven Workspace nicht
+   * als erfolgreich gelten.
+   */
   async function fetchWorkspaces(): Promise<void> {
-    try {
-      const raw = (await service.get('/api/workspaces')) as WorkspacesEnvelope
-      const payload = (raw as { data?: unknown })?.data ?? raw
-      const list = Array.isArray(payload) ? payload : (payload as { data?: unknown })?.data
-
-      const parsed: WorkspaceSummary[] = []
-      if (Array.isArray(list)) {
-        for (const item of list) {
-          const r = WorkspaceSummarySchema.safeParse(item)
-          if (r.success) parsed.push(r.data)
-        }
-      }
-
-      // If JWT session and list is empty → bootstrap a default workspace.
-      if (parsed.length === 0 && session.value) {
-        try {
-          const bootstrapRaw = (await service.post('/api/workspaces/bootstrap', {})) as { data?: unknown }
-          const bootstrapPayload = bootstrapRaw?.data ?? bootstrapRaw
-          const r = WorkspaceSummarySchema.safeParse(bootstrapPayload)
-          if (r.success) parsed.push(r.data)
-        } catch {
-          // Bootstrap failed — proceed without workspace
-        }
-      }
-
-      workspaces.value = parsed
-
-      // Choose workspace: prefer persisted id if it's still in the list, else first.
-      const persisted = _readPersistedWorkspaceId()
-      const still = persisted ? parsed.find((w) => w.workspace_id === persisted) : undefined
-      const chosen = still ?? parsed[0] ?? null
-      activeWorkspaceId.value = chosen?.workspace_id ?? null
-      setActiveWorkspaceId(activeWorkspaceId.value)
-    } catch {
-      // Network error — keep existing state
+    let list = await listWorkspaces()
+    if (list.length === 0 && session.value) {
+      list = [await bootstrapWorkspace()]
     }
+    workspaces.value = list
+
+    // Gespeicherten Workspace nehmen, solange er noch in der Liste steht.
+    const persisted = _readPersistedWorkspaceId()
+    const chosen = list.find((w) => w.workspace_id === persisted) ?? list[0] ?? null
+    activeWorkspaceId.value = chosen?.workspace_id ?? null
+    setActiveWorkspaceId(activeWorkspaceId.value)
   }
 
   async function switchWorkspace(id: string): Promise<void> {

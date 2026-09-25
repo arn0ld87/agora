@@ -79,8 +79,8 @@ import { _resetSupabaseClient } from '../../auth/supabaseClient'
 
 const WS_A = { workspace_id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'WS A', slug: 'ws-a', role: 'owner' as const }
 const WS_B = { workspace_id: 'bbbbbbbb-0000-4000-8000-000000000002', name: 'WS B', slug: 'ws-b', role: 'member' as const }
-const AUTH_CFG_DISABLED = { data: { auth_backend: 'legacy', jwt_enabled: false, supabase_url: null, supabase_anon_key: null } }
-const AUTH_CFG_ENABLED = { data: { auth_backend: 'supabase', jwt_enabled: true, supabase_url: 'https://p.supabase.co', supabase_anon_key: 'anon' } }
+const AUTH_CFG_DISABLED = { success: true, data: { auth_backend: 'legacy', jwt_enabled: false, supabase_url: null, supabase_anon_key: null } }
+const AUTH_CFG_ENABLED = { success: true, data: { auth_backend: 'supabase', jwt_enabled: true, supabase_url: 'https://p.supabase.co', supabase_anon_key: 'anon' } }
 
 beforeEach(() => {
   localStorageMock.clear()
@@ -118,8 +118,8 @@ describe('loadWorkspaces()', () => {
     mocks._sbOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
     mocks._svcGet
       .mockResolvedValueOnce(AUTH_CFG_ENABLED)
-      .mockResolvedValueOnce({ data: [] })
-    mocks._svcPost.mockResolvedValueOnce({ data: WS_A })
+      .mockResolvedValueOnce({ success: true, data: [] })
+    mocks._svcPost.mockResolvedValueOnce({ success: true, data: WS_A })
 
     const store = useAuthStore()
     await store.init()
@@ -131,7 +131,7 @@ describe('loadWorkspaces()', () => {
 
   it('picks persisted workspace id if still in list', async () => {
     localStorageMock.setItem('agora_workspace', WS_B.workspace_id)
-    mocks._svcGet.mockResolvedValue({ data: [WS_A, WS_B] })
+    mocks._svcGet.mockResolvedValue({ success: true, data: [WS_A, WS_B] })
     const store = useAuthStore()
     await store.loadWorkspaces()
     expect(store.activeWorkspaceId).toBe(WS_B.workspace_id)
@@ -139,7 +139,7 @@ describe('loadWorkspaces()', () => {
 
   it('falls back to first when persisted id not in list', async () => {
     localStorageMock.setItem('agora_workspace', 'cccccccc-0000-0000-0000-000000000099')
-    mocks._svcGet.mockResolvedValue({ data: [WS_A, WS_B] })
+    mocks._svcGet.mockResolvedValue({ success: true, data: [WS_A, WS_B] })
     const store = useAuthStore()
     await store.loadWorkspaces()
     expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
@@ -148,14 +148,14 @@ describe('loadWorkspaces()', () => {
 
 describe('switchWorkspace()', () => {
   it('rejects unknown ids', async () => {
-    mocks._svcGet.mockResolvedValue({ data: [WS_A] })
+    mocks._svcGet.mockResolvedValue({ success: true, data: [WS_A] })
     const store = useAuthStore()
     await store.loadWorkspaces()
     await expect(store.switchWorkspace('unknown-id')).rejects.toThrow('unknown workspace id')
   })
 
   it('persists id to localStorage', async () => {
-    mocks._svcGet.mockResolvedValue({ data: [WS_A, WS_B] })
+    mocks._svcGet.mockResolvedValue({ success: true, data: [WS_A, WS_B] })
     const store = useAuthStore()
     await store.loadWorkspaces()
     _setReloadPage(vi.fn())
@@ -164,7 +164,7 @@ describe('switchWorkspace()', () => {
   })
 
   it('clears the SSE ticket cache', async () => {
-    mocks._svcGet.mockResolvedValue({ data: [WS_A, WS_B] })
+    mocks._svcGet.mockResolvedValue({ success: true, data: [WS_A, WS_B] })
     const store = useAuthStore()
     await store.loadWorkspaces()
     _setReloadPage(vi.fn())
@@ -173,7 +173,7 @@ describe('switchWorkspace()', () => {
   })
 
   it('calls the reload hook', async () => {
-    mocks._svcGet.mockResolvedValue({ data: [WS_A, WS_B] })
+    mocks._svcGet.mockResolvedValue({ success: true, data: [WS_A, WS_B] })
     const store = useAuthStore()
     await store.loadWorkspaces()
     const reloadMock = vi.fn()
@@ -193,7 +193,7 @@ describe('onAuthStateChange — session sync', () => {
     })
     mocks._svcGet
       .mockResolvedValueOnce(AUTH_CFG_ENABLED)
-      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ success: true, data: [] })
 
     const store = useAuthStore()
     await store.init()
@@ -214,9 +214,9 @@ describe('onAuthStateChange — session sync', () => {
     })
     mocks._svcGet
       .mockResolvedValueOnce(AUTH_CFG_ENABLED)
-      .mockResolvedValueOnce({ data: [] })
-      .mockResolvedValueOnce({ data: [] })
-    mocks._svcPost.mockResolvedValueOnce({ data: WS_A })
+      .mockResolvedValueOnce({ success: true, data: [] })
+      .mockResolvedValueOnce({ success: true, data: [] })
+    mocks._svcPost.mockResolvedValueOnce({ success: true, data: WS_A })
 
     const store = useAuthStore()
     await store.init()
@@ -237,7 +237,7 @@ describe('onAuthStateChange — session sync', () => {
       captured.cb = cb
       return { data: { subscription: { unsubscribe: vi.fn() } } }
     })
-    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ data: [] })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [] })
     const store = useAuthStore()
     await store.init()
     const before = mocks._svcGet.mock.calls.length
@@ -257,7 +257,7 @@ describe('onAuthStateChange — session sync', () => {
     })
     mocks._svcGet
       .mockResolvedValueOnce(AUTH_CFG_ENABLED)
-      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ success: true, data: [] })
 
     const store = useAuthStore()
     await store.init()
@@ -290,7 +290,7 @@ describe('Reihenfolge und Anmeldung (#1617, Codex)', () => {
       order.push('getSession')
       return { data: { session: null } }
     })
-    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ data: [] })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [] })
 
     await useAuthStore().init()
 
@@ -302,8 +302,8 @@ describe('Reihenfolge und Anmeldung (#1617, Codex)', () => {
     mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
     mocks._svcGet
       .mockResolvedValueOnce(AUTH_CFG_ENABLED)
-      .mockResolvedValueOnce({ data: [] })
-      .mockResolvedValueOnce({ data: [WS_A, WS_B] })
+      .mockResolvedValueOnce({ success: true, data: [] })
+      .mockResolvedValueOnce({ success: true, data: [WS_A, WS_B] })
     const store = useAuthStore()
     await store.init()
     mocks._sbSignIn.mockResolvedValue({
@@ -324,11 +324,81 @@ describe('Reihenfolge und Anmeldung (#1617, Codex)', () => {
 
     const first = store.loadWorkspaces()
     const second = store.loadWorkspaces()
-    release({ data: [WS_A] })
+    release({ success: true, data: [WS_A] })
     await Promise.all([first, second])
 
     const listCalls = mocks._svcGet.mock.calls.filter((c) => c[0] === '/api/workspaces')
     expect(listCalls).toHaveLength(1)
     expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
+  })
+})
+
+describe('Codex-Runde 2 (#1617)', () => {
+  function jwtStore() {
+    mocks._sbOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
+    mocks._sbSignIn.mockResolvedValue({
+      data: { session: { access_token: 'tok-signin', user: { id: 'u1' }, expires_at: 9999 } },
+      error: null,
+    })
+  }
+
+  it('signIn scheitert, wenn die Workspace-Liste nicht ladbar ist', async () => {
+    jwtStore()
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockResolvedValueOnce({ success: true, data: [] })
+      .mockRejectedValueOnce(new Error('network'))
+    const store = useAuthStore()
+    await store.init()
+
+    await expect(store.signIn('a@example.test', 'ein-langes-passwort')).rejects.toThrow()
+    expect(store.activeWorkspaceId).toBeNull()
+  })
+
+  it('signIn scheitert, wenn der Bootstrap scheitert', async () => {
+    jwtStore()
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockResolvedValueOnce({ success: true, data: [] })
+      .mockResolvedValueOnce({ success: true, data: [] })
+    mocks._svcPost.mockResolvedValueOnce({ success: false, code: 'rate_limited', error: 'rate limited' })
+    const store = useAuthStore()
+    await store.init()
+
+    await expect(store.signIn('a@example.test', 'ein-langes-passwort')).rejects.toThrow()
+  })
+
+  it('verwirft eine Workspace-Liste, die nicht dem Vertrag entspricht', async () => {
+    mocks._svcGet.mockResolvedValueOnce({ success: true, data: [{ workspace_id: 'kein-uuid', name: 'x', slug: 'x', role: 'owner' }] })
+    const store = useAuthStore()
+
+    await expect(store.loadWorkspaces()).rejects.toThrow()
+    expect(store.activeWorkspaceId).toBeNull()
+  })
+
+  it('zählt im Modus supabase nur die Session, nicht den Legacy-Token', async () => {
+    const { getAgoraToken } = await import('../../api/index')
+    vi.mocked(getAgoraToken).mockReturnValue('alter-master-token')
+    mocks._svcGet.mockResolvedValueOnce({
+      success: true,
+      data: { auth_backend: 'supabase', jwt_enabled: true, supabase_url: 'https://p.supabase.co', supabase_anon_key: 'anon' },
+    })
+    const store = useAuthStore()
+    await store.loadConfig()
+
+    expect(store.isAuthenticated).toBe(false)
+    vi.mocked(getAgoraToken).mockReturnValue('')
+  })
+
+  it('zählt im Modus hybrid den Legacy-Token weiter', async () => {
+    const { getAgoraToken } = await import('../../api/index')
+    vi.mocked(getAgoraToken).mockReturnValue('master-token')
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_DISABLED)
+    const store = useAuthStore()
+    await store.loadConfig()
+
+    expect(store.isAuthenticated).toBe(true)
+    vi.mocked(getAgoraToken).mockReturnValue('')
   })
 })

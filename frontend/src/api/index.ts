@@ -155,7 +155,11 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
     })
   const res = await send()
   if (res.status !== 401 || !getSessionToken()) return res
-  if (await refreshSessionOnce()) return send()
+  if (await refreshSessionOnce()) {
+    const retried = await send()
+    if (retried.status === 401) await forceSignOut()
+    return retried
+  }
   await forceSignOut()
   return res
 }
@@ -198,18 +202,18 @@ service.interceptors.response.use(
     }
 
     const failedConfig = axiosError.config as (Record<string, unknown> | undefined)
-    if (
-      axiosError?.response?.status === 401 &&
-      getSessionToken() &&
-      failedConfig &&
-      !failedConfig[AUTH_RETRY_FLAG]
-    ) {
-      if (await refreshSessionOnce()) {
+    if (axiosError?.response?.status === 401 && getSessionToken() && failedConfig) {
+      // Auch der Retry mit frischem Token abgelehnt: kein zweiter Refresh,
+      // sondern abmelden — sonst scheitert jede weitere Anfrage gleich.
+      if (failedConfig[AUTH_RETRY_FLAG]) {
+        await forceSignOut()
+      } else if (await refreshSessionOnce()) {
         // Die Markierung überlebt das Klonen der Config durch Axios: ein
         // zweiter 401 auf den Retry löst keinen weiteren Refresh aus.
         return service.request({ ...failedConfig, [AUTH_RETRY_FLAG]: true } as Parameters<typeof service.request>[0])
+      } else {
+        await forceSignOut()
       }
-      await forceSignOut()
     }
 
     // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
