@@ -1,10 +1,12 @@
 # Arbeitsprotokoll 2026-07-18 — Simulation: Agenten reagieren nicht
 
-**Repo:** `agora` (`/Volumes/T7/Projekte/agora`)
+**Repo:** `agora`
 **Branch:** `codex/setup-matt-pocock-skills`
 **Session-Datum:** 2026-07-18, ca. 12:37–13:16 (MESZ)
 **Beteiligte:** Alex (User), Claude Code
 **Skill:** `mattpocock-skills:diagnosing-bugs` (mehrere Phasen angewendet)
+
+Private Host-Adressen sind in dieser öffentlichen Fassung durch Platzhalter ersetzt.
 
 > **⚠️ KORREKTUR (Nachtrag, gleicher Tag):** Die unten stehende Diagnose 3
 > (`models/`-Prefix als Ursache) ist **falsch**. Der Gemini-Endpoint akzeptiert
@@ -47,7 +49,7 @@ Stand Session-Ende: Container läuft noch mit altem Modellnamen (`models/...`), 
   - `/app/backend/data/workspace_llm_routing.json` (UI-Spiegel, `global_default` + `stage_overrides`)
 - **Provider-Connections:** `/app/backend/data/provider_connections.json` (5 Provider registriert: `google`, `minimax`, `ollama_cloud`, `openai`, weitere)
 - **Auth:** `AGORA_AUTH_TOKEN` aktiv → `/api/*` verlangt Bearer-Token
-- **Tool-Pfad:** `docker compose -f /Volumes/T7/Projekte/agora/docker-compose.yml`
+- **Tool-Pfad:** `docker compose -f <REPO_PATH>/docker-compose.yml`
 - **Override:** `docker-compose.override.yml` (automatisch geladen, portiert Frontend-Volumes)
 - **Logs:** `docker logs agora`, Live-Tail nach `/tmp/agora_realtime.log` über `nohup docker logs ... --follow`
 
@@ -105,7 +107,7 @@ curl -m 3 http://localhost:11434/v1/models
 
 ### Manuelle Anwendung
 - `bash scripts/fix-llm-localhost-falle.sh` → kommentiert `LLM_BASE_URL=http://localhost:11434/v1` und `OPENAI_API_BASE_URL=...` aus
-- `.env` behält jetzt nur den ersten Eintrag: `LLM_BASE_URL=http://100.71.152.44:11435/v1` (Tailscale-IP zu meinserver)
+- `.env` behält jetzt nur den ersten Eintrag: `LLM_BASE_URL=http://<TAILSCALE_HOST>:11435/v1` (Tailscale-Adresse des privaten Modellservers)
 - **Caveat vom User:** `LLM_MODEL_NAME=gpt-oss:20b-cloud` in `.env` ist **kein** normaler Ollama-Modellname, sondern ein **Ollama-Cloud-Modell**. Modell wird über die Tailscale-URL angesprochen, das ist aber gegen `ollama.com`-Cloud, nicht gegen ein lokales Ollama.
 
 ### Verifikation
@@ -170,7 +172,7 @@ Symptom 2 löste sich selbst auf, als Vite nach ~5 Minuten bereit war.
 - `minimax` (MiniMax) — connected, base_url=`https://api.minimax.io/v1`
 - `ollama_cloud` (Ollama-Cloud) — connected, base_url=`https://ollama.com`
 - `openai` — connected, base_url=`https://api.openai.com/v1`
-- **Es gibt keinen `ollama_local`-Provider** für die Tailscale-URL `http://100.71.152.44:11435/v1`
+- **Es gibt keinen `ollama_local`-Provider** für die Tailscale-URL `http://<TAILSCALE_HOST>:11435/v1`
 
 ### Echter Bug entdeckt
 User-Anforderung: "er muss das modell zur simulatin nehmen welches ich in der ui auswähle" — Backend-Routing liest aber aus `active_llm_config.json`, nicht aus `.env` und nicht aus dem Sim-Request.
@@ -303,13 +305,13 @@ WARNING: Agent config batch LLM generation failed: 404 - model 'models/gemini-2.
 ## Stand Session-Ende (13:16 MESZ)
 
 ### Gemachte Edits
-1. `/Volumes/T7/Projekte/agora/.env` (per User-Hand):
+1. `<REPO_PATH>/.env` (per User-Hand):
    - `LLM_BASE_URL=http://localhost:11434/v1` auskommentiert (durch Fix-Skript)
    - `OPENAI_API_BASE_URL=http://localhost:11434/v1` auskommentiert
    - `GEMINI_API_KEY=<39 chars>` ergänzt (vom User)
-   - Verbleibend: `LLM_BASE_URL=http://100.71.152.44:11435/v1` (Tailscale, erster Eintrag)
+   - Verbleibend: `LLM_BASE_URL=http://<TAILSCALE_HOST>:11435/v1` (Tailscale, erster Eintrag)
 
-2. `/Volumes/T7/Projekte/agora/docker-compose.yml`:
+2. `<REPO_PATH>/docker-compose.yml`:
    - Neue Zeile nach `EMBEDDING_BASE_URL`: `- GEMINI_API_KEY=${GEMINI_API_KEY:-}` mit Kommentar
 
 3. `/app/backend/instance/active_llm_config.json` (im Container):

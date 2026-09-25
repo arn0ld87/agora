@@ -292,12 +292,13 @@ Seit [#1583](https://github.com/arn0ld87/agora/issues/1583) kennt das Werkzeug P
 
 **#766 bleibt offen.** Das ist das Werkzeug, nicht der Nachweis: der Abnahmepunkt verlangt einen **durchgeführten** Fresh-Host-Restore-, Upgrade- und Rollback-Smoke mit echtem Backup. Ein Dry-Run-Protokoll ist keiner — das Skript schreibt diesen Satz selbst hinein. Durchführung: [`runbooks/restore-drill.md`](runbooks/restore-drill.md). Dokumentation ist kein Restore-Test, auch wenn Menschen seit Jahrzehnten tapfer so tun.
 
-### Supabase: Infrastruktur vorhanden, ungenutzt
+### Supabase: Infrastruktur vorhanden, im Default ungenutzt
 
 Unter [`supabase/`](../supabase/README.md) liegt ein **eigenes** Compose-Projekt mit self-hosted Supabase (PostgreSQL 17, Supavisor, GoTrue, PostgREST, Storage, postgres-meta, Studio, Envoy-Gateway). Realtime, Edge Runtime, imgproxy und Analytics laufen bewusst nicht mit.
 
-Das ist Phase 1 des Migrationsplans [`plans/supabase.md`](plans/supabase.md) §7 und **ausschließlich Infrastruktur**. Der PostgreSQL-Code im Backend (Adapter, Alembic, Feature-Flags) ist in den Abschnitten darunter beschrieben und im Default nicht aktiv; dieser Stack ist nur die Instanz, gegen die er später laufen soll. Der Agora-Stack startet und läuft unverändert ohne diesen Stack; die Kopplung ans gemeinsame Docker-Netz `agora-backend` ist ein zusätzliches Overlay ([`deploy/compose/docker-compose.supabase.yml`](../deploy/compose/docker-compose.supabase.yml)), nie die Basis-`docker-compose.yml`.
+Dazu gibt es inzwischen PostgreSQL-Adapter, Alembic-Migrationen, optionale JWT-Authentifizierung und eine Workspace-API; die Abschnitte darunter beschreiben deren Stand und Grenzen. Im ausgelieferten Default sind PostgreSQL und Supabase-JWT nicht aktiviert. Der Agora-Stack startet ohne diesen separaten Stack; die Kopplung ans gemeinsame Docker-Netz `agora-backend` ist ein zusätzliches Overlay ([`deploy/compose/docker-compose.supabase.yml`](../deploy/compose/docker-compose.supabase.yml)), nie die Basis-`docker-compose.yml`.
 
+Der Default nutzt weiterhin die Legacy-Metadatenspeicher. `AGORA_AUTH_BACKEND=hybrid` verhält sich ohne `AGORA_SUPABASE_JWT_ISSUER` wie `legacy`; mit aktiviertem JWT greift der optionale Auth- und Workspace-Pfad. GoTrue erlaubt laut `supabase/docker-compose.yml` Registrierung standardmäßig, verlangt aber E-Mail-Bestätigung. Das macht die Default-Installation nicht zum Mehrbenutzersystem.
 Daraus folgt ausdrücklich **nicht**, dass Multi-User näher rückt oder dass Auth sich geändert hat. Welche Installation PostgreSQL nutzt, steht unter „Metadaten-Cutover armserver“: armserver nutzt dafür nicht diesen Stack, sondern den bestehenden self-hosted Supabase des Hosts. `AGORA_AUTH_TOKEN` und das API-Key-Scope-Modell sind unverändert die Auth-Wahrheit; GoTrue läuft mit `DISABLE_SIGNUP=true` mit und wird von nichts aufgerufen.
 
 Die Supabase-Konfigurationsdateien (DB-Init-SQL, Envoy-Routing, Supavisor-Config) liegen nicht im Repository. `supabase/bootstrap.sh` holt sie von einem gepinnten supabase/supabase-Commit nach `supabase/volumes/` (gitignored) — ohne diesen Lauf startet der Stack nicht.
@@ -553,4 +554,5 @@ Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines 
 - API: [`api.md`](api.md) und [`api-contracts.md`](api-contracts.md)
 - Konfiguration: [`configuration.md`](configuration.md)
 - Betrieb: [`operator-guide.md`](operator-guide.md), [`operations.md`](operations.md), [`backup-restore.md`](backup-restore.md)
+- UI: Der [visuelle Audit vom September 2026](ui/premium-redesign-2026-09/01-visual-audit.md) dokumentiert die Ausgangslage vor dem abgeschlossenen Redesign; [`ui/design-language-v4.md`](ui/design-language-v4.md) ist ein älterer Snapshot vom Mai 2026. Der aktuelle Istzustand steht oben unter „Frontend“.
 - historische Pläne/Audits: nicht als Current-State-Quelle verwenden

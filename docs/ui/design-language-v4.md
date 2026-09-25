@@ -1,9 +1,10 @@
-# Agora Design Language v4 — Real State (Stand 2026-05-15)
+# Agora Design Language v4 — Snapshot vom 15.05.2026
 
-Diese Doku beschreibt die **tatsächlich im Code vorhandene** Design Language v4, nicht den
-aspirational Zustand aus älteren Specs. Quelle: `frontend/src/` auf `origin/main` @ `de933b9`.
-
-Ergänzt das laufende Design-v4-Epic-Dokument [`docs/2026-05-11-design-v4-app-shell-epic.md`](../2026-05-11-design-v4-app-shell-epic.md).
+Diese Doku hält die **damals im Code vorhandene** Design Language v4 fest.
+Quelle: `frontend/src/` auf `origin/main` @ `de933b9`. Der
+[visuelle Audit vom September 2026](./premium-redesign-2026-09/01-visual-audit.md)
+hält die Ausgangslage vor dem abgeschlossenen Redesign fest. Der aktuelle
+Frontend-Stand steht in [`docs/STATUS.md`](../STATUS.md).
 
 ## Ziel
 
@@ -153,7 +154,7 @@ Pro Komponente: `<style scoped>` mit `var(--token-name, fallback)`.
 
 ## Referenzen
 
-- Epic-Doku: [`docs/2026-05-11-design-v4-app-shell-epic.md`](../2026-05-11-design-v4-app-shell-epic.md)
+- Redesign-Ausgangslage: [`premium-redesign-2026-09/01-visual-audit.md`](./premium-redesign-2026-09/01-visual-audit.md)
 - Source-of-Truth-Designs: [`design/v3-source/`](../../design/v3-source/)
 - Showcase live: `bun run dev` → `http://localhost:5173/design/v3/`
 - Component-Audit: [`component-audit.md`](./component-audit.md)
