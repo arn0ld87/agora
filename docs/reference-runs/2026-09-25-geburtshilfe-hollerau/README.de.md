@@ -42,4 +42,4 @@ Persona-Zitate und Agentenaktionen sind **synthetische Modellausgaben**, keine e
 - [Zusammengesetzter Showcase-Screenshot](../../../media/agora-demo-poster.jpg)
 - [Geschnittenes Demo-Video](../../../media/agora-demo.mp4)
 
-Die Medien werden aus den persistierten Ansichten dieses Laufs ohne Browser- oder Betriebssystem-Chrome erzeugt.
+Die Medien zeigen ausschließlich Agora-Ansichten dieses Laufs; Browser- und Betriebssystem-Chrome sind entfernt.

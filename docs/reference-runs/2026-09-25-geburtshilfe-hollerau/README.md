@@ -42,4 +42,4 @@ Persona quotations and agent actions are **synthetic model outputs**, not empiri
 - [Composite showcase screenshot](../../../media/agora-demo-poster.jpg)
 - [Edited showcase video](../../../media/agora-demo.mp4)
 
-The media is captured from the persisted views of this run without browser or operating-system chrome.
+The media shows only Agora views from this run; browser and operating-system chrome have been removed.
