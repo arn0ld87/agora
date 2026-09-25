@@ -41,6 +41,14 @@ vi.mock('../../../api/simulation', () => ({
 vi.mock('../../../api/status', () => ({
   getSystemStatus: vi.fn().mockResolvedValue({ success: true }),
 }))
+const realtime = vi.hoisted(() => ({ off: vi.fn(), reloads: [] as ((t: string) => void)[], tables: [] as string[][] }))
+vi.mock('../../../realtime/listInvalidation', () => ({
+  onListInvalidated: vi.fn((tables: string[], reload: (t: string) => void) => {
+    realtime.tables.push(tables)
+    realtime.reloads.push(reload)
+    return realtime.off
+  }),
+}))
 
 import { listRuns } from '../../../api/runs'
 import { useCancelAction } from '../../../components/shell/useCancelAction'
@@ -169,5 +177,20 @@ describe('ShelfView', () => {
 
     const activePill = wrapper.findAll(`[data-testid="${ShelfTestId.filterPill}"]`).find((p) => p.attributes('aria-selected') === 'true')
     expect(activePill?.text()).toContain('Alle')
+  })
+
+  it('laedt die Ablage auf ein Realtime-Signal nach (#1618)', async () => {
+    realtime.reloads.length = 0
+    realtime.tables.length = 0
+    vi.mocked(listRuns).mockResolvedValue({ data: { runs: [], total: 0, aggregation: null } } as never)
+    const router = makeRouter()
+    await router.push('/ablage')
+    mount(ShelfView, { global: { plugins: [router, i18n, createPinia()] } })
+    await flushPromises()
+
+    expect(realtime.tables).toEqual([['projects', 'runs', 'reports']])
+    realtime.reloads[0]('runs')
+    await flushPromises()
+    expect(listRuns).toHaveBeenCalledTimes(2)
   })
 })

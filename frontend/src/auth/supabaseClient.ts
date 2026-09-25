@@ -2,7 +2,8 @@
  * supabaseClient — lazily creates ONE Supabase client from `/api/auth/config`
  * values, only when jwt_enabled is true.
  *
- * Used ONLY for auth (sign in/up/out, refresh, reset) — never for data.
+ * Used for auth (sign in/up/out, refresh, reset) and, with realtime_enabled,
+ * as a list-invalidation signal (#1618) — never as a data source.
  * The client is cached after first creation; subsequent calls return the
  * same instance.
  */

@@ -12,6 +12,11 @@
       "title": "Jwt Enabled",
       "type": "boolean"
     },
+    "realtime_enabled": {
+      "default": false,
+      "title": "Realtime Enabled",
+      "type": "boolean"
+    },
     "supabase_anon_key": {
       "anyOf": [
         {

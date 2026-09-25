@@ -458,6 +458,16 @@ Seit #1617 meldet sich das Frontend bei aktivem JWT über `@supabase/supabase-js
 
 Verifiziert mit Vitest (Store, Interceptor, Guard, Views, Nutzermenü) und dem Playwright-Smoke `auth-login.spec.ts` gegen gemockte Auth-Endpunkte, inklusive axe und 320-px-Prüfung.
 
+### Realtime für Listen-Projektionen (#1618)
+
+Seit #1618 lädt das Frontend Ablage und Run-Listen nach, sobald sich im aktiven Workspace ein Projekt, eine Simulation, ein Run oder ein Report ändert. Das Ereignis ist nur ein Signal: Die Daten kommen weiter über die Flask-API, der Payload wird nicht gelesen. Das SSE laufender Läufe bleibt unverändert, ebenso das Polling als Rückfallebene.
+- **Datenbank:** Alembic `dc4e84e7c000` nimmt die vier Tabellen in die Publication `supabase_realtime` auf, nur für `INSERT` und `UPDATE`. `DELETE` kann Realtime nicht gegen RLS prüfen. Ohne Publication (reines PostgreSQL, CI) ist die Migration ein No-op.
+- **Sichtbarkeit:** Realtime prüft je Abonnent die RLS-Policy für `authenticated` aus #1615. Das Frontend verwirft zusätzlich Ereignisse aus einem fremden Workspace und lädt höchstens einmal pro Sekunde und Tabelle nach.
+- **Dienst:** `realtime` (`supabase/realtime:v2.134.10`) läuft im Supabase-Stack, ohne Host-Port und nur über das Gateway erreichbar (`/realtime/v1/`).
+- **Schalter:** `AGORA_SUPABASE_REALTIME=true`, Default aus. `GET /api/auth/config` meldet `realtime_enabled` nur bei aktivem JWT.
+
+Verifiziert mit Vitest (Kanal, Filter, fremder Workspace, Bündelung, Anbindung in Ablage und Run-Polling) und Integrationstests gegen PostgreSQL (Migration mit und ohne Publication, RLS-Matrix unter `authenticated` mit nachgebildetem `auth.uid()`). Eine Realtime-E2E-Prüfung gegen den laufenden Stack gibt es nicht. **Umgeschaltet ist nichts.**
+
 ### Metadaten-Migration: Rollback-Gate
 
 Seit #1589 prüft `backend/tests/integration/test_metadata_migration_rollback.py` den ganzen Weg in einem Test (Plan §36): Ein Legacy-Bestand aus LLM-Profil (SQLite), Projekt, Simulation, Run und Report wird mit allen `migrate_*_to_postgres.py` übertragen, und jedes `--verify` muss mit Exit 0 enden. Dann startet `create_app()` mit allen fünf Schaltern auf `postgres`, während die Legacy-Metadateien versteckt sind. Anschließend startet die App erneut mit allen Schaltern auf Legacy. Die Antworten von zehn Lese-Endpunkten (Einzelabruf und Liste je Domäne) müssen in beiden Phasen gleich sein, und jeder Datensatz muss mit unveränderter Kennung da sein. Ein zweiter Test belegt, dass `Config.validate()` einen Rückweg in falscher Reihenfolge ablehnt. Der Test läuft im CI-Integration-Job gegen PostgreSQL; **umgeschaltet ist nichts**.
