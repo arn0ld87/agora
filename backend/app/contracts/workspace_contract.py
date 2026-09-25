@@ -103,6 +103,9 @@ class AuthConfigResponse(BaseModel):
     jwt_enabled: bool
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
+    #: Realtime-Kanal für Listen-Projektionen (#1618). Ein Change-Event ist
+    #: nur ein Signal zum Nachladen über die API, nie selbst Datenquelle.
+    realtime_enabled: bool = False
 
 
 __all__ = [

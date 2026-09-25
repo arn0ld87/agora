@@ -86,4 +86,4 @@ idempotent und öffnet keinen fremden Workspace. Registrierung schließen:
 
 - Mitglieder einladen: `PUT /api/workspaces/current/members/<user_id>` als Owner oder Admin.
 - Frontend-Login über den Supabase-Client (#1617).
-- Realtime für Listen-Projektionen (#1618).
+- Realtime für Listen-Projektionen: [`supabase/README.md`](../../supabase/README.md#realtime-1618), Schalter `AGORA_SUPABASE_REALTIME`.

@@ -14,7 +14,7 @@ describe('useOperatorAccess (#1617)', () => {
   it('verweigert den Zugang bei Supabase-Session', () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()
-    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k' }
+    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k', realtime_enabled: false }
     const access = useOperatorAccess()
     expect(access.value).toBe(true)
 

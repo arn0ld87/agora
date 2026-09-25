@@ -639,13 +639,36 @@ describe('useShelf.reload', () => {
   })
 })
 
+describe('useShelf.reload bei Überlappung (#1618)', () => {
+  it('verwirft eine überholte Antwort, die nach der neueren eintrifft', async () => {
+    let releaseOld: (v: unknown) => void = () => {}
+    const oldRun = makeRun({ run_id: 'run_alt', linked_ids: { simulation_id: 'sim_alt' } })
+    const newRun = makeRun({ run_id: 'run_neu', linked_ids: { simulation_id: 'sim_neu' } })
+    runsApi.listRuns
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseOld = resolve }))
+      .mockResolvedValueOnce({ success: true, data: { runs: [newRun], total: 1, aggregation: null } })
+    reportApi.listReports.mockResolvedValue({ success: true, data: [] })
+    graphApi.listProjects.mockResolvedValue({ success: true, data: [] })
+    simulationApi.listPersonaTemplates.mockResolvedValue({ success: true, data: { count: 0, templates: [] } })
+
+    const { reload, jobs, loading } = useShelf(t)
+    const first = reload()
+    await reload()
+    releaseOld({ success: true, data: { runs: [oldRun], total: 1, aggregation: null } })
+    await first
+
+    expect(jobs.value.map((j) => j.runId)).toEqual(['run_neu'])
+    expect(loading.value).toBe(false)
+  })
+})
+
 describe('useShelf.reload mit Supabase-Session (#1617)', () => {
   it('fragt die Betreiber-Persona-Bibliothek nicht an und meldet keinen Teilausfall', async () => {
     const { createPinia, setActivePinia } = await import('pinia')
     const { useAuthStore } = await import('../../store/auth')
     setActivePinia(createPinia())
     const auth = useAuthStore()
-    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k' }
+    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k', realtime_enabled: false }
     auth.session = { access_token: 'x' } as never
     runsApi.listRuns.mockResolvedValue({ success: true, data: { runs: [], total: 0, aggregation: null } })
     reportApi.listReports.mockResolvedValue({ success: true, data: [] })
