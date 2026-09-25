@@ -47,8 +47,14 @@ def _include_name(
 
 
 def _database_url() -> str:
-    """`DATABASE_URL` aus der Umgebung, auf das psycopg-3-Schema normalisiert."""
-    raw = os.environ.get('DATABASE_URL', '')
+    """Verbindung für Migrationen, auf das psycopg-3-Schema normalisiert.
+
+    ``AGORA_MIGRATION_DATABASE_URL`` hat Vorrang (ADR-0018, #1615): Die
+    Laufzeitrolle der App darf weder Tabellen besitzen noch RLS umgehen.
+    Migrationen laufen deshalb mit der Owner-Rolle. Ohne diese Variable gilt
+    ``DATABASE_URL`` wie bisher, also für Installationen mit nur einer Rolle.
+    """
+    raw = os.environ.get('AGORA_MIGRATION_DATABASE_URL', '') or os.environ.get('DATABASE_URL', '')
     if not raw.strip():
         raise RuntimeError(
             'DATABASE_URL is not set — alembic needs it to reach the database '
@@ -88,6 +94,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # ``FORCE ROW LEVEL SECURITY`` (#1615) gilt auch für den Tabellen-Owner.
+        # Eine Migration arbeitet über alle Workspaces, also im System-Kontext
+        # der Policies — für die ganze Verbindung, nicht nur eine Transaktion.
+        connection.exec_driver_sql("SELECT set_config('agora.system', 'on', false)")
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

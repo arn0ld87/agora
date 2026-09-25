@@ -103,3 +103,30 @@ def test_dump_command_pins_the_exported_snapshot():
     command = build_command('dump', params, '/b/postgres.dump', snapshot='00000003-1')
 
     assert '--snapshot=00000003-1' in command
+
+
+def test_both_tools_run_under_row_level_security_in_system_context(monkeypatch):
+    """``FORCE ROW LEVEL SECURITY`` (#1615) bindet auch den Owner: ohne
+    ``--enable-row-security`` brechen die Werkzeuge ab, ohne System-Kontext
+    sähen sie keine Zeile."""
+    from app.infrastructure.postgres.pg_cli import RLS_SYSTEM_OPTION, _child_env
+
+    params = parse_connection_params('postgresql+psycopg://u:geheim@db:5432/agora')
+    assert '--enable-row-security' in build_command('dump', params, '/b/postgres.dump')
+    assert '--enable-row-security' in build_command('restore', params, '/b/postgres.dump')
+
+    monkeypatch.setenv('PGOPTIONS', '-c statement_timeout=0')
+    env = _child_env(params)
+    assert env['PGOPTIONS'] == f'-c statement_timeout=0 {RLS_SYSTEM_OPTION}'
+    assert RLS_SYSTEM_OPTION == '-c agora.system=on'
+
+
+def test_restore_prefers_the_migration_owner_url(monkeypatch):
+    from app.config import Config
+    from app.infrastructure.postgres.pg_cli import _database_url
+
+    monkeypatch.setattr(Config, 'DATABASE_URL', 'postgresql+psycopg://app:x@db/agora')
+    monkeypatch.delenv('AGORA_MIGRATION_DATABASE_URL', raising=False)
+    assert _database_url().startswith('postgresql+psycopg://app:')
+    monkeypatch.setenv('AGORA_MIGRATION_DATABASE_URL', 'postgresql+psycopg://owner:y@db/agora')
+    assert _database_url().startswith('postgresql+psycopg://owner:')

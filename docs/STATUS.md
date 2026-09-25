@@ -429,6 +429,17 @@ Verifiziert gegen PostgreSQL mit:
 
 **Umgeschaltet ist nichts.**
 
+
+### Row Level Security (#1615)
+
+Seit #1615 stehen Projekte, Simulationen, Runs, Reports, Workspaces und Mitgliedschaften unter `ENABLE` und `FORCE ROW LEVEL SECURITY` (Alembic `e746a558dce5`).
+- **Policy:** Sichtbar ist eine Zeile im Workspace der Transaktion (`agora.workspace_id`) oder im System-Kontext (`agora.system = on`). `Database.session()` setzt beides je Transaktion, aus dem Principal oder, ohne Principal, als System-Kontext. Eine Verbindung ohne Kontext sieht nichts.
+- **Laufzeitrolle:** Das Start-Gate (`app/infrastructure/postgres/rls_gate.py`) verweigert im Tenant-Modus eine Rolle, die RLS umgeht (Superuser, `BYPASSRLS`, Owner). Migrationen, `pg_restore` und Backup nutzen `AGORA_MIGRATION_DATABASE_URL`, Rollen-Setup in [`runbooks/rls-rollen.md`](runbooks/rls-rollen.md).
+- **Werkzeuge:** `pg_dump`/`pg_restore` laufen mit `--enable-row-security` im System-Kontext.
+- **Supabase-Rolle `authenticated`:** darf nur lesen, gefiltert über `auth.uid()`. Die Policy wird nur angelegt, wenn das Schema `auth` existiert.
+
+Verifiziert mit der Testmatrix aus §18 gegen PostgreSQL, roh unter einer eingeschränkten Rolle. **Umgeschaltet ist nichts.**
+
 ### Metadaten-Migration: Rollback-Gate
 
 Seit #1589 prüft `backend/tests/integration/test_metadata_migration_rollback.py` den ganzen Weg in einem Test (Plan §36): Ein Legacy-Bestand aus LLM-Profil (SQLite), Projekt, Simulation, Run und Report wird mit allen `migrate_*_to_postgres.py` übertragen, und jedes `--verify` muss mit Exit 0 enden. Dann startet `create_app()` mit allen fünf Schaltern auf `postgres`, während die Legacy-Metadateien versteckt sind. Anschließend startet die App erneut mit allen Schaltern auf Legacy. Die Antworten von zehn Lese-Endpunkten (Einzelabruf und Liste je Domäne) müssen in beiden Phasen gleich sein, und jeder Datensatz muss mit unveränderter Kennung da sein. Ein zweiter Test belegt, dass `Config.validate()` einen Rückweg in falscher Reihenfolge ablehnt. Der Test läuft im CI-Integration-Job gegen PostgreSQL; **umgeschaltet ist nichts**.

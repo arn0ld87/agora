@@ -37,6 +37,38 @@ from .engine import build_engine
 logger = get_logger('agora.postgres')
 
 
+#: Setzt die RLS-Werte für genau diese Transaktion (``is_local = true``).
+#: Fester Text mit gebundenen Parametern — ``SET LOCAL`` nimmt keine.
+_RLS_CONTEXT_SQL = text(
+    "SELECT set_config('agora.workspace_id', :workspace_id, true), "
+    "set_config('agora.system', :system, true)"
+)
+
+
+def rls_context() -> tuple[str, str]:
+    """``(workspace_id, system)`` für die Policies aus #1615.
+
+    Mit Principal (Request nach dem Guard): sein Workspace, kein
+    System-Kontext. Sonst — Hintergrund-Threads, Start-Reconciliation,
+    Migrationsskripte, die Mitgliedschaftsprüfung beim Anmelden — der
+    System-Kontext. Dieselbe Trennung wie in ``workspace_scope``.
+    """
+    from flask import has_request_context
+
+    from ...security.principal_context import current_principal
+
+    if has_request_context():
+        principal = current_principal()
+        if principal is not None:
+            return str(principal.workspace_id), 'off'
+    return '', 'on'
+
+
+def _bind_rls_context(session: Session) -> None:
+    workspace_id, system = rls_context()
+    session.execute(_RLS_CONTEXT_SQL, {'workspace_id': workspace_id, 'system': system})
+
+
 class Database:
     """Besitzt Engine und Session-Factory für einen Prozess.
 
@@ -98,6 +130,7 @@ class Database:
             raise RuntimeError('session factory missing after engine initialisation')
         session = factory()
         try:
+            _bind_rls_context(session)
             yield session
             session.commit()
         except Exception:
