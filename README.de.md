@@ -133,7 +133,9 @@ graph TD
 
 Produktions-Gunicorn läuft bewusst mit **einem Web-Worker**, solange prozesslokale Job-/Monitor-Zustände existieren — in ADR-0015 beziffert: Der nicht verschiebbare Anteil sind Betriebssystem-Handles (`Popen`-Objekte, In-Prozess-Queues, offene Dateideskriptoren) im `SimulationRunner`, die nur eine persistente Job-Queue mit eigenen Workern ([#1472](https://github.com/arn0ld87/agora/issues/1472)) auflösen kann. Mehr Worker sind hier kein kostenloser Performance-Regler.
 
-Parallel zu den Datei-/JSON-/SQLite-Stores existiert eine SQLAlchemy-/Alembic-gestützte PostgreSQL-Schicht (self-hosted Supabase als optionales Compose-Overlay, sowie LLM-Profile, Provider-Secrets und Projektmetadaten jeweils mit einem PostgreSQL-Adapter hinter einem Repository-Port). Sie ist **je Store optional zuschaltbar** und ändert nichts am Default: `AGORA_METADATA_BACKEND`, `AGORA_LLM_PROFILE_BACKEND` und `AGORA_PROJECT_BACKEND` stehen alle auf dem bisherigen Datei-/SQLite-Pfad. Agora läuft nicht „auf PostgreSQL" — die JSON-/Datei-Stores bleiben der ausgelieferte Standard.
+Parallel zu den Datei-/JSON-/SQLite-Stores existiert eine SQLAlchemy-/Alembic-gestützte PostgreSQL-Schicht; self-hosted Supabase ist ein optionales Compose-Overlay. Repository-Adapter decken **Projekt-, Simulations-, Job-, Report- und LLM-Profil-Metadaten** ab; für Workspaces gibt es einen PostgreSQL-only-Adapter. Jeder migrierte Metadaten-Store behält seinen Datei-/SQLite-Default und hat eine eigene `AGORA_*_BACKEND`-Einstellung. Provider-Secrets bleiben im dateibasierten Fernet-Store; Projektdokumente, Simulationsartefakte und Berichtsinhalte bleiben Dateien. Der ausgelieferte Default benötigt kein PostgreSQL. Adapter und Aktivierung sind in [`docs/STATUS.md`](./docs/STATUS.md) beschrieben.
+
+Eine wichtige Einschränkung des Defaults: Der `SqliteLlmProfileRepository` speichert Profil-API-Keys **im Klartext** in der Spalte `api_key` von `instance/llm_profiles.db` (`backend/app/services/llm_profiles_store.py`). Nur der PostgreSQL-Adapter legt sie im Fernet-gestützten `LlmProfileSecretsStore` ab. Diese Datei ist daher wie ein Secret zu behandeln.
 
 Die tatsächliche Architektur und ihre offenen Schulden stehen in [`docs/architecture.md`](./docs/architecture.md) und [`docs/STATUS.md`](./docs/STATUS.md).
 
@@ -187,6 +189,44 @@ Standard-Endpunkte:
 
 > [!WARNING]
 > Agora ist eine **Single-User Stability Beta**. Den Development-Stack nicht direkt ins öffentliche Internet hängen. Für produktionsnahen Betrieb gelten TLS/VPN/Reverse-Proxy, Auth und die Härtung aus [`docs/deployment-prod-like.md`](./docs/deployment-prod-like.md).
+
+## Konfiguration
+
+`install.sh` legt die lokale `.env` anhand von [`.env.example`](./.env.example) an; [`.env.docker.example`](./.env.docker.example) beschreibt die Container-Einstellungen. Zugangsdaten werden lokal gesetzt, `.env` bleibt außerhalb von Git.
+
+| Einstellung | Zweck |
+|---|---|
+| `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `AGORA_SECRET_KEY`, `AGORA_FERNET_KEY` | Signaturen, Master-Zugang und verschlüsselte Stores; von `install.sh` erzeugt. |
+| `NEO4J_PASSWORD`, `NEO4J_URI`, `REDIS_URL` | Graph- und Live-State-Verbindungen; bei externen Diensten anpassen. |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL_NAME` | Initiale HTTP-Provider-Einstellungen; Routen sind auch in der Anwendung konfigurierbar. |
+| `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, `VECTOR_DIM` | Embedding-Modell und Vektorindex; Dimension und Modell müssen zusammenpassen. |
+| `AGORA_*_BACKEND`, `DATABASE_URL` | Optionale PostgreSQL-Metadatenadapter; vor dem Wechsel Alembic-Migrationen ausführen. |
+
+Provider-Setup und persistierte Routen beschreibt [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md). Für den optionalen PostgreSQL-Pfad gilt das [Migrations-Runbook](./docs/runbooks/llm-profile-postgres-umstellung.md); das Ändern einer Backend-Einstellung migriert bestehende Daten nicht.
+
+## Entwicklung und Prüfungen
+
+Im Repository-Root startet `bun run backend` nur Flask und `bun run frontend` nur Vite. Die Befehle entsprechen der versionierten Package-Konfiguration:
+
+```bash
+bun run test:backend      # Backend-Pytest-Suite
+bun run test:frontend     # Frontend-Vitest-Suite
+bun run lint:backend      # Ruff
+bun run lint:frontend     # ESLint
+cd frontend && bun run typecheck  # Vue/TypeScript
+```
+
+`bun run build` erstellt den Frontend-Produktionsbuild. Das [Pre-Push-Gate](./docs/runbooks/pre-push-gate.md) beschreibt die scopespezifischen Vertrags-, Schema-, Lint-, Typ- und Testprüfungen vor einem PR-Push. PostgreSQL-Schema-Migrationen laufen bei aktiviertem optionalem Backend aus `backend/` mit `uv run alembic -c migrations/alembic.ini upgrade head`.
+
+## Repository-Struktur
+
+| Pfad | Inhalt |
+|---|---|
+| `backend/` | Flask-API, Pydantic-Verträge, Services, Migrationen und Python-Tests. |
+| `frontend/` | Vue-Anwendung, Zod-Vertragsspiegel und Frontend-Tests. |
+| `schemas/` | Generierte Vertragsschemas für das Frontend. |
+| `docs/` | Aktuelle Architektur, Betrieb, API-Referenzen, Entscheidungen und historische Recherche. |
+| `scripts/`, `deploy/`, `supabase/` | Qualitäts-/Entwicklungsskripte und optionale Deployment-Infrastruktur. |
 
 ## Aktueller Stand
 
