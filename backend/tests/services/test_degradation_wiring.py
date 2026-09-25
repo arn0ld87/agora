@@ -151,6 +151,7 @@ class TestAddTextBatchesForwardsCollector:
             extraction_tally=None,
             document_id=None,
             chunk_id=None,
+            chunk_context="",
         ):
             embed_entities_and_relations(
                 embedding,
@@ -193,6 +194,7 @@ class TestBuildWorkerPublishesDegradations:
             extraction_tally=None,
             document_id=None,
             chunk_id=None,
+            chunk_context="",
         ):
             embed_entities_and_relations(
                 embedding,

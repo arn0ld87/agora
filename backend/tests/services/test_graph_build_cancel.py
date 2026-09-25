@@ -273,6 +273,7 @@ class _FakeBuilder:
         chunk_ids,
         run_id,
         checkpoint_callback,
+        chunk_contexts=None,
     ):
         self.add_text_batches_called = True
         if self._checkpoint_then_raise is not None:

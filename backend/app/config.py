@@ -747,6 +747,12 @@ class Config:
         os.environ.get('PERSONA_REVIEW_ENABLED', 'false').lower() == 'true'
     )
 
+    # Slice 5.2 (Issue #1323): Rollenwechsel-Markierung beim Lesen der
+    # actions.jsonl. Aus → keine Prüfung, role_conflict bleibt None.
+    AGORA_ROLE_LEAKAGE_MARKING = (
+        os.environ.get('AGORA_ROLE_LEAKAGE_MARKING', 'true').lower() in ('true', '1', 'yes')
+    )
+
     # Event bus transport for simulation IPC (Issue #9 Phase B).
     # "redis" → RedisEventBus via REDIS_URL; "file" → FilePollingEventBus (offline fallback);
     # "auto" (default) → redis if REDIS_URL pings OK, otherwise file.
