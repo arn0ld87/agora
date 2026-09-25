@@ -33,13 +33,13 @@
 
 <p align="center">
   <a href="./media/agora-demo.mp4">
-    <img src="./media/agora-demo-preview.gif" alt="Agora Demo: Simulation, Agentenreaktionen, Evidence Report und PDF-Export" width="100%">
+    <img src="./media/agora-demo-poster.jpg" alt="Agora-Vorzeigelauf: Graph Build, Simulation, Live-Feed und evidenzorientierter Bericht" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <strong><a href="./media/agora-demo.mp4">▶ 43-Sekunden-Demo öffnen</a></strong><br>
-  <sub>Ein realer Agora-Lauf zum fiktiven Rollout des KI-Lernassistenten „LernKompass 2027“.</sub>
+  <strong><a href="./media/agora-demo.mp4">▶ Vorzeigelauf-Demo öffnen</a></strong><br>
+  <sub>Ein realer Agora-Lauf zum fiktiven Szenario „Geburtshilfe Hollerau“. Browser- und Betriebssystem-Chrome werden in den veröffentlichten Medien ausgeblendet.</sub>
 </p>
 
 ## Was Agora macht
@@ -250,11 +250,11 @@ Ein strukturelles `RunManifest` und ein Replay-Dialog existieren, Reports und Si
 
 ## Referenzlauf
 
-Die aktuelle dokumentierte Referenz ist **Referenzlauf 7: AURORA mit Red-Team-Review**, erzeugt am 17.08.2026 für das fiktive Szenario Städtischer Klinikverbund Falkenbrück / „Nexora Triage Assist“.
+Der aktuelle **visuelle End-to-End-Vorzeigelauf** ist [Referenzlauf 8: Geburtshilfe Hollerau](./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.de.md). Er zeigt die aktuelle Strecke Graph Build → Simulation/Live-Feed → Bericht an einem fiktiven kommunalen Szenario.
 
-Er ist bewusst ein **Referenzartefakt und kein Nachweis vollständiger Reproduzierbarkeit oder Produktvalidität**. Dokumentierte Stärken und Fehler dienen als Regressionsevidenz für Report- und Evidence-Pipeline. Dem Repository fehlen weiterhin alle Informationen, die einen bytegenauen Replay aus einem frischen Checkout garantieren würden.
+Für Regressionen der Report-/Trust-Pipeline bleibt [Referenzlauf 7: AURORA mit Red-Team-Review](./docs/reference-runs/2026-08-17-aurora-red-team/README.de.md) die technische Referenz. Lauf 8 versteckt seine Degradationen bewusst nicht: Der exportierte ReportV3 enthält 2 validierte Claims, 31 Hypothesen, 6 Data Gaps und fünf wegen LLM-Fehlern nicht erzeugte Abschnitte.
 
-[Referenzlauf 7 lesen](./docs/reference-runs/2026-08-17-aurora-red-team/README.de.md) · [Übersicht der Referenzläufe](./docs/reference-runs/README.md)
+[Übersicht der Referenzläufe](./docs/reference-runs/README.md)
 
 ## Sicherheit
 

@@ -13,6 +13,7 @@ export default {
   "08-12-domain-migration-20-runden",
   "08-14-aurora-report",
   "08-17-aurora-red-team",
+  "09-25-geburtshilfe-hollerau",
   "README"
 ],
 };

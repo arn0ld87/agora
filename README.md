@@ -33,13 +33,13 @@
 
 <p align="center">
   <a href="./media/agora-demo.mp4">
-    <img src="./media/agora-demo-preview.gif" alt="Agora demo: simulation, agent reactions, evidence report, and PDF export" width="100%">
+    <img src="./media/agora-demo-poster.jpg" alt="Agora showcase run: Graph Build, simulation, live feed, and evidence-oriented report" width="100%">
   </a>
 </p>
 
 <p align="center">
-  <strong><a href="./media/agora-demo.mp4">▶ Open the 43-second demo</a></strong><br>
-  <sub>A real Agora run for the fictional “LernKompass 2027” AI learning-assistant rollout.</sub>
+  <strong><a href="./media/agora-demo.mp4">▶ Open the showcase demo</a></strong><br>
+  <sub>A real Agora run for the fictional “Geburtshilfe Hollerau” scenario. Browser and operating-system chrome are excluded from the published media.</sub>
 </p>
 
 ## What Agora does
@@ -250,11 +250,11 @@ A structural `RunManifest` and a replay dialog exist, and reports and simulation
 
 ## Reference run
 
-The current documented reference is **Reference run 7: AURORA with red-team review**, generated on 2026-08-17 for the fictional Städtischer Klinikverbund Falkenbrück / “Nexora Triage Assist” scenario.
+The current **visual end-to-end showcase** is [Reference run 8: Geburtshilfe Hollerau](./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.md). It captures the current Graph Build → simulation/live-feed → report experience on a fictional public-sector scenario.
 
-It is intentionally a **reference artifact, not a proof of reproducibility or product validity**. Its documented strengths and failures are regression evidence for the report/evidence pipeline. The repository still lacks everything required to replay that run byte-for-byte from a fresh checkout.
+For Report-/Trust-pipeline regression work, [Reference run 7: AURORA with Red-Team review](./docs/reference-runs/2026-08-17-aurora-red-team/README.md) remains the technical reference. Run 8 deliberately does not hide its degradations: its exported ReportV3 contains 2 validated claims, 31 hypotheses, 6 data gaps, and five sections that failed generation because of LLM errors.
 
-[Read Reference run 7](./docs/reference-runs/2026-08-17-aurora-red-team/README.md) · [Reference-run index](./docs/reference-runs/README.md)
+[Reference-run index](./docs/reference-runs/README.md)
 
 ## Security
 
