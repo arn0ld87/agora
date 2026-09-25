@@ -43,9 +43,14 @@ class GraphStorage(ABC):
         extraction_tally: Optional[Any] = None,
         document_id: Optional[str] = None,
         chunk_id: Optional[int] = None,
+        chunk_context: str = "",
     ) -> str:
         """
         Process text: NER/RE → create nodes/edges → return episode_id.
+
+        ``chunk_context`` (Issue #1470): nur lesender Vorlauf (letzte
+        Überschrift, Ende des Vorgänger-Chunks), damit die NER Pronomen
+        auflösen kann. Extrahiert wird ausschließlich aus ``text``.
         This is synchronous (unlike Zep Cloud's async episodes).
 
         Issue #10: ``round_num`` stamps newly created RELATION edges with

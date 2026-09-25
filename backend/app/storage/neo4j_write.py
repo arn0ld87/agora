@@ -244,6 +244,7 @@ class Neo4jWriteMixin:
         extraction_tally: Optional["ChunkExtractionTally"] = None,
         document_id: Optional[str] = None,
         chunk_id: Optional[int] = None,
+        chunk_context: str = "",
     ) -> str:
         """Process text in three phases — NER, embed, persist.
 
@@ -286,7 +287,7 @@ class Neo4jWriteMixin:
         ontology = self.get_ontology(graph_id)
         ner = ner_extractor if ner_extractor is not None else self._ner
         extraction = extract_entities_and_relations(
-            ner, text, ontology, tally=extraction_tally
+            ner, text, ontology, tally=extraction_tally, chunk_context=chunk_context
         )
         entities = extraction.get("entities", [])
         relations = extraction.get("relations", [])

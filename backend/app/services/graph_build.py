@@ -20,6 +20,7 @@ from ..services.ontology_generator import OntologyGenerator
 from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.stage_model_router import StageModelRouter
 from ..services.text_processor import TextProcessor
+from ..storage.ner_chunk_context import build_chunk_contexts
 from ..storage.ner_extractor import NERExtractor
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.file_parser import split_text_into_chunks_with_documents
@@ -718,6 +719,7 @@ class GraphBuildService:
                             chunk_ids=chunk_ids,
                             run_id=run_record["run_id"],
                             checkpoint_callback=record_checkpoint,
+                            chunk_contexts=build_chunk_contexts(chunks),
                         )
                     except GraphBuildCancelled as cancel_exc:
                         _finish_cancelled_build(cancel_exc.episode_uuids)
@@ -904,6 +906,10 @@ class GraphBuildService:
             if chunk_ids is not None
             else None
         )
+        # Kontext für verbleibende Chunks aus der GESAMTEN Chunk-Liste ableiten
+        # (Vorgänger-Kontext muss auch bereits abgeschlossene Chunks berücksichtigen).
+        _all_contexts = build_chunk_contexts(chunks)
+        remaining_chunk_contexts = [_all_contexts[idx] for idx in remaining_original_indices]
 
         from .run_lifecycle import RunLifecycle
 
@@ -1050,6 +1056,7 @@ class GraphBuildService:
                                 chunk_ids=remaining_chunk_ids,
                                 run_id=new_run["run_id"],
                                 checkpoint_callback=record_checkpoint,
+                                chunk_contexts=remaining_chunk_contexts,
                             )
                         except GraphBuildCancelled as cancel_exc:
                             _finish_cancelled_resume(cancel_exc.episode_uuids)

@@ -55,6 +55,7 @@ class _FakeBuilder:
         chunk_ids,
         run_id,
         checkpoint_callback,
+        chunk_contexts=None,
     ):
         self.add_text_batches_calls.append(
             {
