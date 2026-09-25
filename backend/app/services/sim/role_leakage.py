@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from ...contracts.role_leakage_contract import (
+    ConflictReason,
     RoleConflict,
     RoleLeakagePlatformSummary,
     RoleLeakageSummary,
@@ -412,7 +413,7 @@ def _action_text(action_type: str, action_args: dict) -> str:
 
 def _self_reference_conflict(
     text: str, own_text: str, own_persona: Optional[dict], all_personas: list[dict]
-) -> Optional[tuple[str, str, Optional[str]]]:
+) -> Optional[tuple[ConflictReason, str, Optional[str]]]:
     """Erste Selbstreferenz, die nicht zur eigenen Rolle passt.
 
     Liefert ``(reason, phrase, matched_role)`` oder ``None``.
@@ -434,7 +435,7 @@ def _self_reference_conflict(
 
 def _name_signature_conflict(
     text: str, own_tokens: set[str], all_personas: list[dict]
-) -> Optional[tuple[str, str, Optional[str]]]:
+) -> Optional[tuple[ConflictReason, str, Optional[str]]]:
     """Namens-Signatur einer anderen Persona am Textende."""
     for sig in _extract_name_signatures(text):
         sig_tokens = _tokens(sig)

@@ -12,6 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 _STRICT = ConfigDict(extra="forbid")
 
+#: Konfliktkategorien (Issue #1323); auch der Rückgabetyp der Detektoren.
+ConflictReason = Literal["foreign_role", "foreign_name_signature", "unmatched_self_reference"]
+
 
 class RoleConflict(BaseModel):
     """Eine einzelne erkannte Rollenvertauschung in einer Aktion."""
@@ -34,7 +37,7 @@ class RoleConflict(BaseModel):
         default=None,
         description="Fremde Rolle/Name, gegen die gematcht wurde (None bei unmatched_self_reference)",
     )
-    reason: Literal["foreign_role", "foreign_name_signature", "unmatched_self_reference"] = Field(
+    reason: ConflictReason = Field(
         description=(
             "foreign_role: Selbstreferenz trifft fremde Persona-Rolle;\n"
             "foreign_name_signature: Namens-Signatur einer fremden Persona;\n"
