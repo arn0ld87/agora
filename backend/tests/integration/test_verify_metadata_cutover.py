@@ -213,7 +213,9 @@ def test_a_changed_run_turns_only_the_runs_step_red(database, bestand, monkeypat
 
     assert results['runs'].status == cutover.FAILED
     assert any(f'{RUN_ID}.status' in line for line in results['runs'].details)
-    assert results['reports'].status == cutover.OK
+    # Nur ``runs`` wird rot (CodeRabbit-Review auf #1608).
+    for name in ('llm_profiles', 'projects', 'simulations', 'reports'):
+        assert results[name].status == cutover.OK, name
     assert results['baseline'].status == cutover.UNCHECKED
 
 
