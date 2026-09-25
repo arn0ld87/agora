@@ -113,6 +113,7 @@ Vor dem Merge:
 
 - automatisierte Checks grün
 - relevante Code-Review-Findings geprüft
+- jeder Review-Kommentar, auch von Bots (Codex, CodeRabbit), einzeln im Thread beantwortet: behoben mit Commit-Hash oder begründet zurückgewiesen
 - Security-, Datenintegritäts- und Contract-Findings behoben oder begründet ausgelagert
 - keine offene HIGH-/P0-Feststellung
 - bei Cross-Layer-, Security- oder Migrationsänderungen zusätzliche Lead-Prüfung
