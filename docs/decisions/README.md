@@ -19,7 +19,8 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0011](0011-evidence-entailment-and-provenance.md) | Evidence-Entailment, Provenance-Trennung und Final-Content-Contract | Accepted (2026-07-27) | Report-Trust-Slice |
 | [0012](0012-run-budgets.md) | Run-Budgets — Micros-Preise, Termination-Reason, ehrliche Unbekannt-Status | Accepted (2026-07-29) | #764 |
 | [0013](0013-seed-corpus-document-anchor.md) | Verifizierter Dokument-Anker für seed_corpus-Evidence | Accepted (2026-08-09) | #1086 |
-| [0018](0018-multi-user-before-1-0.md) | Multi-User vor 1.0: Workspaces, Supabase Auth, RLS, Realtime (löst 0001 ab) | Accepted (2026-09-25) | #1610 |
+| [0018](0018-multi-user-before-1-0.md) | Multi-User vor 1.0: Workspaces, Supabase Auth, RLS, Realtime (löst 0001 ab) | Zeitpunkt abgelöst durch 0019 | #1610 |
+| [0019](0019-multi-user-after-1-0.md) | Multi-User erst nach 1.0; gemergter Code bleibt inaktiv | Accepted (2026-09-25) | #1610 |
 
 ## Geplante ADRs
 
