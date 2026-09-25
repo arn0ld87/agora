@@ -99,27 +99,50 @@ def build_command(
     tool: str, params: PgConnectionParams, dump_file: str, snapshot: str | None = None
 ) -> list[str]:
     """Die Befehlszeile für ``pg_dump``/``pg_restore`` — ohne Passwort."""
+    # ``--enable-row-security``: Ohne diese Option setzen beide Werkzeuge
+    # ``row_security = off`` und brechen ab, sobald eine Policy greift. Mit
+    # ``FORCE ROW LEVEL SECURITY`` (#1615) gilt das auch für den Owner. Den
+    # System-Kontext der Policies setzt ``_child_env`` über ``PGOPTIONS``.
     if tool == 'dump':
-        command = ['pg_dump', *params.cli_args(), '-n', 'agora', '-Fc', '-f', dump_file]
+        command = [
+            'pg_dump', *params.cli_args(), '-n', 'agora', '-Fc', '--enable-row-security',
+            '-f', dump_file,
+        ]
         if snapshot:
             command.append(f'--snapshot={snapshot}')
         return command
     if tool == 'restore':
-        return ['pg_restore', *params.cli_args(), '--clean', '--if-exists', dump_file]
+        return [
+            'pg_restore', *params.cli_args(), '--clean', '--if-exists',
+            '--enable-row-security', dump_file,
+        ]
     raise ValueError(f'unbekanntes Werkzeug: {tool}')
+
+
+#: System-Kontext der RLS-Policies für ``pg_dump``/``pg_restore`` (#1615).
+RLS_SYSTEM_OPTION = '-c agora.system=on'
 
 
 def _child_env(params: PgConnectionParams) -> dict[str, str]:
     env = {**os.environ, **params.environ()}
+    existing = env.get('PGOPTIONS', '').strip()
+    env['PGOPTIONS'] = f'{existing} {RLS_SYSTEM_OPTION}'.strip()
     # DATABASE_URL trägt das Passwort ebenfalls; der Kindprozess braucht sie nicht.
     env.pop('DATABASE_URL', None)
     return env
 
 
 def _database_url() -> str:
+    """Owner-Verbindung, wenn getrennt konfiguriert (#1615), sonst ``DATABASE_URL``.
+
+    Die Laufzeitrolle darf keine Tabelle besitzen. ``pg_restore --clean``
+    muss Tabellen löschen und neu anlegen und braucht deshalb die Rolle, mit
+    der auch die Migrationen laufen.
+    """
     from app.config import Config
 
-    return (Config.DATABASE_URL or '').strip()
+    migration_url = os.environ.get('AGORA_MIGRATION_DATABASE_URL', '').strip()
+    return migration_url or (Config.DATABASE_URL or '').strip()
 
 
 def _status() -> int:
@@ -182,9 +205,17 @@ def _restore(url: str, params: PgConnectionParams, dump_file: str, manifest_file
     migrations_dir = Path(__file__).resolve().parents[3] / 'migrations'
     config = AlembicConfig(str(migrations_dir / 'alembic.ini'))
     config.set_main_option('script_location', str(migrations_dir))
-    # migrations/env.py liest DATABASE_URL aus der Umgebung dieses Prozesses.
-    os.environ['DATABASE_URL'] = url
-    command.stamp(config, revision)
+    # migrations/env.py liest die Owner-URL aus der Umgebung dieses Prozesses —
+    # nur für den Stempel gesetzt, danach wie vorher.
+    previous = os.environ.get('AGORA_MIGRATION_DATABASE_URL')
+    os.environ['AGORA_MIGRATION_DATABASE_URL'] = url
+    try:
+        command.stamp(config, revision)
+    finally:
+        if previous is None:
+            os.environ.pop('AGORA_MIGRATION_DATABASE_URL', None)
+        else:
+            os.environ['AGORA_MIGRATION_DATABASE_URL'] = previous
     logger.info('Restore abgeschlossen, Alembic-Revision %s gestempelt', revision)
     return 0
 

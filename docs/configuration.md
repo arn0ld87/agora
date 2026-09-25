@@ -53,6 +53,7 @@ Geheimnisse niemals committen, in Logs ausgeben oder in Run-/Report-Artefakte sc
 | `AGORA_SECRET_KEY` 🔐 | Fernet-Master-Key für gespeicherte LLM-Provider-Secrets |
 | `AGORA_FERNET_KEY` 🔐 | Fernet-Key u. a. für persistierte Agora-API-Keys / Hash-Secret-Fallback |
 | `AGORA_TICKET_RATE_LIMIT_MAX`, `AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS` | Signed-Ticket-Rate-Limit |
+| `AGORA_MIGRATION_DATABASE_URL` 🔐 | Owner-Verbindung für Alembic, `pg_restore` und Backup (#1615). Ohne Wert gilt `DATABASE_URL`. Die Laufzeitrolle in `DATABASE_URL` soll RLS nicht umgehen, siehe [`runbooks/rls-rollen.md`](runbooks/rls-rollen.md) |
 | `AGORA_AUTH_BACKEND` | `legacy`, `hybrid` (Default) oder `supabase` ([ADR-0018](decisions/0018-multi-user-before-1-0.md)). Ein unbekannter Wert ist ein Startfehler |
 | `AGORA_SUPABASE_JWT_ISSUER` | Issuer der Supabase-Access-Tokens, z. B. `https://<host>/auth/v1`. Mit diesem Wert wird der JWT-Zweig aktiv. Ohne ihn verhält sich `hybrid` wie `legacy` |
 | `AGORA_SUPABASE_JWT_AUDIENCE` | erwartete `aud`, Default `authenticated` |

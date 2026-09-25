@@ -132,3 +132,40 @@ class TestPostgresBackendTriggersTheGate:
 
         with pytest.raises(SchemaDriftError, match="erwartete Revision"):
             create_app()
+
+
+class TestRlsRoleGate:
+    """#1615: Die Rollenprüfung ist im Tenant-Modus hart, sonst ein Hinweis."""
+
+    def _app_with(self, tmp_path, monkeypatch, *, tenant: bool, gate):
+        _prepare_startup_env(monkeypatch)
+        _reset_run_registry(tmp_path, monkeypatch)
+        from app.config import Config as _Config
+
+        monkeypatch.setattr(_Config, "PROJECT_BACKEND", "postgres")
+        monkeypatch.setattr(_Config, "DATABASE_URL", "postgresql+psycopg://user:pw@localhost:5432/db")
+        monkeypatch.setattr("app.infrastructure.postgres.schema_gate.verify_schema_at_head", MagicMock())
+        monkeypatch.setattr("app.infrastructure.postgres.rls_gate.verify_rls_role", gate)
+        monkeypatch.setattr("app.security.principal_context.tenant_mode_active", lambda: tenant)
+        from app import create_app
+
+        return create_app()
+
+    def test_unreachable_check_is_only_a_warning_without_tenant_mode(self, tmp_path, monkeypatch):
+        gate = MagicMock(side_effect=OSError("down"))
+
+        assert self._app_with(tmp_path, monkeypatch, tenant=False, gate=gate) is not None
+
+    def test_unreachable_check_aborts_in_tenant_mode(self, tmp_path, monkeypatch):
+        gate = MagicMock(side_effect=OSError("down"))
+
+        with pytest.raises(OSError):
+            self._app_with(tmp_path, monkeypatch, tenant=True, gate=gate)
+
+    def test_bypassing_role_aborts_in_tenant_mode(self, tmp_path, monkeypatch):
+        from app.infrastructure.postgres.rls_gate import RlsRoleError
+
+        gate = MagicMock(side_effect=RlsRoleError("runtime database role bypasses row level security (superuser)"))
+
+        with pytest.raises(RlsRoleError):
+            self._app_with(tmp_path, monkeypatch, tenant=True, gate=gate)

@@ -139,7 +139,10 @@ def reference_state(kind: str, value: str, workspace_id: UUID) -> str:
         )
     else:
         raise ValueError(f'unknown reference kind: {kind}')
-    with get_database().session() as session:
+    # System-Kontext: Unter RLS sähe die Session des Requests fremde Zeilen
+    # nicht, und eine fremde Kennung wirkte „unbekannt“ (#1615). Die Abfrage
+    # liefert nur Workspace-Kennungen und entscheidet über den Zugriff.
+    with get_database().session(system=True) as session:
         owners = set(session.scalars(query.limit(5)).all())
     if not owners:
         return REFERENCE_UNKNOWN

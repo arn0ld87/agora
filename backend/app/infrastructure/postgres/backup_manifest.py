@@ -62,7 +62,13 @@ def _row_counts(connection: Connection) -> dict[str, int]:
 
 
 def collect_manifest(connection: Connection) -> dict[str, Any]:
-    """Revision und Zeilenzahlen über eine bestehende Verbindung."""
+    """Revision und Zeilenzahlen über eine bestehende Verbindung.
+
+    Gezählt wird im System-Kontext der RLS-Policies (#1615): Mit
+    ``FORCE ROW LEVEL SECURITY`` sähe eine Verbindung ohne Kontext keine Zeile,
+    und das Manifest meldete einen leeren Bestand.
+    """
+    connection.execute(text("SELECT set_config('agora.system', 'on', true)"))
     return {
         'revision': _current_revision(connection),
         'row_counts': _row_counts(connection),

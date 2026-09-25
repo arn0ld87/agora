@@ -191,6 +191,34 @@ def _validate_embedding_at_startup(app, logger, *, should_log_startup: bool) -> 
         raise RuntimeError(f"Embedding configuration invalid: {e}") from e
 
 
+def _verify_rls_role_at_startup(logger) -> None:
+    """Row Level Security greift nur für eine eingeschränkte Laufzeitrolle
+    (#1615). Im Tenant-Modus bricht der Start sonst ab; einmandantig bleibt es
+    ein Hinweis."""
+    from .infrastructure.postgres.rls_gate import RlsRoleError, verify_rls_role
+    from .security.principal_context import tenant_mode_active
+
+    tenant_mode = tenant_mode_active()
+    try:
+        violations = verify_rls_role(Config.DATABASE_URL, tenant_mode=tenant_mode)
+    except RlsRoleError as exc:
+        logger.error("RLS role check: %s", exc)
+        raise
+    except Exception as exc:  # noqa: BLE001 — nur der Typ, nie die URL
+        if tenant_mode:
+            # Ohne geprüfte Rolle keine Mandantentrennung: fail-closed.
+            logger.error("RLS role check failed: %s", type(exc).__name__)
+            raise
+        logger.warning("RLS role check skipped: %s", type(exc).__name__)
+        return
+    if violations:
+        logger.info(
+            "RLS: Laufzeitrolle umgeht Row Level Security (%s) — einmandantig "
+            "zulässig, für Supabase-JWT nicht.",
+            ", ".join(violations),
+        )
+
+
 def create_app(config_class=Config):
     """Flask application factory function"""
     # Observability: Tracing + Metrics vor Flask-Instanz initialisieren,
@@ -290,6 +318,7 @@ def create_app(config_class=Config):
         except SchemaDriftError as exc:
             logger.error("Schema drift: %s", exc)
             raise
+        _verify_rls_role_at_startup(logger)
 
     # Fail fast on embedding misconfiguration or unavailable embedding backend.
     # Keep startup checks crisp and local — small nod to alexle135.de.
