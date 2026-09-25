@@ -7,6 +7,11 @@ Zwei Zusagen: der Default bleibt die Datei und braucht keine Datenbank, und
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from app.config import RUN_BACKENDS, Config, validate_run_backend
@@ -14,14 +19,40 @@ from app.repositories.run_repository import RunBackendUnavailable, get_run_repos
 from app.services.file_run_store import FileRunRepository
 
 URL = 'postgresql+psycopg://u:p@host:5432/db'
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 def test_run_backends_are_exactly_file_and_postgres():
     assert RUN_BACKENDS == frozenset({'file', 'postgres'})
 
 
-def test_default_is_file_without_database_url():
-    assert Config.RUN_BACKEND == 'file' or Config.RUN_BACKEND in RUN_BACKENDS
+def test_default_is_file_without_environment_or_dotenv():
+    """Der Default selbst, nicht der Wert dieser Testumgebung.
+
+    Eigener Prozess, damit weder eine gesetzte ``AGORA_RUN_BACKEND`` noch
+    eine lokale ``.env`` (``load_dotenv`` wird vor dem Import abgeschaltet)
+    noch ein Reload von ``app.config`` den übrigen Tests hineinspielt
+    (CodeRabbit-Review auf #1605).
+    """
+    env = {k: v for k, v in os.environ.items() if k != 'AGORA_RUN_BACKEND'}
+    probe = (
+        'import dotenv; dotenv.load_dotenv = lambda *a, **k: False; '
+        'from app.config import Config; print(Config.RUN_BACKEND)'
+    )
+    result = subprocess.run(
+        [sys.executable, '-c', probe],
+        cwd=BACKEND_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+
+    assert result.stdout.strip().splitlines()[-1] == 'file'
+
+
+def test_file_needs_no_database_url():
     assert validate_run_backend('file', '', 'file') == []
 
 
