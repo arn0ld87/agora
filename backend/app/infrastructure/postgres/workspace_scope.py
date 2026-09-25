@@ -104,11 +104,17 @@ def workspace_for_write(
 # -- Verweise in Requests (zentrale Prüfung im Guard) ---------------------------
 
 
-def reference_visible(kind: str, value: str, workspace_id: UUID) -> bool:
-    """Liegt die Ressource ``value`` der Art ``kind`` im Workspace?
+#: Zustand eines Verweises aus Sicht eines Workspace.
+REFERENCE_OWN = 'own'
+REFERENCE_FOREIGN = 'foreign'
+REFERENCE_UNKNOWN = 'unknown'
 
-    Unbekannte Kennungen sind nicht sichtbar — ein Tenant erfährt nicht,
-    ob eine Kennung in einem anderen Workspace existiert.
+
+def reference_state(kind: str, value: str, workspace_id: UUID) -> str:
+    """``own``, ``foreign`` oder ``unknown`` für die Ressource ``value``.
+
+    ``unknown`` heißt: in keinem Workspace gespeichert — etwa ein Report,
+    dessen Metadaten erst der Worker am Ende schreibt (Codex-Review auf #1623).
     """
     from sqlalchemy import or_, select
 
@@ -119,27 +125,27 @@ def reference_visible(kind: str, value: str, workspace_id: UUID) -> bool:
     from .session import get_database
 
     if kind == 'project_id':
-        query = select(ProjectModel.id).where(ProjectModel.id == value)
-        model: Any = ProjectModel
+        query = select(ProjectModel.workspace_id).where(ProjectModel.id == value)
     elif kind == 'graph_id':
-        query = select(ProjectModel.id).where(ProjectModel.graph_id == value)
-        model = ProjectModel
+        query = select(ProjectModel.workspace_id).where(ProjectModel.graph_id == value)
     elif kind in ('simulation_id', 'sim_id'):
-        query = select(SimulationModel.id).where(SimulationModel.id == value)
-        model = SimulationModel
+        query = select(SimulationModel.workspace_id).where(SimulationModel.id == value)
     elif kind == 'run_id':
-        query = select(RunModel.id).where(RunModel.id == value)
-        model = RunModel
+        query = select(RunModel.workspace_id).where(RunModel.id == value)
     elif kind == 'report_id':
         # Ablageschlüssel oder Kennung im Datensatz (Altbestand, #1607).
-        query = select(ReportModel.id).where(
+        query = select(ReportModel.workspace_id).where(
             or_(ReportModel.id == value, ReportModel.report_id == value)
         )
-        model = ReportModel
     else:
         raise ValueError(f'unknown reference kind: {kind}')
     with get_database().session() as session:
-        found = session.scalars(
-            query.where(model.workspace_id == workspace_id).limit(1)
-        ).first()
-    return found is not None
+        owners = set(session.scalars(query.limit(5)).all())
+    if not owners:
+        return REFERENCE_UNKNOWN
+    return REFERENCE_OWN if owners == {workspace_id} else REFERENCE_FOREIGN
+
+
+def reference_visible(kind: str, value: str, workspace_id: UUID) -> bool:
+    """Liegt die Ressource gespeichert im Workspace?"""
+    return reference_state(kind, value, workspace_id) == REFERENCE_OWN

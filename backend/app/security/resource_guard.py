@@ -72,11 +72,80 @@ def request_references() -> list[tuple[str, str]]:
     return list(found)
 
 
-def first_foreign_reference(workspace_id: UUID) -> Optional[tuple[str, str]]:
-    """Der erste Verweis, der nicht im Workspace liegt, oder ``None``."""
-    from ..infrastructure.postgres.workspace_scope import reference_visible
+#: Verweise, die vor ihrer Speicherung schon abgefragt werden: ein Report
+#: existiert bis zum Ende der Erzeugung nur als Dateien, und sein Besitzer
+#: fragt Fortschritt und Abschnitte ab. Eine unbekannte ``report_id`` ist
+#: deshalb erlaubt; eine fremde nie. Die Kennung ist zufällig (48 Bit).
+_MAY_BE_PENDING = frozenset({'report_id'})
 
+
+def _reference_allowed(kind: str, value: str, workspace_id: UUID) -> bool:
+    from ..infrastructure.postgres.workspace_scope import (
+        REFERENCE_OWN,
+        REFERENCE_UNKNOWN,
+        reference_state,
+    )
+
+    state = reference_state(kind, value, workspace_id)
+    if state == REFERENCE_OWN:
+        return True
+    return state == REFERENCE_UNKNOWN and kind in _MAY_BE_PENDING
+
+
+def task_visible(metadata: object, workspace_id: UUID) -> bool:
+    """Ein Task gehört dem Workspace, wenn mindestens ein gespeicherter
+    Verweis dort liegt und keiner in einem anderen. Noch nicht gespeicherte
+    Verweise (etwa die ``report_id`` eines laufenden Reports) zählen nicht
+    gegen ihn (Codex-Review auf #1623)."""
+    from ..infrastructure.postgres.workspace_scope import (
+        REFERENCE_FOREIGN,
+        REFERENCE_OWN,
+        reference_state,
+    )
+
+    states = {reference_state(kind, value, workspace_id) for kind, value in references_in(metadata)}
+    return REFERENCE_OWN in states and REFERENCE_FOREIGN not in states
+
+
+def _request_task_ids() -> list[str]:
+    found: dict[str, None] = {}
+    sources: list[object] = [request.view_args or {}, request.args]
+    if request.is_json:
+        body = request.get_json(silent=True)
+        if isinstance(body, dict):
+            sources.append(body)
+    for source in sources:
+        value = source.get('task_id') if hasattr(source, 'get') else None  # type: ignore[attr-defined]
+        if isinstance(value, str) and value:
+            found.setdefault(value, None)
+    return list(found)
+
+
+def _tasks_allowed(workspace_id: UUID) -> bool:
+    """Jeder ``task_id`` im Request gehört dem Workspace. Ein unbekannter Task
+    bleibt der View überlassen (sie antwortet 404)."""
+    task_ids = _request_task_ids()
+    if not task_ids:
+        return True
+    from ..models.task import TaskManager
+
+    manager = TaskManager()
+    for task_id in task_ids:
+        task = manager.get_task(task_id)
+        if task is not None and not task_visible(task.metadata, workspace_id):
+            return False
+    return True
+
+
+def first_foreign_reference(workspace_id: UUID) -> Optional[tuple[str, str]]:
+    """Der erste Verweis, der nicht zum Workspace gehört, oder ``None``.
+
+    Prüft Ressourcen-Kennungen (Pfad, Query, Body) und ``task_id``s: In-Memory-
+    Tasks tragen Fortschritt, Ergebnis und Fehlertexte (Codex-Review auf #1623).
+    """
     for kind, value in request_references():
-        if not reference_visible(kind, value, workspace_id):
+        if not _reference_allowed(kind, value, workspace_id):
             return kind, value
+    if not _tasks_allowed(workspace_id):
+        return 'task_id', '*'
     return None

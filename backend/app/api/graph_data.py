@@ -17,20 +17,15 @@ from ..services.graph_export import GraphExportService
 
 def _task_visible(metadata: object) -> bool:
     """Tasks leben im Prozessspeicher, ohne Workspace. Ein Supabase-Nutzer
-    sieht nur Tasks, deren Verweise (Projekt, Simulation, Report, Run) alle
-    in seinem Workspace liegen; ein Task ohne Verweis bleibt verborgen (#1614)."""
+    sieht nur Tasks seines Workspace (``resource_guard.task_visible``, #1614)."""
     from ..contracts.auth_contract import AuthType
-    from ..infrastructure.postgres.workspace_scope import reference_visible
     from ..security.principal_context import current_principal
-    from ..security.resource_guard import references_in
+    from ..security.resource_guard import task_visible
 
     principal = current_principal()
     if principal is None or principal.auth_type != AuthType.JWT:
         return True
-    refs = references_in(metadata)
-    return bool(refs) and all(
-        reference_visible(kind, value, principal.workspace_id) for kind, value in refs
-    )
+    return task_visible(metadata, principal.workspace_id)
 
 
 @graph_bp.route('/task/<task_id>', methods=['GET'])

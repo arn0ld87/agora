@@ -385,6 +385,14 @@ def guarded_client(database, workspaces, monkeypatch):
     def by_query():
         return jsonify({'ok': True})
 
+    @bp.route('/report/<report_id>/progress')
+    def report_progress(report_id):
+        return jsonify({'ok': report_id})
+
+    @bp.route('/status', methods=['POST'])
+    def task_status():
+        return jsonify({'ok': True})
+
     install_blueprint_guard(bp)
     app = Flask(__name__)
     app.register_blueprint(bp, url_prefix='/api')
@@ -437,3 +445,66 @@ def test_guard_leaves_operators_unchecked(database, workspaces, guarded_client, 
     )
 
     assert response.status_code == 200
+
+
+
+def test_pending_report_is_reachable_for_its_owner_but_a_foreign_one_is_not(
+    database, workspaces, guarded_client
+):
+    """Ein Report existiert bis zum Ende der Erzeugung nur als Dateien; sein
+    Besitzer fragt ihn trotzdem ab (Codex-Review auf #1623). Ein gespeicherter
+    Report eines anderen Workspace bleibt 404."""
+    ws_a, _ = workspaces
+    PostgresProjectRepository(database=database).add_existing(_project('proj_aaaaaaaa0007'), ws_a)
+    PostgresSimulationRepository(database=database).add_existing(
+        _simulation('sim_aaaaaaaa0007', 'proj_aaaaaaaa0007')
+    )
+    PostgresReportRepository(database=database).add_existing(
+        'report_gespeichert', _report('report_gespeichert', 'sim_aaaaaaaa0007')
+    )
+
+    pending = guarded_client.get('/api/report/report_laeuft0001/progress', headers=_bearer(BOB))
+    assert pending.status_code == 200
+    foreign = guarded_client.get('/api/report/report_gespeichert/progress', headers=_bearer(BOB))
+    assert foreign.status_code == 404
+    own = guarded_client.get('/api/report/report_gespeichert/progress', headers=_bearer(ALICE))
+    assert own.status_code == 200
+
+
+def test_task_status_is_bound_to_the_workspace(database, workspaces, guarded_client):
+    """Status-Endpunkte lesen In-Memory-Tasks per ``task_id`` aus dem Body
+    (Codex-Review auf #1623). Ein laufender Report-Task mit noch
+    ungespeicherter ``report_id`` gehört seinem Besitzer."""
+    from app.models.task import TaskManager
+
+    ws_a, _ = workspaces
+    PostgresProjectRepository(database=database).add_existing(_project('proj_aaaaaaaa0008'), ws_a)
+    PostgresSimulationRepository(database=database).add_existing(
+        _simulation('sim_aaaaaaaa0008', 'proj_aaaaaaaa0008')
+    )
+    task_id = TaskManager().create_task(
+        'report_generate',
+        metadata={'simulation_id': 'sim_aaaaaaaa0008', 'report_id': 'report_laeuft0002'},
+    )
+
+    own = guarded_client.post('/api/status', json={'task_id': task_id}, headers=_bearer(ALICE))
+    foreign = guarded_client.post('/api/status', json={'task_id': task_id}, headers=_bearer(BOB))
+
+    assert own.status_code == 200
+    assert (foreign.status_code, foreign.get_json()['code']) == (404, 'not_found')
+
+
+def test_task_visibility_ignores_unsaved_outputs_but_not_foreign_anchors(database, workspaces):
+    from app.security.resource_guard import task_visible
+
+    ws_a, ws_b = workspaces
+    PostgresProjectRepository(database=database).add_existing(_project('proj_aaaaaaaa0009'), ws_a)
+    PostgresProjectRepository(database=database).add_existing(_project('proj_bbbbbbbb0009'), ws_b)
+
+    assert task_visible({'project_id': 'proj_aaaaaaaa0009', 'report_id': 'report_neu'}, ws_a)
+    assert not task_visible({'project_id': 'proj_aaaaaaaa0009', 'report_id': 'report_neu'}, ws_b)
+    assert not task_visible({'project_id': 'proj_aaaaaaaa0009', 'simulation_id': None}, ws_b)
+    assert not task_visible({'report_id': 'report_neu'}, ws_a)  # kein gespeicherter Anker
+    assert not task_visible(
+        {'project_id': 'proj_aaaaaaaa0009', 'graph_id': 'x', 'simulation_id': 'sim_fremd'}, ws_b
+    )
