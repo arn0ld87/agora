@@ -1291,10 +1291,15 @@ class ReportManager:
             logger.info("Report folder deleted: %s", report_id)
             deleted = True
 
-        # Backward-compatible format: the standalone Markdown file
-        old_md_path = os.path.join(cls.REPORTS_DIR, f"{report_id}.md")
-        if os.path.exists(old_md_path):
-            os.remove(old_md_path)
-            deleted = True
+        # Backward-compatible format: standalone Markdown and flat meta file.
+        # Die Flachdatei wird unabhaengig vom Backend entfernt: mit
+        # AGORA_REPORT_BACKEND=postgres bliebe sie sonst liegen und belebte den
+        # Report beim Rueckweg auf die Datei oder bei einer erneuten Migration
+        # wieder (CodeRabbit-Review auf #1607).
+        for suffix in (".md", ".json"):
+            legacy_path = os.path.join(cls.REPORTS_DIR, f"{report_id}{suffix}")
+            if os.path.exists(legacy_path):
+                os.remove(legacy_path)
+                deleted = True
 
         return deleted

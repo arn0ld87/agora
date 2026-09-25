@@ -100,9 +100,10 @@ class PostgresReportRepository:
     # -- Schreiben -----------------------------------------------------------
 
     def save(self, record: ReportRecord) -> ReportRecord:
-        values = _to_row_values(record.report_id, record)
         try:
             with self.db.session() as session:
+                key = self._storage_key(session, record.report_id)
+                values = _to_row_values(key, record)
                 self._resolve_simulation(session, values)
                 statement = insert(ReportModel).values(**values)
                 statement = statement.on_conflict_do_update(
@@ -117,9 +118,29 @@ class PostgresReportRepository:
         except IntegrityError as exc:
             if _is_simulation_fk_violation(exc):
                 # Die Simulation verschwand zwischen Prüfung und Schreiben.
-                raise _missing(values['id'], values['simulation_id']) from exc
+                raise _missing(record.report_id, record.simulation_id) from exc
             raise
         return record
+
+    @staticmethod
+    def _storage_key(session: Any, report_id: str) -> str:
+        """Unter welchem Ablageschlüssel ``save`` schreibt.
+
+        Normalfall: die ``report_id``. Ein migrierter Altbestand liegt aber
+        unter einem abweichenden Schlüssel (``report_deepseek_<hex>`` mit
+        ``report_<hex>`` im Datensatz). ``ReportManager`` kennt nach dem Lesen
+        nur noch die ``report_id``; schriebe ``save`` darunter, entstünde eine
+        zweite Zeile neben dem migrierten Datensatz (CodeRabbit-Review auf
+        #1607). Gibt es keine Zeile unter der ``report_id``, aber genau eine
+        mit dieser ``report_id`` unter anderem Schlüssel, wird diese
+        aktualisiert.
+        """
+        if session.get(ReportModel, report_id) is not None:
+            return report_id
+        keys = session.scalars(
+            select(ReportModel.id).where(ReportModel.report_id == report_id).limit(2)
+        ).all()
+        return keys[0] if len(keys) == 1 else report_id
 
     def add_existing(self, key: str, record: ReportRecord) -> bool:
         """Legt einen Report unter seinem **bestehenden** Ablageschlüssel an.

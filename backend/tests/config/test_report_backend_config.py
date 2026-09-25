@@ -7,6 +7,11 @@ Zwei Zusagen: der Default bleibt die Datei und braucht keine Datenbank, und
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from app.config import REPORT_BACKENDS, Config, validate_report_backend
@@ -14,14 +19,36 @@ from app.repositories.report_repository import ReportBackendUnavailable, get_rep
 from app.services.file_report_store import FileReportRepository
 
 URL = 'postgresql+psycopg://u:p@host:5432/db'
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 def test_report_backends_are_exactly_file_and_postgres():
     assert REPORT_BACKENDS == frozenset({'file', 'postgres'})
 
 
-def test_default_is_file_without_database_url():
-    assert Config.REPORT_BACKEND == 'file' or Config.REPORT_BACKEND in REPORT_BACKENDS
+def test_default_is_file_without_environment_or_dotenv():
+    """Der Default selbst, nicht der Wert dieser Testumgebung: eigener Prozess
+    ohne ``AGORA_REPORT_BACKEND`` und ohne ``load_dotenv`` (CodeRabbit-Review
+    auf #1607, dasselbe Muster wie für ``AGORA_RUN_BACKEND``)."""
+    env = {k: v for k, v in os.environ.items() if k != 'AGORA_REPORT_BACKEND'}
+    probe = (
+        'import dotenv; dotenv.load_dotenv = lambda *a, **k: False; '
+        'from app.config import Config; print(Config.REPORT_BACKEND)'
+    )
+    result = subprocess.run(
+        [sys.executable, '-c', probe],
+        cwd=BACKEND_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+
+    assert result.stdout.strip().splitlines()[-1] == 'file'
+
+
+def test_file_needs_no_database_url():
     assert validate_report_backend('file', '', 'file') == []
 
 

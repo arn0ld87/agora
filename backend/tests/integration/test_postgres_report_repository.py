@@ -186,6 +186,20 @@ def test_legacy_key_differs_from_report_id(repo):
     assert repo.get('report_abc123') is None
 
 
+def test_save_under_report_id_updates_the_legacy_row(repo):
+    """``save`` kennt nur die ``report_id``. Liegt der Report unter einem
+    abweichenden Ablageschlüssel, muss dieselbe Zeile aktualisiert werden —
+    sonst entstünde ein Duplikat (CodeRabbit-Review auf #1607)."""
+    assert repo.add_existing('report_deepseek_abc123', _record('report_abc123'))
+
+    repo.save(_record('report_abc123', status='failed'))
+
+    assert repo.list_ids() == ['report_deepseek_abc123']
+    loaded = repo.get('report_deepseek_abc123')
+    assert loaded is not None and loaded.status == 'failed'
+    assert repo.get('report_abc123') is None
+
+
 def test_unreadable_row_does_not_break_the_list(repo, migrated_db):
     repo.save(_record('report_gut0000001'))
     with migrated_db.session() as session:
@@ -439,3 +453,27 @@ def test_manager_save_and_list_go_through_postgres(report_on_disk, repo, migrate
     stored = repo.get('report_neu0000001')
     assert stored is not None and stored.simulation_id == SIM_B
     assert ReportManager.get_report_by_simulation(SIM_B).report_id == 'report_neu0000001'
+
+
+def test_manager_delete_removes_the_flat_legacy_file_with_postgres(
+    tmp_path, repo, migrated_db, monkeypatch
+):
+    """Ein Report im Flachformat ``<id>.json`` lag vor der Migration nur als
+    Datei vor. Nach dem Löschen im Postgres-Modus darf sie nicht liegen
+    bleiben, sonst taucht er beim Rückweg auf ``file`` wieder auf
+    (CodeRabbit-Review auf #1607)."""
+    from app.services.report_agent import ReportManager
+
+    reports_dir = tmp_path / 'reports'
+    reports_dir.mkdir()
+    monkeypatch.setattr(ReportManager, 'REPORTS_DIR', str(reports_dir))
+    record = _record('report_flach000001')
+    flat = reports_dir / 'report_flach000001.json'
+    flat.write_text(json.dumps(record.to_dict()), encoding='utf-8')
+    assert repo.add_existing('report_flach000001', record)
+    _use_postgres(monkeypatch, migrated_db)
+
+    assert ReportManager.delete_report('report_flach000001') is True
+
+    assert not flat.exists()
+    assert repo.get('report_flach000001') is None
