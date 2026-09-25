@@ -112,6 +112,21 @@ def test_migration_is_idempotent_for_an_already_published_table(db_url):
     assert set(_published(db_url)) == TABLES
 
 
+def test_an_all_tables_publication_also_loses_delete_and_truncate(db_url):
+    command.upgrade(_alembic(), BEFORE_REALTIME)
+    with create_engine(db_url, isolation_level='AUTOCOMMIT').connect() as c:
+        c.execute(text('CREATE PUBLICATION supabase_realtime FOR ALL TABLES'))
+
+    command.upgrade(_alembic(), 'head')
+
+    published = _published(db_url)
+    assert TABLES <= set(published)
+    assert set(published.values()) == {(True, True, False, False)}
+
+    command.downgrade(_alembic(), BEFORE_REALTIME)
+    assert set(_published(db_url).values()) == {(True, True, True, True)}
+
+
 def test_downgrade_removes_the_tables_and_restores_all_operations(db_url):
     command.upgrade(_alembic(), BEFORE_REALTIME)
     with create_engine(db_url, isolation_level='AUTOCOMMIT').connect() as c:

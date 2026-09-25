@@ -15,7 +15,8 @@ Das Frontend nimmt ein Ereignis nur als Signal zum Nachladen über die
 Flask-API; der Payload ist keine Datenquelle.
 
 Ohne Publication (reines PostgreSQL, CI) ist die Migration ein No-op. Eine
-Publication ``FOR ALL TABLES`` bleibt unverändert.
+Publication ``FOR ALL TABLES`` enthält die Tabellen schon; auch dort gilt
+danach nur noch ``INSERT``/``UPDATE``.
 
 Revision ID: dc4e84e7c000
 Revises: e746a558dce5
@@ -39,15 +40,18 @@ DO $$
 DECLARE
   t text;
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_publication
-             WHERE pubname = 'supabase_realtime' AND NOT puballtables) THEN
-    FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
-      IF NOT EXISTS (SELECT 1 FROM pg_publication_tables
-                     WHERE pubname = 'supabase_realtime'
-                       AND schemaname = 'agora' AND tablename = t) THEN
-        EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE agora.%I', t);
-      END IF;
-    END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    -- FOR ALL TABLES enthält die Tabellen schon; ADD TABLE wäre ein Fehler.
+    IF NOT (SELECT puballtables FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+      FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
+        IF NOT EXISTS (SELECT 1 FROM pg_publication_tables
+                       WHERE pubname = 'supabase_realtime'
+                         AND schemaname = 'agora' AND tablename = t) THEN
+          EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE agora.%I', t);
+        END IF;
+      END LOOP;
+    END IF;
+    -- In jedem Fall: DELETE und TRUNCATE prüft Realtime nicht gegen RLS.
     ALTER PUBLICATION supabase_realtime SET (publish = 'insert, update');
   END IF;
 END
@@ -59,15 +63,16 @@ DO $$
 DECLARE
   t text;
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_publication
-             WHERE pubname = 'supabase_realtime' AND NOT puballtables) THEN
-    FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
-      IF EXISTS (SELECT 1 FROM pg_publication_tables
-                 WHERE pubname = 'supabase_realtime'
-                   AND schemaname = 'agora' AND tablename = t) THEN
-        EXECUTE format('ALTER PUBLICATION supabase_realtime DROP TABLE agora.%I', t);
-      END IF;
-    END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT (SELECT puballtables FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+      FOREACH t IN ARRAY ARRAY['projects', 'simulations', 'runs', 'reports'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_publication_tables
+                   WHERE pubname = 'supabase_realtime'
+                     AND schemaname = 'agora' AND tablename = t) THEN
+          EXECUTE format('ALTER PUBLICATION supabase_realtime DROP TABLE agora.%I', t);
+        END IF;
+      END LOOP;
+    END IF;
     -- Supabase legt die Publication mit allen Operationen an.
     ALTER PUBLICATION supabase_realtime SET (publish = 'insert, update, delete, truncate');
   END IF;
