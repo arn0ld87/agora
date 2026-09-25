@@ -24,6 +24,32 @@ Das ist kein vollständiges Human-Identity-/RBAC-System. Es gibt weder Benutzerk
 
 ---
 
+### Auth-Modi (ADR-0018, #1613)
+
+`AGORA_AUTH_BACKEND` wählt den Modus:
+
+| Modus | Reihenfolge im Guard | Master-Token | Offener Modus |
+|---|---|---|---|
+| `legacy` | Master-Token → `ago_`-Key → Ticket | ja | ohne Token |
+| `hybrid` (Default) | Supabase-JWT → Master-Token → `ago_`-Key → Ticket | ja | ohne Token und ohne JWT |
+| `supabase` | Supabase-JWT → `ago_`-Key → Ticket | nein | nie |
+
+Ohne `AGORA_SUPABASE_JWT_ISSUER` ist `hybrid` gleich `legacy`; der Startlog sagt das ausdrücklich. Mit JWT gilt:
+
+- **Bearer in JWT-Form** (`eyJ…` mit drei Segmenten): Er wird geprüft und nie als Master-Token verglichen. Ist er ungültig, antwortet der Guard mit `401 invalid_token`, und im Log steht nur der Grund, nie das Token.
+- **Workspace:** Der Header `X-Agora-Workspace: <uuid>` wählt ihn, er gilt nur mit Mitgliedschaft in `agora.workspace_members`. Ohne Header gilt die einzige Mitgliedschaft.
+- **Fehlercodes der Workspace-Wahl:**
+  - `invalid_workspace_header` (400): der Header ist keine UUID
+  - `workspace_header_required` (400): mehrere Mitgliedschaften, aber kein Header
+  - `workspace_forbidden` (403): keine Mitgliedschaft im genannten Workspace
+  - `workspace_membership_required` (403): der Nutzer hat gar keine Mitgliedschaft
+- **Principal:** Jeder zugelassene Request trägt einen Principal (`app/security/principal_context.py`). Master-Token, `ago_`-Keys und der offene Modus landen im Default-Workspace mit Rolle `owner`.
+- **Scopes aus der Rolle:** `owner` und `admin` erhalten `admin`, `member` erhält `write`, `viewer` erhält `read`. `require_scope` liest sie aus dem Principal.
+- **Betreiber-Blueprints:** `settings`, `api-keys`, `logs`, `onboarding`, `profile` und `llm` verwalten prozessweiten Zustand. Für JWT-Nutzer sind sie gesperrt (`403 operator_only`).
+- **Tickets:** Ein Ticket trägt den Principal seines Ausstellers in der signierten Scope-Bindung (`<scope>@<typ>~<workspace>~<user>~<rollen>`). Mit aktivem JWT gilt nur ein gebundenes Ticket. Clients dürfen kein `@` im Scope senden.
+
+---
+
 ## 2. Empfohlene Header
 
 Für neue Integrationen gelten diese Formen:

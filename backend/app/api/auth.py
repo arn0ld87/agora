@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from flask import Blueprint, current_app, request
 
+from ..security.principal_context import bind_scope, current_principal
 from ..utils import signed_ticket
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error, json_success
@@ -34,7 +35,9 @@ _ALLOWED_SCOPE_PREFIXES = (
 
 
 def _scope_is_allowed(scope: str) -> bool:
-    if not scope or "." in scope:
+    # ``@`` trennt Scope und Principal-Bindung (ADR-0018); ein Client darf
+    # keine Bindung mitschicken.
+    if not scope or "." in scope or "@" in scope:
         return False
     return any(scope.startswith(prefix) for prefix in _ALLOWED_SCOPE_PREFIXES)
 
@@ -88,7 +91,11 @@ def issue_ticket():
     if not secret:
         return json_error("server misconfigured: SECRET_KEY missing", status=500, code="no_secret")
 
-    ticket = signed_ticket.issue(secret, scope, ttl_seconds=ttl)
+    # Das Ticket trägt den Principal des Ausstellers (ADR-0018, #1613). Beim
+    # Einlösen gilt genau dieser Workspace und Nutzer, nicht der Default.
+    principal = current_principal()
+    signed_scope = bind_scope(scope, principal) if principal is not None else scope
+    ticket = signed_ticket.issue(secret, signed_scope, ttl_seconds=ttl)
     # Re-derive expiry locally so the client doesn't have to parse the ticket.
     parsed = signed_ticket._parse(ticket)
     exp = parsed[1] if parsed else None

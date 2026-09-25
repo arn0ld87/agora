@@ -71,6 +71,17 @@ def _parse(ticket: str) -> tuple[str, int, str, str] | None:
     return version, exp, scope, sig
 
 
+
+def scope_of(ticket: str) -> str | None:
+    """Der (noch ungeprüfte) Scope eines Tickets, ``None`` bei falscher Form.
+
+    Nur zum Auswählen des erwarteten Scopes; gültig ist ein Ticket erst nach
+    :func:`verify` bzw. :func:`consume` mit genau diesem Scope.
+    """
+    parsed = _parse(ticket)
+    return parsed[2] if parsed else None
+
+
 def verify(
     secret: str,
     ticket: str,
