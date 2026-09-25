@@ -498,3 +498,33 @@ describe('Codex-Runde 4 (#1617)', () => {
     expect(getSessionToken()).toBeNull()
   })
 })
+
+describe('Codex-Runde 5 (#1617)', () => {
+  it('leert den Ticket-Cache bei der Abmeldung', async () => {
+    const store = useAuthStore()
+    vi.mocked(useApiAuth._clearCache).mockClear()
+
+    await store.signOut()
+
+    expect(useApiAuth._clearCache).toHaveBeenCalled()
+  })
+
+  it('lässt eine Recovery-Session trotz Workspace-Fehler bestehen', async () => {
+    mocks._sbOnAuthStateChange.mockImplementation((cb: (event: string, session: unknown) => void) => {
+      // Supabase meldet den Reset-Link während des Client-Inits.
+      cb('PASSWORD_RECOVERY', { access_token: 'recovery', user: { id: 'u1' }, expires_at: 9999 })
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'recovery', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockRejectedValueOnce(new Error('network'))
+    const store = useAuthStore()
+
+    await store.init()
+
+    expect(store.passwordRecovery).toBe(true)
+    expect(mocks._sbSignOut).not.toHaveBeenCalled()
+    expect(getSessionToken()).toBe('recovery')
+  })
+})

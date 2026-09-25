@@ -161,7 +161,9 @@ export const useAuthStore = defineStore('auth', () => {
     // Wiederhergestellte Session ohne aktiven Workspace (Liste nicht ladbar,
     // Bootstrap abgelehnt): nicht als angemeldet gelten lassen, sonst liefen
     // alle Anfragen ohne X-Agora-Workspace. Neu anmelden lädt erneut.
-    if (session.value && !activeWorkspaceId.value) {
+    // Ausnahme: Passwort-Reset über den Mail-Link. Die Recovery-Session
+    // braucht keinen Workspace, nur updateUser() bei Supabase.
+    if (session.value && !activeWorkspaceId.value && !passwordRecovery.value) {
       await signOut()
     }
   }
@@ -182,6 +184,10 @@ export const useAuthStore = defineStore('auth', () => {
     workspaces.value = []
     activeWorkspaceId.value = null
     setActiveWorkspaceId(null)
+    // SSE-Tickets sind an den Principal gebunden: nach Abmeldung oder
+    // Nutzerwechsel keines wiederverwenden, auch keines aus einem noch
+    // laufenden Request.
+    useApiAuth._clearCache()
   }
 
   // Einmaliger Start: der Router-Guard wartet darauf, bevor er die erste

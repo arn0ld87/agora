@@ -50,11 +50,17 @@ function _isCacheValid(entry: TicketCacheEntry): boolean {
   return Date.now() < entry.validUntilMs
 }
 
+/** Generation des Caches: ein volles Leeren (Abmeldung, Workspace-Wechsel,
+ *  #1617) erhöht sie. Tickets sind an den Principal gebunden; eine Antwort,
+ *  die erst nach dem Leeren eintrifft, darf nicht mehr gecacht werden. */
+let _generation = 0
+
 function _clearCache(scope?: string): void {
   if (scope) {
     _cache.delete(scope)
     _inflight.delete(scope)
   } else {
+    _generation += 1
     _cache.clear()
     _inflight.clear()
   }
@@ -87,6 +93,7 @@ async function fetchTicket(scope: string, ttlSeconds = 60): Promise<string> {
     return existing
   }
 
+  const generation = _generation
   const request = (async (): Promise<string> => {
     try {
       const res = await service.post('/api/auth/ticket', { scope, ttl_seconds: ttlSeconds })
@@ -104,10 +111,13 @@ async function fetchTicket(scope: string, ttlSeconds = 60): Promise<string> {
           ? exp * 1000 - _EARLY_EXPIRE_BUFFER_MS
           : Date.now() + (ttlSeconds - 5) * 1000
 
-      _cache.set(scope, { ticket, validUntilMs })
+      if (generation === _generation) {
+        _cache.set(scope, { ticket, validUntilMs })
+      }
       return ticket
     } finally {
-      _inflight.delete(scope)
+      // Nach einem vollen Leeren gehört der Eintrag schon einer neuen Generation.
+      if (generation === _generation) _inflight.delete(scope)
     }
   })()
 
