@@ -3,25 +3,32 @@
  * QuickActionsRow — drei RouterLink-Tiles für Compare / History / Settings.
  * Workbench-These: ruhige Kacheln, Mono-Label, kein Akzent (Hero hat den Akzent).
  */
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useOperatorAccess } from '../../../composables/useOperatorAccess'
 
 interface Tile {
   to: string
   labelKey: string
   hintKey: string
+  operatorOnly?: boolean
 }
 
 const TILES: Tile[] = [
   { to: '/v4/compare/last', labelKey: 'dashboard.quick.compare', hintKey: 'dashboard.quick.compareHint' },
   { to: '/v4/history', labelKey: 'dashboard.quick.history', hintKey: 'dashboard.quick.historyHint' },
-  { to: '/settings/general', labelKey: 'dashboard.quick.settings', hintKey: 'dashboard.quick.settingsHint' },
+  { to: '/settings/general', labelKey: 'dashboard.quick.settings', hintKey: 'dashboard.quick.settingsHint', operatorOnly: true },
 ]
+
+// Einstellungen sind Betreiber-Zustand: für Supabase-Nutzer ausgeblendet (#1617).
+const operatorAccess = useOperatorAccess()
+const tiles = computed(() => TILES.filter((tile) => !tile.operatorOnly || operatorAccess.value))
 </script>
 
 <template>
   <div class="qa-row">
     <RouterLink
-      v-for="tile in TILES"
+      v-for="tile in tiles"
       :key="tile.to"
       :to="tile.to"
       class="qa-tile v4-state-selectable"

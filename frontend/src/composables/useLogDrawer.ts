@@ -10,7 +10,7 @@
  * Persistenz via localStorage, damit ein Reload den Drawer-Zustand haelt.
  */
 import { computed, ref } from 'vue'
-import { useAuthStore } from '../store/auth'
+import { useOperatorAccess } from './useOperatorAccess'
 
 const STORAGE_KEY = 'agora.ui.logDrawer.open'
 
@@ -35,15 +35,8 @@ function persistOpen(): void {
 
 export function useLogDrawer() {
   // Logs sind Betreiber-Zustand (operator_only, #1617): für Supabase-Nutzer
-  // weder Knopf noch Hotkey noch Drawer. Ohne aktives Pinia (isolierte
-  // Tests) bleibt es beim bisherigen Verhalten.
-  let auth: ReturnType<typeof useAuthStore> | null = null
-  try {
-    auth = useAuthStore()
-  } catch {
-    auth = null
-  }
-  const available = computed(() => auth?.operatorAccess ?? true)
+  // weder Knopf noch Hotkey noch Drawer.
+  const available = useOperatorAccess()
   const visible = computed(() => isOpen.value && available.value)
 
   function open(): void {

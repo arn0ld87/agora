@@ -22,6 +22,7 @@ vi.mock('../../i18n/index', () => ({
 const fakeAuth = vi.hoisted(() => ({
   jwtEnabled: false,
   isAuthenticated: false,
+  operatorAccess: true,
   ensureInit: vi.fn(async () => {}),
 }))
 vi.mock('../../store/auth', () => ({ useAuthStore: () => fakeAuth }))
@@ -32,6 +33,8 @@ vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
 vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsApiKeysView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
+vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
 vi.mock('../../views/auth/LoginView.vue', () => VIEW_STUB)
 vi.mock('../../views/auth/RegisterView.vue', () => VIEW_STUB)
 vi.mock('../../views/auth/PasswordResetView.vue', () => VIEW_STUB)
@@ -48,6 +51,7 @@ async function go(path: string): Promise<void> {
 beforeEach(async () => {
   fakeAuth.jwtEnabled = false
   fakeAuth.isAuthenticated = false
+  fakeAuth.operatorAccess = true
   fakeAuth.ensureInit.mockClear()
   vi.mocked(getAgoraToken).mockReturnValue('')
   await go('/dashboard')
@@ -103,5 +107,29 @@ describe('JWT-Modus', () => {
     await go('/auth/login?next=//evil.example/x')
     expect(router.currentRoute.value.path).not.toContain('evil')
     expect(router.currentRoute.value.name).not.toBe('Login')
+  })
+})
+
+describe('Betreiber-Routen im JWT-Modus', () => {
+  beforeEach(() => {
+    fakeAuth.jwtEnabled = true
+    fakeAuth.isAuthenticated = true
+  })
+
+  it.each(['/settings/general', '/settings/api-keys', '/onboarding'])(
+    'hält Supabase-Nutzer von %s fern',
+    async (path) => {
+      fakeAuth.operatorAccess = false
+      await go(path)
+      expect(router.currentRoute.value.path).not.toBe(path)
+      expect(router.currentRoute.value.name).toBe('Shelf')
+    },
+  )
+
+  it('lässt Betreiber (Master-Token in hybrid) auf die Einstellungen', async () => {
+    fakeAuth.operatorAccess = true
+    vi.mocked(getAgoraToken).mockReturnValue('master')
+    await go('/settings/general')
+    expect(router.currentRoute.value.name).toBe('SettingsGeneral')
   })
 })

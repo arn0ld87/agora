@@ -474,3 +474,27 @@ describe('Codex-Runde 3 (#1617)', () => {
     expect(store.operatorAccess).toBe(false)
   })
 })
+
+describe('Codex-Runde 4 (#1617)', () => {
+  it('meldet ab, wenn signIn am Workspace scheitert', async () => {
+    mocks._sbOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    mocks._sbGetSession.mockResolvedValue({ data: { session: null } })
+    mocks._sbSignIn.mockResolvedValue({
+      data: { session: { access_token: 'tok-signin', user: { id: 'u1' }, expires_at: 9999 } },
+      error: null,
+    })
+    mocks._svcGet
+      .mockResolvedValueOnce(AUTH_CFG_ENABLED)
+      .mockResolvedValueOnce({ success: true, data: [] })
+      .mockRejectedValueOnce(new Error('network'))
+    const store = useAuthStore()
+    await store.init()
+
+    await expect(store.signIn('a@example.test', 'ein-langes-passwort')).rejects.toThrow()
+
+    expect(mocks._sbSignOut).toHaveBeenCalledTimes(1)
+    expect(store.session).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
+    expect(getSessionToken()).toBeNull()
+  })
+})

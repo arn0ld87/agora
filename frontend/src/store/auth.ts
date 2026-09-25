@@ -209,8 +209,15 @@ export const useAuthStore = defineStore('auth', () => {
     // Erst mit gewähltem Workspace weiter: sonst fehlt Folgeanfragen der
     // Header X-Agora-Workspace (Bootstrap beim ersten Login). Ein Fehler
     // beim Laden lässt den Login scheitern; ein erneuter Versuch lädt neu.
-    await loadWorkspaces()
-    if (!activeWorkspaceId.value) throw new Error('workspace_unavailable')
+    try {
+      await loadWorkspaces()
+      if (!activeWorkspaceId.value) throw new Error('workspace_unavailable')
+    } catch (err) {
+      // Ohne Workspace keine halbe Anmeldung zurücklassen: Session und
+      // Supabase-Speicher verwerfen, dann den Fehler an die View geben.
+      await signOut()
+      throw err
+    }
   }
 
   async function signUp(email: string, password: string): Promise<void> {

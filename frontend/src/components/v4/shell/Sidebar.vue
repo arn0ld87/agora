@@ -20,6 +20,7 @@
 
       <!-- Settings group (IA-Matrix: nur wire-Sub-Items) -->
       <SidebarGroup
+        v-if="operatorAccess"
         group-key="settings"
         :label="t('sidebar.settings.label')"
         icon="settings"
@@ -53,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+import { useOperatorAccess } from '../../../composables/useOperatorAccess'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
 import SidebarItem from './SidebarItem.vue'
@@ -63,6 +65,8 @@ import { useShellStore } from '@/stores/shell'
 import { MOBILE_MEDIA_QUERY } from '@/constants/breakpoints'
 
 const { t } = useI18n()
+// Einstellungen sind Betreiber-Zustand: für Supabase-Nutzer ausgeblendet (#1617).
+const operatorAccess = useOperatorAccess()
 const shellStore = useShellStore()
 
 function handleNavClick(): void {

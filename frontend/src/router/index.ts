@@ -70,6 +70,8 @@ const routes: RouteRecordRaw[] = [
     path: '/onboarding',
     name: 'Onboarding',
     component: () => import('../views/onboarding/OnboardingView.vue'),
+    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
+    meta: { operatorOnly: true },
   },
 
   // Settings — /settings und der klassische Deep-Link konvergieren auf General.
@@ -82,16 +84,22 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/general',
     name: 'SettingsGeneral',
     component: () => import('../views/Settings/SettingsGeneralView.vue'),
+    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
+    meta: { operatorOnly: true },
   },
   {
     path: '/settings/integrations',
     name: 'SettingsIntegrations',
     component: () => import('../views/Settings/SettingsIntegrationsView.vue'),
+    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
+    meta: { operatorOnly: true },
   },
   {
     path: '/settings/profile',
     name: 'SettingsProfile',
     component: () => import('../views/Settings/SettingsProfileView.vue'),
+    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
+    meta: { operatorOnly: true },
   },
   // Sidebar-IA-Fix (Onboarding-Epic): "Users & Teams" wurde durch das
   // Profil-Setting ersetzt — bestehende Deep-Links leiten weiter um.
@@ -104,25 +112,25 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/api-keys',
     name: 'SettingsApiKeys',
     component: () => import('../views/Settings/SettingsApiKeysView.vue'),
-    meta: { requiresAuth: true },
+    meta: { operatorOnly: true, requiresAuth: true },
   },
   {
     path: '/settings/audit-logs',
     name: 'SettingsAuditLogs',
     component: () => import('../views/Settings/SettingsAuditLogsView.vue'),
-    meta: { requiresAuth: true },
+    meta: { operatorOnly: true, requiresAuth: true },
   },
   {
     path: '/settings/llm-routing',
     name: 'SettingsLlmRouting',
     component: () => import('../views/Settings/LlmRoutingView.vue'),
-    meta: { requiresAuth: true },
+    meta: { operatorOnly: true, requiresAuth: true },
   },
   {
     path: '/settings/llm-providers',
     name: 'SettingsLlmProviders',
     component: () => import('../views/Settings/LlmProvidersView.vue'),
-    meta: { requiresAuth: true },
+    meta: { operatorOnly: true, requiresAuth: true },
   },
   // Onboarding Slice 4.3.3: eigene Route für die kanonische
   // Embedding-Konfiguration (Store, View, Migrations, Ollama-Download).
@@ -130,7 +138,7 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/embedding',
     name: 'SettingsEmbedding',
     component: () => import('../views/Settings/EmbeddingConfigurationsView.vue'),
-    meta: { requiresAuth: true },
+    meta: { operatorOnly: true, requiresAuth: true },
   },
   // Legacy-Deep-Link bleibt fuer einen Release-Zyklus als Redirect erhalten.
   {
@@ -305,6 +313,9 @@ router.beforeEach(async (to) => {
       return true
     }
     if (!auth.isAuthenticated) return { name: 'Login', query: { next: to.fullPath } }
+    // Einstellungen und Onboarding sind Betreiber-Zustand; das Backend
+    // antwortet Supabase-Nutzern dort mit 403.
+    if (to.meta?.operatorOnly && !auth.operatorAccess) return '/'
     return true
   }
 
