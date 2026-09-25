@@ -27,7 +27,7 @@ Priorität vor neuen Features:
 
 ## Nicht vor 1.0 priorisieren
 
-- Multi-User/SaaS
+- SaaS/gehosteter Betrieb (Multi-User mit Workspaces ist seit ADR-0016 Teil von 1.0, Epic #1610)
 - Kubernetes/Helm
 - Federation
 - allgemeines Plugin-System

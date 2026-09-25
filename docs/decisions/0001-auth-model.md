@@ -1,6 +1,6 @@
 # ADR-0001 — Auth-Zielbild für v1.0
 
-**Status:** Accepted (User-Sign-off via Merge PR #277, 2026-05-04)
+**Status:** Superseded by [ADR-0016](0016-multi-user-before-1-0.md) (2026-09-25); zuvor Accepted (User-Sign-off via Merge PR #277, 2026-05-04)
 **Datum:** 2026-05-04
 **Accepted:** 2026-05-04
 **Slice:** M10.4
