@@ -31,6 +31,7 @@ describe('supabaseClient', () => {
       jwt_enabled: true,
       supabase_url: 'https://s.test',
       supabase_anon_key: 'k',
+      realtime_enabled: false,
     })
     expect(created.options[0]).toMatchObject({ auth: { storageKey: SUPABASE_STORAGE_KEY } })
   })
@@ -58,6 +59,7 @@ describe('supabaseClient', () => {
       jwt_enabled: true,
       supabase_url: 'https://proj.supabase.example',
       supabase_anon_key: 'k',
+      realtime_enabled: false,
     })
 
     expect(localStorage.getItem(SUPABASE_STORAGE_KEY)).toBe('{"access_token":"alt"}')
@@ -75,6 +77,7 @@ describe('supabaseClient', () => {
       jwt_enabled: true,
       supabase_url: 'https://proj.supabase.example',
       supabase_anon_key: 'k',
+      realtime_enabled: false,
     })
 
     expect(localStorage.getItem(SUPABASE_STORAGE_KEY)).toBe('{"access_token":"neu"}')

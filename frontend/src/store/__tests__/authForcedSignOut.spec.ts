@@ -29,6 +29,7 @@ vi.mock('../../api/workspaces', () => ({
     jwt_enabled: true,
     supabase_url: 'https://s.test',
     supabase_anon_key: 'k',
+    realtime_enabled: false,
   })),
   listWorkspaces: vi.fn(async () => [WS]),
   bootstrapWorkspace: vi.fn(),
