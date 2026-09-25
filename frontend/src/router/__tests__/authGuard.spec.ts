@@ -162,6 +162,17 @@ describe('Session ohne Workspace im JWT-Modus (Recovery)', () => {
     expect(router.currentRoute.value.name).toBe('Login')
   })
 
+  it.each(['/auth/register', '/auth/confirm'])('leitet %s auf den Reset zurück', async (path) => {
+    await go(path)
+    expect(router.currentRoute.value.name).toBe('PasswordReset')
+  })
+
+  it('schickt ohne Recovery auch öffentliche Routen auf den Login', async () => {
+    fakeAuth.passwordRecovery = false
+    await go('/auth/register')
+    expect(router.currentRoute.value.name).toBe('Login')
+  })
+
   it('leitet ohne Recovery auf den Login', async () => {
     fakeAuth.passwordRecovery = false
     await go('/ablage')

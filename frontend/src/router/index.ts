@@ -308,19 +308,18 @@ router.beforeEach(async (to) => {
 
   // JWT-Modus (#1617): ohne Session nur öffentliche Routen.
   if (auth?.jwtEnabled) {
+    // Session ohne Workspace (Passwort-Reset über den Mail-Link): nur Reset
+    // und Login sind erreichbar, auch keine anderen öffentlichen Routen.
+    if (auth.sessionWithoutWorkspace) {
+      if (to.name === 'PasswordReset' || to.name === 'Login') return true
+      if (auth.passwordRecovery) return { name: 'PasswordReset' }
+      return to.meta?.public ? { name: 'Login' } : { name: 'Login', query: { next: to.fullPath } }
+    }
     if (to.meta?.public) {
-      if (to.name === 'Login' && auth.isAuthenticated && !auth.sessionWithoutWorkspace) {
-        return safeNext(to.query.next)
-      }
+      if (to.name === 'Login' && auth.isAuthenticated) return safeNext(to.query.next)
       return true
     }
     if (!auth.isAuthenticated) return { name: 'Login', query: { next: to.fullPath } }
-    // Session ohne Workspace (Passwort-Reset über den Mail-Link): nur der
-    // Reset ist erreichbar, sonst neu anmelden.
-    if (auth.sessionWithoutWorkspace) {
-      if (auth.passwordRecovery) return { name: 'PasswordReset' }
-      return { name: 'Login', query: { next: to.fullPath } }
-    }
     // Einstellungen und Onboarding sind Betreiber-Zustand; das Backend
     // antwortet Supabase-Nutzern dort mit 403.
     if (to.meta?.operatorOnly && !auth.operatorAccess) return '/'
