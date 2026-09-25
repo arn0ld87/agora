@@ -460,6 +460,14 @@ def validate_auth_backend(config: Any) -> list[str]:
         )
         errors.append(f'Supabase JWT settings invalid: {reasons}')
 
+    errors.extend(_tenant_isolation_errors(config))
+    return errors
+
+
+def _tenant_isolation_errors(config: Any) -> list[str]:
+    """Was mit aktivem JWT die Workspace-Grenze aufweichen würde: Datei-Backends,
+    fehlende Datenbank, offener Modus, beliebige Origins."""
+    errors: list[str] = []
     not_postgres = [
         env_name
         for env_name, attr in WORKSPACE_SCOPED_BACKENDS
@@ -477,6 +485,10 @@ def validate_auth_backend(config: Any) -> list[str]:
         errors.append(
             'AGORA_ALLOW_ANONYMOUS cannot be combined with Supabase JWT auth'
         )
+    if os.environ.get('AGORA_CORS_ALLOW_ALL', 'false').lower() == 'true':
+        # Mit Registrierung für jeden darf keine fremde Origin im Namen eines
+        # angemeldeten Nutzers Anfragen stellen (Plan §37, #1616).
+        errors.append('AGORA_CORS_ALLOW_ALL cannot be combined with Supabase JWT auth')
     return errors
 
 #: f005 (ADR-0016): globaler Zustand der Decision-Layer-Pilotierung. Ein
@@ -694,6 +706,11 @@ class Config:
     SUPABASE_JWT_AUDIENCE = os.environ.get('AGORA_SUPABASE_JWT_AUDIENCE', 'authenticated')
     SUPABASE_JWKS_URL = os.environ.get('AGORA_SUPABASE_JWKS_URL', '')
     SUPABASE_JWT_SECRET = os.environ.get('AGORA_SUPABASE_JWT_SECRET', '')
+    # Öffentliche Angaben für den Supabase-Client im Browser (#1616):
+    # Gateway-URL und Anon-Key. Beides ist für den Browser bestimmt und kein
+    # Geheimnis; ``GET /api/auth/config`` gibt es nur bei aktivem JWT aus.
+    SUPABASE_URL = os.environ.get('AGORA_SUPABASE_URL', '')
+    SUPABASE_ANON_KEY = os.environ.get('AGORA_SUPABASE_ANON_KEY', '')
 
     # f005 (ADR-0016): Decision-Layer-Pilotierung, Default 'disabled' haelt
     # jeden bestehenden Use-Case-Pfad unveraendert.
@@ -859,6 +876,11 @@ class Config:
     AGORA_REPORT_RATE_LIMIT_MAX = int(os.environ.get('AGORA_REPORT_RATE_LIMIT_MAX', '10'))
     AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS = int(
         os.environ.get('AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS', '60')
+    )
+    # Workspace-Bootstrap und Mitgliederverwaltung (#1616).
+    AGORA_WORKSPACE_RATE_LIMIT_MAX = int(os.environ.get('AGORA_WORKSPACE_RATE_LIMIT_MAX', '30'))
+    AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS = int(
+        os.environ.get('AGORA_WORKSPACE_RATE_LIMIT_WINDOW_SECONDS', '60')
     )
     AGORA_PROXY_FIX_X_FOR = int(os.environ.get('AGORA_PROXY_FIX_X_FOR', '0'))
     AGORA_PROXY_FIX_X_PROTO = int(os.environ.get('AGORA_PROXY_FIX_X_PROTO', '0'))

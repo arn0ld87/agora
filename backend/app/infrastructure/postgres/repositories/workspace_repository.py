@@ -15,9 +15,9 @@ stillschweigend verschluckt wird.
 from __future__ import annotations
 
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -51,6 +51,25 @@ def _to_membership(row: WorkspaceMemberModel) -> WorkspaceMembership:
         role=WorkspaceRole(row.role),
         created_at=row.created_at,
     )
+
+
+class LastOwnerError(ValueError):
+    """Der letzte Owner eines Workspace würde entfernt oder herabgestuft."""
+
+
+class UserDirectoryUnavailable(RuntimeError):
+    """``auth.users`` existiert, ist für die Laufzeitrolle aber nicht lesbar."""
+
+
+_AUTH_USERS_STATE_SQL = text(
+    """
+    SELECT to_regclass('auth.users') IS NOT NULL AS present,
+           CASE WHEN to_regclass('auth.users') IS NULL THEN false
+                ELSE has_schema_privilege('auth', 'USAGE')
+                     AND has_column_privilege('auth.users', 'id', 'SELECT') END AS readable
+    """
+)
+_AUTH_USER_EXISTS_SQL = text('SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = :user_id)')
 
 
 class PostgresWorkspaceRepository:
@@ -123,10 +142,66 @@ class PostgresWorkspaceRepository:
             row = session.get(WorkspaceMemberModel, (workspace_id, user_id))
             return None if row is None else _to_membership(row)
 
+    def user_exists(self, user_id: uuid.UUID) -> Optional[bool]:
+        """Ob ``user_id`` ein Supabase-Nutzer ist (``auth.users``).
+
+        ``None``, wenn es kein Schema ``auth`` gibt (reines PostgreSQL ohne
+        Supabase): dann ist keine Prüfung möglich. Existiert die Tabelle, ist
+        aber nicht lesbar, wirft die Methode :class:`UserDirectoryUnavailable`
+        — ungeprüft wird dann nichts angelegt.
+        """
+        with self.db.session(system=True) as session:
+            state = session.execute(_AUTH_USERS_STATE_SQL).one()
+            if not state.present:
+                return None
+            if not state.readable:
+                raise UserDirectoryUnavailable(
+                    'auth.users is not readable for the runtime role '
+                    '(GRANT SELECT (id) ON auth.users, docs/runbooks/rls-rollen.md)'
+                )
+            return bool(session.execute(_AUTH_USER_EXISTS_SQL, {'user_id': user_id}).scalar())
+
+    def list_members(self, workspace_id: uuid.UUID) -> List[WorkspaceMembership]:
+        with self.db.session(system=True) as session:
+            rows = session.scalars(
+                select(WorkspaceMemberModel)
+                .where(WorkspaceMemberModel.workspace_id == workspace_id)
+                .order_by(WorkspaceMemberModel.created_at, WorkspaceMemberModel.user_id)
+            ).all()
+            return [_to_membership(row) for row in rows]
+
+    @staticmethod
+    def _guard_last_owner(
+        session: Any, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        """Wirft :class:`LastOwnerError`, wenn ``user_id`` der letzte Owner ist.
+
+        ``FOR UPDATE`` sperrt die Owner-Zeilen bis zum Ende der Transaktion:
+        zwei gleichzeitige Herabstufungen können den Workspace nicht ohne
+        Owner zurücklassen.
+        """
+        owners = session.scalars(
+            select(WorkspaceMemberModel.user_id)
+            .where(
+                WorkspaceMemberModel.workspace_id == workspace_id,
+                WorkspaceMemberModel.role == WorkspaceRole.OWNER.value,
+            )
+            .with_for_update()
+        ).all()
+        if list(owners) == [user_id]:
+            raise LastOwnerError('the last owner of a workspace cannot be removed or demoted')
+
     def add_member(
-        self, workspace_id: uuid.UUID, user_id: uuid.UUID, role: WorkspaceRole
+        self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID,
+        role: WorkspaceRole,
+        *,
+        keep_owner: bool = False,
     ) -> WorkspaceMembership:
         with self.db.session(system=True) as session:
+            if keep_owner and role != WorkspaceRole.OWNER:
+                self._guard_last_owner(session, workspace_id, user_id)
             statement = insert(WorkspaceMemberModel).values(
                 workspace_id=workspace_id,
                 user_id=user_id,
@@ -144,8 +219,12 @@ class PostgresWorkspaceRepository:
             assert row is not None
             return _to_membership(row)
 
-    def remove_member(self, workspace_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    def remove_member(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID, *, keep_owner: bool = False
+    ) -> bool:
         with self.db.session(system=True) as session:
+            if keep_owner:
+                self._guard_last_owner(session, workspace_id, user_id)
             row = session.get(WorkspaceMemberModel, (workspace_id, user_id))
             if row is None:
                 return False

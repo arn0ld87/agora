@@ -470,6 +470,8 @@ def create_app(config_class=Config):
         llm_profiles_bp,
         user_profile_bp,
         onboarding_bp,
+        auth_public_bp,
+        workspaces_bp,
     )
     from .utils.api_responses import install_api_error_handlers
     from .utils.auth import install_blueprint_guard, log_auth_mode
@@ -487,6 +489,7 @@ def create_app(config_class=Config):
         report_bp,
         runs_bp,
         status_bp,
+        workspaces_bp,
     ):
         install_blueprint_guard(bp)
     # Prozessweiter Zustand (Provider-Keys, LLM-Profile, API-Keys, Logs,
@@ -516,6 +519,11 @@ def create_app(config_class=Config):
     app.register_blueprint(llm_profiles_bp, url_prefix='/api/settings/llm-profiles')
     app.register_blueprint(user_profile_bp, url_prefix='/api/profile')
     app.register_blueprint(onboarding_bp, url_prefix='/api/onboarding')
+    # Workspaces (#1616). ``auth_public_bp`` bleibt bewusst ohne Guard: der
+    # Browser liest die Auth-Konfiguration vor dem Login; sie enthält nichts
+    # Geheimes.
+    app.register_blueprint(workspaces_bp, url_prefix='/api/workspaces')
+    app.register_blueprint(auth_public_bp, url_prefix='/api/auth')
     if should_log_startup:
         log_auth_mode(app, logger)
 

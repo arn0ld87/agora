@@ -59,11 +59,14 @@ Geheimnisse niemals committen, in Logs ausgeben oder in Run-/Report-Artefakte sc
 | `AGORA_SUPABASE_JWT_AUDIENCE` | erwartete `aud`, Default `authenticated` |
 | `AGORA_SUPABASE_JWKS_URL` | JWKS-Endpunkt von GoTrue (RS256/ES256). Genau eine Schlüsselquelle ist erlaubt |
 | `AGORA_SUPABASE_JWT_SECRET` 🔐 | HS256-Secret (Supabase `JWT_SECRET`, mindestens 32 Zeichen), alternativ zur JWKS-URL |
+| `AGORA_SUPABASE_URL` | öffentliche Gateway-URL für den Supabase-Client im Browser; `GET /api/auth/config` gibt sie nur bei aktivem JWT aus (#1616) |
+| `AGORA_SUPABASE_ANON_KEY` | öffentlicher Anon-Key für den Browser-Client, kein Geheimnis (#1616) |
 
 **Supabase-JWT (ADR-0018, #1613).**
 - Ist `AGORA_SUPABASE_JWT_ISSUER` gesetzt, verlangt `Config.validate()` zusätzlich alle fünf Metadaten-Schalter auf `postgres` und `DATABASE_URL`, weil die Datei-Backends keine Workspace-Isolation kennen.
 - `AGORA_ALLOW_ANONYMOUS` und `AGORA_AUTH_BACKEND=legacy` sind mit JWT unvereinbar.
 - `supabase` ohne JWT-Konfiguration ist ein Startfehler.
+- `AGORA_CORS_ALLOW_ALL=true` ist mit JWT unvereinbar (#1616).
 - Seit #1614 filtern die Repositories nach Workspace, und JWT ist zulässig. Der Default bleibt ohne Issuer; **umgeschaltet ist damit nichts.**
 
 Die beiden Fernet-Keys erfüllen unterschiedliche Persistenzaufgaben und sind nicht bloß zwei Namen für `SECRET_KEY`. Lebenszyklus/Recovery: [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
@@ -77,6 +80,7 @@ Auth-Header werden in [`auth.md`](auth.md) beschrieben. Bevorzugt ist `Authoriza
 | `AGORA_LLM_TRIGGER_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | LLM-Trigger |
 | `AGORA_REPORT_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | Report-Generierung |
 | `AGORA_UPLOAD_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | Uploads |
+| `AGORA_WORKSPACE_RATE_LIMIT_MAX`, `_WINDOW_SECONDS` | Workspace-Bootstrap und Mitgliederverwaltung, Default 30 je 60 s (#1616) |
 
 ---
 

@@ -17,6 +17,7 @@ from .settings import settings_bp  # noqa: E402, F401 -- Issue #133: Settings-UI
 from .api_keys import api_keys_bp  # noqa: E402, F401 -- Slice G2: API-Keys real
 from .user_profile import user_profile_bp  # noqa: E402, F401 -- Onboarding Slice 2
 from .onboarding import onboarding_bp  # noqa: E402, F401 -- Onboarding Slice 2
+from .workspaces import auth_public_bp, workspaces_bp  # noqa: E402, F401 -- #1616
 from . import graph           # noqa: E402, F401
 from . import graph_projects  # noqa: E402, F401
 from . import graph_build     # noqa: E402, F401
