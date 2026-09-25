@@ -48,4 +48,36 @@ describe('supabaseClient', () => {
     expect(localStorage.getItem(`${SUPABASE_STORAGE_KEY}-user`)).toBeNull()
     expect(localStorage.getItem('agora_workspace')).toBe('w')
   })
+
+  it('übernimmt eine Session unter dem alten Standardschlüssel und entfernt ihn', () => {
+    localStorage.setItem('sb-proj-auth-token', '{"access_token":"alt"}')
+    localStorage.setItem('sb-proj-auth-token-code-verifier', 'v')
+
+    initSupabaseClient({
+      auth_backend: 'hybrid',
+      jwt_enabled: true,
+      supabase_url: 'https://proj.supabase.example',
+      supabase_anon_key: 'k',
+    })
+
+    expect(localStorage.getItem(SUPABASE_STORAGE_KEY)).toBe('{"access_token":"alt"}')
+    expect(localStorage.getItem(`${SUPABASE_STORAGE_KEY}-code-verifier`)).toBe('v')
+    expect(localStorage.getItem('sb-proj-auth-token')).toBeNull()
+    expect(localStorage.getItem('sb-proj-auth-token-code-verifier')).toBeNull()
+  })
+
+  it('überschreibt eine Session unter dem neuen Schlüssel nicht', () => {
+    localStorage.setItem(SUPABASE_STORAGE_KEY, '{"access_token":"neu"}')
+    localStorage.setItem('sb-proj-auth-token', '{"access_token":"alt"}')
+
+    initSupabaseClient({
+      auth_backend: 'hybrid',
+      jwt_enabled: true,
+      supabase_url: 'https://proj.supabase.example',
+      supabase_anon_key: 'k',
+    })
+
+    expect(localStorage.getItem(SUPABASE_STORAGE_KEY)).toBe('{"access_token":"neu"}')
+    expect(localStorage.getItem('sb-proj-auth-token')).toBeNull()
+  })
 })
