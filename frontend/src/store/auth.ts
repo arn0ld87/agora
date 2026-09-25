@@ -14,7 +14,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { getAgoraToken, register401SignOutCallback } from '../api/index'
 import { bootstrapWorkspace, fetchAuthConfig, listWorkspaces } from '../api/workspaces'
 import { setSessionToken, setActiveWorkspaceId } from '../auth/sessionState'
-import { initSupabaseClient, getSupabaseClient } from '../auth/supabaseClient'
+import { initSupabaseClient, getSupabaseClient, clearPersistedSession } from '../auth/supabaseClient'
 import type { AuthConfigResponse } from '../contracts/authConfigContract'
 import type { WorkspaceSummary } from '../contracts/workspaceContract'
 import { useApiAuth } from '../composables/useApiAuth'
@@ -249,8 +249,9 @@ export const useAuthStore = defineStore('auth', () => {
     const supabase = getSupabaseClient()
     try {
       if (supabase) {
-        // Scheitert die Abmeldung beim Server (Netz), bleibt die Session im
-        // Supabase-Speicher; dann wenigstens lokal verwerfen.
+        // supabase-js entfernt die gespeicherte Session auch bei einer
+        // Fehlerantwort des Servers, aber nicht, wenn der Aufruf wirft. Dann
+        // den Speicher direkt leeren — ohne zweiten Netzaufruf.
         let failed = false
         try {
           const result = await supabase.auth.signOut()
@@ -258,13 +259,7 @@ export const useAuthStore = defineStore('auth', () => {
         } catch {
           failed = true
         }
-        if (failed) {
-          try {
-            await supabase.auth.signOut({ scope: 'local' })
-          } catch {
-            // Lokales Verwerfen ist best effort; der Zustand unten zählt.
-          }
-        }
+        if (failed) clearPersistedSession()
       }
     } finally {
       // Lokaler Zustand wird immer verworfen, sonst hielte der Guard den

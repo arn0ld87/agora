@@ -12,6 +12,12 @@ import type { AuthConfigResponse } from '../contracts/authConfigContract'
 let _client: SupabaseClient | null = null
 
 /**
+ * Fester Speicherschlüssel der Supabase-Session. Mit ihm lässt sich die
+ * gespeicherte Session ohne Netzaufruf verwerfen (siehe clearPersistedSession).
+ */
+export const SUPABASE_STORAGE_KEY = 'agora-supabase-auth'
+
+/**
  * Returns the lazily-initialized Supabase client.
  * Must only be called after a successful `loadConfig()` with `jwt_enabled=true`.
  */
@@ -35,9 +41,25 @@ export function initSupabaseClient(config: AuthConfigResponse): SupabaseClient |
       autoRefreshToken: true,
       detectSessionInUrl: true,
       flowType: 'pkce',
+      storageKey: SUPABASE_STORAGE_KEY,
     },
   })
   return _client
+}
+
+/**
+ * Entfernt die gespeicherte Session aus localStorage, ohne GoTrue anzufragen.
+ * Für den Fall, dass `auth.signOut()` wirft: dann hat supabase-js die Session
+ * nicht entfernt, und ein Neuladen stellte sie wieder her.
+ */
+export function clearPersistedSession(): void {
+  for (const suffix of ['', '-code-verifier', '-user']) {
+    try {
+      globalThis.localStorage?.removeItem(`${SUPABASE_STORAGE_KEY}${suffix}`)
+    } catch {
+      // Speicher gesperrt (privater Modus): nichts zu entfernen.
+    }
+  }
 }
 
 /**

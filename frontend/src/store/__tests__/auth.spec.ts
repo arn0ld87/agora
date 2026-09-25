@@ -24,7 +24,8 @@ const mocks = vi.hoisted(() => {
   const _svcPost = vi.fn()
   const _sbSignIn = vi.fn()
   const _sbUpdateUser = vi.fn()
-  return { _sbGetSession, _sbOnAuthStateChange, _sbSignOut, _sbRefreshSession, _svcGet, _svcPost, _sbSignIn, _sbUpdateUser }
+  const _clearPersisted = vi.fn()
+  return { _sbGetSession, _sbOnAuthStateChange, _sbSignOut, _sbRefreshSession, _svcGet, _svcPost, _sbSignIn, _sbUpdateUser, _clearPersisted }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -53,6 +54,7 @@ vi.mock('../../auth/supabaseClient', async () => {
       return _client
     }),
     _resetSupabaseClient: vi.fn(() => { _client = null }),
+    clearPersistedSession: mocks._clearPersisted,
   }
 })
 
@@ -586,13 +588,14 @@ describe('Codex-Runde 7 (#1617)', () => {
     await store.init()
     expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
     mocks._sbSignOut.mockReset()
-    mocks._sbSignOut.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({ error: null })
+    mocks._sbSignOut.mockRejectedValueOnce(new Error('network'))
     vi.mocked(useApiAuth._clearCache).mockClear()
 
     await store.signOut()
 
-    // Zweiter Aufruf: nur lokal, ohne Netz
-    expect(mocks._sbSignOut).toHaveBeenLastCalledWith({ scope: 'local' })
+    // Kein zweiter Netzaufruf: der Speicher wird direkt geleert.
+    expect(mocks._sbSignOut).toHaveBeenCalledTimes(1)
+    expect(mocks._clearPersisted).toHaveBeenCalledTimes(1)
     expect(store.session).toBeNull()
     expect(store.isAuthenticated).toBe(false)
     expect(store.activeWorkspaceId).toBeNull()
@@ -608,11 +611,12 @@ describe('Codex-Runde 7 (#1617)', () => {
     const store = useAuthStore()
     await store.init()
     mocks._sbSignOut.mockReset()
-    mocks._sbSignOut.mockResolvedValueOnce({ error: new Error('offline') }).mockResolvedValueOnce({ error: null })
+    mocks._sbSignOut.mockResolvedValueOnce({ error: new Error('offline') })
 
     await store.signOut()
 
-    expect(mocks._sbSignOut).toHaveBeenLastCalledWith({ scope: 'local' })
+    expect(mocks._sbSignOut).toHaveBeenCalledTimes(1)
+    expect(mocks._clearPersisted).toHaveBeenCalledTimes(1)
     expect(store.session).toBeNull()
   })
 
@@ -622,5 +626,23 @@ describe('Codex-Runde 7 (#1617)', () => {
     expect(store.sessionWithoutWorkspace).toBe(true)
     store.$patch({ activeWorkspaceId: WS_A.workspace_id })
     expect(store.sessionWithoutWorkspace).toBe(false)
+  })
+})
+
+describe('Codex-Runde 8 (#1617)', () => {
+  it('leert den Speicher nicht, wenn die Abmeldung beim Server klappt', async () => {
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'tok', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [WS_A] })
+    const store = useAuthStore()
+    await store.init()
+    mocks._sbSignOut.mockReset()
+    mocks._sbSignOut.mockResolvedValueOnce({ error: null })
+
+    await store.signOut()
+
+    expect(mocks._clearPersisted).not.toHaveBeenCalled()
+    expect(store.session).toBeNull()
   })
 })
