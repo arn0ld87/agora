@@ -1,4 +1,4 @@
-# ADR-0016: Multi-User vor 1.0 — Workspaces, Supabase Auth, RLS, Realtime
+# ADR-0018: Multi-User vor 1.0 — Workspaces, Supabase Auth, RLS, Realtime
 
 - Status: Accepted (Owner-Entscheidung 2026-09-25, Sign-off über den Merge dieses ADR)
 - Datum: 2026-09-25
@@ -22,6 +22,10 @@ Produktiv-Cutover ist [#1592](https://github.com/arn0ld87/agora/issues/1592).
 Heute authentifiziert `backend/app/utils/auth.py` über einen Master-Token
 (`AGORA_AUTH_TOKEN`), Workspace-API-Keys (`ago_…`) und signierte Tickets. Eine
 Identität gibt es nicht.
+
+Zur Nummer: ADR-0016 und ADR-0017 sind im Code bereits für den Decision-Layer
+vergeben (f005, #1547), auch wenn unter `docs/decisions/` keine Datei dafür liegt.
+Dieses ADR trägt deshalb die 0018.
 
 ## Entscheidung
 

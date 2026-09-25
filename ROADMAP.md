@@ -22,14 +22,14 @@ ADRs, Architektur-, Security- und Runbook-Dokumente bleiben verbindliche Referen
 
 ## Produktziel
 
-Agora soll eine stabile, lokal oder kontrolliert hybrid betreibbare **Plattform für evidenzorientierte Stakeholder-, Risiko- und Szenarioanalyse** werden — für Einzelnutzer und, seit [ADR-0016](docs/decisions/0016-multi-user-before-1-0.md), für mehrere Nutzer in getrennten Workspaces.
+Agora soll eine stabile, lokal oder kontrolliert hybrid betreibbare **Plattform für evidenzorientierte Stakeholder-, Risiko- und Szenarioanalyse** werden — für Einzelnutzer und, seit [ADR-0018](docs/decisions/0018-multi-user-before-1-0.md), für mehrere Nutzer in getrennten Workspaces.
 
 Der Weg zu `1.0.0` folgt vier Regeln:
 
 1. Stabilität und Trust vor neuen großen Produktflächen.
 2. Eine kanonische Oberfläche sowie eine kanonische Provider-/Secret-/Routing-Wahrheit.
 3. Reproduzierbarkeit und messbarer Erkenntnisgewinn vor Plattformausbau.
-4. Kein SaaS-/Kubernetes-Ausbau vor 1.0. Multi-User mit Workspaces, Supabase Auth und RLS gehört seit [ADR-0016](docs/decisions/0016-multi-user-before-1-0.md) zum Weg zu 1.0 (Epic [#1610](https://github.com/arn0ld87/agora/issues/1610)).
+4. Kein SaaS-/Kubernetes-Ausbau vor 1.0. Multi-User mit Workspaces, Supabase Auth und RLS gehört seit [ADR-0018](docs/decisions/0018-multi-user-before-1-0.md) zum Weg zu 1.0 (Epic [#1610](https://github.com/arn0ld87/agora/issues/1610)).
 
 ---
 
@@ -153,7 +153,7 @@ Mit dem ersten `0.10.0`-Release-Candidate beginnt der Feature-Freeze. Danach wer
 
 Parent-Gate: [#767](https://github.com/arn0ld87/agora/issues/767).
 
-`1.0.0` bedeutet nicht „alles denkbare eingebaut“, sondern: Der definierte Anwendungsbereich (Einzelnutzer und Workspaces nach ADR-0016) ist stabil, nachvollziehbar und operativ wiederherstellbar.
+`1.0.0` bedeutet nicht „alles denkbare eingebaut“, sondern: Der definierte Anwendungsbereich (Einzelnutzer und Workspaces nach ADR-0018) ist stabil, nachvollziehbar und operativ wiederherstellbar.
 
 ## Freigabekriterien
 
