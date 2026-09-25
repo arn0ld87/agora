@@ -5,7 +5,7 @@
 // `sse:<simulationId>`, valid for ~60s and reusable inside that window so
 // EventSource auto-reconnects keep working.
 
-import { getAgoraToken } from './index'
+import { getAgoraToken, hasCredentials } from './index'
 import { useApiAuth } from '../composables/useApiAuth'
 import { PostCreatedEventSchema, type PostCreatedEvent } from '../contracts/postEventContract'
 
@@ -65,7 +65,7 @@ export async function buildSimulationStreamUrl(simulationId: string): Promise<st
   const base = import.meta.env.VITE_API_BASE_URL || ''
   const path = `${base}/api/simulation/${encodeURIComponent(simulationId)}/stream`
   // Without a bearer (open-mode backend) we don't need a ticket either.
-  if (!getAgoraToken()) return path
+  if (!hasCredentials()) return path
   const ticket = await fetchStreamTicket(simulationId)
   return ticket ? `${path}?ticket=${encodeURIComponent(ticket)}` : path
 }

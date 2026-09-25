@@ -3,6 +3,7 @@ import {
   BranchComparisonSchema,
   type BranchComparison,
 } from "../contracts/branchComparisonContract";
+import { authHeaders } from "../api/index";
 
 export function useBranchComparison() {
   const comparison: Ref<BranchComparison | null> = ref(null);
@@ -26,7 +27,7 @@ export function useBranchComparison() {
         params.set("window_size_rounds", String(windowSizeRounds));
       }
       const url = `/api/simulation/${encodeURIComponent(simulationId)}/compare?${params.toString()}`;
-      const res = await fetch(url, { credentials: "same-origin" });
+      const res = await fetch(url, { credentials: "same-origin", headers: { ...authHeaders() } });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as Record<
           string,

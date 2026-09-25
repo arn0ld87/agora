@@ -5,7 +5,7 @@
 // auch alle anderen API-Module nutzen.
 
 import type { ApiEnvelope } from './envelope'
-import service, { getAgoraToken } from './index'
+import service, { getAgoraToken, hasCredentials } from './index'
 import { useApiAuth } from '../composables/useApiAuth'
 
 export interface SettingsResponse {
@@ -58,7 +58,7 @@ export function putSecrets(
 export async function buildSettingsStreamUrl(): Promise<string> {
   const base = import.meta.env.VITE_API_BASE_URL || ''
   const path = `${base}/api/settings/stream`
-  if (!getAgoraToken()) return path
+  if (!hasCredentials()) return path
   try {
     const ticket = await useApiAuth.fetchTicket('settings-stream')
     return ticket ? `${path}?ticket=${encodeURIComponent(ticket)}` : path
