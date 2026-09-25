@@ -23,15 +23,109 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from pydantic import ValidationError
 
+from ...config import Config
 from ...contracts.sim_action_log_contract import RoundEndEvent
 from ...utils.logger import get_logger
+from .role_leakage import detect_role_conflict, load_profiles
 from .run_state_store import AgentAction, RunnerStatus, SimulationRunState
 
 logger = get_logger("agora.action_log_reader")
+
+# ---------------------------------------------------------------------------
+# Profile-Cache (pro Simulationsverzeichnis, einmal laden)
+# ---------------------------------------------------------------------------
+
+# Schlüssel: str(sim_dir) → (twitter_profiles, reddit_profiles)
+_PROFILE_CACHE: Dict[str, Tuple[List[dict], List[dict]]] = {}
+
+
+def _get_profiles(sim_dir: str) -> Tuple[List[dict], List[dict]]:
+    """Lädt Profile für *sim_dir* einmalig und gibt gecachte Kopie zurück.
+
+    Ein leeres Ergebnis wird nicht gecacht: liegen die Profildateien beim
+    ersten Lesen noch nicht vor, bliebe die Markierung sonst für den ganzen
+    Lauf aus.
+    """
+    cached = _PROFILE_CACHE.get(sim_dir)
+    if cached is not None:
+        return cached
+    loaded = load_profiles(Path(sim_dir))
+    if loaded[0] or loaded[1]:
+        _PROFILE_CACHE[sim_dir] = loaded
+    return loaded
+
+
+def _clear_profile_cache(sim_dir: Optional[str] = None) -> None:
+    """Cache leeren — für Tests oder nach Simulation-Cleanup."""
+    if sim_dir is None:
+        _PROFILE_CACHE.clear()
+    else:
+        _PROFILE_CACHE.pop(sim_dir, None)
+
+
+def _marking_profiles(log_path: str, sim_dir: Optional[str], platform: str) -> List[dict]:
+    """Profile der Plattform für die Markierung; ``sim_dir`` fällt auf den
+    Log-Pfad zurück (``<sim_dir>/<platform>/actions.jsonl``). Leer, wenn die
+    Markierung abgeschaltet ist."""
+    if not Config.AGORA_ROLE_LEAKAGE_MARKING:
+        return []
+    effective_sim_dir = sim_dir or str(Path(log_path).parent.parent)
+    twitter_profiles, reddit_profiles = _get_profiles(effective_sim_dir)
+    return twitter_profiles if platform == "twitter" else reddit_profiles
+
+
+def _build_action_with_marking(
+    action_data: dict,
+    platform: str,
+    marking_enabled: bool,
+    profiles: List[dict],
+) -> AgentAction:
+    """Erstellt einen ``AgentAction`` und setzt ``role_conflict`` wenn Markierung aktiv."""
+    conflict_reason: Optional[str] = None
+    if marking_enabled and profiles:
+        conflict_reason = detect_role_conflict(
+            platform=platform,
+            action_dict=action_data,
+            profiles=profiles,
+        )
+    return AgentAction(
+        round_num=action_data.get("round", 0),
+        timestamp=action_data.get("timestamp", datetime.now().isoformat()),
+        platform=platform,
+        agent_id=action_data.get("agent_id", 0),
+        agent_name=action_data.get("agent_name", ""),
+        action_type=action_data.get("action_type", ""),
+        action_args=action_data.get("action_args", {}),
+        result=action_data.get("result"),
+        success=action_data.get("success", True),
+        role_conflict=conflict_reason,
+    )
+
+
+def _record_conflict(
+    state: SimulationRunState,
+    action: AgentAction,
+) -> None:
+    """Inkrementiert Konflikt-Zähler und schreibt Debug-Log wenn role_conflict gesetzt."""
+    reason = action.role_conflict
+    if reason is None:
+        return
+    state.role_conflict_count += 1
+    state.role_conflicts_by_reason[reason] = (
+        state.role_conflicts_by_reason.get(reason, 0) + 1
+    )
+    logger.debug(
+        "Role conflict marked: simulation=%s platform=%s round=%s agent_id=%s reason=%s",
+        state.simulation_id,
+        action.platform,
+        action.round_num,
+        action.agent_id,
+        reason,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +140,7 @@ def read_action_log_chunk(
     platform: str,
     *,
     graph_memory_enabled: bool = False,
+    sim_dir: Optional[str] = None,
 ) -> int:
     """Read a JSONL action log from *position* and update *state* in place.
 
@@ -56,10 +151,15 @@ def read_action_log_chunk(
         platform: ``"twitter"`` or ``"reddit"``.
         graph_memory_enabled: If ``True``, discovered actions are also forwarded
             to the ``GraphMemoryManager`` updater for the simulation.
+        sim_dir: Simulation root directory for profile loading.  When ``None``,
+            inferred from ``log_path`` (two levels up from the ``.jsonl``).
 
     Returns:
         New file offset after reading.
     """
+    marking_enabled = Config.AGORA_ROLE_LEAKAGE_MARKING
+    profiles = _marking_profiles(log_path, sim_dir, platform)
+
     graph_updater = None
     if graph_memory_enabled:
         # Lazy import to avoid a hard cycle — graph_memory_updater imports
@@ -141,18 +241,11 @@ def read_action_log_chunk(
 
                         continue
 
-                    action = AgentAction(
-                        round_num=action_data.get("round", 0),
-                        timestamp=action_data.get("timestamp", datetime.now().isoformat()),
-                        platform=platform,
-                        agent_id=action_data.get("agent_id", 0),
-                        agent_name=action_data.get("agent_name", ""),
-                        action_type=action_data.get("action_type", ""),
-                        action_args=action_data.get("action_args", {}),
-                        result=action_data.get("result"),
-                        success=action_data.get("success", True),
+                    action = _build_action_with_marking(
+                        action_data, platform, marking_enabled, profiles
                     )
                     state.add_action(action)
+                    _record_conflict(state, action)
 
                     if action.round_num and action.round_num > state.current_round:
                         state.current_round = action.round_num
@@ -215,6 +308,8 @@ def read_actions_from_file(
     platform_filter: Optional[str] = None,
     agent_id: Optional[int] = None,
     round_num: Optional[int] = None,
+    *,
+    profiles: Optional[List[dict]] = None,
 ) -> List[AgentAction]:
     """Read and filter ``AgentAction`` objects from a single ``.jsonl`` file.
 
@@ -261,6 +356,14 @@ def read_actions_from_file(
                 if round_num is not None and data.get("round") != round_num:
                     continue
 
+                conflict_reason_file: Optional[str] = None
+                if profiles:
+                    conflict_reason_file = detect_role_conflict(
+                        platform=record_platform,
+                        action_dict=data,
+                        profiles=profiles,
+                    )
+
                 actions.append(
                     AgentAction(
                         round_num=data.get("round", 0),
@@ -272,6 +375,7 @@ def read_actions_from_file(
                         action_args=data.get("action_args", {}),
                         result=data.get("result"),
                         success=data.get("success", True),
+                        role_conflict=conflict_reason_file,
                     )
                 )
             except json.JSONDecodeError:
@@ -313,6 +417,12 @@ def get_all_actions(
     sim_dir = os.path.join(str(base_dir), simulation_id)
     actions: List[AgentAction] = []
 
+    # Profile einmal laden, wenn Markierung aktiv
+    twitter_profiles: List[dict] = []
+    reddit_profiles: List[dict] = []
+    if Config.AGORA_ROLE_LEAKAGE_MARKING:
+        twitter_profiles, reddit_profiles = _get_profiles(sim_dir)
+
     twitter_actions_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
     if not platform or platform == "twitter":
         actions.extend(
@@ -322,6 +432,7 @@ def get_all_actions(
                 platform_filter=platform,
                 agent_id=agent_id,
                 round_num=round_num,
+                profiles=twitter_profiles if Config.AGORA_ROLE_LEAKAGE_MARKING else None,
             )
         )
 
@@ -334,6 +445,7 @@ def get_all_actions(
                 platform_filter=platform,
                 agent_id=agent_id,
                 round_num=round_num,
+                profiles=reddit_profiles if Config.AGORA_ROLE_LEAKAGE_MARKING else None,
             )
         )
 

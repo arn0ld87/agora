@@ -148,3 +148,14 @@ getestet.
 Referenzläufe unter `docs/reference-runs/` enthalten keine
 `actions.jsonl`-Dateien (nur Report-Artefakte). Eine Baseline über alle
 Referenzläufe ist daher mit dem aktuellen Stand nicht möglich.
+
+## Markierung im Lauf (Slice 5.2)
+
+Seit Slice 5.2 läuft derselbe Detektor beim Lesen der Aktionslogs mit:
+
+- Jede texttragende Aktion trägt `role_conflict` (`foreign_role`, `foreign_name_signature`, `unmatched_self_reference` oder `null`). Nichts wird verworfen, `actions.jsonl` bleibt unverändert.
+- `run_state.json` zählt die Markierungen: `role_conflict_count` und `role_conflicts_by_reason`.
+- Der Report nutzt Aktionen mit `foreign_role`/`foreign_name_signature` nicht als Stimme des Agents, der sie geschrieben hat.
+- Abschalten: `AGORA_ROLE_LEAKAGE_MARKING=false`.
+
+Eine Schwelle, ab der ein Lauf als unbrauchbar gilt, ist bewusst nicht gesetzt. Sie braucht mehr als eine Baseline.

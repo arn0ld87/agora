@@ -444,7 +444,14 @@ class ReportAgent:
                     items[-1]["producer_key"] = f"simulation-metric:{field}"
 
             sampled_actions = self._sample_actions_timeseries(action_dicts, k=8)
+            _skipped_foreign = 0
+            _HARD_CONFLICT_REASONS = frozenset({"foreign_role", "foreign_name_signature"})
             for action in sampled_actions:
+                # Slice 5.2: Aktionen mit hartem Rollenwechsel-Konflikt überspringen.
+                # unmatched_self_reference bleibt drin (schwächere Kategorie).
+                if action.get("role_conflict") in _HARD_CONFLICT_REASONS:
+                    _skipped_foreign += 1
+                    continue
                 action_type = action.get("action_type") or "action"
                 agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
                 platform = action.get("platform") or "unknown"
@@ -476,6 +483,13 @@ class ReportAgent:
                     items[-1]["producer_key"] = "simulation-action:" + ":".join(
                         str(value) for value in action_identity
                     )
+            if _skipped_foreign:
+                logger.info(
+                    "report_evidence: %d action(s) with foreign role conflict skipped "
+                    "(simulation_id=%s)",
+                    _skipped_foreign,
+                    self.simulation_id,
+                )
             return items
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to collect simulation evidence: {exc}")

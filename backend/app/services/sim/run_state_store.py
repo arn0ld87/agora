@@ -59,9 +59,12 @@ class AgentAction:
     action_args: Dict[str, Any] = field(default_factory=dict)
     result: Optional[str] = None
     success: bool = True
+    # Slice 5.2: Markierung bei Rollenwechsel-Verdacht — None = kein Konflikt
+    # oder Prüfung deaktiviert; Wert = ConflictReason-Zeichenkette.
+    role_conflict: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "round_num": self.round_num,
             "timestamp": self.timestamp,
             "platform": self.platform,
@@ -72,6 +75,9 @@ class AgentAction:
             "result": self.result,
             "success": self.success,
         }
+        if self.role_conflict is not None:
+            d["role_conflict"] = self.role_conflict
+        return d
 
 
 @dataclass
@@ -148,6 +154,11 @@ class SimulationRunState:
     # Process ID (for stopping)
     process_pid: Optional[int] = None
 
+    # Slice 5.2: Zählung markierter Rollenwechsel-Konflikte
+    # Rückwärtskompatibel: alte run_state.json ohne dieses Feld lädt mit Default 0.
+    role_conflict_count: int = 0
+    role_conflicts_by_reason: Dict[str, int] = field(default_factory=dict)
+
     def add_action(self, action: AgentAction) -> None:
         """Add action to recent actions list"""
         self.recent_actions.insert(0, action)
@@ -187,6 +198,8 @@ class SimulationRunState:
             "completed_at": self.completed_at,
             "error": self.error,
             "process_pid": self.process_pid,
+            "role_conflict_count": self.role_conflict_count,
+            "role_conflicts_by_reason": self.role_conflicts_by_reason,
         }
 
     def to_detail_dict(self) -> Dict[str, Any]:
@@ -248,6 +261,8 @@ def load_run_state(
             completed_at=data.get("completed_at"),
             error=data.get("error"),
             process_pid=data.get("process_pid"),
+            role_conflict_count=data.get("role_conflict_count", 0),
+            role_conflicts_by_reason=data.get("role_conflicts_by_reason", {}),
         )
 
         # Load recent actions
@@ -263,6 +278,7 @@ def load_run_state(
                     action_args=a.get("action_args", {}),
                     result=a.get("result"),
                     success=a.get("success", True),
+                    role_conflict=a.get("role_conflict"),
                 )
             )
 

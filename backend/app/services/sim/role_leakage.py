@@ -367,6 +367,76 @@ def _resolve_persona(profiles: list[dict], agent_id: int) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Öffentliche Helfer für den action_log_reader-Pfad (Slice 5.2)
+# ---------------------------------------------------------------------------
+
+
+def load_profiles(sim_dir: Path | str) -> tuple[list[dict], list[dict]]:
+    """Lädt und kombiniert Plattform-Profile für ein Simulationsverzeichnis.
+
+    Gibt ``(twitter_profiles, reddit_profiles)`` zurück; beide Listen können
+    leer sein, wenn die Dateien fehlen oder nicht lesbar sind. Die
+    Twitter-Profile werden mit den Reddit-Profilen angereichert (Beruf, Typ),
+    wenn die Namen am gleichen Index übereinstimmen.
+
+    Wird einmal pro Simulation geladen und vom Aufrufer gecacht.
+    """
+    sim_path = Path(sim_dir)
+    reddit = _load_reddit_profiles(sim_path)
+    twitter = _enrich_from_reddit(_load_twitter_profiles(sim_path), reddit)
+    return twitter, reddit
+
+
+def detect_role_conflict(
+    platform: str,
+    action_dict: dict,
+    profiles: list[dict],
+) -> Optional[str]:
+    """Prüft einen Action-Dict auf Rollenvertauschung und gibt den Grund zurück.
+
+    Parameters
+    ----------
+    platform:
+        ``"twitter"`` oder ``"reddit"`` — bestimmt, welches Profil-Set
+        übergeben wird.
+    action_dict:
+        Roher Action-Dict (Felder: ``agent_id``, ``agent_name``,
+        ``action_type``, ``action_args``, ``round``).
+    profiles:
+        Fertig angereichertes Plattform-Profil-Set (Twitter oder Reddit),
+        wie von :func:`load_profiles` geliefert.
+
+    Returns
+    -------
+    str | None
+        ``RoleConflict.reason`` als Zeichenkette (z. B. ``"foreign_role"``,
+        ``"foreign_name_signature"``, ``"unmatched_self_reference"``), oder
+        ``None`` wenn kein Konflikt erkannt wurde.
+    """
+    action_type = action_dict.get("action_type", "")
+    if action_type not in _TEXT_ACTION_TYPES:
+        return None
+
+    agent_id_raw = action_dict.get("agent_id", 0)
+    try:
+        agent_id = int(agent_id_raw)
+    except (TypeError, ValueError):
+        agent_id = 0
+
+    conflict = check_action(
+        platform=platform,
+        round_num=action_dict.get("round", 0),
+        agent_id=agent_id,
+        agent_name=action_dict.get("agent_name", ""),
+        action_type=action_type,
+        action_args=action_dict.get("action_args", {}),
+        own_persona=_resolve_persona(profiles, agent_id),
+        all_personas=profiles,
+    )
+    return conflict.reason if conflict is not None else None
+
+
+# ---------------------------------------------------------------------------
 # Konflikt-Erkennung
 # ---------------------------------------------------------------------------
 
