@@ -555,4 +555,5 @@ Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines 
 - Konfiguration: [`configuration.md`](configuration.md)
 - Betrieb: [`operator-guide.md`](operator-guide.md), [`operations.md`](operations.md), [`backup-restore.md`](backup-restore.md)
 - UI: Der [visuelle Audit vom September 2026](ui/premium-redesign-2026-09/01-visual-audit.md) dokumentiert die Ausgangslage vor dem abgeschlossenen Redesign; [`ui/design-language-v4.md`](ui/design-language-v4.md) ist ein älterer Snapshot vom Mai 2026. Der aktuelle Istzustand steht oben unter „Frontend“.
+- Repository-Hygiene: Ein unreferenzierter Playwright-MCP-Snapshot vom Mai 2026 ist entfernt; neue lokale Backups und Datenbank-Dumps werden ignoriert. Die bewusst versionierten Datenbanken des Referenzlaufs bleiben erhalten. Beispielkonfiguration und DNS-Overlay verwenden Platzhalter beziehungsweise eine gekennzeichnete Dokumentationsadresse statt privater Hostadressen.
 - historische Pläne/Audits: nicht als Current-State-Quelle verwenden

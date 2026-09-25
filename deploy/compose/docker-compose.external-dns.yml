@@ -12,7 +12,8 @@
 # Verwendung — beide Variablen sind Pflicht, damit kein stiller Default
 # zurueckkehrt:
 #
-#   export AGORA_DNS_PRIMARY=192.168.1.1
+#   # Beispieladresse vor dem Start durch einen erreichbaren DNS-Server ersetzen.
+#   export AGORA_DNS_PRIMARY=192.0.2.53
 #   export AGORA_DNS_SECONDARY=9.9.9.9
 #   docker compose \
 #     -f docker-compose.yml \
