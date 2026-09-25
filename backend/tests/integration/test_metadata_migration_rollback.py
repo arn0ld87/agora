@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import pytest
 from alembic import command
@@ -278,17 +278,38 @@ def _migrate_and_verify(paths: dict[str, Path], files: dict[str, Path], capsys) 
         )
 
 
-def _collect(monkeypatch, flags: dict[str, str]) -> dict[str, Any]:
+def _clear_run_cache() -> None:
+    """Leert den Cache der Registry, die die Route tatsächlich benutzt.
+
+    ``app.api.runs`` hält ``run_registry`` als Modulobjekt. ``RunRegistry._instance
+    = None`` hätte nur künftige Konstruktoraufrufe betroffen, und die
+    Legacy-Phase hätte das Manifest aus der PostgreSQL-Phase aus dem Cache
+    geliefert (Codex-Review auf #1609). Das Repository wählt ``_repo`` bei jedem
+    Zugriff neu; ohne Cache liest die Route also über den gerade gesetzten
+    Schalter.
+    """
+    from app.api import runs as runs_api
+
+    for registry in (runs_api.run_registry, RunRegistry._instance):
+        if registry is not None:
+            registry._cache.clear()
+
+
+def _collect(
+    monkeypatch, flags: dict[str, str], before_request: Callable[[str], None] | None = None
+) -> dict[str, Any]:
     """Startet eine frische App mit ``flags`` und sammelt alle Antworten."""
     for name, value in flags.items():
         monkeypatch.setattr(Config, name, value)
-    RunRegistry._instance = None  # kein Cache aus der vorherigen Phase
+    _clear_run_cache()
 
     from app import create_app
 
     client = create_app().test_client()
     responses: dict[str, Any] = {}
     for endpoint in ENDPOINTS:
+        if before_request is not None:
+            before_request(endpoint)
         response = client.get(endpoint)
         assert response.status_code == 200, f'{endpoint}: {response.get_data(as_text=True)}'
         responses[endpoint] = response.get_json()
@@ -317,8 +338,36 @@ def test_migrate_switch_to_postgres_and_roll_back_without_loss(
     assert not bestand['run'].exists()  # auch nichts neu in die Datei geschrieben
     _restore(bestand)
 
-    # Schritt 4: zurück auf Legacy.
-    from_legacy = _collect(monkeypatch, LEGACY_FLAGS)
+    # Schritt 4: zurück auf Legacy. Der Spion belegt, dass der Einzelabruf des
+    # Runs am Cache vorbei über das Datei-Repository läuft — sonst verglichen
+    # wir die PostgreSQL-Antwort mit sich selbst (Codex-Review auf #1609).
+    from app.services.file_run_store import FileRunRepository
+
+    single_run = f'/api/runs/{RUN_ID}'
+    current = {'endpoint': ''}
+    cache_hits: list[bool] = []
+    file_reads: list[str] = []
+    original_read = RunRegistry._read_run
+    original_get = FileRunRepository.get
+
+    def spy_read(self, run_id):
+        if current['endpoint'] == single_run and run_id == RUN_ID:
+            cache_hits.append(run_id in self._cache)
+        return original_read(self, run_id)
+
+    def spy_get(self, run_id):
+        if current['endpoint'] == single_run:
+            file_reads.append(run_id)
+        return original_get(self, run_id)
+
+    def note_endpoint(endpoint: str) -> None:
+        current['endpoint'] = endpoint
+
+    monkeypatch.setattr(RunRegistry, '_read_run', spy_read)
+    monkeypatch.setattr(FileRunRepository, 'get', spy_get)
+    from_legacy = _collect(monkeypatch, LEGACY_FLAGS, before_request=note_endpoint)
+    assert cache_hits and cache_hits[0] is False, 'Einzelabruf kam aus dem Cache'
+    assert RUN_ID in file_reads
 
     for endpoint in ENDPOINTS:
         assert from_postgres[endpoint] == from_legacy[endpoint], endpoint
