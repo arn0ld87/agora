@@ -575,3 +575,52 @@ describe('Codex-Runde 6 (#1617)', () => {
     expect(getSessionToken()).toBeNull()
   })
 })
+
+describe('Codex-Runde 7 (#1617)', () => {
+  it('verwirft den lokalen Zustand, auch wenn die Abmeldung beim Server scheitert', async () => {
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'tok', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [WS_A] })
+    const store = useAuthStore()
+    await store.init()
+    expect(store.activeWorkspaceId).toBe(WS_A.workspace_id)
+    mocks._sbSignOut.mockReset()
+    mocks._sbSignOut.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({ error: null })
+    vi.mocked(useApiAuth._clearCache).mockClear()
+
+    await store.signOut()
+
+    // Zweiter Aufruf: nur lokal, ohne Netz
+    expect(mocks._sbSignOut).toHaveBeenLastCalledWith({ scope: 'local' })
+    expect(store.session).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.activeWorkspaceId).toBeNull()
+    expect(getSessionToken()).toBeNull()
+    expect(useApiAuth._clearCache).toHaveBeenCalled()
+  })
+
+  it('meldet lokal ab, wenn der Server einen Fehler zurückgibt', async () => {
+    mocks._sbGetSession.mockResolvedValue({
+      data: { session: { access_token: 'tok', user: { id: 'u1' }, expires_at: 9999 } },
+    })
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED).mockResolvedValueOnce({ success: true, data: [WS_A] })
+    const store = useAuthStore()
+    await store.init()
+    mocks._sbSignOut.mockReset()
+    mocks._sbSignOut.mockResolvedValueOnce({ error: new Error('offline') }).mockResolvedValueOnce({ error: null })
+
+    await store.signOut()
+
+    expect(mocks._sbSignOut).toHaveBeenLastCalledWith({ scope: 'local' })
+    expect(store.session).toBeNull()
+  })
+
+  it('markiert eine Session ohne Workspace', async () => {
+    const store = useAuthStore()
+    store.$patch({ session: { access_token: 'tok' } as never, activeWorkspaceId: null })
+    expect(store.sessionWithoutWorkspace).toBe(true)
+    store.$patch({ activeWorkspaceId: WS_A.workspace_id })
+    expect(store.sessionWithoutWorkspace).toBe(false)
+  })
+})
