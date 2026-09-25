@@ -84,7 +84,7 @@ uv run python scripts/verify_metadata_cutover.py --baseline /tmp/vorher.json /tm
 |---|---|
 | `flags` | Schalter untereinander konsistent (dieselben Regeln wie `Config.validate()`), `DATABASE_URL` gesetzt |
 | `alembic_head` | Datenbank steht auf dem Alembic-Head (dieselbe Prüfung wie das Start-Gate) |
-| `llm_profiles` … `reports` | das `--verify` jedes Migrationsskripts: jeder Datensatz feldweise gleich |
+| `llm_profiles` … `reports` | das `--verify` jedes Migrationsskripts: jeder Datensatz feldweise gleich. Dazu kommt die Gegenrichtung: Eine Zeile, die nur in PostgreSQL steht (etwa ein Rest aus einem früheren Versuch), ist `FEHLER`. Fehlt die Quelle (Verzeichnis oder SQLite), ist der Schritt `UNGEPRÜFT` und nicht `OK 0/0`. |
 | `baseline` | `migration_baseline.py --compare`: Anzahl, IDs, Felder und Prüfsummen unverändert |
 
 Ausgabe nach Plan §33:

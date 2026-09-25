@@ -106,18 +106,27 @@ def _verify_result(checked: int, deviations: list[str], mismatched: set[str]) ->
     )
 
 
-@pytest.mark.parametrize(
-    ('name', 'module', 'check'),
-    [
-        ('simulations', 'migrate_simulations_to_postgres', cutover.check_simulations),
-        ('runs', 'migrate_runs_to_postgres', cutover.check_runs),
-        ('reports', 'migrate_reports_to_postgres', cutover.check_reports),
-    ],
-)
-def test_verify_result_steps_green_and_red(monkeypatch, tmp_path, name, module, check):
+_DOMAIN_STEPS = [
+    ('simulations', 'migrate_simulations_to_postgres', cutover.check_simulations, 'simulations'),
+    ('runs', 'migrate_runs_to_postgres', cutover.check_runs, 'run_registry'),
+    ('reports', 'migrate_reports_to_postgres', cutover.check_reports, 'reports'),
+]
+
+
+@pytest.fixture
+def no_target_rows(monkeypatch):
+    """Die Zieltabellen sind leer; eigene Tests setzen Zeilen."""
+    rows: dict[str, set[str]] = {}
+    monkeypatch.setattr(cutover, 'target_ids', lambda table: rows.get(table, set()))
+    return rows
+
+
+@pytest.mark.parametrize(('name', 'module', 'check', 'subdir'), _DOMAIN_STEPS)
+def test_verify_result_steps_green_and_red(monkeypatch, tmp_path, no_target_rows, name, module, check, subdir):
     import importlib
 
     skript = importlib.import_module(f'scripts.{module}')
+    (tmp_path / subdir).mkdir()
     options = cutover.CutoverOptions(uploads_dir=tmp_path, simulations_dir=tmp_path / 'simulations')
 
     monkeypatch.setattr(skript, 'verify', lambda root: _verify_result(3, [], set()))
@@ -132,11 +141,47 @@ def test_verify_result_steps_green_and_red(monkeypatch, tmp_path, name, module, 
     assert red.details == ['x.status: Datei=a DB=b']
 
 
-def test_projects_green_and_red(monkeypatch, tmp_path):
+@pytest.mark.parametrize(('name', 'module', 'check', 'subdir'), _DOMAIN_STEPS)
+def test_rows_only_in_postgres_turn_the_step_red(monkeypatch, tmp_path, no_target_rows, name, module, check, subdir):
+    """Reste eines früheren Versuchs: das ``--verify`` der Skripte läuft nur
+    über die Quelle und sähe sie nie (Codex-Review auf #1608)."""
+    import importlib
+
+    skript = importlib.import_module(f'scripts.{module}')
+    (tmp_path / subdir).mkdir()
+    options = cutover.CutoverOptions(uploads_dir=tmp_path, simulations_dir=tmp_path / 'simulations')
+    monkeypatch.setattr(skript, 'verify', lambda root: _verify_result(0, [], set()))
+    no_target_rows[name] = {'rest_von_gestern'}
+
+    red = check(options)
+
+    assert red.status == cutover.FAILED
+    assert red.details == [f'rest_von_gestern: nur in agora.{name}, nicht in der Quelle']
+
+
+@pytest.mark.parametrize(('name', 'module', 'check', 'subdir'), _DOMAIN_STEPS)
+def test_missing_source_directory_is_unchecked_not_green(tmp_path, no_target_rows, name, module, check, subdir):
+    """Ein vertippter Pfad ist kein leerer Bestand (Codex-Review auf #1608)."""
+    options = cutover.CutoverOptions(
+        uploads_dir=tmp_path / 'vertippt', simulations_dir=tmp_path / 'vertippt' / 'simulations'
+    )
+
+    result = check(options)
+
+    assert result.status == cutover.UNCHECKED
+    assert 'Quelle fehlt' in result.details[0]
+
+
+def test_projects_green_and_red(monkeypatch, tmp_path, no_target_rows):
     from scripts import migrate_projects_to_postgres as skript
 
+    (tmp_path / 'projects').mkdir()
     options = cutover.CutoverOptions(uploads_dir=tmp_path)
-    monkeypatch.setattr(skript, 'read_file_projects', lambda root: [object(), object()])
+    monkeypatch.setattr(
+        skript,
+        'read_file_projects',
+        lambda root: [SimpleNamespace(project_id='proj_a'), SimpleNamespace(project_id='proj_b')],
+    )
 
     monkeypatch.setattr(skript, 'verify', lambda root: [])
     assert cutover.check_projects(options).status == cutover.OK
@@ -145,11 +190,31 @@ def test_projects_green_and_red(monkeypatch, tmp_path):
     red = cutover.check_projects(options)
     assert (red.status, red.verified, red.checked) == (cutover.FAILED, 1, 2)
 
+    monkeypatch.setattr(skript, 'verify', lambda root: [])
+    no_target_rows['projects'] = {'proj_a', 'proj_b', 'proj_rest'}
+    stale = cutover.check_projects(options)
+    assert stale.status == cutover.FAILED
+    assert stale.details == ['proj_rest: nur in agora.projects, nicht in der Quelle']
 
-def test_llm_profiles_green_without_database_file(tmp_path):
+
+def test_projects_missing_directory_is_unchecked(tmp_path, no_target_rows):
+    result = cutover.check_projects(cutover.CutoverOptions(uploads_dir=tmp_path / 'vertippt'))
+
+    assert result.status == cutover.UNCHECKED
+
+
+def test_llm_profiles_missing_database_file_is_unchecked(tmp_path):
     options = cutover.CutoverOptions(llm_profiles_db=tmp_path / 'gibtesnicht.db')
 
-    assert cutover.check_llm_profiles(options).status == cutover.OK
+    result = cutover.check_llm_profiles(options)
+
+    assert result.status == cutover.UNCHECKED
+    assert 'Quelle fehlt' in result.details[0]
+
+
+def test_target_ids_accepts_only_known_tables():
+    with pytest.raises(ValueError):
+        cutover.target_ids('projects; DROP TABLE agora.projects')
 
 
 def test_llm_profiles_red(monkeypatch, tmp_path):

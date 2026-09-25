@@ -174,13 +174,76 @@ def _from_findings(name: str, checked: int, findings: List[str]) -> StepResult:
     return StepResult(name=name, status=FAILED, checked=checked, verified=verified, details=findings)
 
 
+#: Abfrage je Tabelle, deren Zeilen gegen die Quelle gezählt werden. Feste
+#: Texte statt eines eingesetzten Tabellennamens.
+TARGET_ID_QUERIES: dict[str, str] = {
+    'projects': 'SELECT id FROM agora.projects',
+    'simulations': 'SELECT id FROM agora.simulations',
+    'runs': 'SELECT id FROM agora.runs',
+    'reports': 'SELECT id FROM agora.reports',
+}
+
+
+def target_ids(table: str) -> set[str]:
+    """Alle Primärschlüssel einer Zieltabelle, auch unlesbare Zeilen.
+
+    Bewusst nicht über die Repositories: deren Listen überspringen kaputte
+    Zeilen oder haben ein Limit, und genau solche Zeilen soll die Prüfung
+    finden (Codex-Review auf #1608).
+    """
+    from sqlalchemy import text
+
+    from app.infrastructure.postgres.session import get_database
+
+    query = TARGET_ID_QUERIES.get(table)
+    if query is None:
+        raise ValueError(f'unbekannte Tabelle: {table}')
+    with get_database().session() as session:
+        return {str(key) for key in session.scalars(text(query))}
+
+
+def _missing_source(name: str, path: Path) -> StepResult:
+    """Eine fehlende Quelle ist kein leerer, geprüfter Bestand.
+
+    Ein vertippter ``--uploads-dir`` oder ein nicht eingehängtes Volume sähe
+    sonst aus wie ``OK 0/0`` (Codex-Review auf #1608).
+    """
+    return StepResult(
+        name=name,
+        status=UNCHECKED,
+        details=[f'Quelle fehlt: {path} — Pfad prüfen oder Volume einhängen'],
+    )
+
+
+def _key_of(line: str) -> str:
+    """Kennung aus einer Fehlerzeile der Migrationsskripte (``<id>: …``)."""
+    return line.split(':', 1)[0].strip()
+
+
+def _with_target_only(result: StepResult, table: str, source_ids: set[str]) -> StepResult:
+    """Zeilen, die nur in PostgreSQL stehen, machen den Schritt rot.
+
+    Das ``--verify`` der Migrationsskripte läuft nur über die Quelle. Reste
+    eines früheren Versuchs wären danach nach dem Umschalten sichtbar, ohne
+    dass die Prüfung sie gemeldet hätte (Codex-Review auf #1608).
+    """
+    extra = sorted(target_ids(table) - source_ids)
+    if not extra:
+        return result
+    details = list(result.details) + [
+        f'{key}: nur in agora.{table}, nicht in der Quelle' for key in extra
+    ]
+    return result.model_copy(update={'status': FAILED, 'details': details})
+
+
 def check_llm_profiles(options: CutoverOptions) -> StepResult:
     from scripts import migrate_llm_profiles_to_postgres as skript
     from app.services.llm_profile_secrets_store import LlmProfileSecretsStore
 
-    if not options.llm_profiles_db.exists():
-        # Keine SQLite, kein Bestand: nichts zu vergleichen ist kein Fehler.
-        return StepResult(name='llm_profiles', status=OK, details=['keine llm_profiles.db — kein Bestand'])
+    if not options.llm_profiles_db.is_file():
+        return _missing_source('llm_profiles', options.llm_profiles_db)
+    # ``verify`` vergleicht hier schon die Anzahl beider Seiten; Zeilen nur in
+    # PostgreSQL fallen damit auf.
     checked = len(skript.read_sqlite_profiles(options.llm_profiles_db))
     secrets = LlmProfileSecretsStore(data_dir=options.secrets_dir)
     return _from_findings(
@@ -192,26 +255,47 @@ def check_projects(options: CutoverOptions) -> StepResult:
     from scripts import migrate_projects_to_postgres as skript
 
     root = options.uploads_dir / 'projects'
-    checked = len(skript.read_file_projects(root))
-    return _from_findings('projects', checked, skript.verify(root))
+    if not root.is_dir():
+        return _missing_source('projects', root)
+    projects = skript.read_file_projects(root)
+    result = _from_findings('projects', len(projects), skript.verify(root))
+    return _with_target_only(result, 'projects', {p.project_id for p in projects})
 
 
 def check_simulations(options: CutoverOptions) -> StepResult:
     from scripts import migrate_simulations_to_postgres as skript
 
-    return _from_verify_result('simulations', skript.verify(options.simulations_dir))
+    root = options.simulations_dir
+    if not root.is_dir():
+        return _missing_source('simulations', root)
+    records, failures = skript.read_file_simulations(root)
+    result = _from_verify_result('simulations', skript.verify(root))
+    source = {r.simulation_id for r in records} | {_key_of(f) for f in failures}
+    return _with_target_only(result, 'simulations', source)
 
 
 def check_runs(options: CutoverOptions) -> StepResult:
     from scripts import migrate_runs_to_postgres as skript
 
-    return _from_verify_result('runs', skript.verify(options.uploads_dir / 'run_registry'))
+    root = options.uploads_dir / 'run_registry'
+    if not root.is_dir():
+        return _missing_source('runs', root)
+    records, failures = skript.read_file_runs(root)
+    result = _from_verify_result('runs', skript.verify(root))
+    source = {r.run_id for r in records} | {_key_of(f) for f in failures}
+    return _with_target_only(result, 'runs', source)
 
 
 def check_reports(options: CutoverOptions) -> StepResult:
     from scripts import migrate_reports_to_postgres as skript
 
-    return _from_verify_result('reports', skript.verify(options.uploads_dir / 'reports'))
+    root = options.uploads_dir / 'reports'
+    if not root.is_dir():
+        return _missing_source('reports', root)
+    records, failures = skript.read_file_reports(root)
+    result = _from_verify_result('reports', skript.verify(root))
+    source = {key for key, _ in records} | {_key_of(f) for f in failures}
+    return _with_target_only(result, 'reports', source)
 
 
 # -- Schritt 4: Baseline -----------------------------------------------------

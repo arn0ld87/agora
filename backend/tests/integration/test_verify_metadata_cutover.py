@@ -231,3 +231,43 @@ def test_missing_migration_and_schema_drift_are_reported(database, bestand, post
     assert results['reports'].status == cutover.FAILED
     assert cutover.exit_code(list(results.values())) == 1
     assert postgres_database_url not in cutover.render(list(results.values()))
+
+
+def test_a_stale_row_only_in_postgres_is_reported(database, bestand):
+    """Ein Rest aus einem früheren Migrationsversuch steht nur in PostgreSQL.
+    Das ``--verify`` der Skripte läuft nur über die Quelle; die Sammelprüfung
+    muss ihn trotzdem finden (Codex-Review auf #1608)."""
+    from app.infrastructure.postgres.repositories.project_repository import (
+        PostgresProjectRepository,
+    )
+
+    _migrate_everything(bestand)
+    PostgresProjectRepository(database=database).add_existing(
+        Project(
+            project_id='proj_rest00000001',
+            name='Rest',
+            created_at='2026-09-01T10:00:00',
+            updated_at='2026-09-01T10:00:00',
+        )
+    )
+
+    results = {r.name: r for r in cutover.run_checks(bestand)}
+
+    assert results['projects'].status == cutover.FAILED
+    assert results['projects'].details == [
+        'proj_rest00000001: nur in agora.projects, nicht in der Quelle'
+    ]
+    assert results['simulations'].status == cutover.OK
+
+
+def test_a_mistyped_uploads_dir_is_unchecked_not_green(database, bestand, tmp_path):
+    """Ohne lesbare Quelle ist nichts geprüft (Codex-Review auf #1608)."""
+    _migrate_everything(bestand)
+    bestand.uploads_dir = tmp_path / 'vertippt'
+    bestand.simulations_dir = tmp_path / 'vertippt' / 'simulations'
+
+    results = {r.name: r for r in cutover.run_checks(bestand)}
+
+    for name in ('projects', 'simulations', 'runs', 'reports'):
+        assert results[name].status == cutover.UNCHECKED, name
+    assert cutover.exit_code(list(results.values())) == 2
