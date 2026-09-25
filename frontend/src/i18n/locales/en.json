@@ -1475,9 +1475,9 @@
       "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 is active — slider goes down to 10 instead of 30. Statistical significance is limited.",
       "documentRoleLabel": "Document type",
       "documentRoles": {
-        "domain_fact": "Domain facts",
-        "scenario_statement": "Scenario description",
-        "requirement": "Question / requirement",
+        "domain_fact": "Case and domain facts",
+        "scenario_statement": "Test-case construction notes",
+        "requirement": "Question / brief",
         "expected_result": "Expected result",
         "background": "Background"
       }
