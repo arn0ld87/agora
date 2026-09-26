@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from . import runs_bp
 from ..config import Config
+from ..contracts.ai_provider_contract import AiModelRef
 from ..contracts.job_lease_contract import JobLease
 from ..contracts.runs_contract import (
     RunDetail,
@@ -39,6 +40,7 @@ from ..services.graph_tools import GraphToolsService
 from ..services.llm_routing_seed import (
     build_route_subprocess_env,
     build_runtime_llm_config,
+    prevalidate_ai_model_ref,
     resolve_route_api_key,
     seed_run_stage_routing,
 )
@@ -1204,6 +1206,30 @@ def _resume_report_generate(run: dict):
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 
 
+def _ai_model_ref_from_manifest_route(stage_route) -> Optional[AiModelRef]:
+    """Baut eine ``AiModelRef`` aus der im Manifest erfassten Original-Route
+    (Issue #1686 P1) — Grundlage für ein 1:1-Replay, wenn kein expliziter
+    Override gesetzt ist.
+
+    Bevorzugt den strikten ``ai_route_snapshot`` (Issue #1274 Punkt 2), weil
+    er die kanonische (Connection, Modell)-Referenz trägt; fällt auf die
+    Top-Level-Felder von ``StageRoute`` zurück, wenn kein Snapshot vorliegt
+    (Alt-Manifest vor #1274). ``None``, wenn beides keine vollständige
+    (Connection, Modell)-Kombination liefert — dann bleibt das Verhalten
+    unverändert (Workspace-Defaults).
+    """
+    if stage_route is None:
+        return None
+    snapshot = stage_route.ai_route_snapshot
+    provider_connection_id = (
+        snapshot.provider_connection_id if snapshot is not None else None
+    ) or stage_route.provider
+    model_id = (snapshot.model_id if snapshot is not None else None) or stage_route.model
+    if not provider_connection_id or not model_id:
+        return None
+    return AiModelRef(provider_connection_id=provider_connection_id, model_id=model_id)
+
+
 def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
     """Klont die Original-Simulation per ``create_branch`` und startet sie neu.
 
@@ -1242,6 +1268,8 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
     if not source_state:
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
+    original_stage_route = (manifest.routing.stages or {}).get("simulation_rounds")
+
     branch_overrides: dict = {}
     llm_model_override = None
     ai_model_ref = overrides.ai_model_ref if overrides is not None else None
@@ -1255,6 +1283,29 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         # JSON-Form, weil create_branch die Overrides in branch_meta persistiert.
         branch_overrides["ai_model_ref"] = ai_model_ref.model_dump(mode="json")
         llm_model_override = ai_model_ref.model_id
+
+    # Issue #1686 (P1): Ohne expliziten Override die im Original-Manifest
+    # erfasste Route seeden statt der aktuellen Workspace-Defaults —
+    # `seed_run_stage_routing` würde sonst auf den heutigen Defaults landen,
+    # und ein "identisches" Replay liefe unbemerkt auf einem anderen Modell,
+    # sobald sich Defaults/Connections seit dem Original-Run geändert haben.
+    # Ist die Original-Connection nicht mehr auflösbar (z. B. gelöscht), ist
+    # ein sichtbarer 409 vor jeder Branch-/Run-Erzeugung ehrlicher als ein
+    # stiller Rückfall auf Defaults, der wie ein 1:1-Replay aussähe.
+    route_seed_ai_model_ref = ai_model_ref
+    if route_seed_ai_model_ref is None:
+        route_seed_ai_model_ref = _ai_model_ref_from_manifest_route(original_stage_route)
+        if route_seed_ai_model_ref is not None:
+            try:
+                prevalidate_ai_model_ref(route_seed_ai_model_ref)
+            except ValueError as exc:
+                return json_error(
+                    f"Run {run_id}'s captured model route is no longer resolvable "
+                    f"({exc}) — refusing to silently fall back to current workspace "
+                    "defaults for what would be presented as a 1:1 replay.",
+                    status=409,
+                    code="manifest_route_unresolvable",
+                )
 
     branch_state = manager.create_branch(
         simulation_id,
@@ -1297,12 +1348,14 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         # ai_model_ref durchreichen, nicht nur model_id: dieselbe Modell-ID kann
         # auf mehreren Provider-Connections liegen. Ohne die Connection-ID
         # liefe das Replay auf einer anderen Connection als das Original.
+        # route_seed_ai_model_ref ist entweder der explizite Override oder
+        # (Issue #1686 P1) die aus dem Original-Manifest rekonstruierte Route.
         seed_run_stage_routing(
             new_run_id,
             "simulation_rounds",
             llm_model_override=llm_model_override,
             llm_runtime=None,
-            ai_model_ref=ai_model_ref,
+            ai_model_ref=route_seed_ai_model_ref,
         )
         route_router = StageModelRouter(new_run_id)
         resolved_route = route_router.resolve("simulation_rounds")
@@ -1328,14 +1381,20 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             new_simulation_id=new_simulation_id,
             manifest=manifest,
             resolved_route=resolved_route,
-            ai_model_ref=ai_model_ref,
+            original_stage_route=original_stage_route,
         )
 
     return {"run_id": new_run["run_id"], "status": "processing"}
 
 
 def _capture_replay_manifest_draft(
-    *, original_run_id: str, new_run_id: str, new_simulation_id: str, manifest, resolved_route, ai_model_ref
+    *,
+    original_run_id: str,
+    new_run_id: str,
+    new_simulation_id: str,
+    manifest,
+    resolved_route,
+    original_stage_route,
 ) -> None:
     """Draft-Manifest für einen Replay-Run schreiben (Issue #1274 Punkt 3).
 
@@ -1344,6 +1403,13 @@ def _capture_replay_manifest_draft(
     gefährden. Übernimmt Eingaben und Simulationsparameter 1:1 aus dem
     Original-Manifest und dokumentiert eine etwaige Modell-Route-Abweichung
     (die einzige überschreibbare Größe) über ``deviations``.
+
+    Issue #1686 (P1): die aufgelöste Replay-Route wird IMMER mit der im
+    Original-Manifest erfassten Route verglichen — unabhängig davon, ob ein
+    expliziter Override oder die aus dem Manifest rekonstruierte Route
+    geseedet wurde. Ohne diesen Vergleich blieb ``deviations`` leer, sobald
+    kein Override gesetzt war, obwohl sich Defaults/Connections seit dem
+    Original-Run geändert haben konnten.
     """
     try:
         from .. import __version__
@@ -1351,11 +1417,10 @@ def _capture_replay_manifest_draft(
         from ..services.manifest_capture import ManifestCapture
         from ..services.runtime_run_config import RuntimeRunConfig
 
-        original_stage = (manifest.routing.stages or {}).get("simulation_rounds")
         deviations: list[dict[str, Any]] = []
-        if ai_model_ref is not None:
-            original_model = original_stage.model if original_stage else None
-            original_provider = original_stage.provider if original_stage else None
+        if original_stage_route is not None:
+            original_model = original_stage_route.model
+            original_provider = original_stage_route.provider
             if original_model != resolved_route.model:
                 deviations.append(
                     {"field": "model_id", "original": original_model, "replay": resolved_route.model}

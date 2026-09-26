@@ -136,6 +136,13 @@ def _stub_replay_infra(monkeypatch, *, new_simulation_id: str = "sim_branch_defa
         "app.api.runs.build_route_subprocess_env", lambda _r, _k, _rid: {}
     )
     monkeypatch.setattr("app.api.runs.seed_run_stage_routing", MagicMock())
+    # Issue #1686 (P1): ohne expliziten Override prüft `_replay_simulation_run`
+    # jetzt vorab, ob die im Manifest erfasste Original-Connection noch
+    # existiert. Die meisten dieser Tests interessieren sich nicht für diese
+    # Connection-Auflösung — ohne den Stub würde jeder Replay ohne Override
+    # an einem echten (in der Testumgebung leeren) ProviderConnectionStore
+    # mit 409 scheitern.
+    monkeypatch.setattr("app.api.runs.prevalidate_ai_model_ref", lambda _ref: MagicMock())
 
     runner = MagicMock()
     runner.start_simulation.return_value = MagicMock(
@@ -260,6 +267,7 @@ def test_replay_starts_a_worker_not_just_a_pending_record(env, monkeypatch):
         "app.api.runs.build_route_subprocess_env", lambda _r, _k, _rid: {}
     )
     monkeypatch.setattr("app.api.runs.seed_run_stage_routing", MagicMock())
+    monkeypatch.setattr("app.api.runs.prevalidate_ai_model_ref", lambda _ref: MagicMock())
 
     runner = MagicMock()
     runner.start_simulation.return_value = MagicMock(
@@ -316,6 +324,7 @@ def test_replay_new_run_has_fresh_linked_ids_not_original(env, monkeypatch):
         "app.api.runs.build_route_subprocess_env", lambda _r, _k, _rid: {}
     )
     monkeypatch.setattr("app.api.runs.seed_run_stage_routing", MagicMock())
+    monkeypatch.setattr("app.api.runs.prevalidate_ai_model_ref", lambda _ref: MagicMock())
 
     runner = MagicMock()
     runner.start_simulation.return_value = MagicMock(
@@ -596,6 +605,114 @@ def test_replay_writes_its_own_manifest_with_deviations(env, monkeypatch):
     assert new_data["simulation"]["max_rounds"] == 10
     deviation_fields = {d["field"] for d in new_data["deviations"]}
     assert "model_id" in deviation_fields
+
+
+# ---------------------------------------------------------------------------
+# Issue #1686 (P1): Route-Continuity ohne expliziten Override
+# ---------------------------------------------------------------------------
+
+
+def test_replay_without_override_seeds_original_route_not_workspace_defaults(env, monkeypatch):
+    """Ohne ``ai_model_ref``-Override muss die Original-Route aus dem Manifest
+    an ``seed_run_stage_routing`` gehen — nicht ``None`` (was intern auf die
+    aktuellen Workspace-Defaults zurückfällt). Änderten sich Defaults zwischen
+    Original und Replay, liefe ein "identisches" Replay sonst unbemerkt auf
+    einem anderen Modell."""
+    from unittest.mock import MagicMock
+
+    _stub_replay_infra(monkeypatch)
+    seed_mock = MagicMock()
+    monkeypatch.setattr("app.api.runs.seed_run_stage_routing", seed_mock)
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/replay")
+
+    assert resp.status_code == 202, resp.get_json()
+    passed_ref = seed_mock.call_args.kwargs["ai_model_ref"]
+    assert passed_ref is not None, (
+        "Ohne Override darf ai_model_ref nicht None sein — sonst seedet "
+        "seed_run_stage_routing aus den aktuellen Workspace-Defaults statt "
+        "aus der im Manifest erfassten Original-Route (conn-local/qwen3)"
+    )
+    assert passed_ref.provider_connection_id == "conn-local"
+    assert passed_ref.model_id == "qwen3"
+
+
+def test_replay_without_override_records_deviation_from_current_defaults(env, monkeypatch):
+    """Auch ohne Override muss eine Abweichung zwischen der Original-Route und
+    der tatsächlich aufgelösten Replay-Route sichtbar werden — vorher blieb
+    ``deviations`` in diesem Fall leer, weil der Vergleich nur bei einem
+    expliziten Override lief."""
+    manager, _runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_defaults")
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Original-Manifest-Route weicht bewusst von der gestubbten
+    # Resolver-Antwort ("qwen3"/"conn-local", siehe _stub_replay_infra) ab —
+    # simuliert geänderte Workspace-Defaults zwischen Original und Replay.
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    ManifestCapture.capture_draft(
+        run_id=run_id,
+        run_dir=run_dir,
+        seed_document_hash="sha256:abc",
+        seed_document_filename="test.md",
+        simulation_config_hash="sha256:def",
+        graph_id="graph_001",
+        agora_version="0.9.5",
+        schema_version="1.0.0",
+        random_seed=None,
+        simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "gpt-4o",
+                "provider": "conn-openai",
+                "base_url": "https://api.openai.com",
+            }
+        },
+        platform="parallel",
+        max_rounds=10,
+        enable_graph_memory_update=False,
+    )
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+    assert resp.status_code == 202, resp.get_json()
+    new_run_id = resp.get_json()["run_id"]
+
+    new_manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run_id, "manifest.json")
+    with open(new_manifest_path) as f:
+        new_data = json.load(f)
+
+    deviation_fields = {d["field"] for d in new_data["deviations"]}
+    assert "model_id" in deviation_fields, (
+        "Ohne Override muss die aufgelöste Replay-Route trotzdem gegen die "
+        "Original-Route verglichen werden"
+    )
+    assert "provider_connection_id" in deviation_fields
+
+
+def test_replay_without_override_returns_409_when_original_connection_gone(env, monkeypatch):
+    """Ist die im Manifest erfasste Connection nicht mehr auflösbar (z.B.
+    gelöscht), darf das Replay nicht still auf die aktuellen Workspace-
+    Defaults zurückfallen und sich als 1:1-Replay ausgeben — ein sichtbarer
+    409 ist hier ehrlicher (analog ``manifest_missing_simulation_params``)."""
+    from unittest.mock import MagicMock
+
+    _stub_replay_infra(monkeypatch)
+    # _stub_replay_infra lässt prevalidate_ai_model_ref standardmäßig
+    # durchlaufen (siehe dortiger Kommentar) — hier gezielt das Gegenteil:
+    # die Original-Connection "conn-local" existiert nicht mehr.
+    monkeypatch.setattr(
+        "app.api.runs.prevalidate_ai_model_ref",
+        MagicMock(side_effect=ValueError("ProviderConnection 'conn-local' nicht gefunden")),
+    )
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 409, resp.get_json()
+    assert resp.get_json()["code"] == "manifest_route_unresolvable"
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):
