@@ -8,6 +8,7 @@ Extracted verbatim from ``app/utils/llm_client.py`` as part of issue #582
 from ipaddress import ip_address
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from .client import LLMClient
 from ..utils.logger import get_logger
@@ -42,6 +43,8 @@ def _is_local_base_url(url: str | None) -> bool:
 
 def _resolve_connection_secret(
     profile: "LlmProfile",
+    *,
+    run_id: str | None = None,
 ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
     Resolve the enabled provider connection bound to a profile and its API key.
@@ -61,6 +64,9 @@ def _resolve_connection_secret(
         fehlschlägt. Bei einer aufgelösten api_key-Connection ohne hinterlegtes Secret
         ist der Key ``None``, ID/URL/auth_mode bleiben jedoch gesetzt.
     """
+    from ..services.llm_routing_seed import workspace_credential_id_for_run
+
+    workspace_id = workspace_credential_id_for_run(run_id)
     try:
         from ..services.provider_connection_store import ProviderConnectionStore
 
@@ -82,9 +88,17 @@ def _resolve_connection_secret(
         return None, None, None, None
 
     match = resolved.connection
+    if workspace_id is not None and (match.transport != "http" or match.auth_mode != "api_key"):
+        raise ValueError("Workspace provider connection is unavailable")
     # Explizite No-Auth-Connection: autoritative Route ohne erwartetes Secret.
     if match.auth_mode == "none":
         return None, match.id, resolved.base_url, match.auth_mode
+
+    if workspace_id is not None:
+        from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
+
+        key = WorkspaceProviderCredentialsStore().get_plaintext(workspace_id, match.id)
+        return key, match.id, resolved.base_url, match.auth_mode
 
     try:
         from ..services.llm_provider_secrets_store import (
@@ -106,6 +120,9 @@ def _resolve_connection_secret(
 
 def resolve_connection_for_base_url(
     base_url: Optional[str],
+    *,
+    run_id: str | None = None,
+    workspace_id: UUID | None = None,
 ) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Resolve the single enabled ProviderConnection whose canonical endpoint matches ``base_url``.
@@ -134,6 +151,9 @@ def resolve_connection_for_base_url(
         normalize_endpoint_url,
     )
     from ..services.provider_connection_store import ProviderConnectionStore
+    from ..services.llm_routing_seed import workspace_credential_id_for_run
+
+    credential_workspace_id = workspace_id or workspace_credential_id_for_run(run_id)
 
     target = normalize_endpoint_url(base_url)
     if not target:
@@ -170,6 +190,15 @@ def resolve_connection_for_base_url(
         return None, None, None
 
     match = matches[0]
+    if credential_workspace_id is not None:
+        if match.transport != "http" or match.auth_mode != "api_key":
+            raise ValueError("Workspace provider connection is unavailable")
+        from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
+
+        key = WorkspaceProviderCredentialsStore().get_plaintext(
+            credential_workspace_id, match.id
+        )
+        return key, match.id, match.auth_mode
     if match.auth_mode == "none":
         return None, match.id, match.auth_mode
 
@@ -210,7 +239,7 @@ def build_client_from_profile(
         ValueError: If no API key is available for a non-local endpoint.
     """
     connection_key, connection_id, connection_base_url, connection_auth_mode = (
-        _resolve_connection_secret(profile)
+        _resolve_connection_secret(profile, run_id=run_id)
     )
     api_key = connection_key
     api_key_source = "connection_store" if connection_key else "local_no_auth"
@@ -231,6 +260,9 @@ def build_client_from_profile(
             f"LLM-Profil {profile.id!r}: api_key fehlt; kein Secret aus einer passenden "
             f"aktivierten ProviderConnection für Provider {profile.provider!r}"
         )
+    from ..services.llm_routing_seed import workspace_credential_id_for_run
+
+    tenant_scoped = workspace_credential_id_for_run(run_id) is not None
     return LLMClient(
         api_key=api_key or "ollama",
         base_url=effective_base_url,
@@ -239,4 +271,6 @@ def build_client_from_profile(
         run_id=run_id,
         route_provider_id=connection_id,
         api_key_source=api_key_source,
+        use_active_config=not tenant_scoped,
+        allow_api_key_fallback=not tenant_scoped,
     )

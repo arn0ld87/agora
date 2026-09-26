@@ -25,6 +25,7 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -343,6 +344,10 @@ def _default_client_factory(
     immer geloggt, unabhängig davon, ob der Fallback-Aufbau selbst gelingt.
     """
 
+    from ..llm_routing_seed import workspace_credential_id_for_run
+
+    tenant_workspace_id = workspace_credential_id_for_run(run_id)
+
     def factory():
         from ...config import Config
         from ...llm.client import LLMClient
@@ -355,12 +360,28 @@ def _default_client_factory(
             connection_key = connection_id = connection_auth_mode = None
             if base_url:
                 connection_key, connection_id, connection_auth_mode = (
-                    resolve_connection_for_base_url(base_url)
+                    resolve_connection_for_base_url(base_url, workspace_id=tenant_workspace_id)
+                    if tenant_workspace_id is not None
+                    else resolve_connection_for_base_url(base_url)
                 )
 
             if connection_id is not None and (
                 connection_auth_mode == "none" or connection_key
             ):
+                if tenant_workspace_id is not None:
+                    if not connection_key:
+                        raise ValueError("Workspace provider credential is missing")
+                    return LLMClient(
+                        model=model,
+                        base_url=base_url,
+                        api_key=connection_key,
+                        route_provider_id=connection_id,
+                        api_key_source="workspace_store",
+                        use_active_config=False,
+                        allow_api_key_fallback=False,
+                        timeout=timeout,
+                        run_id=run_id,
+                    )
                 try:
                     return LLMClient(
                         model=model,
@@ -432,6 +453,8 @@ def _default_client_factory(
                         model,
                         exc,
                     )
+        if tenant_workspace_id is not None:
+            raise ValueError("Workspace provider credential is missing for interview route")
         return LLMClient(timeout=timeout, run_id=run_id)
 
     return factory
@@ -673,8 +696,14 @@ def interview_agents_batch_direct(
         if workers == 1:
             entries = [_run(item) for item in interviews]
         else:
+            credential_context = copy_context()
             with ThreadPoolExecutor(max_workers=workers) as pool:
-                entries = list(pool.map(_run, interviews))
+                entries = list(
+                    pool.map(
+                        lambda item: credential_context.copy().run(_run, item),
+                        interviews,
+                    )
+                )
 
     results = {f"{e['platform']}_{e['agent_id']}": e for e in entries}
     succeeded = [e for e in entries if e.get("response")]

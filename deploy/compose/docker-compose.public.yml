@@ -1,0 +1,41 @@
+# Dedicated public demo instance. Apply after the production, nginx proxy,
+# and Supabase overlays with `docker compose -p agora-demo` in a separate checkout.
+# The personal instance keeps its Tailnet-only Traefik router and data mounts.
+services:
+  agora:
+    container_name: agora-demo
+    ports: !reset []
+    build:
+      args:
+        ALLOW_BUILD_TIME_TOKEN: "false"
+        VITE_AGORA_TOKEN: ""
+
+  redis:
+    container_name: agora-demo-redis
+
+  neo4j:
+    container_name: agora-demo-neo4j
+    ports: !reset []
+
+  nginx:
+    container_name: agora-demo-nginx
+    ports: !reset []
+    build:
+      args:
+        ALLOW_BUILD_TIME_TOKEN: "false"
+        VITE_AGORA_TOKEN: ""
+    networks:
+      default:
+      proxy:
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.agora-demo.rule: "Host(`agora.alexle135.de`)"
+      traefik.http.routers.agora-demo.entrypoints: websecure
+      traefik.http.routers.agora-demo.tls.certresolver: letsencrypt
+      traefik.http.routers.agora-demo.middlewares: security-headers@file
+      traefik.http.services.agora-demo.loadbalancer.server.port: "80"
+
+networks:
+  proxy:
+    external: true

@@ -929,6 +929,7 @@
       "triggerUnknown": "Nutzermenü öffnen",
       "profile": "Profil",
       "settings": "Einstellungen",
+      "providerKeys": "Eigene Anbieter-Keys",
       "help": "Hilfe",
       "workspaces": "Workspace",
       "signOut": "Abmelden",
@@ -2063,7 +2064,22 @@
       "toRegister": "Noch kein Konto? Jetzt registrieren",
       "errorGeneric": "Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.",
       "resetDone": "Passwort geändert. Bitte melde dich neu an."
-    },
+  },
+  "workspaceProviderKeys": {
+    "title": "Eigene Anbieter-Keys",
+    "description": "Keys gelten nur für den aktiven Workspace. Agora zeigt gespeicherte Keys nicht erneut an.",
+    "keyLabel": "API-Key für {provider}",
+    "configured": "Key gespeichert",
+    "missing": "Kein Key gespeichert",
+    "save": "Key speichern",
+    "delete": "Key löschen",
+    "saved": "Key gespeichert.",
+    "deleted": "Key gelöscht.",
+    "readOnly": "Nur Owner und Admins können Keys ändern.",
+    "loadError": "Keys konnten nicht geladen werden.",
+    "saveError": "Key konnte nicht gespeichert werden.",
+    "deleteError": "Key konnte nicht gelöscht werden."
+  },
     "register": {
       "title": "Konto erstellen",
       "emailLabel": "E-Mail-Adresse",

@@ -82,6 +82,7 @@ class ResolvedEmbeddingRoute:
     api_key: Optional[str]
     configuration_id: str
     dimensions: int
+    provider_id: Optional[str] = None
 
 
 def resolve_operational_vector_dim() -> int:
@@ -107,7 +108,7 @@ def resolve_operational_vector_dim() -> int:
     return Config.VECTOR_DIM
 
 
-def resolve_active_embedding_route() -> Optional[ResolvedEmbeddingRoute]:
+def resolve_active_embedding_route(*, include_secret: bool = True) -> Optional[ResolvedEmbeddingRoute]:
     """Loest die aktive globale Embedding-Konfiguration auf.
 
     Returns:
@@ -157,7 +158,7 @@ def resolve_active_embedding_route() -> Optional[ResolvedEmbeddingRoute]:
     _reject_unmigrated_model_switch(config)
 
     api_key = None
-    if connection.secret_ref:
+    if include_secret and connection.secret_ref:
         from ..llm_provider_secrets_store import get_llm_provider_secrets_store
 
         api_key = get_llm_provider_secrets_store().get_plaintext(connection.secret_ref)
@@ -172,6 +173,7 @@ def resolve_active_embedding_route() -> Optional[ResolvedEmbeddingRoute]:
         api_key=api_key,
         configuration_id=config.id,
         dimensions=config.dimensions,
+        provider_id=getattr(connection, "provider_kind", None),
     )
 
 

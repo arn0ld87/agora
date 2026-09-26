@@ -262,14 +262,15 @@ class EmbeddingService:
             return stub_vec
 
         # Check cache
-        if text in self._cache:
+        if not self._workspace_credential_id() and text in self._cache:
             return self._cache[text]
 
         vectors = self._request_embeddings([text])
         vector = vectors[0]
 
         # Cache result
-        self._cache_put(text, vector)
+        if not self._workspace_credential_id():
+            self._cache_put(text, vector)
 
         return vector
 
@@ -304,7 +305,7 @@ class EmbeddingService:
         # Check cache first
         for i, text in enumerate(texts):
             text = text.strip() if text else ""
-            if text in self._cache:
+            if not self._workspace_credential_id() and text in self._cache:
                 results[i] = self._cache[text]
             elif text:
                 uncached_indices.append(i)
@@ -324,7 +325,8 @@ class EmbeddingService:
             # Place results and cache
             for idx, vec, text in zip(uncached_indices, all_vectors, uncached_texts):
                 results[idx] = vec
-                self._cache_put(text, vec)
+                if not self._workspace_credential_id():
+                    self._cache_put(text, vec)
 
         return results  # type: ignore
 
@@ -470,11 +472,40 @@ class EmbeddingService:
 
     def _request_headers(self) -> dict[str, str]:
         headers = {'Content-Type': 'application/json'}
+        workspace_id = self._workspace_credential_id()
+        if workspace_id is not None and self._provider == 'openai':
+            from ..services.embedding_configurations.runtime import (
+                resolve_active_embedding_route,
+            )
+            from ..services.workspace_provider_credentials_store import (
+                WorkspaceProviderCredentialsStore,
+            )
+
+            route = resolve_active_embedding_route(include_secret=False)
+            if route is None or not route.provider_id:
+                raise EmbeddingError(
+                    'Workspace embeddings require an active provider configuration'
+                )
+            workspace_key = WorkspaceProviderCredentialsStore().get_plaintext(
+                workspace_id, route.provider_id
+            )
+            if not workspace_key:
+                raise EmbeddingError(
+                    f'Workspace embedding provider key for {route.provider_id} is not configured'
+                )
+            headers['Authorization'] = f'Bearer {workspace_key}'
+            return headers
         if self._provider == 'openai':
             if not self.api_key:
                 raise EmbeddingError('EMBEDDING_API_KEY is required for OpenAI embeddings')
             headers['Authorization'] = f'Bearer {self.api_key}'
         return headers
+
+    @staticmethod
+    def _workspace_credential_id():
+        from ..services.llm_routing_seed import workspace_credential_id_for_run
+
+        return workspace_credential_id_for_run(None)
 
     def _extract_embeddings(self, data: dict) -> List[List[float]]:
         if self._provider == 'openai':

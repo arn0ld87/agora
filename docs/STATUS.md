@@ -464,6 +464,12 @@ Seit #1617 meldet sich das Frontend bei aktivem JWT über `@supabase/supabase-js
 
 Verifiziert mit Vitest (Store, Interceptor, Guard, Views, Nutzermenü) und dem Playwright-Smoke `auth-login.spec.ts` gegen gemockte Auth-Endpunkte, inklusive axe und 320-px-Prüfung.
 
+### Isolierte Bewerbungsdemo mit eigenen Provider-Keys (#1688)
+
+Für die in [ADR-0020](decisions/0020-isolated-public-demo-before-1-0.md) begrenzte Demo gibt es verschlüsselte Provider-Keys je Workspace und eine JWT-geschützte Eingabeseite unter `/workspace/provider-keys`. API-Antworten geben nur den Konfigurationsstatus zurück. LLM- und Embedding-Aufrufe aus JWT-Läufen verwenden den Key des verifizierten Workspace; fehlende Keys und vom aktivierten Provider abweichende Zieladressen werden abgewiesen. Hintergrund- und parallele Chunk-Jobs übernehmen den geprüften Credential-Kontext. Der Legacy-Token bleibt für den internen Betreiberpfad.
+
+Die Compose-Overlays trennen Demo-Artefakte, Neo4j, Redis und Supabase von der bisherigen Instanz und veröffentlichen nur Agora und `/auth/v1` auf dem öffentlichen HTTPS-Eingang. **Der Code und die Overlays allein schalten nichts um:** DNS, SMTP, JWT-Konfiguration und die externe Zwei-Konten-Abnahme sind eigene Deploy-Schritte nach dem Merge.
+
 ### Realtime für Listen-Projektionen (#1618)
 
 Seit #1618 lädt das Frontend Ablage und Run-Listen nach, sobald sich im aktiven Workspace ein Projekt, eine Simulation, ein Run oder ein Report ändert. Das Ereignis ist nur ein Signal: Die Daten kommen weiter über die Flask-API, der Payload wird nicht gelesen. Das SSE laufender Läufe bleibt unverändert, ebenso das Polling als Rückfallebene.

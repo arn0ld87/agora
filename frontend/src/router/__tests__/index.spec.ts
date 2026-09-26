@@ -61,6 +61,7 @@ vi.mock('../../views/Settings/SettingsApiKeysView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsAuditLogsView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/LlmRoutingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/LlmProvidersView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/WorkspaceProviderKeysView.vue', () => VIEW_STUB)
 // Issue #838 — Lücken aus der Routen-Konsolidierung (ADR-0010) schließen.
 vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsProfileView.vue', () => VIEW_STUB)
@@ -350,6 +351,7 @@ describe('Router – Struktur-Integrität', () => {
       'Register',
       'PasswordReset',
       'EmailConfirm',
+      'WorkspaceProviderKeys',
       'NotFound',
     ].sort()
 

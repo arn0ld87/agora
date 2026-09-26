@@ -115,6 +115,22 @@ class TestResolution:
 
         assert resolve_active_embedding_route().api_key == "sk-from-store"
 
+    def test_workspace_route_metadata_does_not_read_operator_secret(self, monkeypatch) -> None:
+        _install(
+            monkeypatch,
+            config=_Config(),
+            connections=[_Connection(secret_ref="ref_1")],
+        )
+        monkeypatch.setattr(
+            "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
+            lambda: (_ for _ in ()).throw(AssertionError("operator secret read")),
+        )
+
+        route = resolve_active_embedding_route(include_secret=False)
+
+        assert route is not None
+        assert route.api_key is None
+
     def test_no_active_configuration_keeps_the_legacy_env_view(self, monkeypatch) -> None:
         _install(monkeypatch, config=None, connections=[])
 

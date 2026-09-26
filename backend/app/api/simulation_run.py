@@ -16,6 +16,7 @@ from ..services.llm_routing_seed import (
     build_route_subprocess_env,
     resolve_route_api_key,
     seed_run_stage_routing,
+    workspace_credential_metadata,
 )
 from ..utils.endpoints import is_local_endpoint
 from ..services.llm_runtime import RuntimeLlmConfig, parse_runtime_llm_config
@@ -429,6 +430,8 @@ def _precheck_runtime_provider_key(llm_runtime: RuntimeLlmConfig) -> None:
 
     from ..services.llm_routing_seed import map_runtime_provider_to_route_provider
     from ..services.secret_resolver import SecretResolver
+    from ..services.llm_routing_seed import workspace_credential_id_for_run
+    from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
     from ..services.llm_provider_registry import LlmProviderRegistry
     provider_id_preview = map_runtime_provider_to_route_provider(llm_runtime.provider)
     if not provider_id_preview:
@@ -437,7 +440,12 @@ def _precheck_runtime_provider_key(llm_runtime: RuntimeLlmConfig) -> None:
     registry = LlmProviderRegistry()
     descriptor = next((p for p in registry.get_providers() if p.id == provider_id_preview), None)
     p_type = descriptor.type if descriptor else "openai_compatible"
-    stored_key = SecretResolver().get_api_key(provider_id_preview, p_type)
+    workspace_id = workspace_credential_id_for_run(None)
+    stored_key = (
+        WorkspaceProviderCredentialsStore().get_plaintext(workspace_id, provider_id_preview)
+        if workspace_id is not None
+        else SecretResolver().get_api_key(provider_id_preview, p_type)
+    )
     if not stored_key and not is_local_endpoint(
         (descriptor.base_url if descriptor else None) or llm_runtime.base_url
     ):
@@ -496,6 +504,7 @@ def _begin_start_run(req: _StartRequest, state) -> RunLifecycle:
         resume_capability=_simulation_resume_capability(req.simulation_id, state),
         branch_label=state.branch_name,
         metadata={
+            **workspace_credential_metadata(),
             "graph_id": state.graph_id,
             "platform": req.platform,
             "source_simulation_id": state.source_simulation_id,

@@ -929,6 +929,7 @@
       "triggerUnknown": "Open user menu",
       "profile": "Profile",
       "settings": "Settings",
+      "providerKeys": "Your provider keys",
       "help": "Help",
       "workspaces": "Workspace",
       "signOut": "Sign out",
@@ -2063,7 +2064,22 @@
       "toRegister": "No account yet? Register now",
       "errorGeneric": "Sign-in failed. Please check your credentials.",
       "resetDone": "Password changed. Please sign in again."
-    },
+  },
+  "workspaceProviderKeys": {
+    "title": "Your provider keys",
+    "description": "Keys apply only to the active workspace. Agora does not display stored keys again.",
+    "keyLabel": "API key for {provider}",
+    "configured": "Key saved",
+    "missing": "No key saved",
+    "save": "Save key",
+    "delete": "Delete key",
+    "saved": "Key saved.",
+    "deleted": "Key deleted.",
+    "readOnly": "Only owners and admins can change keys.",
+    "loadError": "Keys could not be loaded.",
+    "saveError": "Key could not be saved.",
+    "deleteError": "Key could not be deleted."
+  },
     "register": {
       "title": "Create account",
       "emailLabel": "Email address",

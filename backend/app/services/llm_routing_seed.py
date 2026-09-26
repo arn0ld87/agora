@@ -8,8 +8,14 @@ can be used without a flag day across all API surfaces.
 from __future__ import annotations
 
 import os
-from typing import Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Iterator, Optional
+from uuid import UUID
 
+from flask import has_request_context
+
+from ..contracts.auth_contract import AuthType
 from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
 from ..contracts.provider_types import (
@@ -28,15 +34,24 @@ from .llm_provider_registry import LlmProviderRegistry
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
 from ..repositories.llm_profile_repository import get_llm_profile_repository
 from .llm_runtime import RuntimeLlmConfig
-from .profile_connection_resolver import canonical_connection_base_url, resolve_profile_connection
+from .profile_connection_resolver import (
+    canonical_connection_base_url,
+    normalize_endpoint_url,
+    resolve_profile_connection,
+)
 from .provider_connection_store import ProviderConnectionStore
 from .provider_connections.service import ProviderConnectionService
 from .runtime_run_config import RuntimeRunConfig
 from .secret_resolver import SecretResolver, get_bound_store_api_key
 from .workspace_routing_store import get_workspace_routing_store
+from .workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.llm_routing_seed")
+
+_credential_workspace: ContextVar[UUID | None] = ContextVar(
+    "agora_credential_workspace", default=None
+)
 
 _PROVIDER_ID_MAP = {
     "default": None,
@@ -117,6 +132,15 @@ def _verify_selected_model(connection: ProviderConnection, model_id: str) -> Non
     Credentials, Rate-Limit), ist das kein Beleg für einen Model-Mismatch —
     eine Meldung "Modell gehört nicht zur Connection" wäre hier irreführend.
     """
+    workspace_id = workspace_credential_id_for_run(None)
+    if workspace_id is not None:
+        # The global discovery service uses the operator secret and writes a
+        # process-wide probe result. A tenant route is checked at execution
+        # with its own credential instead.
+        if not WorkspaceProviderCredentialsStore().get_plaintext(workspace_id, connection.id):
+            raise ValueError("Workspace provider credential is missing")
+        return
+
     service = ProviderConnectionService(
         store=ProviderConnectionStore(),
         secrets_store=get_llm_provider_secrets_store(),
@@ -171,6 +195,12 @@ def _bind_connection_secret(
     ``llm_profile_id``-Routing-Pfad, damit keiner der beiden die Bindung umgeht.
     """
     if connection.auth_mode != "api_key":
+        return
+    workspace_id = workspace_credential_id_for_run(None)
+    if workspace_id is not None:
+        if not WorkspaceProviderCredentialsStore().get_plaintext(workspace_id, connection.id):
+            raise ValueError("Workspace provider credential is missing")
+        options["connection_only"] = True
         return
     if not connection.secret_ref:
         raise ValueError(
@@ -493,7 +523,111 @@ def seed_run_stage_routing(
     return config
 
 
-def resolve_route_api_key(route: ResolvedRoute, llm_runtime: Optional[RuntimeLlmConfig] = None) -> Optional[str]:
+def workspace_credential_metadata() -> dict[str, str]:
+    """Persist the verified JWT workspace before work leaves the request."""
+    if not has_request_context():
+        return {}
+    from ..security.principal_context import current_principal
+
+    principal = current_principal()
+    if principal is None or principal.auth_type != AuthType.JWT:
+        return {}
+    return {
+        "credential_scope": "workspace",
+        "credential_workspace_id": str(principal.workspace_id),
+    }
+
+
+def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
+    """Return a JWT run's validated workspace, including in background jobs."""
+    if run_id is None:
+        bound_workspace = _credential_workspace.get()
+        if bound_workspace is not None:
+            return bound_workspace
+    from .run_registry import RunRegistry
+    from ..repositories.run_repository import get_run_repository
+
+    record = (
+        get_run_repository(registry_dir=RunRegistry.REGISTRY_DIR).get(run_id)
+        if run_id
+        else None
+    )
+    run = record.to_manifest() if record is not None else None
+    metadata = (run or {}).get("metadata") or {}
+    scope = metadata.get("credential_scope")
+    raw_id = metadata.get("credential_workspace_id")
+    if scope == "workspace":
+        if not isinstance(raw_id, str):
+            raise ValueError("Workspace credential scope has no workspace ID")
+        try:
+            workspace_id = UUID(raw_id)
+        except ValueError as exc:
+            raise ValueError("Invalid workspace credential scope") from exc
+        if run_id:
+            from ..infrastructure.postgres.workspace_scope import REFERENCE_OWN, reference_state
+
+            if reference_state("run_id", run_id, workspace_id) != REFERENCE_OWN:
+                raise ValueError("Run workspace credential scope does not match persisted owner")
+    elif scope is not None or raw_id is not None:
+        raise ValueError("Invalid workspace credential scope")
+    else:
+        workspace_id = None
+
+    if has_request_context():
+        from ..security.principal_context import current_principal
+
+        principal = current_principal()
+        if principal is not None and principal.auth_type == AuthType.JWT:
+            if run_id and run is None:
+                raise ValueError("Run credential scope cannot be validated")
+            if workspace_id is not None and workspace_id != principal.workspace_id:
+                raise ValueError("Run workspace credential scope does not match principal")
+            if run_id and run is not None:
+                from ..infrastructure.postgres.workspace_scope import REFERENCE_OWN, reference_state
+
+                if reference_state("run_id", run_id, principal.workspace_id) != REFERENCE_OWN:
+                    raise ValueError("Run does not belong to principal workspace")
+            return principal.workspace_id
+    return workspace_id
+
+
+@contextmanager
+def workspace_credential_context_for_run(run_id: str) -> Iterator[UUID | None]:
+    """Bind a persisted run's validated credential scope to its job thread."""
+    workspace_id = workspace_credential_id_for_run(run_id)
+    token = _credential_workspace.set(workspace_id)
+    try:
+        yield workspace_id
+    finally:
+        _credential_workspace.reset(token)
+
+
+def validate_workspace_route(route: ResolvedRoute) -> None:
+    """Prevent a tenant credential from being sent to an arbitrary endpoint."""
+    connection = next(
+        (c for c in ProviderConnectionStore().list_connections() if c.id == route.provider_id),
+        None,
+    )
+    if (
+        connection is None
+        or not connection.enabled
+        or connection.transport != "http"
+        or connection.auth_mode != "api_key"
+    ):
+        raise ValueError("Workspace provider route is unavailable")
+    expected_url = canonical_connection_base_url(connection)
+    actual_url = route.base_url_sanitized
+    if not expected_url or normalize_endpoint_url(actual_url) != normalize_endpoint_url(expected_url):
+        raise ValueError("Workspace provider route endpoint does not match connection")
+
+
+def resolve_route_api_key(
+    route: ResolvedRoute,
+    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    *,
+    run_id: str | None = None,
+    workspace_id: UUID | None = None,
+) -> Optional[str]:
     """Resolve the API key for a resolved route.
     
     Connection-only routes use their bound secret reference. Other routes use a
@@ -508,6 +642,13 @@ def resolve_route_api_key(route: ResolvedRoute, llm_runtime: Optional[RuntimeLlm
     Returns:
         Optional[str]: The resolved API key, or None when no key is available.
     """
+    credential_workspace_id = workspace_id or workspace_credential_id_for_run(run_id)
+    if credential_workspace_id is not None:
+        validate_workspace_route(route)
+        return WorkspaceProviderCredentialsStore().get_plaintext(
+            credential_workspace_id, route.provider_id
+        )
+
     if route.provider_options.get("connection_only") is True:
         raw_secret_ref = route.provider_options.get("secret_ref")
         secret_ref = raw_secret_ref if isinstance(raw_secret_ref, str) else ""

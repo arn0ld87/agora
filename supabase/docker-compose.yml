@@ -196,10 +196,12 @@ services:
   # Abonnent nur, was die RLS-Policy fuer `authenticated` zulaesst. Kein
   # Host-Port und nicht im Netz `agora-backend`: erreichbar nur ueber das
   # Gateway (/realtime/v1/). Der Containername ist Absicht: Realtime liest die
-  # Tenant-ID aus der ersten Stelle des Hostnamens (`realtime-dev`), und die
-  # Gateway-Config zeigt auf genau diesen Namen.
+   # Tenant-ID aus der ersten Stelle des Hostnamens (`realtime-dev`), und die
+   # Gateway-Config zeigt auf den Netzwerk-Alias. Der Containername selbst
+   # bleibt eindeutig neben einem weiteren Supabase-Stack auf demselben Host.
   realtime:
-    container_name: realtime-dev.supabase-realtime
+    container_name: agora-supabase-realtime
+    hostname: realtime-dev.supabase-realtime
     image: ${REALTIME_IMAGE:-supabase/realtime:v2.134.10}
     restart: unless-stopped
     depends_on:
@@ -235,6 +237,10 @@ services:
       SEED_SELF_HOST: "true"
       RUN_JANITOR: "true"
       DISABLE_HEALTHCHECK_LOGGING: "true"
+    networks:
+      default:
+        aliases:
+          - realtime-dev.supabase-realtime
 
   # Storage. Ab Phase 7 fuer grosse immutable Artefakte (Plan §19).
   # imgproxy ist nicht Teil des Stacks, deshalb keine Bildtransformation.
@@ -379,3 +385,4 @@ networks:
   # Muss vorher existieren: `docker network create agora-backend`.
   agora-backend:
     external: true
+    name: ${AGORA_SUPABASE_BACKEND_NETWORK:-agora-backend}

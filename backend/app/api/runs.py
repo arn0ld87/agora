@@ -43,6 +43,8 @@ from ..services.llm_routing_seed import (
     prevalidate_ai_model_ref,
     resolve_route_api_key,
     seed_run_stage_routing,
+    workspace_credential_context_for_run,
+    workspace_credential_metadata,
 )
 from ..services.document_roles import load_document_roles
 from ..services.report_agent import ReportAgent, ReportManager
@@ -644,7 +646,7 @@ def _restart_graph_build(run: dict):
         linked_ids={"project_id": project_id},
         artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
         resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
-        metadata={"graph_name": graph_name},
+        metadata={"graph_name": graph_name, **workspace_credential_metadata()},
     ) as lifecycle:
         new_run = lifecycle.record
         task_manager = TaskManager()
@@ -825,7 +827,11 @@ def _restart_graph_build(run: dict):
                 )
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        threading.Thread(target=build_task, daemon=True).start()
+        def scoped_build_task():
+            with workspace_credential_context_for_run(new_run["run_id"]):
+                build_task()
+
+        threading.Thread(target=scoped_build_task, daemon=True).start()
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
@@ -863,7 +869,7 @@ def _restart_simulation_prepare(run: dict):
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
-        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
+        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name, **workspace_credential_metadata()},
     ) as lifecycle:
         new_run = lifecycle.record
         run_id = new_run["run_id"]
@@ -990,7 +996,11 @@ def _restart_simulation_prepare(run: dict):
                 task_manager.fail_task(task_id, str(exc))
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        threading.Thread(target=run_prepare, daemon=True).start()
+        def scoped_prepare_job():
+            with workspace_credential_context_for_run(new_run["run_id"]):
+                run_prepare()
+
+        threading.Thread(target=scoped_prepare_job, daemon=True).start()
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
@@ -1032,7 +1042,7 @@ def _resume_or_restart_simulation_run(run: dict):
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=state.branch_name,
-        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
+        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name, **workspace_credential_metadata()},
     ) as lifecycle:
         new_run = lifecycle.record
         # Finding F1 (Codex-Review Runde 3, PR #1476): requested_run_id ist
@@ -1202,7 +1212,11 @@ def _resume_report_generate(run: dict):
             task_manager.fail_task(task_id, str(exc))
 
     run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed", message_key="run.report_resumed")
-    threading.Thread(target=run_generate, daemon=True).start()
+    def scoped_run_generate():
+        with workspace_credential_context_for_run(run["run_id"]):
+            run_generate()
+
+    threading.Thread(target=scoped_run_generate, daemon=True).start()
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 
 
@@ -1333,6 +1347,7 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=branch_state.branch_name,
         metadata={
+            **workspace_credential_metadata(),
             "graph_id": branch_state.graph_id,
             "branch_name": branch_state.branch_name,
             **(

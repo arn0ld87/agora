@@ -35,6 +35,13 @@ from ..contracts.workspace_contract import (
     WorkspaceRole,
     WorkspaceSummary,
 )
+from ..contracts.workspace_provider_credentials_contract import (
+    WorkspaceProviderCredentialStatus,
+    WorkspaceProviderCredentialUpsert,
+    WorkspaceProviderCredentialsList,
+)
+from ..services.llm_provider_registry import LlmProviderRegistry
+from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
 from ..security.principal_context import (
     current_identity,
     current_principal,
@@ -335,3 +342,77 @@ def remove_member(user_id: str):
     except LastOwnerError:
         return json_error('last owner', status=409, code='last_owner')
     return json_success(WorkspaceMemberRemoval(user_id=target).model_dump(mode='json'))
+
+
+def _credential_principal(*, write: bool = False):
+    principal, error = _require_principal()
+    if error:
+        return None, error
+    if principal.auth_type != AuthType.JWT:
+        return None, json_error('forbidden', status=403, code='jwt_required')
+    if write and not principal.roles & _MANAGERS:
+        return None, json_error('forbidden', status=403, code='role_required')
+    return principal, None
+
+
+def _provider_accepts_workspace_key(provider_id: str) -> bool:
+    definition = LlmProviderRegistry.connection_definition(provider_id)
+    return bool(
+        definition is not None
+        and definition.auth_mode == 'api_key'
+        and definition.transport == 'http'
+        and definition.adapter_kind not in ('unsupported', 'anthropic')
+        and definition.default_base_url is not None
+    )
+
+
+@workspaces_bp.route('/current/provider-credentials', methods=['GET'])
+def list_workspace_provider_credentials():
+    principal, error = _credential_principal()
+    if error:
+        return error
+    entries = WorkspaceProviderCredentialsStore().list_entries(principal.workspace_id)
+    response = WorkspaceProviderCredentialsList(items=entries, total=len(entries))
+    return json_success(response.model_dump(mode='json'))
+
+
+@workspaces_bp.route('/current/provider-credentials/<provider_id>', methods=['PUT'])
+@_rate_limited
+def upsert_workspace_provider_credential(provider_id: str):
+    principal, error = _credential_principal(write=True)
+    if error:
+        return error
+    if not _provider_accepts_workspace_key(provider_id):
+        return json_error('unsupported provider', status=400, code='invalid_provider')
+    raw = _json_object()
+    if raw is None:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400)
+    try:
+        body = WorkspaceProviderCredentialUpsert.model_validate(raw)
+    except ValidationError:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400)
+    try:
+        status = WorkspaceProviderCredentialsStore().upsert(
+            principal.workspace_id,
+            provider_id,
+            api_key=body.api_key.get_secret_value(),
+        )
+    except RuntimeError:
+        logger.error('workspace provider credential store unavailable')
+        return json_error('credential store unavailable', status=503, code='store_unavailable')
+    return json_success(status.model_dump(mode='json'))
+
+
+@workspaces_bp.route('/current/provider-credentials/<provider_id>', methods=['DELETE'])
+@_rate_limited
+def delete_workspace_provider_credential(provider_id: str):
+    principal, error = _credential_principal(write=True)
+    if error:
+        return error
+    if not _provider_accepts_workspace_key(provider_id):
+        return json_error('unsupported provider', status=400, code='invalid_provider')
+    deleted = WorkspaceProviderCredentialsStore().delete(principal.workspace_id, provider_id)
+    if not deleted:
+        return json_error(ApiErrorCode.NOT_FOUND, status=404)
+    status = WorkspaceProviderCredentialStatus(provider_id=provider_id, configured=False)
+    return json_success(status.model_dump(mode='json'))

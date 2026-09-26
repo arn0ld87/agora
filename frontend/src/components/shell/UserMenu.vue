@@ -43,6 +43,9 @@
               <span class="user-menu__role">{{ t(`topbar.userMenu.role.${ws.role}`) }}</span>
             </DropdownMenuItem>
           </div>
+          <DropdownMenuItem @select="() => { close(); goTo('WorkspaceProviderKeys') }">
+            {{ t('topbar.userMenu.providerKeys') }}
+          </DropdownMenuItem>
         </template>
         <!-- Profil und Einstellungen sind prozessweiter Betreiber-Zustand
              (operator_only): für Supabase-Nutzer ausgeblendet (#1617). -->
@@ -140,7 +143,7 @@ const triggerLabel = computed(() =>
     : t('topbar.userMenu.triggerUnknown'),
 )
 
-function goTo(routeName: 'SettingsProfile' | 'SettingsGeneral'): void {
+function goTo(routeName: 'SettingsProfile' | 'SettingsGeneral' | 'WorkspaceProviderKeys'): void {
   router.push({ name: routeName })
 }
 

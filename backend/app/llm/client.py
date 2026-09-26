@@ -13,6 +13,7 @@ orchestration in ``app.llm.json_mode``, and native tool-calling in
 import os
 import re
 import time as _time_mod
+from uuid import UUID
 from typing import Literal, Optional, Dict, Any, List, Tuple
 from openai import OpenAI
 from pydantic import BaseModel
@@ -160,6 +161,13 @@ class LLMClient:
         # Ein übergebener api_key ohne explizite Annotation gilt als "passed_in"
         # (Caller hat den Key direkt übergeben), statt auf "unknown" durchzufallen.
         resolved_source: Optional[str] = (api_key_source or "passed_in") if api_key else None
+        from ..services.llm_routing_seed import workspace_credential_id_for_run
+
+        if workspace_credential_id_for_run(run_id) is not None:
+            use_active_config = False
+            allow_api_key_fallback = False
+            if not api_key or not base_url or not model:
+                raise ValueError("Workspace LLM route requires explicit model, endpoint and credential")
         active_provider_id: Optional[str] = None
         # Issue #1405: codex_cli hat weder base_url noch api_key — die
         # Ollama/Minimax-URL-Heuristiken und der OpenAI-SDK-Client-Bau
@@ -412,6 +420,7 @@ class LLMClient:
         timeout: float = 300.0,
         run_id: Optional[str] = None,
         api_key_override: Optional[str] = None,
+        workspace_id: UUID | None = None,
     ) -> "LLMClient":
         """Factory: create LLMClient from a resolved stage route.
 
@@ -420,6 +429,15 @@ class LLMClient:
         """
         base_url = route.base_url_sanitized
         connection_only = route.provider_options.get("connection_only") is True
+        from ..services.llm_routing_seed import (
+            validate_workspace_route,
+            workspace_credential_id_for_run,
+        )
+        from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
+
+        credential_workspace_id = workspace_id or workspace_credential_id_for_run(run_id)
+        if credential_workspace_id is not None:
+            validate_workspace_route(route)
 
         # Issue #1405 Codex-Review-Finding: der Provider-Typ der Route wurde
         # zwar hier nachgeschlagen (fuer die api_key-Aufloesung unten), aber
@@ -435,7 +453,12 @@ class LLMClient:
             None,
         )
         provider_type = _route_descriptor.type if _route_descriptor else None
-        if connection_only:
+        if credential_workspace_id is not None:
+            api_key = WorkspaceProviderCredentialsStore().get_plaintext(
+                credential_workspace_id, route.provider_id
+            )
+            api_key_source = "workspace_store" if api_key else None
+        elif connection_only:
             from ..services.secret_resolver import get_bound_store_api_key
 
             raw_secret_ref = route.provider_options.get("secret_ref")
@@ -452,7 +475,7 @@ class LLMClient:
         # If a secret resolver is provided, we try to get the real secrets.
         # This prevents leaking them into ResolvedRoute but allows LLMClient
         # to use them.
-        if secret_resolver and not connection_only:
+        if secret_resolver and not connection_only and credential_workspace_id is None:
             # Provider-Typ kommt aus dem Lookup oben (``_route_descriptor``) —
             # ResolvedRoute traegt selbst nur provider_id.
             if not api_key:
@@ -479,8 +502,8 @@ class LLMClient:
             route_provider_id=route.provider_id,
             provider_type=provider_type,
             api_key_source=api_key_source,
-            use_active_config=not connection_only,
-            allow_api_key_fallback=not connection_only,
+            use_active_config=not connection_only and credential_workspace_id is None,
+            allow_api_key_fallback=not connection_only and credential_workspace_id is None,
         )
 
     def _is_ollama(self) -> bool:

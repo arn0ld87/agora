@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import math
+from contextvars import copy_context
 from typing import Any, Dict, List
 
 
@@ -65,15 +66,17 @@ def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNo
         logger.info('Gevent detected: using cooperative Pool for %d parallel agent-config batches', len(batch_ranges))
         from gevent.pool import Pool
         pool = Pool(pool_size)
+        credential_context = copy_context()
         try:
-            batch_results = list(pool.map(run_batch, batch_ranges))
+            batch_results = list(pool.map(lambda item: credential_context.copy().run(run_batch, item), batch_ranges))
         finally:
             pool.join()
     else:
         from concurrent.futures import ThreadPoolExecutor
         logger.info('No gevent monkey-patching detected: using ThreadPoolExecutor for %d parallel agent-config batches', len(batch_ranges))
+        credential_context = copy_context()
         with ThreadPoolExecutor(max_workers=pool_size) as executor:
-            batch_results = list(executor.map(run_batch, batch_ranges))
+            batch_results = list(executor.map(lambda item: credential_context.copy().run(run_batch, item), batch_ranges))
     all_agent_configs: List[AgentActivityConfig] = []
     for batch_configs in batch_results:
         all_agent_configs.extend(batch_configs)
