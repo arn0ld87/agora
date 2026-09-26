@@ -18,6 +18,7 @@ from ..contracts.ai_provider_contract import AiModelRef
 from ..repositories.report_repository import get_report_repository
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 
 if TYPE_CHECKING:
@@ -244,6 +245,13 @@ def create_branch(
             "copy_profiles": copy_profiles,
             "copy_report_artifacts": copy_report_artifacts,
             "overrides": overrides,
+            # Finding H1 (#1688): ohne einen explizit persistierten
+            # credential_scope faellt die spaetere Routen-Aufloesung fuer
+            # diesen Run auf den Operator zurueck, sobald sie ausserhalb
+            # eines gebundenen Kontexts (z. B. ein spaeterer Request ohne
+            # Principal) laeuft — auch wenn der Branch von einem
+            # Workspace-Run abstammt.
+            **workspace_credential_metadata(),
         },
     )
     return branch

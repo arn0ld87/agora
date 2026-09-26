@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator, Mapping, Optional
+from typing import Iterator, Mapping, NamedTuple, Optional
 from uuid import UUID
 
 from flask import has_request_context
@@ -190,17 +190,31 @@ def _bind_connection_secret(
     Cloud-Connections (``auth_mode="api_key"``) ohne gebundenes ``secret_ref``
     werden hart abgelehnt — kein ``.env``-/Server-Key-Fallback, sonst wiche die
     Secret-Quelle von der gewählten Route ab (Issue #817). Lokale No-Auth-
-    Connections (``auth_mode="none"``) laufen hier nicht durch und bleiben
-    unberührt. Gemeinsame SSoT für den ``ai_model_ref``- und den
-    ``llm_profile_id``-Routing-Pfad, damit keiner der beiden die Bindung umgeht.
+    Connections (``auth_mode="none"``) laufen für Operator-Routen hier nicht
+    durch und bleiben unberührt. Gemeinsame SSoT für den ``ai_model_ref``- und
+    den ``llm_profile_id``-Routing-Pfad, damit keiner der beiden die Bindung
+    umgeht.
+
+    Finding H1 (Security-Review 2026-09-26, #1688): eine Workspace-Route
+    (JWT-Run) muss zuerst geprüft werden, unabhängig vom ``auth_mode`` der
+    Connection — ein keyless/lokaler ``auth_mode="none"``-Connection (z. B.
+    Ollama) in Workspace-Scope hätte hier vorher den frühen Operator-Return
+    getroffen und wäre nie gegen den Workspace-Credential-Store geprüft
+    worden. Ein Workspace-Run darf grundsätzlich nur an eine ``api_key``-
+    Connection mit ihrem eigenen, verschlüsselten Workspace-Key routen.
     """
-    if connection.auth_mode != "api_key":
-        return
     workspace_id = workspace_credential_id_for_run(None)
     if workspace_id is not None:
+        if connection.auth_mode != "api_key":
+            raise ValueError(
+                f"ProviderConnection {connection.id!r}: Workspace-Runs "
+                "dürfen nicht an eine keyless/lokale Connection routen"
+            )
         if not WorkspaceProviderCredentialsStore().get_plaintext(workspace_id, connection.id):
             raise ValueError("Workspace provider credential is missing")
         options["connection_only"] = True
+        return
+    if connection.auth_mode != "api_key":
         return
     if not connection.secret_ref:
         raise ValueError(
@@ -523,34 +537,65 @@ def seed_run_stage_routing(
     return config
 
 
+def demo_mode_enabled() -> bool:
+    """``AGORA_DEMO_MODE`` gate for the public demo instance (Finding H1/M1)."""
+    return os.environ.get("AGORA_DEMO_MODE", "").lower() in {"1", "true", "yes", "on"}
+
+
 def workspace_credential_metadata() -> dict[str, str]:
-    """Persist the verified JWT workspace before work leaves the request."""
+    """Persist this run's credential scope — operator or workspace — before
+    work leaves the request.
+
+    Finding H1 (Security-Review 2026-09-26, #1688): an *absent*
+    ``credential_scope`` used to mean "operator" implicitly, indistinguishable
+    from a run creation path that simply forgot to attach it. Persisting
+    ``"operator"`` explicitly here lets :func:`workspace_credential_id_for_run`
+    tell "deliberately operator-scoped" apart from "no scope was ever
+    recorded" and default-deny the latter on a demo instance instead of
+    silently granting operator credentials.
+    """
     if not has_request_context():
         return {}
     from ..security.principal_context import current_principal
 
     principal = current_principal()
     if principal is None or principal.auth_type != AuthType.JWT:
-        return {}
+        return {"credential_scope": "operator"}
     return {
         "credential_scope": "workspace",
         "credential_workspace_id": str(principal.workspace_id),
     }
 
 
-def _workspace_id_from_run_metadata(metadata: Mapping[str, object]) -> UUID | None:
+class _RunCredentialScope(NamedTuple):
+    """Resolved ``credential_scope`` of a run — ``explicit`` distinguishes a
+    deliberately recorded scope (operator or workspace) from a run whose
+    creation path never attached one (Finding H1)."""
+
+    workspace_id: UUID | None
+    explicit: bool
+
+
+_UNSCOPED = _RunCredentialScope(None, False)
+
+
+def _workspace_id_from_run_metadata(metadata: Mapping[str, object]) -> _RunCredentialScope:
     scope = metadata.get("credential_scope")
     raw_id = metadata.get("credential_workspace_id")
     if scope == "workspace":
         if not isinstance(raw_id, str):
             raise ValueError("Workspace credential scope has no workspace ID")
         try:
-            return UUID(raw_id)
+            return _RunCredentialScope(UUID(raw_id), True)
         except ValueError as exc:
             raise ValueError("Invalid workspace credential scope") from exc
+    if scope == "operator":
+        if raw_id is not None:
+            raise ValueError("Invalid workspace credential scope")
+        return _RunCredentialScope(None, True)
     if scope is not None or raw_id is not None:
         raise ValueError("Invalid workspace credential scope")
-    return None
+    return _UNSCOPED
 
 
 def _assert_run_workspace_owner(run_id: str, workspace_id: UUID, message: str) -> None:
@@ -560,52 +605,90 @@ def _assert_run_workspace_owner(run_id: str, workspace_id: UUID, message: str) -
         raise ValueError(message)
 
 
-def _persisted_workspace_for_run(run_id: str | None) -> tuple[bool, UUID | None]:
+def _persisted_workspace_for_run(run_id: str | None) -> tuple[bool, _RunCredentialScope]:
     if not run_id:
-        return False, None
+        return False, _UNSCOPED
     from .run_registry import RunRegistry
     from ..repositories.run_repository import get_run_repository
 
     record = get_run_repository(registry_dir=RunRegistry.REGISTRY_DIR).get(run_id)
     if record is None:
-        return False, None
-    workspace_id = _workspace_id_from_run_metadata(record.to_manifest().get("metadata") or {})
-    if workspace_id is not None:
+        return False, _UNSCOPED
+    scope = _workspace_id_from_run_metadata(record.to_manifest().get("metadata") or {})
+    if scope.workspace_id is not None:
         _assert_run_workspace_owner(
-            run_id, workspace_id, "Run workspace credential scope does not match persisted owner"
+            run_id, scope.workspace_id, "Run workspace credential scope does not match persisted owner"
         )
-    return True, workspace_id
+    return True, scope
 
 
 def _request_workspace_for_run(
-    run_id: str | None, run_exists: bool, persisted_workspace_id: UUID | None
-) -> UUID | None:
+    run_id: str | None, run_exists: bool, persisted: _RunCredentialScope
+) -> _RunCredentialScope:
     if not has_request_context():
-        return persisted_workspace_id
+        return persisted
     from ..security.principal_context import current_principal
 
     principal = current_principal()
     if principal is None or principal.auth_type != AuthType.JWT:
-        return persisted_workspace_id
+        # A live request without a JWT principal is an operator/legacy
+        # request (master token or open/no-auth mode) — an explicit signal,
+        # not a missing one.
+        return _RunCredentialScope(persisted.workspace_id, True)
     if run_id and not run_exists:
         raise ValueError("Run credential scope cannot be validated")
-    if persisted_workspace_id is not None and persisted_workspace_id != principal.workspace_id:
+    if persisted.workspace_id is not None and persisted.workspace_id != principal.workspace_id:
         raise ValueError("Run workspace credential scope does not match principal")
     if run_id and run_exists:
         _assert_run_workspace_owner(
             run_id, principal.workspace_id, "Run does not belong to principal workspace"
         )
-    return principal.workspace_id
+    return _RunCredentialScope(principal.workspace_id, True)
 
 
 def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
-    """Return a JWT run's validated workspace, including in background jobs."""
-    if run_id is None:
-        bound_workspace = _credential_workspace.get()
-        if bound_workspace is not None:
-            return bound_workspace
-    run_exists, persisted_workspace_id = _persisted_workspace_for_run(run_id)
-    return _request_workspace_for_run(run_id, run_exists, persisted_workspace_id)
+    """Return a JWT run's validated workspace, including in background jobs.
+
+    Finding H1: a bound context (:func:`workspace_credential_context_for_run`,
+    used by background job threads) is now consulted regardless of whether
+    ``run_id`` is given — the previous code only checked it when ``run_id``
+    was ``None``, so a background job that (correctly) passed its own
+    ``run_id`` through never saw its own bound scope and could fail open to
+    ``None`` (operator) whenever the persisted/request lookup came up empty.
+    A resolved scope that contradicts the bound one raises. When neither the
+    bound context nor the persisted/request lookup ever recorded an explicit
+    scope, this defaults to operator (unchanged legacy behaviour) — unless
+    ``AGORA_DEMO_MODE`` is enabled, where a missing scope is default-deny.
+    """
+    bound_workspace = _credential_workspace.get()
+    if bound_workspace is not None and run_id is None:
+        # Fast path, unchanged since before Finding H1: a background job
+        # already bound its validated scope for this thread/context — no
+        # need to re-derive it from persisted/request state.
+        return bound_workspace
+
+    run_exists, persisted = _persisted_workspace_for_run(run_id)
+    resolved = _request_workspace_for_run(run_id, run_exists, persisted)
+
+    if bound_workspace is not None:
+        # Finding H1: this branch (``run_id`` given) previously never
+        # consulted the bound value at all — a background job that
+        # (correctly) passed its own ``run_id`` through could fail open to
+        # ``None`` (operator) whenever the persisted/request lookup came up
+        # empty. A resolved scope that contradicts the bound one raises
+        # instead of silently overriding it.
+        if resolved.workspace_id is not None and resolved.workspace_id != bound_workspace:
+            raise ValueError(
+                "Bound workspace credential scope does not match resolved run workspace"
+            )
+        return bound_workspace
+
+    if resolved.workspace_id is None and not resolved.explicit and demo_mode_enabled():
+        raise ValueError(
+            "Run has no persisted credential scope — refusing the implicit "
+            "operator fallback on a demo instance"
+        )
+    return resolved.workspace_id
 
 
 @contextmanager
@@ -620,7 +703,16 @@ def workspace_credential_context_for_run(run_id: str) -> Iterator[UUID | None]:
 
 
 def validate_workspace_route(route: ResolvedRoute) -> None:
-    """Prevent a tenant credential from being sent to an arbitrary endpoint."""
+    """Prevent a tenant credential from being sent to an arbitrary endpoint.
+
+    Finding M3 (Security-Review 2026-09-26, #1688): a workspace key may only
+    reach a connection whose ``base_url`` is still the provider's registry
+    default — the same gate ``workspaces.py::list_workspace_available_models``
+    already applies when it surfaces routable connections. Without it, an
+    operator-edited (or -compromised) custom ``base_url`` on an otherwise
+    ordinary ``api_key`` connection would exfiltrate every workspace's key
+    that routes through it to an arbitrary endpoint.
+    """
     connection = next(
         (c for c in ProviderConnectionStore().list_connections() if c.id == route.provider_id),
         None,
@@ -632,6 +724,13 @@ def validate_workspace_route(route: ResolvedRoute) -> None:
         or connection.auth_mode != "api_key"
     ):
         raise ValueError("Workspace provider route is unavailable")
+    definition = LlmProviderRegistry.connection_definition(connection.provider_kind)
+    if (
+        definition is None
+        or definition.default_base_url is None
+        or connection.base_url != definition.default_base_url
+    ):
+        raise ValueError("Workspace provider route endpoint does not match connection")
     expected_url = canonical_connection_base_url(connection)
     actual_url = route.base_url_sanitized
     if not expected_url or normalize_endpoint_url(actual_url) != normalize_endpoint_url(expected_url):
