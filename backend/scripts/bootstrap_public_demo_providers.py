@@ -6,6 +6,7 @@ The script refuses any pre-existing operator secret or non-canonical connection.
 
 from __future__ import annotations
 
+from app.config import demo_mode_leaked_operator_vars
 from app.contracts.ai_provider_contract import ProviderConnectionUpsertRequest
 from app.contracts.llm_routing_contract import StageLLMRoute
 from app.services.llm_provider_registry import LlmProviderRegistry
@@ -20,6 +21,13 @@ _PROVIDERS = ("openai", "google", "minimax")
 
 
 def bootstrap_public_demo_providers() -> None:
+    leaked_operator_vars = demo_mode_leaked_operator_vars()
+    if leaked_operator_vars:
+        raise RuntimeError(
+            "operator provider env vars set, refusing to bootstrap: "
+            + ", ".join(leaked_operator_vars)
+        )
+
     secrets_store = LlmProviderSecretsStore()
     for provider_id in _PROVIDERS:
         if secrets_store.get_entry(provider_id) is not None:

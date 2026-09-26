@@ -45,6 +45,43 @@ NEO4J_PASSWORD_PLACEHOLDERS = frozenset({
     'password',
 })
 
+# Betreiber-Provider-Zugangsdaten, die die oeffentliche Demo-Instanz nie
+# halten oder nutzen darf (Workspace-BYOK-Modell, #1688). Geteilte Liste fuer
+# den Startup-Guard (siehe unten) und
+# ``backend/scripts/bootstrap_public_demo_providers.py``.
+DEMO_MODE_FORBIDDEN_ENV_VARS: tuple[str, ...] = (
+    'LLM_API_KEY',
+    'OPENAI_API_KEY',
+    'GEMINI_API_KEY',
+    'GOOGLE_API_KEY',
+    'MINIMAX_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'OPENROUTER_API_KEY',
+    'OLLAMA_API_KEY',
+    'EMBEDDING_API_KEY',
+    'LLM_BOOST_API_KEY',
+    'LLM_BASE_URL',
+    'LLM_BOOST_BASE_URL',
+)
+
+
+def is_demo_mode() -> bool:
+    """``AGORA_DEMO_MODE``-Gate, identisches Muster zu
+    ``app/api/simulation_common.py``/``app/services/llm_routing_seed.py``."""
+    return os.environ.get('AGORA_DEMO_MODE', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def demo_mode_leaked_operator_vars() -> list[str]:
+    """Namen der in ``AGORA_DEMO_MODE`` verbotenen, aber gesetzten Env-Vars.
+
+    Nur Namen, nie Werte — auch nicht in Fehlermeldungen oder Logs.
+    """
+    return [
+        name for name in DEMO_MODE_FORBIDDEN_ENV_VARS
+        if (os.environ.get(name) or '').strip()
+    ]
+
+
 # Metadaten-Backend (docs/plans/supabase.md §8). 'legacy' ist der heutige Weg:
 # Dateisystem und Neo4j tragen die Wahrheit. 'postgres' schaltet ab Phase 4
 # einzelne Stores auf die Datenbank um, Store fuer Store, nicht auf einmal.
