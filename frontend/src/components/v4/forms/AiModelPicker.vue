@@ -17,7 +17,7 @@
  *
  * Master-Prompt §6.1-6.3, ADR-0009, docs/epics/onboarding-provider-unification/slice-5-subplan.md
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AiModelPickerTestId as testIds } from '@/contracts/testIds'
 import {
@@ -45,6 +45,7 @@ import {
   type AiModelSource,
 } from '@/contracts/aiModelRef'
 import { useAvailableModels } from '@/composables/useAvailableModels'
+import { useOperatorAccess } from '@/composables/useOperatorAccess'
 
 const { t } = useI18n()
 
@@ -73,8 +74,35 @@ const emit = defineEmits<{
   'update:modelValue': [value: AiModelRef | null]
 }>()
 
-const { models: discoveredModels, loading, error, refresh: refreshDiscovery } = useAvailableModels()
+const { models: discoveredModels, providers, loading, error, refresh: refreshDiscovery } = useAvailableModels()
+const operatorAccess = useOperatorAccess()
+const customProviderId = ref('')
+const customModelId = ref('')
+const customProvider = computed(() => providers.value.find((provider) =>
+  provider.provider_connection_id === customProviderId.value,
+) ?? providers.value[0])
+const showCustomModel = computed(() => !operatorAccess.value && props.mode === 'chat')
 const refresh = (): Promise<void> => refreshDiscovery({ force: true })
+
+function hasControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
+function onCustomModel(): void {
+  const modelId = customModelId.value.trim()
+  const provider = customProvider.value
+  if (!provider || !modelId || modelId.length > 128 || hasControlCharacter(modelId)) return
+  emit('update:modelValue', {
+    provider_connection_id: provider.provider_connection_id,
+    model_id: modelId,
+    source: 'explicit',
+    capability_filter: 'chat',
+  })
+}
 
 /** Required-Capability je mode (Master-Prompt §5.4). */
 const REQUIRED_CAPABILITY: Record<AiModelPickerMode, AiCapability> = {
@@ -276,6 +304,12 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
     :data-disabled="disabled || undefined"
     :data-testid="testIds.root"
   >
+    <p v-if="error" class="ai-model-picker__error" role="alert">
+      {{ t('aiModelPicker.discoveryError') }}: {{ error }}
+      <button type="button" :disabled="loading" @click="refresh">
+        {{ t('aiModelPicker.retry') }}
+      </button>
+    </p>
     <ComboboxRoot
       :model-value="selectedId ?? ''"
       :disabled="disabled"
@@ -386,6 +420,23 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
         </ComboboxContent>
       </ComboboxPortal>
     </ComboboxRoot>
+    <form v-if="showCustomModel && providers.length" class="ai-model-picker__custom" @submit.prevent="onCustomModel">
+      <label>
+        {{ t('aiModelPicker.customProvider') }}
+        <select v-model="customProviderId" :disabled="disabled">
+          <option v-for="provider in providers" :key="provider.provider_connection_id" :value="provider.provider_connection_id">
+            {{ provider.display_name }}
+          </option>
+        </select>
+      </label>
+      <label>
+        {{ t('aiModelPicker.customModel') }}
+        <input v-model="customModelId" type="text" :disabled="disabled" maxlength="128" autocomplete="off" />
+      </label>
+      <button type="submit" :disabled="disabled || !customModelId.trim()">
+        {{ t('aiModelPicker.useCustomModel') }}
+      </button>
+    </form>
   </div>
 </template>
 

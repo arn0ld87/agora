@@ -27,6 +27,7 @@ INTERVIEW_PROMPT_PREFIX = (
 _LLM_TRIGGER_ENDPOINTS = {
     "simulation.generate_profiles",
     "simulation.prepare_simulation",
+    "simulation.start_simulation",
 }
 
 

@@ -10,7 +10,9 @@ from flask import jsonify, request
 
 from . import simulation_bp
 from ..config import Config
+from ..contracts.auth_contract import AuthType
 from ..models.project import ProjectManager
+from ..security.principal_context import current_principal
 from ..services.persona_review_service import PersonaReviewService
 from ..services.llm_routing_seed import (
     build_route_subprocess_env,
@@ -241,6 +243,35 @@ def _parse_budget_config(data: "dict[str, Any]") -> "RunBudgetConfig | None":
         ) from exc
 
 
+def _apply_demo_start_limits(
+    max_rounds: int | None, budget_config: "RunBudgetConfig | None"
+) -> tuple[int | None, "RunBudgetConfig | None"]:
+    """Enforce bounded JWT runs only on an explicitly enabled demo instance."""
+    if os.environ.get("AGORA_DEMO_MODE", "").lower() not in {"1", "true", "yes", "on"}:
+        return max_rounds, budget_config
+    principal = current_principal()
+    if principal is None or principal.auth_type != AuthType.JWT:
+        return max_rounds, budget_config
+    if max_rounds is not None and max_rounds > 5:
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="Demo simulations allow at most 5 rounds",
+            )
+        )
+
+    from ..contracts.run_budget_contract import RunBudgetConfig
+
+    budget = budget_config or RunBudgetConfig.model_validate({})
+    bounded_budget = budget.model_copy(update={
+        "enforcement": "hard",
+        "max_llm_calls": min(budget.max_llm_calls or 200, 200),
+        "max_duration_seconds": min(budget.max_duration_seconds or 1800, 1800),
+    })
+    return max_rounds or 5, bounded_budget
+
+
 def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
     """Phase 1 — Request-Payload validieren und in einen Container überführen.
 
@@ -260,6 +291,19 @@ def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
             json_error(
                 ApiErrorCode.INVALID_ID,
                 message="Invalid simulation_id format",
+            )
+        )
+    principal = current_principal()
+    if (
+        data.get('enable_graph_memory_update')
+        and principal is not None
+        and principal.auth_type == AuthType.JWT
+    ):
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.AUTH_FORBIDDEN,
+                status=403,
+                message="Graph memory update is unavailable for workspace simulations",
             )
         )
 
@@ -301,6 +345,8 @@ def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
         range_message="simulation_days must be between 1 and 365",
         type_message="simulation_days must be a valid integer",
     )
+
+    max_rounds, budget_config = _apply_demo_start_limits(max_rounds, budget_config)
 
     if platform not in ['twitter', 'reddit', 'parallel']:
         raise _StartRejected(

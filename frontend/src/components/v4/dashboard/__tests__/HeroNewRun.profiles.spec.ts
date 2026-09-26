@@ -3,6 +3,13 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { makeI18n, makeRouter } from './dashTestHelpers'
 
+const operator = vi.hoisted(() => ({ value: true }))
+const ensureLoaded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('@/composables/useOperatorAccess', async () => {
+  const { computed } = await import('vue')
+  return { useOperatorAccess: () => computed(() => operator.value) }
+})
+
 // Slice 5.4: AiModelPicker stubben (statt ModelPicker, der in 5.4 ersetzt wurde).
 vi.mock('../../forms/AiModelPicker.vue', () => ({
   default: {
@@ -92,13 +99,14 @@ vi.mock('@/composables/useEffectiveModelSelection', () => {
       effectiveRoute: { value: stubRoute },
       loading: { value: false },
       error: { value: null },
-      ensureLoaded: vi.fn().mockResolvedValue(undefined),
+      ensureLoaded,
       setGlobalSelection: vi.fn().mockResolvedValue(undefined),
     }),
   }
 })
 
 import { setPendingUpload } from '../../../../store/pendingUpload'
+import { fetchLlmProfiles } from '../../../../api/llmProfiles'
 import HeroNewRun from '../HeroNewRun.vue'
 
 // localStorage-Mock (Bun-Testrunner hat kein jsdom built-in) — HeroNewRun liest
@@ -120,6 +128,21 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
     setActivePinia(createPinia())
     vi.mocked(setPendingUpload).mockReset()
     window.localStorage.clear()
+    operator.value = true
+    ensureLoaded.mockClear()
+    vi.mocked(fetchLlmProfiles).mockClear()
+  })
+
+  it('JWT-Workspace lädt keine Betreiber-Profile oder globalen Defaults', async () => {
+    operator.value = false
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+    expect(fetchLlmProfiles).not.toHaveBeenCalled()
+    expect(ensureLoaded).not.toHaveBeenCalled()
+    expect(w.find('select#hero-profile').exists()).toBe(false)
+    expect(w.find('[data-testid="ai-model-picker"]').exists()).toBe(true)
   })
 
   it('rendert LLM-Profile aus API im Profile-Dropdown', async () => {

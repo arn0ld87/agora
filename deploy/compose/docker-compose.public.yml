@@ -5,6 +5,35 @@ services:
   agora:
     container_name: agora-demo
     ports: !reset []
+    cpus: 4.0
+    mem_limit: 8g
+    pids_limit: 512
+    environment:
+      - AGORA_DEMO_MODE=true
+      - EMBEDDING_BASE_URL=http://host.docker.internal:11434
+      - EMBEDDING_MODEL=nomic-embed-text
+      - VECTOR_DIM=768
+      # Kein Betreiber-Fallback: leere Basis-URL/Modell lassen
+      # StageModelRouter._provider_fallback_candidate None liefern, statt auf
+      # das Host-Ollama (inkl. abgerechneter Cloud-Modelle) zu zeigen.
+      - LLM_BASE_URL=
+      - LLM_MODEL_NAME=
+      - OPENAI_API_KEY=
+      - GOOGLE_API_KEY=
+      - GEMINI_API_KEY=
+      - MINIMAX_API_KEY=
+      - LLM_API_KEY=
+      - ANTHROPIC_API_KEY=
+      - OPENROUTER_API_KEY=
+      - OLLAMA_API_KEY=
+      - EMBEDDING_API_KEY=
+      - HF_TOKEN=
+      - AGORA_LLM_TRIGGER_RATE_LIMIT_MAX=2
+      - AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS=3600
+      - AGORA_REPORT_RATE_LIMIT_MAX=2
+      - AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS=3600
+      - AGORA_UPLOAD_RATE_LIMIT_MAX=5
+      - AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS=3600
     build:
       args:
         ALLOW_BUILD_TIME_TOKEN: "false"
@@ -12,14 +41,23 @@ services:
 
   redis:
     container_name: agora-demo-redis
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
 
   neo4j:
     container_name: agora-demo-neo4j
     ports: !reset []
+    cpus: 2.0
+    mem_limit: 6g
+    pids_limit: 256
 
   nginx:
     container_name: agora-demo-nginx
     ports: !reset []
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 64
     build:
       args:
         ALLOW_BUILD_TIME_TOKEN: "false"

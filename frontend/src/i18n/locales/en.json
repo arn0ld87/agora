@@ -1254,6 +1254,11 @@
     "loading": "Loading models …",
     "label": "AI model",
     "refresh": "Refresh models",
+    "discoveryError": "Models could not be loaded",
+    "retry": "Try again",
+    "customProvider": "Provider for custom model ID",
+    "customModel": "Custom model ID",
+    "useCustomModel": "Use model",
     "badge": {
       "local": "local",
       "cloud": "Cloud",

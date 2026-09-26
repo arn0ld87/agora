@@ -98,6 +98,7 @@ from app.contracts.workspace_contract import (
     WorkspaceSummary,
 )
 from app.contracts.workspace_provider_credentials_contract import (
+    WorkspaceAvailableModelsList,
     WorkspaceProviderCredentialStatus,
     WorkspaceProviderCredentialUpsert,
     WorkspaceProviderCredentialsList,
@@ -208,6 +209,7 @@ CONTRACTS: dict[str, type] = {
     "workspace-provider-credential-upsert.schema.json": WorkspaceProviderCredentialUpsert,
     "workspace-provider-credential-status.schema.json": WorkspaceProviderCredentialStatus,
     "workspace-provider-credentials-list.schema.json": WorkspaceProviderCredentialsList,
+    "workspace-available-models-list.schema.json": WorkspaceAvailableModelsList,
     "system-status-ollama.schema.json": SystemStatusOllama,
     "system-status-e2e.schema.json": SystemStatusE2E,
     # Neo4j-/Disk-Teilbaeume von /api/status (Issue #1466)

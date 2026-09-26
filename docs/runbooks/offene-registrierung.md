@@ -98,6 +98,24 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
      -f deploy/compose/docker-compose.public.yml up -d --build
    ```
 
+5. Im **Demo-Container** die kanonischen OpenAI-, Google- und MiniMax-
+   Provider-Verbindungen ohne Betreiber-Key anlegen. Der idempotente Bootstrap
+   verweigert vorhandene Betreiber-Secrets und fremde Base-URLs. Danach kann
+   jeder bestätigte Nutzer Modelle nur mit seinem eigenen Key abrufen:
+
+   ```bash
+   docker compose -p agora-demo -f docker-compose.yml -f docker-compose.prod.yml \
+     -f deploy/compose/docker-compose.prod-with-proxy.yml \
+     -f deploy/compose/docker-compose.supabase.yml \
+     -f deploy/compose/docker-compose.public.yml \
+     exec agora uv run python scripts/bootstrap_public_demo_providers.py
+   ```
+
+   Das Public-Overlay erzwingt lokale Ollama-Embeddings und leere globale
+   Cloud-Provider-Variablen. Es begrenzt CPU, RAM und Prozesse der Demo-Container,
+   drosselt kostspielige Starts und aktiviert JWT-Demo-Limits für Runden und
+   Laufbudgets. Die Betreiber-Instanz bleibt in ihrem eigenen Compose-Projekt.
+
 ## 4) Überprüfung
 
 ```bash
@@ -116,7 +134,7 @@ curl -s -X POST https://<agora-host>/api/workspaces/bootstrap \
 
 Danach im Browser mit einem bestätigten Testkonto anmelden, unter
 `/workspace/provider-keys` einen **eigenen** Provider-Key speichern und einen
-Graph-/Berichtslauf starten. Der Lauf muss ohne Browser-Konsole und ohne
+Provider und ein Modell auswählen und einen Graph-/Berichtslauf starten. Der Lauf muss ohne Browser-Konsole und ohne
 `AGORA_AUTH_TOKEN` funktionieren. Mit einem zweiten Konto kontrollieren, dass
 der erste Workspace, seine Artefakte und sein Key weder sichtbar noch nutzbar
 sind. Den Test-Key danach löschen. Eine ungeprüfte Veröffentlichung der

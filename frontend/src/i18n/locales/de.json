@@ -1254,6 +1254,11 @@
     "loading": "Modelle werden geladen …",
     "label": "KI-Modell",
     "refresh": "Modelle aktualisieren",
+    "discoveryError": "Modelle konnten nicht geladen werden",
+    "retry": "Erneut versuchen",
+    "customProvider": "Anbieter für eigene Modell-ID",
+    "customModel": "Eigene Modell-ID",
+    "useCustomModel": "Modell verwenden",
     "badge": {
       "local": "lokal",
       "cloud": "Cloud",

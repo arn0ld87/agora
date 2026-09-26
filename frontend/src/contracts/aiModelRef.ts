@@ -44,6 +44,16 @@ export const AiProviderKindSchema = z.enum([
   'ollama',
   'ollama_cloud',
   'openai',
+  'google',
+  'minimax',
+  'custom',
+  'opencode_go',
+  'github_copilot',
+  'bedrock',
+  'cloud',
+  'codex_cli',
+  'claude_cli',
+  'unknown',
   'anthropic',
   'gemini',
   'openai_compatible',
@@ -128,14 +138,7 @@ export interface AiModelRefInput {
   readonly unsupported_capabilities?: readonly AiCapability[]
 }
 
-export type AiProviderKind =
-  | 'ollama'
-  | 'ollama_cloud'
-  | 'openai'
-  | 'anthropic'
-  | 'gemini'
-  | 'openai_compatible'
-  | 'mock'
+export type AiProviderKind = z.infer<typeof AiProviderKindSchema>
 
 export type AiCapability =
   | 'chat'

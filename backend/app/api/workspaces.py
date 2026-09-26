@@ -36,11 +36,16 @@ from ..contracts.workspace_contract import (
     WorkspaceSummary,
 )
 from ..contracts.workspace_provider_credentials_contract import (
+    WorkspaceAvailableModel,
+    WorkspaceAvailableModelsList,
+    WorkspaceAvailableProvider,
     WorkspaceProviderCredentialStatus,
     WorkspaceProviderCredentialUpsert,
     WorkspaceProviderCredentialsList,
 )
 from ..services.llm_provider_registry import LlmProviderRegistry
+from ..services.provider_connection_store import ProviderConnectionStore
+from ..services.provider_connections.adapters import adapter_for_connection
 from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
 from ..security.principal_context import (
     current_identity,
@@ -373,6 +378,69 @@ def list_workspace_provider_credentials():
         return error
     entries = WorkspaceProviderCredentialsStore().list_entries(principal.workspace_id)
     response = WorkspaceProviderCredentialsList(items=entries, total=len(entries))
+    return json_success(response.model_dump(mode='json'))
+
+
+@workspaces_bp.route('/current/available-models', methods=['GET'])
+@_rate_limited
+def list_workspace_available_models():
+    """Discover models with this workspace's own keys, never operator secrets."""
+    principal, error = _credential_principal()
+    if error:
+        return error
+    credentials = WorkspaceProviderCredentialsStore()
+    connections = {c.id: c for c in ProviderConnectionStore().list_connections()}
+    providers: list[WorkspaceAvailableProvider] = []
+    models: list[WorkspaceAvailableModel] = []
+    for entry in credentials.list_entries(principal.workspace_id):
+        connection = connections.get(entry.provider_id)
+        definition = LlmProviderRegistry.connection_definition(entry.provider_id)
+        if (
+            not connection or not connection.enabled or not definition
+            or not _provider_accepts_workspace_key(entry.provider_id)
+            or connection.provider_kind != entry.provider_id
+            or connection.base_url != definition.default_base_url
+        ):
+            continue
+        provider = WorkspaceAvailableProvider(
+            provider_connection_id=connection.id,
+            provider_kind=connection.provider_kind,
+            display_name=connection.display_name,
+        )
+        providers.append(provider)
+        try:
+            api_key = credentials.get_plaintext(principal.workspace_id, entry.provider_id)
+            result = adapter_for_connection(connection.provider_kind).probe(connection, api_key)
+        except RuntimeError:
+            logger.error('workspace model discovery unavailable for provider=%s', entry.provider_id)
+            return json_error('model discovery unavailable', status=503, code='discovery_unavailable')
+        discovered = result.models
+        if discovered:
+            for model in discovered:
+                capabilities = model.capabilities.model_dump()
+                models.append(WorkspaceAvailableModel(
+                    **provider.model_dump(),
+                    model_id=model.model_id,
+                    model_label=model.display_name,
+                    source=model.source,
+                    status='available',
+                    local_or_cloud='cloud',
+                    capabilities=[name for name, value in capabilities.items() if value == 'supported'],
+                    unsupported_capabilities=[name for name, value in capabilities.items() if value == 'unsupported'],
+                    context_window=model.context_window,
+                ))
+        elif definition.fallback_models:
+            status = 'degraded' if result.status == 'degraded' else 'unavailable'
+            for model_id in definition.fallback_models:
+                models.append(WorkspaceAvailableModel(
+                    **provider.model_dump(),
+                    model_id=model_id,
+                    model_label=model_id,
+                    source='fallback',
+                    status=status,
+                    capabilities=[],
+                ))
+    response = WorkspaceAvailableModelsList(items=models, providers=providers, total=len(models))
     return json_success(response.model_dump(mode='json'))
 
 

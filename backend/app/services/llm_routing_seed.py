@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator, Optional
+from typing import Iterator, Mapping, Optional
 from uuid import UUID
 
 from flask import has_request_context
@@ -538,57 +538,74 @@ def workspace_credential_metadata() -> dict[str, str]:
     }
 
 
-def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
-    """Return a JWT run's validated workspace, including in background jobs."""
-    if run_id is None:
-        bound_workspace = _credential_workspace.get()
-        if bound_workspace is not None:
-            return bound_workspace
-    from .run_registry import RunRegistry
-    from ..repositories.run_repository import get_run_repository
-
-    record = (
-        get_run_repository(registry_dir=RunRegistry.REGISTRY_DIR).get(run_id)
-        if run_id
-        else None
-    )
-    run = record.to_manifest() if record is not None else None
-    metadata = (run or {}).get("metadata") or {}
+def _workspace_id_from_run_metadata(metadata: Mapping[str, object]) -> UUID | None:
     scope = metadata.get("credential_scope")
     raw_id = metadata.get("credential_workspace_id")
     if scope == "workspace":
         if not isinstance(raw_id, str):
             raise ValueError("Workspace credential scope has no workspace ID")
         try:
-            workspace_id = UUID(raw_id)
+            return UUID(raw_id)
         except ValueError as exc:
             raise ValueError("Invalid workspace credential scope") from exc
-        if run_id:
-            from ..infrastructure.postgres.workspace_scope import REFERENCE_OWN, reference_state
-
-            if reference_state("run_id", run_id, workspace_id) != REFERENCE_OWN:
-                raise ValueError("Run workspace credential scope does not match persisted owner")
-    elif scope is not None or raw_id is not None:
+    if scope is not None or raw_id is not None:
         raise ValueError("Invalid workspace credential scope")
-    else:
-        workspace_id = None
+    return None
 
-    if has_request_context():
-        from ..security.principal_context import current_principal
 
-        principal = current_principal()
-        if principal is not None and principal.auth_type == AuthType.JWT:
-            if run_id and run is None:
-                raise ValueError("Run credential scope cannot be validated")
-            if workspace_id is not None and workspace_id != principal.workspace_id:
-                raise ValueError("Run workspace credential scope does not match principal")
-            if run_id and run is not None:
-                from ..infrastructure.postgres.workspace_scope import REFERENCE_OWN, reference_state
+def _assert_run_workspace_owner(run_id: str, workspace_id: UUID, message: str) -> None:
+    from ..infrastructure.postgres.workspace_scope import REFERENCE_OWN, reference_state
 
-                if reference_state("run_id", run_id, principal.workspace_id) != REFERENCE_OWN:
-                    raise ValueError("Run does not belong to principal workspace")
-            return principal.workspace_id
-    return workspace_id
+    if reference_state("run_id", run_id, workspace_id) != REFERENCE_OWN:
+        raise ValueError(message)
+
+
+def _persisted_workspace_for_run(run_id: str | None) -> tuple[bool, UUID | None]:
+    if not run_id:
+        return False, None
+    from .run_registry import RunRegistry
+    from ..repositories.run_repository import get_run_repository
+
+    record = get_run_repository(registry_dir=RunRegistry.REGISTRY_DIR).get(run_id)
+    if record is None:
+        return False, None
+    workspace_id = _workspace_id_from_run_metadata(record.to_manifest().get("metadata") or {})
+    if workspace_id is not None:
+        _assert_run_workspace_owner(
+            run_id, workspace_id, "Run workspace credential scope does not match persisted owner"
+        )
+    return True, workspace_id
+
+
+def _request_workspace_for_run(
+    run_id: str | None, run_exists: bool, persisted_workspace_id: UUID | None
+) -> UUID | None:
+    if not has_request_context():
+        return persisted_workspace_id
+    from ..security.principal_context import current_principal
+
+    principal = current_principal()
+    if principal is None or principal.auth_type != AuthType.JWT:
+        return persisted_workspace_id
+    if run_id and not run_exists:
+        raise ValueError("Run credential scope cannot be validated")
+    if persisted_workspace_id is not None and persisted_workspace_id != principal.workspace_id:
+        raise ValueError("Run workspace credential scope does not match principal")
+    if run_id and run_exists:
+        _assert_run_workspace_owner(
+            run_id, principal.workspace_id, "Run does not belong to principal workspace"
+        )
+    return principal.workspace_id
+
+
+def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
+    """Return a JWT run's validated workspace, including in background jobs."""
+    if run_id is None:
+        bound_workspace = _credential_workspace.get()
+        if bound_workspace is not None:
+            return bound_workspace
+    run_exists, persisted_workspace_id = _persisted_workspace_for_run(run_id)
+    return _request_workspace_for_run(run_id, run_exists, persisted_workspace_id)
 
 
 @contextmanager

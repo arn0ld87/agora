@@ -25,6 +25,7 @@ import { toRunParamsQuery } from '../../../contracts/runParamsQuery'
 import { DocumentRoleSchema, type DocumentRole } from '../../../contracts/documentRoleContract'
 import { STORAGE_LANG } from '../../../composables/useEnvForm'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
+import { useOperatorAccess } from '@/composables/useOperatorAccess'
 import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
@@ -117,6 +118,7 @@ const STORAGE_HERO_ROUTE_LEGACY = 'agora.hero.route'
 // (routing/defaults.global via useEffectiveModelSelection), nicht mehr aus
 // einem eigenen localStorage-Key.
 const effectiveModel = useEffectiveModelSelection()
+const operatorAccess = useOperatorAccess()
 
 const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
 const selectedModel = ref<AiModelRef | null>(null)
@@ -372,13 +374,19 @@ onMounted(() => {
   removeLocal(STORAGE_HERO_ROUTE_LEGACY)
   // Phase-1 Konsolidierung: Default-Modell aus dem Kanon initialisieren, damit
   // der Dashboard-Start dieselbe Auswahl wie Settings zeigt.
-  effectiveModel
-    .ensureLoaded()
-    .then(() => {
-      if (!selectedModel.value) selectedModel.value = effectiveModel.effectiveRef.value
-    })
-    .catch(() => { /* Kanon nicht ladbar: Picker bleibt leer, Backend nutzt active-config */ })
-  fetchLlmProfiles()
+  if (!operatorAccess.value) {
+    // Workspace-Sessions dürfen prozessweite Profile und Defaults nicht lesen.
+    // Die Auswahl erfolgt im JWT-sicheren Picker als Run-Override.
+    discardPersistedProfile()
+    profilesSettled.value = true
+  } else {
+    effectiveModel
+      .ensureLoaded()
+      .then(() => {
+        if (!selectedModel.value) selectedModel.value = effectiveModel.effectiveRef.value
+      })
+      .catch(() => { /* Kanon nicht ladbar: Picker bleibt leer, Backend nutzt active-config */ })
+    fetchLlmProfiles()
     .then(profiles => {
       llmProfiles.value = profiles
       // Stale-Persistenz-Gate: `agora.hero.profileId` überlebt das Löschen des
@@ -394,7 +402,8 @@ onMounted(() => {
       // trotzdem zu senden waere geraten — der ModelPicker-Pfad greift.
       discardPersistedProfile()
     })
-    .finally(() => { profilesSettled.value = true })
+      .finally(() => { profilesSettled.value = true })
+  }
   // Neo4j-Readiness + Backend-Default-Language. Bei Fetch-Fehler bleibt
   // Neo4j pessimistisch auf false, bis die Bereitschaft bestätigt ist.
   getAvailableModels()
@@ -476,7 +485,7 @@ onMounted(() => {
 
       <!-- Zone 2: Model + Sprache -->
       <div class="hero-zone hero-config">
-        <div class="hero-field">
+        <div v-if="operatorAccess" class="hero-field">
           <label class="hero-label" for="hero-profile">
             {{ $t('dashboard.hero.profileLabel') }}
           </label>
