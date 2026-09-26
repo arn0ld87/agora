@@ -67,7 +67,8 @@ def _create_run_with_manifest(
     )
     run_id = run_id_override or run["run_id"]
 
-    # Manifest im Run-Verzeichnis schreiben
+    # Manifest im Run-Verzeichnis schreiben — inklusive der Replay-1:1-Parameter
+    # (Issue #1274 Punkt 3), sonst lehnt ``_replay_simulation_run`` mit 409 ab.
     run_dir = tmp_path / "runs" / run_id
     ManifestCapture.capture_draft(
         run_id=run_id,
@@ -78,8 +79,18 @@ def _create_run_with_manifest(
         graph_id="graph_001",
         agora_version="0.9.5",
         schema_version="1.0.0",
-        random_seed=42,
+        random_seed=None,
         simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "qwen3",
+                "provider": "conn-local",
+                "base_url": "http://localhost:1234/v1",
+            }
+        },
+        platform="parallel",
+        max_rounds=10,
+        enable_graph_memory_update=False,
     )
 
     return run
@@ -446,6 +457,145 @@ def test_replay_forwards_full_ai_model_ref_to_create_branch(env, monkeypatch):
     json.dumps(call_kwargs["overrides"])
     assert AiModelRef.model_validate(forwarded).provider_connection_id == "conn-gemini"
     assert forwarded["model_id"] == "gemini-2.5-pro"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1274 Punkt 3: 1:1-Replay von platform/max_rounds/graph-memory-update
+# ---------------------------------------------------------------------------
+
+
+def test_replay_uses_platform_max_rounds_and_graph_memory_update_from_manifest(env, monkeypatch):
+    """Vorher: SimulationRunner.start_simulation bekam hart platform="parallel"
+    und keinerlei max_rounds/enable_graph_memory_update/graph_id — Replay
+    reproduzierte das Original nicht, sondern lief mit Runner-Defaults."""
+    _, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Original-Manifest mit abweichenden Simulationsparametern überschreiben.
+    from app.services.manifest_capture import ManifestCapture
+
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    ManifestCapture.capture_draft(
+        run_id=run_id,
+        run_dir=run_dir,
+        seed_document_hash="sha256:abc",
+        seed_document_filename="test.md",
+        simulation_config_hash="sha256:def",
+        graph_id="graph_001",
+        agora_version="0.9.5",
+        schema_version="1.0.0",
+        random_seed=None,
+        simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "qwen3",
+                "provider": "conn-local",
+                "base_url": "http://localhost:1234/v1",
+            }
+        },
+        platform="twitter",
+        max_rounds=7,
+        enable_graph_memory_update=True,
+        memory_update_graph_id="graph_mem_9",
+    )
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+    assert resp.status_code == 202, resp.get_json()
+
+    call_kwargs = runner.start_simulation.call_args.kwargs
+    assert call_kwargs["platform"] == "twitter"
+    assert call_kwargs["max_rounds"] == 7
+    assert call_kwargs["enable_graph_memory_update"] is True
+    assert call_kwargs["graph_id"] == "graph_mem_9"
+
+
+def test_replay_old_manifest_without_simulation_params_returns_409(env):
+    """Ein Manifest vor Issue #1274 kennt platform/max_rounds/
+    enable_graph_memory_update nicht — stillschweigend Defaults zu setzen
+    würde einen 1:1-Replay vortäuschen, der nicht stattfindet. Ein ehrlicher
+    409 ist hier das Ehrlichere (vs. ein stiller deviation-Eintrag, der einen
+    bekannten Originalwert suggerieren würde, den es gar nicht gibt)."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Altes Manifest ohne "simulation"-Feld direkt schreiben (bypässt
+    # ManifestCapture, simuliert einen echten Vor-#1274-Altbestand).
+    manifest_path = os.path.join(str(env["tmp_path"]), "runs", run_id, "manifest.json")
+    with open(manifest_path) as f:
+        data = json.load(f)
+    del data["simulation"]
+    with open(manifest_path, "w") as f:
+        json.dump(data, f)
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 409, resp.get_json()
+    assert resp.get_json()["code"] == "manifest_missing_simulation_params"
+
+
+def test_replay_writes_its_own_manifest_with_deviations(env, monkeypatch):
+    """Vorher bekam ein Replay-Run gar kein eigenes Manifest — capture_final
+    fand später kein Draft und schluckte den Fehler still. Jetzt bekommt der
+    neue Run ein Draft-Manifest mit den Route-Abweichungen gegenüber dem
+    Original (die einzige überschreibbare Größe)."""
+    manager, _runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_dev")
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Original-Route weicht bewusst von der gestubbten Replay-Route ("qwen3")
+    # ab, damit der Modell-Override eine echte, prüfbare Abweichung erzeugt.
+    from app.services.manifest_capture import ManifestCapture
+
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    ManifestCapture.capture_draft(
+        run_id=run_id,
+        run_dir=run_dir,
+        seed_document_hash="sha256:abc",
+        seed_document_filename="test.md",
+        simulation_config_hash="sha256:def",
+        graph_id="graph_001",
+        agora_version="0.9.5",
+        schema_version="1.0.0",
+        random_seed=None,
+        simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "gpt-4o",
+                "provider": "conn-openai",
+                "base_url": "https://api.openai.com",
+            }
+        },
+        platform="parallel",
+        max_rounds=10,
+        enable_graph_memory_update=False,
+    )
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-gemini",
+                    "model_id": "gemini-2.5-pro",
+                }
+            }
+        },
+    )
+    assert resp.status_code == 202, resp.get_json()
+    new_run_id = resp.get_json()["run_id"]
+
+    new_manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run_id, "manifest.json")
+    assert os.path.exists(new_manifest_path), "Replay-Run muss ein eigenes Draft-Manifest bekommen"
+
+    with open(new_manifest_path) as f:
+        new_data = json.load(f)
+
+    assert new_data["replayed_from_run_id"] == run_id
+    assert new_data["simulation"]["platform"] == "parallel"
+    assert new_data["simulation"]["max_rounds"] == 10
+    deviation_fields = {d["field"] for d in new_data["deviations"]}
+    assert "model_id" in deviation_fields
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):

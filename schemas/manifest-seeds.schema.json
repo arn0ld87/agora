@@ -2,21 +2,33 @@
   "$id": "https://alexle135.de/schemas/manifest-seeds.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Random-Seed-Informationen.",
+  "description": "Random-Seed-Informationen.\n\n``random_seed`` ist ``Optional`` (Issue #1274 Punkt 1): Agora hat kein\nechtes RNG-Seed-Konzept (kein ``np.random.seed`` o.\u00e4.). Ein aus der\n``simulation_id`` abgeleiteter Platzhalter-Hash suggerierte hier\nReproduzierbarkeit, die nicht besteht \u2014 ``None`` ist die ehrliche\nAussage \"kein Seed vorhanden\". ``simulation_id_seed`` ist ``Optional``\naus demselben Grund: eine Legacy-Rekonstruktion ohne bekannte\n``simulation_id`` darf keinen fabrizierten Platzhalter (``\"legacy\"``)\ntragen.",
   "properties": {
     "random_seed": {
-      "title": "Random Seed",
-      "type": "integer"
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Random Seed"
     },
     "simulation_id_seed": {
-      "title": "Simulation Id Seed",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Simulation Id Seed"
     }
   },
-  "required": [
-    "random_seed",
-    "simulation_id_seed"
-  ],
   "title": "ManifestSeeds",
   "type": "object"
 }

@@ -5,12 +5,17 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+from app.contracts.ai_provider_contract import AiRoute, ai_route_from_stage_route
+from app.contracts.llm_routing_contract import StageLLMRoute
 from app.contracts.run_manifest_contract import (
+    AiRouteSnapshot,
+    ManifestDeviation,
     ManifestInputs,
     ManifestPrompts,
     ManifestRouting,
     ManifestRuntime,
     ManifestSeeds,
+    ManifestSimulationParams,
     ManifestVersions,
     PromptSnapshot,
     ReplayOverrides,
@@ -18,6 +23,7 @@ from app.contracts.run_manifest_contract import (
     ReplayResponse,
     RunManifest,
     StageRoute,
+    ai_route_snapshot_from_ai_route,
 )
 
 
@@ -329,3 +335,126 @@ class TestReplayResponse:
         resp = ReplayResponse(run_id="run_new123456", status="pending")
         data = resp.model_dump()
         assert data == {"run_id": "run_new123456", "status": "pending"}
+
+
+class TestAiRouteSnapshot:
+    """Issue #1274 Punkt 2: strikter Ersatz für das offene ai_route_snapshot-dict."""
+
+    def test_rejects_unknown_field(self):
+        """extra="forbid" — kein interner Transportkanal darf durchsickern."""
+        with pytest.raises(ValidationError):
+            AiRouteSnapshot(source="workspace", validated_capabilities={})
+
+    def test_builder_resolves_legacy_channel_and_strips_secret_ref(self):
+        stage_route = StageLLMRoute(
+            stage="simulation_rounds",
+            provider_id="conn-a",
+            model="gpt-4o",
+            temperature=0.3,
+            max_tokens=512,
+            reasoning_effort="high",
+            ai_model_ref_source="explicit",
+            provider_options={"secret_ref": "secret-1", "base_url": "https://api.openai.com"},
+        )
+        route = ai_route_from_stage_route(stage_route)
+        snapshot = ai_route_snapshot_from_ai_route(route)
+
+        assert snapshot.temperature == 0.3
+        assert snapshot.max_tokens == 512
+        assert snapshot.reasoning_effort == "high"
+        assert "__legacy_stage_route__" not in snapshot.provider_options
+        assert "secret_ref" not in snapshot.provider_options
+        assert snapshot.provider_options.get("base_url") == "https://api.openai.com"
+
+    def test_stage_route_tolerates_legacy_full_ai_route_dump(self):
+        """Ein vor #1274 geschriebenes Manifest trug den vollen AiRoute-Dump
+        (inkl. validated_capabilities/routing_version/resolved_at) als
+        ai_route_snapshot — das muss weiterhin lesbar bleiben."""
+        route = AiRoute(
+            stage="simulation_rounds",
+            provider_connection_id="conn-a",
+            model_id="gpt-4o",
+            source="workspace",
+            provider_options={
+                "__legacy_stage_route__": {
+                    "temperature": 0.5,
+                    "max_tokens": None,
+                    "reasoning_effort": "medium",
+                    "had_reserved_value": False,
+                    "reserved_value": None,
+                }
+            },
+        )
+        legacy_dump = route.model_dump(mode="json")
+        assert "validated_capabilities" in legacy_dump  # Fixture-Annahme
+
+        stage = StageRoute(model="gpt-4o", provider="openai", ai_route_snapshot=legacy_dump)
+        assert stage.ai_route_snapshot is not None
+        assert stage.ai_route_snapshot.source == "workspace"
+        assert stage.ai_route_snapshot.temperature == 0.5
+        assert stage.ai_route_snapshot.reasoning_effort == "medium"
+
+    def test_stage_route_drops_unrescuable_legacy_snapshot(self):
+        """Fehlt sogar 'source', ist der Altbestand nicht rettbar — None statt
+        eines ValidationError, der die gesamte Manifest-Lesekette bricht."""
+        stage = StageRoute(model="m", provider="p", ai_route_snapshot={"unrelated": "x"})
+        assert stage.ai_route_snapshot is None
+
+    def test_stage_route_base_url_is_optional(self):
+        """Issue #1274 Punkt 4: eine aus Run-Metadaten rekonstruierte Route
+        kennt oft nur Modell und Provider, nie die Basis-URL."""
+        stage = StageRoute(model="gemini-2.5-flash", provider="google")
+        assert stage.base_url is None
+
+
+class TestManifestSimulationParams:
+    """Issue #1274 Punkt 3: Replay-Parameter, 1:1 statt Runner-Defaults."""
+
+    def test_requires_platform_and_enable_graph_memory_update(self):
+        params = ManifestSimulationParams(platform="twitter", enable_graph_memory_update=False)
+        assert params.max_rounds is None
+        assert params.memory_update_graph_id is None
+
+    def test_manifest_simulation_defaults_to_none_for_backward_compat(self):
+        """Ein Manifest vor Issue #1274 kennt das Feld nicht — muss weiter lesbar sein."""
+        manifest = RunManifest(
+            schema_version=1,
+            run_id="run_abc123def456",
+            captured_at=datetime.now(timezone.utc),
+            inputs=ManifestInputs(
+                simulation_config_hash="sha256:def456",
+                graph_id="graph_001",
+            ),
+            versions=ManifestVersions(agora_version="0.9.5", schema_version="1.0.0"),
+            routing=ManifestRouting(stages={}),
+            prompts=ManifestPrompts(entries={}),
+            seeds=ManifestSeeds(),
+            status="draft",
+        )
+        assert manifest.simulation is None
+        assert manifest.deviations == []
+
+
+class TestManifestInputsOptionalSeedFields:
+    """Issue #1274 Punkt 6: seed_document_hash/filename sind Optional."""
+
+    def test_seed_document_fields_default_to_none(self):
+        inputs = ManifestInputs(simulation_config_hash="sha256:def", graph_id="graph_001")
+        assert inputs.seed_document_hash is None
+        assert inputs.seed_document_filename is None
+
+
+class TestManifestDeviation:
+    """Issue #1274 Punkt 3: dokumentierte Replay-Abweichungen."""
+
+    def test_records_field_original_and_replay(self):
+        deviation = ManifestDeviation(field="model_id", original="gpt-4o", replay="gemini-2.5-pro")
+        assert deviation.model_dump() == {
+            "field": "model_id",
+            "original": "gpt-4o",
+            "replay": "gemini-2.5-pro",
+        }
+
+    def test_rejects_extra_fields(self):
+        with pytest.raises(ValidationError):
+            ManifestDeviation(field="x", geheim="y")  # type: ignore[call-arg]

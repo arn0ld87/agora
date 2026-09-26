@@ -1,25 +1,157 @@
 {
+  "$defs": {
+    "AiRouteSnapshot": {
+      "additionalProperties": false,
+      "description": "Strikter Manifest-Snapshot einer aufgel\u00f6sten ``AiRoute`` (Issue #1274 Punkt 2).\n\nErsetzt das vorherige offene ``dict[str, Any]``: der interne\n``__legacy_stage_route__``-Transportkanal von :class:`AiRoute` (siehe\n``ai_provider_contract.stage_route_from_ai_route``) ist hier bereits\naufgel\u00f6st \u2014 ``temperature``/``max_tokens``/``reasoning_effort`` liegen auf\noberster Ebene \u2014 und secret-tragende Provider-Optionen sind entfernt.\n``extra=\"forbid\"`` lehnt jedes weitere Feld ab, damit kein k\u00fcnftiger\ninterner Transportkanal ungepr\u00fcft ins Manifest durchsickert.",
+      "properties": {
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Id"
+        },
+        "provider_connection_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Connection Id"
+        },
+        "provider_options": {
+          "additionalProperties": true,
+          "title": "Provider Options",
+          "type": "object"
+        },
+        "reasoning_effort": {
+          "default": "none",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Reasoning Effort",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "profile",
+            "stage_override",
+            "run_override",
+            "project",
+            "workspace",
+            "provider_fallback",
+            "runtime",
+            "legacy"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "enum": [
+                "document_ingest",
+                "ontology_generation",
+                "graph_build",
+                "persona_generation",
+                "simulation_rounds",
+                "report_generation",
+                "evaluation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "AiRouteSnapshot",
+      "type": "object"
+    }
+  },
   "$id": "https://alexle135.de/schemas/stage-route.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Pro-Stage-Modell- und Provider-Information (ohne Secrets).",
+  "description": "Pro-Stage-Modell- und Provider-Information (ohne Secrets).\n\n``base_url`` ist ``Optional`` (Issue #1274 Punkt 4): eine aus\nRun-Metadaten rekonstruierte Legacy-Route kennt oft nur Modell und\nProvider, nie die Basis-URL der Verbindung.",
   "properties": {
     "ai_route_snapshot": {
       "anyOf": [
         {
-          "additionalProperties": true,
-          "type": "object"
+          "$ref": "#/$defs/AiRouteSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Ai Route Snapshot"
-    },
-    "base_url": {
-      "title": "Base Url",
-      "type": "string"
+      "title": "Base Url"
     },
     "model": {
       "title": "Model",
@@ -32,8 +164,7 @@
   },
   "required": [
     "model",
-    "provider",
-    "base_url"
+    "provider"
   ],
   "title": "StageRoute",
   "type": "object"
