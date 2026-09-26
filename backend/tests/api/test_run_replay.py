@@ -64,6 +64,7 @@ def _create_run_with_manifest(
     run_id_override: str | None = None,
     status: str = "completed",
     max_rounds: int = 10,
+    enable_graph_memory_update: bool = False,
 ) -> dict[str, Any]:
     """Erzeugt einen Run mit Draft-Manifest im Run-Verzeichnis."""
     run = registry.create_run(
@@ -99,7 +100,8 @@ def _create_run_with_manifest(
         },
         platform="parallel",
         max_rounds=max_rounds,
-        enable_graph_memory_update=False,
+        enable_graph_memory_update=enable_graph_memory_update,
+        memory_update_graph_id="graph_mem" if enable_graph_memory_update else None,
     )
 
     return run
@@ -244,6 +246,38 @@ def test_replay_rejects_unbounded_manifest_in_demo_mode(env, monkeypatch):
         f"Erwartet 400, erhalten: {resp.status_code} — {resp.get_json()}"
     )
     assert resp.get_json()["code"] == "demo_limit_exceeded"
+    manager.create_branch.assert_not_called()
+    runner.start_simulation.assert_not_called()
+
+
+def test_replay_rejects_graph_memory_update_for_jwt_principal(env, monkeypatch):
+    """#1688 Runde 3: ``/simulation/start`` sperrt das Graph-Memory-Update
+    fuer JWT-Principals mit 403 — ein Replay eines Runs, der es aktiv hatte,
+    darf diese Sperre nicht umgehen."""
+    from uuid import UUID
+
+    from app.contracts.auth_contract import AuthType, Principal
+    from app.contracts.workspace_contract import WorkspaceRole
+    from app.security.principal_context import set_principal
+
+    @env["app"].before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(
+        env["registry"], env["tmp_path"], max_rounds=3, enable_graph_memory_update=True
+    )
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/replay")
+
+    assert resp.status_code == 403, resp.get_json()
+    assert resp.get_json()["code"] == "auth_forbidden"
     manager.create_branch.assert_not_called()
     runner.start_simulation.assert_not_called()
 

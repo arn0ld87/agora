@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from . import runs_bp
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
+from ..contracts.auth_contract import AuthType
 from ..contracts.job_lease_contract import JobLease
 from ..contracts.runs_contract import (
     RunDetail,
@@ -63,6 +64,8 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.stage_model_router import StageModelRouter
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
+from ..security.principal_context import current_principal
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.endpoints import is_local_endpoint
 from ..utils.llm_client import LLMClient
@@ -1400,6 +1403,22 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             "predates Issue #1274 and cannot be replayed 1:1.",
             status=409,
             code="manifest_missing_simulation_params",
+        )
+
+    # #1688 Runde 3: ``/simulation/start`` verweigert JWT-Principals das
+    # Graph-Memory-Update (403) — ein Replay eines Runs, der es aktiv hatte,
+    # darf diese Sperre nicht umgehen. Ehrlicher 403 statt stillem Abschalten,
+    # das den 1:1-Replay-Versprechen widerspraeche.
+    principal = current_principal()
+    if (
+        manifest.simulation.enable_graph_memory_update
+        and principal is not None
+        and principal.auth_type == AuthType.JWT
+    ):
+        return json_error(
+            ApiErrorCode.AUTH_FORBIDDEN,
+            status=403,
+            message="Graph memory update is unavailable for workspace simulations",
         )
 
     # Finding M1 (#1688): ein Demo-JWT-Run darf die Rundenobergrenze aus

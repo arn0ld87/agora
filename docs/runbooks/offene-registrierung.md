@@ -111,7 +111,9 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
      exec agora uv run python scripts/bootstrap_public_demo_providers.py
    ```
 
-   Das Public-Overlay erzwingt lokale Ollama-Embeddings und leere globale
+   Das Public-Overlay erzwingt lokale Ollama-Embeddings (Owner-Entscheidung:
+   Besucher-Embeddings laufen über das Betreiber-Ollama mit `nomic-embed-text`,
+   `EMBEDDING_BASE_URL` ist deshalb erlaubt) und leere globale
    Cloud-Provider-Variablen. Es begrenzt CPU, RAM und Prozesse der Demo-Container,
    drosselt kostspielige Starts und aktiviert JWT-Demo-Limits für Runden und
    Laufbudgets. Die Betreiber-Instanz bleibt in ihrem eigenen Compose-Projekt.
@@ -120,7 +122,10 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
    `LLM_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`,
    `MINIMAX_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`,
    `OLLAMA_API_KEY`, `EMBEDDING_API_KEY`, `LLM_BOOST_API_KEY`, `LLM_BASE_URL`,
-   `LLM_BOOST_BASE_URL`. Im Demo-Modus (`AGORA_DEMO_MODE=true`) verweigert das
+   `LLM_BOOST_BASE_URL`, `TAVILY_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+   `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE_URL`. Dasselbe gilt
+   für `backend/instance/settings.json` des Demo-Checkouts: dort persistierte
+   Keys zählen wie Env-Vars. Im Demo-Modus (`AGORA_DEMO_MODE=true`) verweigert das
    Backend sonst den Start (#1688) — Besucher-Keys leben ausschließlich im
    verschlüsselten Workspace-Credential-Store, nie in der Prozessumgebung des
    Betreibers. `enable_graph_memory_update` steht Besuchern nicht zur

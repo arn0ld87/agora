@@ -23,8 +23,20 @@ def _test_value(name: str) -> str:
 
 
 def _clear_all_forbidden_vars(monkeypatch):
+    from pathlib import Path
+
+    from app.services import settings_layer
+
     for name in DEMO_MODE_FORBIDDEN_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+    # Eine echte backend/instance/settings.json des Testhosts darf das
+    # Ergebnis nicht beeinflussen.
+    monkeypatch.setattr(
+        settings_layer, "get_default_service",
+        lambda: settings_layer.SettingsService(
+            instance_path=Path("/nonexistent-agora-test/settings.json")
+        ),
+    )
 
 
 def test_demo_mode_refuses_startup_with_operator_key_set(monkeypatch):
@@ -43,6 +55,60 @@ def test_demo_mode_refuses_startup_with_operator_key_set(monkeypatch):
 
     assert "AGORA_DEMO_MODE" in str(excinfo.value)
     assert secret_value not in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["TAVILY_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "OLLAMA_BASE_URL",
+     "OPENAI_BASE_URL", "OPENAI_API_BASE_URL"],
+)
+def test_demo_mode_forbids_round3_operator_vars(monkeypatch, name):
+    """#1688 Runde 3: Web-Recherche-, Claude-CLI- und OpenAI-/Ollama-
+    Endpunkt-Vars zaehlen ebenfalls als Betreiber-Zugang."""
+    from app.config import demo_mode_leaked_operator_vars
+
+    _clear_all_forbidden_vars(monkeypatch)
+    monkeypatch.setenv(name, _test_value(name.lower()))
+
+    assert demo_mode_leaked_operator_vars() == [name]
+
+
+def test_demo_mode_embedding_base_url_stays_allowed(monkeypatch):
+    """Owner-Entscheidung: Demo-Embeddings laufen ueber das lokale
+    Betreiber-Ollama, EMBEDDING_BASE_URL ist deshalb nicht gesperrt."""
+    from app.config import demo_mode_leaked_operator_vars
+
+    _clear_all_forbidden_vars(monkeypatch)
+    monkeypatch.setenv("EMBEDDING_BASE_URL", "http://host.docker.internal:11434")
+
+    assert demo_mode_leaked_operator_vars() == []
+
+
+def test_demo_mode_detects_operator_key_in_settings_json(monkeypatch, tmp_path):
+    """Der Settings-Layer legt instance/settings.json ueber die Env — ein
+    dort persistierter Key ist genauso ein Betreiber-Zugang. Gemeldet wird
+    nur der Name, nie der Wert."""
+    import json
+
+    from app.config import demo_mode_leaked_operator_vars
+    from app.services import settings_layer
+
+    _clear_all_forbidden_vars(monkeypatch)
+    secret_value = _test_value("settings-file-key")
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(
+        json.dumps({"LLM_API_KEY": secret_value, "LLM_MODEL_NAME": "x"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        settings_layer, "get_default_service",
+        lambda: settings_layer.SettingsService(instance_path=settings_file),
+    )
+
+    leaked = demo_mode_leaked_operator_vars()
+
+    assert leaked == ["instance/settings.json:LLM_API_KEY"]
+    assert secret_value not in " ".join(leaked)
 
 
 def test_demo_mode_succeeds_without_operator_keys(monkeypatch):

@@ -62,6 +62,16 @@ DEMO_MODE_FORBIDDEN_ENV_VARS: tuple[str, ...] = (
     'LLM_BOOST_API_KEY',
     'LLM_BASE_URL',
     'LLM_BOOST_BASE_URL',
+    # #1688 Runde 3: weitere Betreiber-Zugaenge, die ein Workspace-Lauf sonst
+    # still mitbenutzen koennte (Web-Recherche, Claude-CLI-Session,
+    # OpenAI-/Ollama-Endpunkte fuer OASIS und Legacy-Clients).
+    # EMBEDDING_BASE_URL fehlt bewusst: Demo-Embeddings laufen per
+    # Owner-Entscheidung ueber das lokale Betreiber-Ollama (Runbook).
+    'TAVILY_API_KEY',
+    'CLAUDE_CODE_OAUTH_TOKEN',
+    'OLLAMA_BASE_URL',
+    'OPENAI_BASE_URL',
+    'OPENAI_API_BASE_URL',
 )
 
 
@@ -75,11 +85,23 @@ def demo_mode_leaked_operator_vars() -> list[str]:
     """Namen der in ``AGORA_DEMO_MODE`` verbotenen, aber gesetzten Env-Vars.
 
     Nur Namen, nie Werte — auch nicht in Fehlermeldungen oder Logs.
+
+    Prueft neben ``os.environ`` auch ``instance/settings.json``: der
+    Settings-Layer legt Datei-Werte ueber die Env, ein dort persistierter
+    Betreiber-Key waere sonst ein stiller Fallback trotz leerer ``.env``.
     """
-    return [
+    leaked = [
         name for name in DEMO_MODE_FORBIDDEN_ENV_VARS
         if (os.environ.get(name) or '').strip()
     ]
+    from .services.settings_layer import get_default_service
+
+    file_layer = get_default_service()._read_file_layer()
+    for name in DEMO_MODE_FORBIDDEN_ENV_VARS:
+        value = file_layer.get(name)
+        if value is not None and str(value).strip():
+            leaked.append(f'instance/settings.json:{name}')
+    return leaked
 
 
 # Metadaten-Backend (docs/plans/supabase.md §8). 'legacy' ist der heutige Weg:

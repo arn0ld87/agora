@@ -568,8 +568,14 @@ def seed_run_stage_routing(
 
 
 def demo_mode_enabled() -> bool:
-    """``AGORA_DEMO_MODE`` gate for the public demo instance (Finding H1/M1)."""
-    return os.environ.get("AGORA_DEMO_MODE", "").lower() in {"1", "true", "yes", "on"}
+    """``AGORA_DEMO_MODE`` gate for the public demo instance (Finding H1/M1).
+
+    Delegates to :func:`app.config.is_demo_mode` so the startup guard and the
+    request-time gates can never disagree on the same env value.
+    """
+    from ..config import is_demo_mode
+
+    return is_demo_mode()
 
 
 def workspace_credential_metadata() -> dict[str, str]:
