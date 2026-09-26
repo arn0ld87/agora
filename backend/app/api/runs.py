@@ -64,6 +64,7 @@ from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.stage_model_router import StageModelRouter
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
 from ..utils.api_responses import handle_api_errors, json_error, json_success
+from ..utils.endpoints import is_local_endpoint
 from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
@@ -1006,6 +1007,33 @@ def _restart_simulation_prepare(run: dict):
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
 
+def _reject_if_route_api_key_missing(resolved_route, resolved_api_key):
+    """Fail-closed guard mirroring ``simulation_run._resolve_start_route``.
+
+    A workspace-scoped run without a resolvable key must never fall through
+    to an operator-configured route. Session-auth (CLI) providers and local
+    endpoints do not require a key and are exempt, exactly like the initial
+    start path. Returns a ready ``json_error(...)`` response, or ``None``.
+    """
+    from ..services.llm_provider_registry import LlmProviderRegistry
+
+    is_session_auth = LlmProviderRegistry.uses_session_auth(resolved_route.provider_id)
+    if (
+        resolved_api_key is None
+        and not is_session_auth
+        and not is_local_endpoint(resolved_route.base_url_sanitized)
+    ):
+        return json_error(
+            f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+            f"für Provider '{resolved_route.provider_id}'. "
+            "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+            "oder im Sitzungsfeld eingeben.",
+            status=422,
+            code="provider_api_key_missing",
+        )
+    return None
+
+
 def _resume_or_restart_simulation_run(run: dict):
     simulation_id = _linked_or_entity_id(run, "simulation_id", "simulation_id")
     manager = SimulationManager()
@@ -1027,6 +1055,28 @@ def _resume_or_restart_simulation_run(run: dict):
         )
         return {"run_id": run["run_id"], "status": "processing", "message": "Simulation resumed"}
 
+    # Finding H2 (#1688): a restart previously called
+    # ``SimulationRunner.start_simulation`` bare — no route, no
+    # ``runtime_env``, no demo round/budget cap. It inherited the OASIS
+    # subprocess's whitelisted backend env instead of a workspace-scoped
+    # key, i.e. a JWT visitor's restart could run on operator credentials.
+    # Resolve the same locked stage route the original run used
+    # (``StageModelRouter(run_id)`` returns the snapshot ``lock_stage``
+    # persisted at start — no re-seeding needed), resolve its API key with
+    # the same fail-closed guard as ``/simulation/start``, and cap
+    # max_rounds/budget for a demo JWT visitor exactly like a fresh start.
+    route_router = StageModelRouter(run["run_id"])
+    resolved_route = route_router.resolve("simulation_rounds")
+    resolved_api_key = resolve_route_api_key(resolved_route, None, run_id=run["run_id"])
+    key_error = _reject_if_route_api_key_missing(resolved_route, resolved_api_key)
+    if key_error is not None:
+        return key_error
+
+    try:
+        max_rounds, budget_config = apply_demo_run_limits(None, None)
+    except DemoLimitExceededError as exc:
+        return json_error(exc.message, status=400, code="demo_limit_exceeded")
+
     # Issue #1183: Der Run-Record entsteht VOR dem Prozessstart im
     # Lifecycle-Fenster — schlägt der Start fehl, existiert ein failed-Record
     # statt gar keinem (vorher: create_run erst nach start_simulation).
@@ -1046,6 +1096,12 @@ def _resume_or_restart_simulation_run(run: dict):
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name, **workspace_credential_metadata()},
     ) as lifecycle:
         new_run = lifecycle.record
+        from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+        from .simulation_run import _apply_budget_to_simulation
+
+        _apply_budget_to_simulation(
+            simulation_id, new_run["run_id"], budget_config, _set_run_budget_config
+        )
         # Finding F1 (Codex-Review Runde 3, PR #1476): requested_run_id ist
         # run["run_id"] — der urspruenglich angefragte, hier zu resumierende
         # (moeglicherweise verwaiste) Run, NICHT das gerade eben angelegte
@@ -1053,7 +1109,13 @@ def _resume_or_restart_simulation_run(run: dict):
         # Weitergabe koennte die Stale-Korrektur bei mehreren historischen
         # "processing"-Manifesten einen falschen, neueren Run treffen.
         new_run_state = SimulationRunner.start_simulation(
-            simulation_id=simulation_id, platform="parallel", requested_run_id=run["run_id"]
+            simulation_id=simulation_id,
+            platform="parallel",
+            max_rounds=max_rounds,
+            requested_run_id=run["run_id"],
+            runtime_env=build_route_subprocess_env(
+                resolved_route, resolved_api_key, new_run["run_id"]
+            ),
         )
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
@@ -1727,7 +1789,13 @@ def resume_run(run_id: str):
     elif run_type == "simulation_prepare":
         data = _restart_simulation_prepare(run)
     elif run_type == "simulation_run":
-        data = _resume_or_restart_simulation_run(run)
+        # _resume_or_restart_simulation_run kann bei fehlendem Workspace-Key
+        # oder ueberschrittenem Demo-Limit direkt eine Fehler-Response
+        # zurueckgeben (Finding H2, #1688) — in dem Fall weiterleiten.
+        result = _resume_or_restart_simulation_run(run)
+        if not isinstance(result, dict):
+            return result
+        data = result
     elif run_type == "report_generate":
         # _resume_report_generate kann bei fehlendem LLM-Key direkt eine
         # Fehler-Response (Tuple) zurückgeben — in dem Fall weiterleiten.
