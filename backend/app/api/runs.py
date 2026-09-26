@@ -46,6 +46,7 @@ from ..services.llm_routing_seed import (
     workspace_credential_context_for_run,
     workspace_credential_metadata,
 )
+from .simulation_common import DemoLimitExceededError, apply_demo_run_limits
 from ..services.document_roles import load_document_roles
 from ..services.report_agent import ReportAgent, ReportManager
 from ..services.report_agent.output_contract import is_deliverable_report_status
@@ -1276,6 +1277,16 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             status=409,
             code="manifest_missing_simulation_params",
         )
+
+    # Finding M1 (#1688): ein Demo-JWT-Run darf die Rundenobergrenze aus
+    # ``/simulation/start`` nicht per Replay eines älteren, nicht gedeckelten
+    # Runs umgehen. Ein stiller Cap wäre hier zudem ein 1:1-Replay-Versprechen
+    # (Manifest-Kommentar oben), das die tatsächlich gefahrenen Runden nicht
+    # mehr widerspiegelt — deshalb ehrlicher 400 statt stillem Downgrade.
+    try:
+        apply_demo_run_limits(manifest.simulation.max_rounds, None)
+    except DemoLimitExceededError as exc:
+        return json_error(exc.message, status=400, code="demo_limit_exceeded")
 
     manager = SimulationManager()
     source_state = manager.get_simulation(simulation_id)

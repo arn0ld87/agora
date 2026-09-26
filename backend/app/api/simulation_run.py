@@ -246,30 +246,26 @@ def _parse_budget_config(data: "dict[str, Any]") -> "RunBudgetConfig | None":
 def _apply_demo_start_limits(
     max_rounds: int | None, budget_config: "RunBudgetConfig | None"
 ) -> tuple[int | None, "RunBudgetConfig | None"]:
-    """Enforce bounded JWT runs only on an explicitly enabled demo instance."""
-    if os.environ.get("AGORA_DEMO_MODE", "").lower() not in {"1", "true", "yes", "on"}:
-        return max_rounds, budget_config
-    principal = current_principal()
-    if principal is None or principal.auth_type != AuthType.JWT:
-        return max_rounds, budget_config
-    if max_rounds is not None and max_rounds > 5:
+    """Enforce bounded JWT runs only on an explicitly enabled demo instance.
+
+    Finding M1: the round/budget cap itself now lives in
+    ``simulation_common.apply_demo_run_limits`` so the replay/resume paths in
+    ``runs.py`` enforce the identical limit — this wrapper only translates
+    the shared ``DemoLimitExceededError`` into the ``_StartRejected``
+    response shape this endpoint's callers expect.
+    """
+    from .simulation_common import DemoLimitExceededError, apply_demo_run_limits
+
+    try:
+        return apply_demo_run_limits(max_rounds, budget_config)
+    except DemoLimitExceededError as exc:
         raise _StartRejected(
             json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
-                message="Demo simulations allow at most 5 rounds",
+                message=exc.message,
             )
-        )
-
-    from ..contracts.run_budget_contract import RunBudgetConfig
-
-    budget = budget_config or RunBudgetConfig.model_validate({})
-    bounded_budget = budget.model_copy(update={
-        "enforcement": "hard",
-        "max_llm_calls": min(budget.max_llm_calls or 200, 200),
-        "max_duration_seconds": min(budget.max_duration_seconds or 1800, 1800),
-    })
-    return max_rounds or 5, bounded_budget
+        ) from exc
 
 
 def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
