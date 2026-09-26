@@ -279,4 +279,24 @@ describe('RunReplayDialog', () => {
     expect(wrapper.text()).toContain(de.runs.dashboard.replay.missing_simulation_params_error)
     expect(wrapper.emitted('replayed')).toBeFalsy()
   })
+
+  it('zeigt eine verständliche Meldung für 409 manifest_route_unresolvable (Issue #1686)', async () => {
+    replayRunMock.mockRejectedValueOnce(
+      new ApiError({
+        code: 'manifest_route_unresolvable',
+        status: 409,
+        message:
+          "Run run-abc123's captured model route is no longer resolvable (ProviderConnection 'conn-local' nicht gefunden) …",
+      }),
+    )
+    const wrapper = mountDialog()
+    await flushPromises()
+
+    const submitBtn = wrapper.findAll('button').find((b) => b.text().includes('Replay starten'))
+    await submitBtn?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(de.runs.dashboard.replay.route_unresolvable_error)
+    expect(wrapper.emitted('replayed')).toBeFalsy()
+  })
 })

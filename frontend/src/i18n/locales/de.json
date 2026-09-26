@@ -1414,6 +1414,7 @@
         "unknown_error": "Unbekannter Fehler",
         "no_manifest": "Kein Manifest verfügbar — Replay nicht möglich.",
         "missing_simulation_params_error": "Das Original-Manifest enthält keine Start-Parameter (Plattform, Runden, Graph-Memory-Update) und kann nicht 1:1 wiederholt werden.",
+        "route_unresolvable_error": "Die im Original-Manifest erfasste Modell-Route ist nicht mehr auflösbar (z. B. Connection gelöscht oder deaktiviert). Bitte eine Variante mit einer aktuellen Modell-Auswahl starten.",
         "original_params_heading": "Original-Startparameter (unveränderlich)",
         "original_params_platform": "Plattform",
         "original_params_max_rounds": "Max. Runden",

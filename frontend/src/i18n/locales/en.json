@@ -1414,6 +1414,7 @@
         "unknown_error": "Unknown error",
         "no_manifest": "No manifest available — replay not possible.",
         "missing_simulation_params_error": "The original manifest has no captured start parameters (platform, rounds, graph memory update) and cannot be replayed 1:1.",
+        "route_unresolvable_error": "The model route captured in the original manifest is no longer resolvable (e.g. the connection was deleted or disabled). Please start a variant with a current model selection instead.",
         "original_params_heading": "Original start parameters (fixed)",
         "original_params_platform": "Platform",
         "original_params_max_rounds": "Max rounds",

@@ -22,6 +22,12 @@
  * (Alt-Manifest vor Issue #1274), lehnt das Backend mit
  * `409 manifest_missing_simulation_params` ab — das wird hier bereits vor dem
  * Absenden sichtbar gemacht, wenn das Original-Manifest das zeigt.
+ *
+ * Ist bei "Identisch wiederholen" die im Original-Manifest erfasste
+ * Modell-Route nicht mehr auflösbar (Connection gelöscht/deaktiviert),
+ * lehnt das Backend mit `409 manifest_route_unresolvable` ab (Issue #1686,
+ * Teil von #1274) — eigene i18n-Meldung statt der rohen Backend-Zeichenkette,
+ * analog zu `manifest_missing_simulation_params`.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -142,6 +148,13 @@ async function submit(): Promise<void> {
   } catch (e) {
     if (e instanceof ApiError && e.code === 'manifest_missing_simulation_params') {
       errorMessage.value = t('runs.dashboard.replay.missing_simulation_params_error')
+    } else if (e instanceof ApiError && e.code === 'manifest_route_unresolvable') {
+      // Issue #1686 (P1): ohne Override ist die im Original-Manifest erfasste
+      // Modell-Route nicht mehr auflösbar (z.B. Connection gelöscht) — das
+      // Backend lehnt mit 409 ab statt still auf Workspace-Defaults
+      // zurückzufallen. Eine eigene i18n-Meldung statt der rohen
+      // Backend-Zeichenkette, analog zu manifest_missing_simulation_params.
+      errorMessage.value = t('runs.dashboard.replay.route_unresolvable_error')
     } else {
       errorMessage.value =
         e instanceof ApiError || e instanceof Error
