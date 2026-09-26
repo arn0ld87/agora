@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.contracts.ai_provider_contract import ProviderConnectionUpsertRequest
 from app.contracts.llm_routing_contract import StageLLMRoute
 from app.services.llm_provider_registry import LlmProviderRegistry
+from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
 from app.services.provider_connection_store import ProviderConnectionStore
 from app.services.workspace_routing_store import WorkspaceRoutingStore
 from app.utils.logger import get_logger
@@ -19,6 +20,24 @@ _PROVIDERS = ("openai", "google", "minimax")
 
 
 def bootstrap_public_demo_providers() -> None:
+    secrets_store = LlmProviderSecretsStore()
+    for provider_id in _PROVIDERS:
+        if secrets_store.get_entry(provider_id) is not None:
+            raise RuntimeError(
+                f"operator secret present for public demo provider: {provider_id}"
+            )
+
+    routing_defaults = WorkspaceRoutingStore().load()
+    routed_provider_ids = [routing_defaults.global_default.provider_id] + [
+        route.provider_id for route in routing_defaults.stage_overrides.values()
+    ]
+    for routed_provider_id in routed_provider_ids:
+        if routed_provider_id is not None and routed_provider_id not in _PROVIDERS:
+            raise RuntimeError(
+                "workspace routing points to a non-demo connection: "
+                f"{routed_provider_id}"
+            )
+
     store = ProviderConnectionStore()
     existing = {connection.id: connection for connection in store.list_connections()}
     if set(existing) - set(_PROVIDERS):
