@@ -176,7 +176,11 @@ def test_thread_path_uses_workspace_embedding_credential_or_fails_closed(
     workspace_id = uuid4()
     monkeypatch.setattr(
         llm_routing_seed, "_persisted_workspace_for_run",
-        lambda run_id: (True, workspace_id) if run_id == "run-test" else (False, None),
+        lambda run_id: (
+            (True, llm_routing_seed._RunCredentialScope(workspace_id, True))
+            if run_id == "run-test"
+            else (False, llm_routing_seed._UNSCOPED)
+        ),
     )
     monkeypatch.setattr(
         "app.services.embedding_configurations.runtime.resolve_active_embedding_route",
