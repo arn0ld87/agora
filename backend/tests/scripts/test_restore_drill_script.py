@@ -737,6 +737,30 @@ class TestNeo4jOfflineDumpAndLoad:
         ]
         assert order == sorted(order), "Reihenfolge stop/dump/start nicht eingehalten"
 
+    def test_a_relative_backup_dir_is_bind_mounted_as_an_absolute_path(
+        self, tmp_path
+    ) -> None:
+        """Codex-Befund auf PR #1677: Docker verlangt fuer einen Bind-Mount
+        eine absolute Quelle. Ein relatives ``--backup-dir`` landete bislang
+        unveraendert in ``-v backup/neo4j:/backups`` und scheiterte im Restore
+        erst nach ``docker compose down``."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "backup",
+            "--backup-dir", "backup",
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+            cwd=tmp_path,
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        expected = f"-v {tmp_path.resolve() / 'backup' / 'neo4j'}:/backups"
+        assert expected in text
+        assert "-v backup/neo4j:/backups" not in text
+
     def test_backup_dry_run_uses_placeholders_for_container_and_image(
         self, tmp_path
     ) -> None:

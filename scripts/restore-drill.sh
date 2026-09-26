@@ -128,6 +128,11 @@ if [ -z "$BACKUP_DIR" ]; then
   echo "--backup-dir ist erforderlich" >&2
   usage 2
 fi
+# Absolut machen, bevor irgendetwas den Pfad benutzt: der Neo4j-Schritt
+# bind-mountet "$BACKUP_DIR/neo4j" in einen Wegwerf-Container, und Docker
+# verlangt für einen Bind-Mount eine absolute Quelle (#1633, Codex-Review).
+# Ein relativer Pfad scheiterte sonst erst nach `docker compose down`.
+BACKUP_DIR=$(resolve_path "$BACKUP_DIR")
 
 PROTOCOL="${PROTOCOL:-$REPO_ROOT/restore-drill-$(date -u +%Y%m%dT%H%M%SZ).log}"
 # Prüfsummen liegen neben den Archiven, nicht beim Protokoll: ein Backup, das
