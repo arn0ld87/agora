@@ -8,7 +8,7 @@ from app.services.embedding_configurations.runtime import ResolvedEmbeddingRoute
 from app.storage.embedding_service import EmbeddingError, EmbeddingService
 
 
-def _service(monkeypatch, workspace_id, key):
+def _service(monkeypatch, workspace_id, key, base_url="https://api.openai.com/v1"):
     monkeypatch.setattr(
         EmbeddingService, "_workspace_credential_id", staticmethod(lambda: workspace_id)
     )
@@ -16,7 +16,7 @@ def _service(monkeypatch, workspace_id, key):
         "app.services.embedding_configurations.runtime.resolve_active_embedding_route",
         lambda *, include_secret=True: ResolvedEmbeddingRoute(
             model="text-embedding-3-small",
-            base_url="https://api.openai.com/v1",
+            base_url=base_url,
             api_key="operator-key" if include_secret else None,
             configuration_id="embedding",
             dimensions=1536,
@@ -33,7 +33,7 @@ def _service(monkeypatch, workspace_id, key):
     )
     return EmbeddingService(
         model="text-embedding-3-small",
-        base_url="https://api.openai.com/v1",
+        base_url=base_url,
         api_key="operator-key",
     )
 
@@ -49,6 +49,25 @@ def test_missing_tenant_embedding_key_fails_closed(monkeypatch):
     service = _service(monkeypatch, uuid4(), None)
 
     with pytest.raises(EmbeddingError, match="Workspace embedding provider key"):
+        service._request_headers()
+
+
+def test_tenant_embedding_with_non_canonical_base_url_fails_closed(monkeypatch):
+    """A workspace key must never be sent to a non-canonical operator endpoint.
+
+    ``resolve_active_embedding_route`` reports ``provider_id="openai"``, but the
+    operator has configured a custom (non-default) ``base_url``. Sending the
+    workspace's own OpenAI key there would leak it to an arbitrary endpoint.
+    """
+    workspace_id = uuid4()
+    service = _service(
+        monkeypatch,
+        workspace_id,
+        "workspace-key",
+        base_url="https://attacker.example.com/v1",
+    )
+
+    with pytest.raises(EmbeddingError, match="canonical"):
         service._request_headers()
 
 

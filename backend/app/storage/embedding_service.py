@@ -477,6 +477,7 @@ class EmbeddingService:
             from ..services.embedding_configurations.runtime import (
                 resolve_active_embedding_route,
             )
+            from ..services.llm_provider_registry import LlmProviderRegistry
             from ..services.workspace_provider_credentials_store import (
                 WorkspaceProviderCredentialsStore,
             )
@@ -485,6 +486,16 @@ class EmbeddingService:
             if route is None or not route.provider_id:
                 raise EmbeddingError(
                     'Workspace embeddings require an active provider configuration'
+                )
+            definition = LlmProviderRegistry.connection_definition(route.provider_id)
+            canonical_base_url = definition.default_base_url if definition else None
+            if not canonical_base_url or (
+                self.base_url.rstrip('/') != canonical_base_url.rstrip('/')
+            ):
+                raise EmbeddingError(
+                    'Workspace embedding base URL does not match the canonical '
+                    f'{route.provider_id} endpoint; refusing to send a workspace '
+                    'key to an operator-configured endpoint'
                 )
             workspace_key = WorkspaceProviderCredentialsStore().get_plaintext(
                 workspace_id, route.provider_id
