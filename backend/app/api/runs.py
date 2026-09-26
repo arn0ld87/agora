@@ -50,6 +50,7 @@ from ..services.report_generation import (
     finish_completed_run,
     was_run_cancelled,
 )
+from ..services.run_export import select_run_export_files
 from ..services.run_lifecycle import RunLifecycle
 from ..services.run_read_model import attach_summary as _attach_summary
 from ..services.run_registry import RunRegistry
@@ -1415,8 +1416,13 @@ def get_run_manifest(run_id: str):
 def export_run(run_id: str):
     """GET /api/runs/<run_id>/export — ZIP-Download mit Manifest + Artefakten (Issue #763).
 
-    Erzeugt ein ZIP-Archiv mit manifest.json und allen Dateien aus dem
-    Run-Verzeichnis. Streaming-Response, kein Temp-File.
+    Erzeugt ein ZIP-Archiv mit den Allowlist-Artefakten aus dem
+    Run-Verzeichnis (Issue #1680) plus einer ``export-report.json``, die
+    exportierte und übersprungene Dateien mit Grund auflistet. Alles
+    außerhalb der Allowlist — insbesondere versehentlich ins Run-Verzeichnis
+    geratene Dateien wie Secrets — wird nicht ausgeliefert; Symlinks und
+    Pfade außerhalb des Run-Verzeichnisses nie. Streaming-Response, kein
+    Temp-File.
     """
     import io
     import zipfile
@@ -1434,21 +1440,24 @@ def export_run(run_id: str):
             code="no_manifest",
         )
 
+    report = select_run_export_files(run_id, run_dir)
+    if report.skipped:
+        logger.info(
+            "run export skipped files outside the allowlist",
+            extra={
+                "run_id": run_id,
+                "skipped": [entry.model_dump(mode="json") for entry in report.skipped],
+            },
+        )
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # manifest.json
-        zf.write(manifest_path, "manifest.json")
-
-        # Alle weiteren Dateien im Run-Verzeichnis rekursiv (keine Secrets) —
-        # os.listdir+isfile hätte Unterverzeichnisse wie stages/ (eingefrorene
-        # Routing-Snapshots) stillschweigend übersprungen.
-        for root, _dirs, files in os.walk(run_dir):
-            for name in files:
-                full_path = os.path.join(root, name)
-                arcname = os.path.relpath(full_path, run_dir)
-                if arcname == "manifest.json":
-                    continue
-                zf.write(full_path, arcname)
+        for rel_posix in report.exported:
+            zf.write(os.path.join(run_dir, rel_posix), rel_posix)
+        zf.writestr(
+            "export-report.json",
+            json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True),
+        )
 
     buf.seek(0)
 
