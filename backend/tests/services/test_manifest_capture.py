@@ -1,5 +1,6 @@
 """Tests für ManifestCapture (Issue #763, Ticket 2)."""
 
+import hashlib
 import json
 import os
 import tempfile
@@ -320,10 +321,12 @@ class TestManifestCaptureLegacy:
         # Bekannte Felder
         assert data["versions"]["agora_version"] == "0.9.0"
         assert data["inputs"]["graph_id"] == "graph_001"
-        # Nicht rekonstruierbare Felder
-        assert data["inputs"]["seed_document_hash"] == "unknown"
+        # Nicht rekonstruierbare Felder: None statt fabrizierter Platzhalter
+        # (Issue #1274 Punkt 4/6) — "unknown" bleibt nur für Pflicht-Strings
+        # wie simulation_config_hash.
+        assert data["inputs"]["seed_document_hash"] is None
         assert data["inputs"]["simulation_config_hash"] == "unknown"
-        assert data["seeds"]["random_seed"] == 0
+        assert data["seeds"]["random_seed"] is None
 
     def test_legacy_is_valid_pydantic(self, run_dir):
         """S8: Legacy-Manifest ist als RunManifest validierbar."""
@@ -377,6 +380,301 @@ class TestManifestCaptureLegacy:
         # Sollte immer noch das Draft sein
         assert data["status"] == "draft"
         assert data["seeds"]["random_seed"] == 42
+
+
+class TestManifestCaptureLegacyReconstruction:
+    """Issue #1274 Punkt 4: migrate_legacy übernimmt completed_at/status/
+    llm_model/llm_provider statt sie stillschweigend zu ignorieren."""
+
+    @pytest.fixture
+    def run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            yield tmp
+
+    def test_reconstructs_runtime_from_completed_at_and_status(self, run_dir):
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_rt",
+            run_dir=run_dir,
+            run_metadata={
+                "started_at": "2026-01-15T10:00:00",
+                "completed_at": "2026-01-15T10:30:00",
+                "status": "completed",
+            },
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["runtime"] is not None
+        assert data["runtime"]["termination_reason"] == "completed"
+        assert data["runtime"]["completed_at"] is not None
+        # RunManifest bleibt validierbar (AwareDatetime etc.)
+        RunManifest(**data)
+
+    def test_no_started_at_leaves_runtime_none(self, run_dir):
+        """Ohne echten Start-Zeitpunkt darf runtime.started_at nicht auf
+        "jetzt" fabriziert werden — dann bleibt runtime komplett None."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_no_start",
+            run_dir=run_dir,
+            run_metadata={"completed_at": "2026-01-15T10:30:00", "status": "completed"},
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["runtime"] is None
+
+    def test_reconstructs_stage_route_from_llm_model_and_provider(self, run_dir):
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_route",
+            run_dir=run_dir,
+            run_metadata={
+                "started_at": "2026-01-15T10:00:00",
+                "llm_model": "gemini-2.5-flash",
+                "llm_provider": "google",
+            },
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        stage = data["routing"]["stages"]["simulation_rounds"]
+        assert stage["model"] == "gemini-2.5-flash"
+        assert stage["provider"] == "google"
+        assert stage["base_url"] is None
+
+    def test_omits_stage_route_when_provider_unknown(self, run_dir):
+        """Nur model ODER nur provider bekannt reicht nicht für einen
+        gültigen StageRoute-Eintrag — dann bleibt die Stage-Tabelle leer,
+        statt eine erfundene provider-Zeichenkette einzusetzen."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_partial",
+            run_dir=run_dir,
+            run_metadata={"started_at": "2026-01-15T10:00:00", "llm_model": "gemini-2.5-flash"},
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["routing"]["stages"] == {}
+
+    def test_simulation_id_seed_from_metadata(self, run_dir):
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_seed",
+            run_dir=run_dir,
+            run_metadata={"started_at": "2026-01-15T10:00:00", "simulation_id": "sim_old"},
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["seeds"]["simulation_id_seed"] == "sim_old"
+
+    def test_simulation_id_seed_none_when_unknown(self, run_dir):
+        """Kein fabriziertes "legacy" mehr, wenn die simulation_id nicht in
+        den Run-Metadaten steht."""
+        ManifestCapture.migrate_legacy(
+            run_id="run_legacy_no_seed",
+            run_dir=run_dir,
+            run_metadata={"started_at": "2026-01-15T10:00:00"},
+            agora_version="0.9.0",
+            schema_version="1.0.0",
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["seeds"]["simulation_id_seed"] is None
+
+
+class TestManifestCaptureDraftRoutingAndReplay:
+    """Issue #1274 Punkt 2/3/5: ai_route_snapshot, Prompt-Snapshots,
+    Simulationsparameter und Deviations in capture_draft."""
+
+    @pytest.fixture
+    def run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            yield tmp
+
+    def _draft_kwargs(self, run_dir, **overrides):
+        base = dict(
+            run_id="run_test123456",
+            run_dir=run_dir,
+            seed_document_hash="sha256:abc",
+            seed_document_filename="test.md",
+            simulation_config_hash="sha256:def",
+            graph_id="graph_001",
+            agora_version="0.9.5",
+            schema_version="1.0.0",
+            random_seed=None,
+            simulation_id_seed="sim_test",
+        )
+        base.update(overrides)
+        return base
+
+    def test_routing_dict_accepts_ai_route_snapshot(self, run_dir):
+        ManifestCapture.capture_draft(
+            **self._draft_kwargs(
+                run_dir,
+                routing={
+                    "simulation_rounds": {
+                        "model": "gemini-2.5-flash",
+                        "provider": "google",
+                        "base_url": "https://generativelanguage.googleapis.com",
+                        "ai_route_snapshot": {
+                            "provider_connection_id": "conn-google",
+                            "model_id": "gemini-2.5-flash",
+                            "source": "workspace",
+                            "temperature": 0.7,
+                            "provider_options": {},
+                        },
+                    }
+                },
+            )
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        snapshot = data["routing"]["stages"]["simulation_rounds"]["ai_route_snapshot"]
+        assert snapshot["source"] == "workspace"
+        assert snapshot["temperature"] == 0.7
+        RunManifest(**data)
+
+    def test_writes_prompt_snapshots(self, run_dir):
+        ManifestCapture.capture_draft(
+            **self._draft_kwargs(
+                run_dir,
+                prompts={
+                    "oasis_user_system_message": {
+                        "content": "# OBJECTIVE\n...",
+                        "source_file": "camel-oasis==0.2.5:oasis/social_platform/config/user.py",
+                    }
+                },
+            )
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        entry = data["prompts"]["entries"]["oasis_user_system_message"]
+        assert entry["content"] == "# OBJECTIVE\n..."
+
+    def test_builds_simulation_params_when_platform_and_flag_given(self, run_dir):
+        ManifestCapture.capture_draft(
+            **self._draft_kwargs(
+                run_dir,
+                platform="twitter",
+                max_rounds=5,
+                enable_graph_memory_update=True,
+                memory_update_graph_id="graph_mem_001",
+            )
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["simulation"] == {
+            "platform": "twitter",
+            "max_rounds": 5,
+            "enable_graph_memory_update": True,
+            "memory_update_graph_id": "graph_mem_001",
+        }
+
+    def test_simulation_stays_none_without_platform(self, run_dir):
+        """Ohne platform/enable_graph_memory_update bleibt simulation None,
+        statt mit fabrizierten Defaults befüllt zu werden."""
+        ManifestCapture.capture_draft(**self._draft_kwargs(run_dir))
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["simulation"] is None
+
+    def test_writes_deviations_and_replayed_from_run_id(self, run_dir):
+        ManifestCapture.capture_draft(
+            **self._draft_kwargs(
+                run_dir,
+                replayed_from_run_id="run_original123",
+                deviations=[
+                    {"field": "model_id", "original": "gpt-4o", "replay": "gemini-2.5-pro"}
+                ],
+            )
+        )
+        with open(os.path.join(run_dir, "manifest.json")) as f:
+            data = json.load(f)
+
+        assert data["replayed_from_run_id"] == "run_original123"
+        assert data["deviations"] == [
+            {"field": "model_id", "original": "gpt-4o", "replay": "gemini-2.5-pro"}
+        ]
+
+
+class TestManifestCaptureSeedDocumentSnapshot:
+    """Issue #1274 Punkt 6: echter Hash/Dateiname statt "unknown"."""
+
+    def test_none_project_id_returns_none_tuple(self):
+        assert ManifestCapture.seed_document_snapshot(None) == (None, None)
+
+    def test_hashes_extracted_text_and_reads_filenames(self, monkeypatch):
+        from app.models.project import ProjectManager
+
+        monkeypatch.setattr(
+            ProjectManager, "get_extracted_text", classmethod(lambda cls, pid: "hello world")
+        )
+
+        class _Entry:
+            filename = "quelle.md"
+
+        class _Manifest:
+            documents = [_Entry()]
+
+        monkeypatch.setattr(
+            ProjectManager, "get_document_manifest", classmethod(lambda cls, pid: _Manifest())
+        )
+
+        digest, filename = ManifestCapture.seed_document_snapshot("proj_1")
+        assert digest == (
+            "sha256:" + hashlib.sha256(b"hello world").hexdigest()
+        )
+        assert filename == "quelle.md"
+
+    def test_missing_text_returns_none_hash(self, monkeypatch):
+        from app.models.project import ProjectManager
+
+        monkeypatch.setattr(
+            ProjectManager, "get_extracted_text", classmethod(lambda cls, pid: None)
+        )
+        monkeypatch.setattr(
+            ProjectManager, "get_document_manifest", classmethod(lambda cls, pid: None)
+        )
+
+        digest, filename = ManifestCapture.seed_document_snapshot("proj_1")
+        assert digest is None
+        assert filename is None
+
+
+class TestManifestCaptureOasisPromptSnapshot:
+    """Issue #1274 Punkt 5: byte-genauer Snapshot des OASIS-System-Prompts."""
+
+    def test_returns_installed_package_source(self):
+        snapshots = ManifestCapture.oasis_prompt_snapshots()
+        assert "oasis_user_system_message" in snapshots
+        entry = snapshots["oasis_user_system_message"]
+        assert "to_system_message" in entry["content"] or "OBJECTIVE" in entry["content"]
+        assert entry["source_file"].startswith("camel-oasis==")
+
+    def test_missing_distribution_returns_empty_dict(self, monkeypatch):
+        import importlib.metadata as metadata_module
+
+        def _boom(name):
+            raise metadata_module.PackageNotFoundError(name)
+
+        monkeypatch.setattr(
+            "app.services.manifest_capture.importlib.metadata.distribution", _boom
+        )
+        assert ManifestCapture.oasis_prompt_snapshots() == {}
 
 
 class TestManifestCaptureBestEffort:

@@ -130,6 +130,17 @@ def test_erfolgreicher_start_schreibt_ein_draft_manifest(client, monkeypatch, tm
     assert data["routing"]["stages"]["simulation_rounds"]["model"] == "qwen3"
     assert data["routing"]["stages"]["simulation_rounds"]["provider"] == "conn-local"
 
+    # Issue #1274 Punkt 1: kein fabrizierter Hash-Platzhalter mehr — Agora hat
+    # kein echtes RNG-Seed-Konzept.
+    assert data["seeds"]["random_seed"] is None
+    # Issue #1274 Punkt 3: platform/enable_graph_memory_update landen im
+    # Manifest, damit ein späteres Replay sie 1:1 übernehmen kann.
+    assert data["simulation"]["platform"] == "parallel"
+    assert data["simulation"]["enable_graph_memory_update"] is False
+    # Issue #1274 Punkt 6: ohne echtes Projekt/Dokument bleibt der
+    # Seed-Dokument-Hash ehrlich None statt "unknown".
+    assert data["inputs"]["seed_document_hash"] is None
+
 
 def test_manifest_fehler_lässt_den_run_trotzdem_erfolgreich_starten(
     client, monkeypatch, tmp_path
