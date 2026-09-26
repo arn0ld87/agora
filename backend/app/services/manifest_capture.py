@@ -328,9 +328,7 @@ class ManifestCapture:
             dist = importlib.metadata.distribution("camel-oasis")
             for file in dist.files or ():
                 if file.as_posix().endswith(_OASIS_USER_PROMPT_MODULE_SUFFIX):
-                    path = dist.locate_file(file)
-                    with open(path, encoding="utf-8") as handle:
-                        content = handle.read()
+                    content = dist.locate_file(file).read_text(encoding="utf-8")
                     return {
                         "oasis_user_system_message": {
                             "content": content,
