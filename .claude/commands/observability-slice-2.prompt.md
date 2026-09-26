@@ -70,7 +70,7 @@ Niemals aus Trainings-Memory zitieren — Trainings-Cutoff hat veraltete `metric
 
 ### Schritt 3 — Plan lesen
 
-Lies `/Volumes/T7/Projekte/agora/docs/plans/2026-05-15-observability-slice-2-metrics.md` vollständig. Falls Sub-Slice-Granularität (2a/2b/2c) im Plan abweicht, gilt der Plan, nicht dieses Brief.
+Lies `docs/plans/active/2026-05-15-observability-slice-2-metrics.md` im Repository vollständig. Falls Sub-Slice-Granularität (2a/2b/2c) im Plan abweicht, gilt der Plan, nicht dieses Brief.
 
 ### Schritt 4 — Worktree
 
