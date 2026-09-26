@@ -561,4 +561,4 @@ Nicht priorisiert vor 1.0: Multi-User, Kubernetes/Helm, Federation, allgemeines 
 - Der Observability-Slice-2-Command verweist auf den tatsächlich versionierten Plan unter `docs/plans/active/`.
 - historische Pläne/Audits: nicht als Current-State-Quelle verwenden
 - Historische Arbeits-Prompts vom Mai 2026 ohne Code- oder Workflow-Referenz sind entfernt. Der Voice-Register-Katalog unter `prompts/` bleibt, weil `backend/scripts/check_voice.py` ihn prüft.
-- ADR-0010 verlinkt die inzwischen entfernten Vue-Routen und Tests auf den verifizierten Stand der ADR-Erstellung; der aktuelle Router bleibt die Tatsachenquelle.
+- ADR-0010 verlinkt alle Belegstellen zu Vue-Routen und Tests auf den verifizierten Stand der ADR-Erstellung; der aktuelle Router bleibt die Tatsachenquelle.
