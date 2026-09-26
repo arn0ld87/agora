@@ -212,6 +212,42 @@ def test_replay_rejects_demo_limit_exceeding_max_rounds(env, monkeypatch):
     runner.start_simulation.assert_not_called()
 
 
+def test_replay_rejects_unbounded_manifest_in_demo_mode(env, monkeypatch):
+    """Finding H4 (#1688): apply_demo_run_limits() silently turns a
+    ``max_rounds=None`` manifest into a capped 5 for a demo JWT visitor —
+    that is no longer a 1:1 replay of the original (unbounded) run. Reject
+    it honestly instead of silently running a different round count."""
+    from uuid import UUID
+
+    from app.contracts.auth_contract import AuthType, Principal
+    from app.contracts.workspace_contract import WorkspaceRole
+    from app.security.principal_context import set_principal
+
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+
+    @env["app"].before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"], max_rounds=None)
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 400, (
+        f"Erwartet 400, erhalten: {resp.status_code} — {resp.get_json()}"
+    )
+    assert resp.get_json()["code"] == "demo_limit_exceeded"
+    manager.create_branch.assert_not_called()
+    runner.start_simulation.assert_not_called()
+
+
 def test_replay_operator_run_ignores_demo_limit(env, monkeypatch):
     """Demo-Cap gilt nur für JWT-Principals — Operator-Replays (Master-Token,
     kein gebundener Principal) bleiben unverändert unbeschränkt."""

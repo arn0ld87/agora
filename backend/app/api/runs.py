@@ -1345,10 +1345,35 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
     # Runs umgehen. Ein stiller Cap wäre hier zudem ein 1:1-Replay-Versprechen
     # (Manifest-Kommentar oben), das die tatsächlich gefahrenen Runden nicht
     # mehr widerspiegelt — deshalb ehrlicher 400 statt stillem Downgrade.
+    #
+    # Finding H4 (#1688): der Rueckgabewert wurde bisher verworfen — der
+    # tatsaechliche ``start_simulation()``-Aufruf unten benutzte weiterhin
+    # ``manifest.simulation.max_rounds`` UNGEDECKELT, der Call oben pruefte
+    # nur die ">5"-Grenze. Ein Manifest mit ``max_rounds=None`` (unbegrenzt)
+    # loeste GAR KEINE Exception aus und lief unbeschraenkt weiter. Jetzt:
+    # den gedeckelten Rueckgabewert tatsaechlich verwenden, und ein
+    # ``None``-Manifest in der Demo-Cap-Regime explizit als 400 ablehnen
+    # statt es stillschweigend auf 5 zu setzen — das waere kein 1:1-Replay
+    # mehr, sondern ein unausgesprochener anderer Lauf.
     try:
-        apply_demo_run_limits(manifest.simulation.max_rounds, None)
+        capped_max_rounds, capped_budget_config = apply_demo_run_limits(
+            manifest.simulation.max_rounds, None
+        )
     except DemoLimitExceededError as exc:
         return json_error(exc.message, status=400, code="demo_limit_exceeded")
+    if manifest.simulation.max_rounds is None and capped_max_rounds is not None:
+        # apply_demo_run_limits() only ever turns a None max_rounds into a
+        # concrete cap while the demo/JWT regime is active (operator runs
+        # and non-demo instances return max_rounds unchanged) — so this
+        # condition alone identifies "demo cap would silently replace an
+        # unbounded manifest", without re-deriving that check here.
+        return json_error(
+            f"Run {run_id}'s manifest has no round limit (max_rounds=None) — "
+            "a demo instance cannot replay this 1:1 without silently capping "
+            "it to a different round count than the original run.",
+            status=400,
+            code="demo_limit_exceeded",
+        )
 
     manager = SimulationManager()
     source_state = manager.get_simulation(simulation_id)
@@ -1479,13 +1504,26 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             resolved_route=resolved_route,
             original_stage_route=original_stage_route,
             manager=manager,
+            max_rounds=capped_max_rounds,
+        )
+
+        # Finding H4 (#1688): apply the same (possibly demo-capped) budget
+        # to the replay's subprocess artifacts as a fresh start does — the
+        # capped_max_rounds computed above only bounds the round count;
+        # without this the demo LLM-call/duration hardcap never reached the
+        # replayed run at all.
+        from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+        from .simulation_run import _apply_budget_to_simulation
+
+        _apply_budget_to_simulation(
+            new_simulation_id, new_run_id, capped_budget_config, _set_run_budget_config
         )
 
         try:
             SimulationRunner.start_simulation(
                 simulation_id=new_simulation_id,
                 platform=manifest.simulation.platform,
-                max_rounds=manifest.simulation.max_rounds,
+                max_rounds=capped_max_rounds,
                 enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
                 graph_id=manifest.simulation.memory_update_graph_id,
                 runtime_env=build_route_subprocess_env(
@@ -1520,6 +1558,7 @@ def _capture_replay_manifest_draft(
     resolved_route,
     original_stage_route,
     manager: SimulationManager,
+    max_rounds: "int | None" = None,
 ) -> None:
     """Draft-Manifest für einen Replay-Run schreiben (Issue #1274 Punkt 3).
 
@@ -1600,7 +1639,13 @@ def _capture_replay_manifest_draft(
             },
             prompts=ManifestCapture.oasis_prompt_snapshots(),
             platform=manifest.simulation.platform,
-            max_rounds=manifest.simulation.max_rounds,
+            # Finding H4 (#1688): record the ACTUALLY applied max_rounds
+            # (possibly demo-capped) here, not the original manifest's value
+            # — otherwise the replay's own manifest would claim a round
+            # count it never ran with.
+            max_rounds=(
+                max_rounds if max_rounds is not None else manifest.simulation.max_rounds
+            ),
             enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
             memory_update_graph_id=manifest.simulation.memory_update_graph_id,
             replayed_from_run_id=original_run_id,
