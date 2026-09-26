@@ -227,6 +227,47 @@ def test_replay_operator_run_ignores_demo_limit(env, monkeypatch):
     )
 
 
+def test_replay_rejects_when_resolved_route_has_no_api_key(env, monkeypatch):
+    """Finding H2 (#1688): fehlt der aufgeloeste API-Key fuer die Replay-Route
+    (kein Workspace-Key, kein Session-Auth-Provider, kein lokaler Endpunkt),
+    darf der Replay NICHT stillschweigend auf einen Operator-Key
+    durchfallen — die neue Run-Manifest wird als 'failed' markiert statt als
+    laufend, und die Antwort ist ein 4xx-Client-Fehler statt 202/500."""
+    from unittest.mock import MagicMock
+
+    from app.contracts.llm_routing_contract import ResolvedRoute
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    # Non-local, non-session-auth route — a missing key here has no
+    # exemption and must be rejected instead of silently proceeding.
+    remote_route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+        provider_options={},
+    )
+    router = MagicMock()
+    router.resolve.return_value = remote_route
+    router.lock_stage.return_value = remote_route
+    monkeypatch.setattr("app.api.runs.StageModelRouter", lambda _rid: router)
+    monkeypatch.setattr("app.api.runs.resolve_route_api_key", lambda _r, _rt: None)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 400, (
+        f"Erwartet 400 (ValueError -> handle_api_errors), erhalten: "
+        f"{resp.status_code} — {resp.get_json()}"
+    )
+    payload = resp.get_json()
+    assert payload["success"] is False
+    assert "api_key" in payload["error"] or "kein Key" in payload["error"]
+    runner.start_simulation.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Test 2: 404 bei unbekanntem Run
 # ---------------------------------------------------------------------------

@@ -1449,6 +1449,20 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         resolved_route = route_router.resolve("simulation_rounds")
         route_router.lock_stage("simulation_rounds", resolved_route)
         resolved_api_key = resolve_route_api_key(resolved_route, None)
+        # Finding H2 (#1688): same fail-closed condition as
+        # simulation_run._resolve_start_route — a replay must not silently
+        # fall through to an operator-configured route when a workspace key
+        # is missing. Raising (rather than returning) lets RunLifecycle's
+        # __exit__ mark the new run "failed" instead of leaving it "pending"
+        # — the same mechanism already relied on below when start_simulation()
+        # itself fails. handle_api_errors turns ValueError into a 400.
+        if _reject_if_route_api_key_missing(resolved_route, resolved_api_key) is not None:
+            raise ValueError(
+                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                f"für Provider '{resolved_route.provider_id}'. "
+                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                "oder im Sitzungsfeld eingeben."
+            )
 
         # Issue #1686 (P2): Draft-Manifest VOR dem Subprozess-Start schreiben,
         # nicht danach. Der Monitor-Thread finalisiert das Manifest, sobald er
