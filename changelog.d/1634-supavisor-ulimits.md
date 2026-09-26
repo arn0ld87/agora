@@ -1,0 +1,3 @@
+### Fixed (Supavisor startete bei restriktiven Docker-Default-Ulimits nicht — 2026-09-26)
+
+- **`supabase/docker-compose.yml` setzt für den Service `supavisor` jetzt `ulimits.nofile` mit soft/hard 100000/100000.** Das Image `supabase/supavisor:2.9.12` startet via `/app/limits.sh` mit `RLIMIT_NOFILE=100000` unter `set -euo pipefail`; erbt der Container aus `/etc/docker/daemon.json` ein restriktiveres `default-ulimits.nofile` (z. B. 65536), schlägt `ulimit -n 100000` mit „Operation not permitted" fehl, und der Container landet mit Exit 1 in einer Restart-Schleife. Die Werte entsprechen dem Upstream-Supabase-Compose; dokumentiert in `supabase/README.md` (Abschnitt „Voraussetzungen"). (#1634)
