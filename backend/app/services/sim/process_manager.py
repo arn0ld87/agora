@@ -34,7 +34,7 @@ import sys
 import threading
 from datetime import datetime
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -270,6 +270,41 @@ def start_simulation(
         )
 
 
+def _spawn_simulation_process(
+    cmd: List[str],
+    sim_dir: Any,
+    log_file: Any,
+    env: Dict[str, str],
+    pass_fds: Tuple[int, ...],
+) -> subprocess.Popen:  # type: ignore[type-arg]
+    """Startet den OASIS-Subprozess und schliesst danach die geerbten FDs.
+
+    Der Subprozess erbt die Secret-Pipe beim exec() (``pass_fds``, #1688) —
+    die Kopie im Elternprozess (langlebiger Gunicorn-Worker) muss unabhaengig
+    vom Erfolg des Popen-Aufrufs geschlossen werden, sonst sammeln sich offene
+    Pipe-FDs an.
+    """
+    try:
+        return subprocess.Popen(
+            cmd,
+            cwd=str(sim_dir),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+            env=env,
+            start_new_session=True,
+            pass_fds=pass_fds,
+        )
+    finally:
+        for fd in pass_fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
 def _start_simulation_impl(
     simulation_id: str,
     platform: str,
@@ -487,29 +522,9 @@ def _start_simulation_impl(
             if traceparent:
                 env["TRACEPARENT"] = traceparent
 
-            try:
-                process = subprocess.Popen(
-                    cmd,
-                    cwd=str(sim_dir),
-                    stdout=main_log_file,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    bufsize=1,
-                    env=env,
-                    start_new_session=True,
-                    pass_fds=secret_pass_fds,
-                )
-            finally:
-                # Der Subprozess hat die FD beim exec() geerbt (pass_fds) —
-                # die Kopie hier im Elternprozess (langlebiger Gunicorn-
-                # Worker) muss unabhaengig vom Erfolg des Popen-Aufrufs
-                # geschlossen werden, sonst sammeln sich offene Pipe-FDs an.
-                for fd in secret_pass_fds:
-                    try:
-                        os.close(fd)
-                    except OSError:
-                        pass
+            process = _spawn_simulation_process(
+                cmd, sim_dir, main_log_file, env, secret_pass_fds
+            )
 
         stdout_files[simulation_id] = main_log_file
         stderr_files[simulation_id] = None

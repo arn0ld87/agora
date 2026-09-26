@@ -145,6 +145,28 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
     expect(w.find('[data-testid="ai-model-picker"]').exists()).toBe(true)
   })
 
+  it('JWT-Workspace startet erst nach expliziter Modellwahl (#1688)', async () => {
+    operator.value = false
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+    const file = new File(['Briefing'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await w.find('#hero-requirement').setValue('Welche Reaktionen?')
+    await flushPromises()
+    const cta = () => w.find('.hero-cta').element as HTMLButtonElement
+    expect(cta().disabled).toBe(true)
+
+    w.findComponent({ name: 'AiModelPicker' }).vm.$emit('update:modelValue', {
+      provider_connection_id: 'google', model_id: 'gemini-2.5-flash', source: 'explicit',
+    })
+    await flushPromises()
+    expect(cta().disabled).toBe(false)
+  })
+
   it('rendert LLM-Profile aus API im Profile-Dropdown', async () => {
     const router = makeRouter()
     await router.push('/dashboard')

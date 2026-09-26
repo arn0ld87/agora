@@ -204,17 +204,26 @@ const profileOptions = computed(() => {
 // Connections nicht sperren; die globale Probe bleibt reine Statusinformation.
 const servicesReady = computed(() => neo4jReachable.value)
 
+// Workspace-Sessions haben keinen lesbaren Kanon-Default: ohne expliziten
+// Picker-Pick liefe der Lauf über den globalen Default der Demo, für den der
+// Workspace womöglich keinen Key hat (#1688). Daher Pflichtauswahl.
+const workspaceModelMissing = computed(
+  () => !operatorAccess.value && !(hasExplicitPick.value && selectedModel.value),
+)
+
 const canSubmit = computed(
   () =>
     files.value.length > 0 &&
     simulationRequirement.value.trim() !== '' &&
     servicesReady.value &&
-    profilesSettled.value,
+    profilesSettled.value &&
+    !workspaceModelMissing.value,
 )
 
 const disabledHint = computed(() => {
   if (!files.value.length || !simulationRequirement.value.trim()) return t('dashboard.hero.disabledHint')
   if (!servicesReady.value) return t('dashboard.hero.servicesUnavailableHint')
+  if (workspaceModelMissing.value) return t('dashboard.hero.workspaceModelRequiredHint')
   return t('dashboard.hero.profilesLoadingHint')
 })
 
