@@ -466,9 +466,18 @@ def _start_simulation_impl(
         main_log_path = sim_dir / "simulation.log"
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
-        env = _build_subprocess_env(runtime_env, sim_dir)
+        # Finding B1 (#1688): fuer Workspace-Runs traegt ``pass_fds`` die
+        # Lese-Seite einer Pipe mit dem Secret-Payload statt dem Klartext-Key
+        # im Env-Block (``build_route_subprocess_env`` verpackt ihn dafuer
+        # hinter einem privaten Marker, den ``_build_subprocess_env`` hier in
+        # die Pipe umwandelt). Fuer Operator-Runs ist ``secret_pass_fds`` immer
+        # leer und dieser Pfad unveraendert.
+        env, secret_pass_fds = _build_subprocess_env(runtime_env, sim_dir)
 
         # Slice 1c: Trace-Context via W3C-traceparent in den Subprozess propagieren.
+        # ``span.set_attribute`` traegt nie ``env``/``cmd``-Werte, die ein Secret
+        # enthalten koennten — ``cmd`` ist Skriptpfad + ``--config``/``--max-rounds``,
+        # kein Env-Dump (Finding B1 Review-Hinweis: kein Secret-Leak ins Tracing).
         with _tracer.start_as_current_span("agora.subprocess.spawn") as span:
             span.set_attribute("agora.simulation.id", simulation_id)
             span.set_attribute("agora.subprocess.cmd", " ".join(cmd))
@@ -478,17 +487,29 @@ def _start_simulation_impl(
             if traceparent:
                 env["TRACEPARENT"] = traceparent
 
-            process = subprocess.Popen(
-                cmd,
-                cwd=str(sim_dir),
-                stdout=main_log_file,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                bufsize=1,
-                env=env,
-                start_new_session=True,
-            )
+            try:
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=str(sim_dir),
+                    stdout=main_log_file,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    bufsize=1,
+                    env=env,
+                    start_new_session=True,
+                    pass_fds=secret_pass_fds,
+                )
+            finally:
+                # Der Subprozess hat die FD beim exec() geerbt (pass_fds) —
+                # die Kopie hier im Elternprozess (langlebiger Gunicorn-
+                # Worker) muss unabhaengig vom Erfolg des Popen-Aufrufs
+                # geschlossen werden, sonst sammeln sich offene Pipe-FDs an.
+                for fd in secret_pass_fds:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
 
         stdout_files[simulation_id] = main_log_file
         stderr_files[simulation_id] = None

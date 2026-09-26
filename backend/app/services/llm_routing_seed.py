@@ -7,6 +7,7 @@ can be used without a flag day across all API surfaces.
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -52,6 +53,13 @@ logger = get_logger("agora.llm_routing_seed")
 _credential_workspace: ContextVar[UUID | None] = ContextVar(
     "agora_credential_workspace", default=None
 )
+
+# Finding B1 (#1688): private marker key ``build_route_subprocess_env`` uses
+# to smuggle a workspace-owned secret payload (JSON) past the plain env dict
+# it otherwise returns. Not a real subprocess env var — ``_build_subprocess_env``
+# (``process_environment.py``) pops it out and turns it into a pipe FD
+# instead of ever writing it into the child's OS environment block.
+WORKSPACE_SECRET_ENV_MARKER = "__AGORA_WORKSPACE_SECRET_PAYLOAD__"  # noqa: S105 -- env key name, not a credential
 
 _PROVIDER_ID_MAP = {
     "default": None,
@@ -914,17 +922,30 @@ def build_route_subprocess_env(
             route.provider_id,
         )
     if api_key:
-        env["LLM_API_KEY"] = api_key
-        env["OPENAI_API_KEY"] = api_key
+        secret_env: dict[str, str] = {"LLM_API_KEY": api_key, "OPENAI_API_KEY": api_key}
         if provider and provider.api_key_ref:
-            env[provider.api_key_ref] = api_key
+            secret_env[provider.api_key_ref] = api_key
         # CAMELs GeminiModel (OASIS-Subprozess) liest ``GEMINI_API_KEY``; der
         # Google-Provider fuehrt aber ``api_key_ref="GOOGLE_API_KEY"``. Ohne
         # diesen Alias crasht der Subprozess trotz Store-Key mit
         # ``Missing required API keys: GEMINI_API_KEY``. Der Alias haelt den
         # UI-Secrets-Store als Single Source — kein ``.env`` fuer Gemini-Sims.
         if detect_provider(base_url, route.model, mode="oasis") == "google":
-            env["GEMINI_API_KEY"] = api_key
+            secret_env["GEMINI_API_KEY"] = api_key
+        # Finding B1 (Security-Review 2026-09-26, #1688): eine Workspace-
+        # eigene Zugangsdaten darf nie im Klartext im Subprozess-Env landen —
+        # jeder Prozess mit demselben OS-User (auf einer Demo-Instanz: jede
+        # gleichzeitig laufende Simulation jedes Workspace) kann
+        # ``/proc/<pid>/environ`` eines Geschwisterprozesses lesen. Statt
+        # ``env.update(secret_env)`` (Operator-Pfad, unveraendert) wird das
+        # Secret hinter einem privaten Marker verpackt; ``_build_subprocess_env``
+        # in ``process_environment.py`` wandelt ihn in eine Pipe-FD um, bevor
+        # ``subprocess.Popen`` je aufgerufen wird — die Env-Merge-Logik dort
+        # laesst diesen Marker nie unveraendert durch.
+        if workspace_credential_id_for_run(run_id) is not None:
+            env[WORKSPACE_SECRET_ENV_MARKER] = json.dumps(secret_env)
+        else:
+            env.update(secret_env)
     if base_url:
         env["LLM_BASE_URL"] = base_url
         env["OPENAI_BASE_URL"] = base_url

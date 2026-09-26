@@ -419,6 +419,70 @@ def test_build_route_subprocess_env_does_not_set_provider_key_without_api_key():
     assert "OPENAI_API_KEY" not in env
 
 
+def test_build_route_subprocess_env_never_puts_workspace_key_in_env(monkeypatch):
+    """Finding B1 (#1688): fuer einen Workspace-Run darf der Klartext-Key in
+    keiner Env-Var landen (auch nicht als Wert einer anderen Variable) —
+    jeder Prozess desselben OS-Users kann ``/proc/<pid>/environ`` eines
+    Geschwisterprozesses lesen. Stattdessen ein privater Marker mit dem
+    JSON-codierten Secret, den ``process_environment._build_subprocess_env``
+    in eine Pipe-FD umwandelt, bevor ``subprocess.Popen`` je aufgerufen wird."""
+    from uuid import UUID
+
+    from app.services.llm_routing_seed import WORKSPACE_SECRET_ENV_MARKER
+    import json as _json
+
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.workspace_credential_id_for_run",
+        lambda _run_id: UUID("11111111-1111-4111-8111-111111111111"),
+    )
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    env = build_route_subprocess_env(route, api_key="ws-secret-key", run_id="run_ws")
+
+    # Der Marker selbst traegt das Secret noch (er verlaesst diese Funktion
+    # nur, um von ``process_environment._build_subprocess_env`` in eine
+    # Pipe-FD umgewandelt zu werden, siehe die dortigen Regressionstests) —
+    # die Garantie hier ist, dass es in KEINER anderen, realen Env-Var landet.
+    for key, value in env.items():
+        if key == WORKSPACE_SECRET_ENV_MARKER:
+            continue
+        assert "ws-secret-key" not in value
+    assert "LLM_API_KEY" not in env
+    assert "OPENAI_API_KEY" not in env
+    payload = _json.loads(env[WORKSPACE_SECRET_ENV_MARKER])
+    assert payload == {"LLM_API_KEY": "ws-secret-key", "OPENAI_API_KEY": "ws-secret-key"}
+
+
+def test_build_route_subprocess_env_operator_run_unchanged(monkeypatch):
+    """Ein Operator-Run (kein gebundener Workspace) landet weiterhin direkt
+    im Env-Block — unveraendertes Legacy-Verhalten."""
+    from app.services.llm_routing_seed import WORKSPACE_SECRET_ENV_MARKER
+
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.workspace_credential_id_for_run",
+        lambda _run_id: None,
+    )
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    env = build_route_subprocess_env(route, api_key="operator-key", run_id="run_op")
+
+    assert env["LLM_API_KEY"] == "operator-key"
+    assert env["OPENAI_API_KEY"] == "operator-key"
+    assert WORKSPACE_SECRET_ENV_MARKER not in env
+
+
 def _mismatch_connection() -> ProviderConnection:
     return ProviderConnection(
         id="conn-mismatch",

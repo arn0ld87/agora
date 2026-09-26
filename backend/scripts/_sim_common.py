@@ -24,6 +24,76 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 
 
 # ---------------------------------------------------------------------------
+# Finding B1 (Security-Review 2026-09-26, #1688): Workspace-Secret per Pipe
+# statt Subprozess-Env entgegennehmen
+# ---------------------------------------------------------------------------
+
+_SECRET_FD_ENV_KEY = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
+
+
+def load_workspace_secret_env_from_fd() -> None:
+    """Liest ein via Pipe-FD uebergebenes Workspace-Secret ins Prozess-Env.
+
+    Der Elternprozess (``process_manager.start_simulation``) schreibt fuer
+    einen Workspace-Run den Klartext-Key nie in den Subprozess-Env-Block
+    (jeder Prozess desselben OS-Users kann ``/proc/<pid>/environ`` eines
+    Geschwisterprozesses lesen — auf einer Demo-Instanz potenziell die
+    Simulation eines FREMDEN Workspace). Stattdessen nennt
+    ``AGORA_SECRET_ENV_FD`` die Lese-FD einer Pipe mit einem JSON-Objekt
+    ``{env_var_name: value}``; dieser Reader liest sie EINMALIG beim
+    Prozessstart, uebernimmt die Werte per ``os.environ.update`` — ab hier
+    liegen sie nur noch im Python-Prozessspeicher dieses Kindes, nicht mehr
+    im ``envp``-Array, das ``execve`` gesetzt hat — und entfernt die FD-Nummer
+    wieder aus dem Env. Operator-Runs setzen diese Variable nie; No-Op.
+    """
+    fd_value = os.environ.pop(_SECRET_FD_ENV_KEY, None)
+    if not fd_value:
+        return
+    try:
+        fd = int(fd_value)
+    except ValueError:
+        logging.getLogger("agora.sim").warning(
+            "load_workspace_secret_env_from_fd: %s ist keine gueltige FD-Nummer",
+            _SECRET_FD_ENV_KEY,
+        )
+        return
+    chunks: list[bytes] = []
+    try:
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    except OSError:
+        logging.getLogger("agora.sim").warning(
+            "load_workspace_secret_env_from_fd: FD %s nicht lesbar", fd
+        )
+        return
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+    if not chunks:
+        return
+    try:
+        secrets = json.loads(b"".join(chunks).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        logging.getLogger("agora.sim").warning(
+            "load_workspace_secret_env_from_fd: Payload nicht als JSON lesbar"
+        )
+        return
+    if isinstance(secrets, dict):
+        os.environ.update({str(k): str(v) for k, v in secrets.items()})
+
+
+# Laeuft beim Import dieses Moduls — jedes Runner-Skript importiert
+# ``_sim_common`` vor jedem OASIS-/CAMEL-Code, der ``LLM_API_KEY`` o. ae.
+# liest, und braucht dafuer keinen eigenen Aufruf.
+load_workspace_secret_env_from_fd()
+
+
+# ---------------------------------------------------------------------------
 # Issue #1160 F — reproduzierbare Zufallsentscheidungen im Simulationslauf
 # ---------------------------------------------------------------------------
 
