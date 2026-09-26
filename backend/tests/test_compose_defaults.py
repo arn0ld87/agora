@@ -196,3 +196,24 @@ def test_shipped_stack_and_e2e_override_stay_coupled():
         "Resolver — externe Namen laufen dann im CI in Timeouts statt in "
         "NXDOMAIN, und der AiModelPicker-Smoke haengt"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Supabase: Supavisor-ulimits (#1634)
+# --------------------------------------------------------------------------- #
+
+SUPABASE_COMPOSE = REPO_ROOT / "supabase" / "docker-compose.yml"
+
+
+def test_supavisor_nofile_ulimit_matches_image_requirement() -> None:
+    """Das Supavisor-Image setzt in /app/limits.sh RLIMIT_NOFILE=100000.
+
+    Ohne expliziten Block erbt der Container das Docker-Default-ulimit; liegt
+    das unter 100000, bricht limits.sh ab und der Pooler loopt (#1634).
+    """
+    supavisor = _load(SUPABASE_COMPOSE)["services"]["supavisor"]
+    nofile = supavisor.get("ulimits", {}).get("nofile")
+    assert nofile == {"soft": 100000, "hard": 100000}, (
+        "services.supavisor.ulimits.nofile muss soft=hard=100000 sein, sonst "
+        f"droht der Restart-Loop aus #1634 (gefunden: {nofile!r})"
+    )

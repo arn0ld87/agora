@@ -65,6 +65,15 @@ services:
     container_name: agora-supabase-pooler
     image: ${SUPAVISOR_IMAGE:-supabase/supavisor:2.9.12}
     restart: unless-stopped
+    # Das Image startet via /app/limits.sh mit RLIMIT_NOFILE=100000
+    # (set -euo pipefail). Ohne diesen Block erbt der Container das
+    # Docker-default-ulimit; bei nofile < 100000 stirbt limits.sh mit
+    # "Operation not permitted" und supavisor loopt (Exit 1). Gleiche
+    # Werte wie im Upstream-Supabase-Compose.
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
     # Loopback-Bind wie im Agora-Stack: der Pooler ist fuer Container im Netz
     # `agora-backend` ueber den Servicenamen erreichbar und braucht keinen
     # oeffentlichen Host-Port. Der 127.0.0.1-Port bleibt fuer psql/Alembic

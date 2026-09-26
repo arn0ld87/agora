@@ -57,6 +57,16 @@ Ein Dienst wird nachgezogen, wenn er gebraucht wird — nicht vorsorglich.
 
 ## Einrichtung
 
+### Voraussetzungen
+
+Der Supavisor-Container verlangt `nofile` ≥ 100000: das Image startet über
+`/app/limits.sh` mit `RLIMIT_NOFILE=100000` und unter `set -euo pipefail`
+stirbt der Start, wenn der Container sein Limit nicht anheben darf. Das
+Compose setzt deshalb für den Service `ulimits.nofile` auf 100000/100000 —
+Hosts mit restriktiven Docker-Defaults (`default-ulimits.nofile` in
+`/etc/docker/daemon.json`, z. B. 65536) fallen sonst in eine
+Restart-Schleife.
+
 ### 1. Konfiguration holen
 
 `docker-compose.yml` hängt Supabase-Konfiguration unter `volumes/` ein:
