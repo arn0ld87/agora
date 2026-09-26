@@ -95,7 +95,7 @@ def _demo_jwt_principal_active() -> bool:
     return principal is not None and principal.auth_type == AuthType.JWT
 
 
-def apply_demo_run_limits(max_rounds, budget_config):
+def apply_demo_run_limits(max_rounds, budget_config, *, demo_scoped: bool = False):
     """Cap max_rounds/budget for a JWT run on an explicitly enabled demo instance.
 
     Finding M1: shared by ``/simulation/start``
@@ -104,8 +104,17 @@ def apply_demo_run_limits(max_rounds, budget_config):
     round/budget cap by cloning or restarting a run instead of starting a
     fresh one. Operator (master-token) runs and non-demo instances are
     returned unchanged.
+
+    ``demo_scoped`` (#1688 item 4): additionally treat this as demo-scoped
+    when the ORIGINAL run being restarted (not the live requester) was
+    workspace-owned — ``_demo_jwt_principal_active()`` alone only sees the
+    live requester and would silently lift the cap the moment an operator
+    restarts a demo-capped workspace run. Ored with the requester check, not
+    a replacement for it: a demo JWT visitor restarting their own (possibly
+    legacy, unscoped) run must keep the cap too.
     """
-    if not _demo_jwt_principal_active():
+    is_scoped = _demo_jwt_principal_active() or (demo_scoped and demo_mode_enabled())
+    if not is_scoped:
         return max_rounds, budget_config
     if max_rounds is not None and max_rounds > 5:
         raise DemoLimitExceededError("Demo simulations allow at most 5 rounds")

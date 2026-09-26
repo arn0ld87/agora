@@ -1034,6 +1034,49 @@ def _reject_if_route_api_key_missing(resolved_route, resolved_api_key):
     return None
 
 
+def _original_run_is_workspace_scoped(original_run: dict) -> bool:
+    """Whether the ORIGINAL run (not the requester, not the replacement run
+    the restart is about to create) is workspace-scoped — a plain metadata
+    read, deliberately not ``workspace_credential_id_for_run`` (#1688 item
+    4): that helper cross-checks ownership against the workspace store and
+    default-denies a run with no explicit persisted scope on a demo
+    instance — the right behaviour when resolving a credential to *use*, but
+    it would turn "decide whether the demo cap applies to a restart" into a
+    hard failure for any pre-#1688 legacy run. The actual key resolution
+    still goes through that fail-closed path via
+    ``resolve_route_api_key(..., run_id=run["run_id"])`` below.
+    """
+    return (original_run.get("metadata") or {}).get("credential_scope") == "workspace"
+
+
+def _inherited_credential_scope_metadata(original_run: dict) -> dict:
+    """Copy the ORIGINAL run's persisted credential-scope metadata onto a
+    restart's replacement run record (#1688 item 3, follow-up to Finding H2).
+
+    ``workspace_credential_metadata()`` reflects the REQUESTING principal —
+    correct for a fresh start, wrong for a restart: an operator restarting a
+    workspace-owned run must not silently reclassify that run as
+    ``credential_scope="operator"``. ``build_route_subprocess_env`` /
+    ``workspace_credential_id_for_run`` read exactly this persisted metadata
+    (by the NEW run's id) to decide whether the resolved key goes through the
+    workspace secret-FD path or lands in the subprocess env as plaintext —
+    whoever clicks "restart", the new run must keep following its original
+    owner's scope.
+    """
+    metadata = original_run.get("metadata") or {}
+    scope = metadata.get("credential_scope")
+    if scope == "workspace" and metadata.get("credential_workspace_id"):
+        return {
+            "credential_scope": "workspace",
+            "credential_workspace_id": metadata["credential_workspace_id"],
+        }
+    if scope == "operator":
+        return {"credential_scope": "operator"}
+    # Legacy run with no explicit persisted scope (pre-#1688): fall back to
+    # the requesting principal, exactly like a fresh start would.
+    return workspace_credential_metadata()
+
+
 def _resume_or_restart_simulation_run(run: dict):
     simulation_id = _linked_or_entity_id(run, "simulation_id", "simulation_id")
     manager = SimulationManager()
@@ -1072,8 +1115,23 @@ def _resume_or_restart_simulation_run(run: dict):
     if key_error is not None:
         return key_error
 
+    # Finding #1688 item 4: carry over the ORIGINAL run's persisted budget
+    # instead of unconditionally recomputing from (None, None) — that always
+    # handed ``_apply_budget_to_simulation`` a ``None`` config for an
+    # operator restart, whose else-branch deletes budget_config.json /
+    # budget_abort.json outright, wiping ANY run's budget cap on restart.
+    # Whether the demo cap itself applies is likewise decided from the
+    # ORIGINAL run's persisted owner, not the live requester — an operator
+    # restarting a demo-capped workspace run must not lift that cap just by
+    # being the one clicking "restart".
+    from ..services.run_budget import get_run_budget_config as _get_run_budget_config
+
+    original_is_workspace_scoped = _original_run_is_workspace_scoped(run)
+    original_budget_config = _get_run_budget_config(run["run_id"])
     try:
-        max_rounds, budget_config = apply_demo_run_limits(None, None)
+        max_rounds, budget_config = apply_demo_run_limits(
+            None, original_budget_config, demo_scoped=original_is_workspace_scoped
+        )
     except DemoLimitExceededError as exc:
         return json_error(exc.message, status=400, code="demo_limit_exceeded")
 
@@ -1093,7 +1151,11 @@ def _resume_or_restart_simulation_run(run: dict):
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=state.branch_name,
-        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name, **workspace_credential_metadata()},
+        metadata={
+            "graph_id": state.graph_id,
+            "branch_name": state.branch_name,
+            **_inherited_credential_scope_metadata(run),
+        },
     ) as lifecycle:
         new_run = lifecycle.record
         from ..services.run_budget import set_run_budget_config as _set_run_budget_config
