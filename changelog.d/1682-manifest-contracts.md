@@ -49,3 +49,15 @@
   bevor der Draft überhaupt existierte, und der Run blieb dauerhaft im
   Status `draft` hängen. Scheitert der Start danach doch, wird das bereits
   geschriebene Draft-Manifest wieder entfernt.
+- Vervollständigung der Review-Nachbesserung (Issue #1686, Teil von #1274):
+  `RunReplayDialog.vue` zeigte `409 manifest_route_unresolvable` bisher als
+  rohe Backend-Zeichenkette an — jetzt eine eigene i18n-Meldung (de/en),
+  analog zu `manifest_missing_simulation_params`. Dieselbe Draft/Start-Race
+  wie im Replay-Pfad bestand unverändert auch im normalen Startpfad
+  (`POST /api/simulation/start`): das Draft-Manifest wurde erst nach
+  `SimulationRunner.start_simulation` geschrieben. Beide Pfade schreiben den
+  Draft jetzt vorher und verwerfen ihn bei einem gescheiterten Start wieder;
+  die Discard- und Hash-Logik leben als gemeinsame Helper in
+  `ManifestCapture` (`discard_draft_best_effort`, `simulation_config_hash`),
+  damit `runs.py` und `simulation_run.py` dieselbe Logik nutzen statt sie
+  unabhängig voneinander zu duplizieren.
