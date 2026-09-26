@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from . import runs_bp
 from ..config import Config
+from ..contracts.ai_provider_contract import AiModelRef
 from ..contracts.job_lease_contract import JobLease
 from ..contracts.runs_contract import (
     RunDetail,
@@ -39,6 +40,7 @@ from ..services.graph_tools import GraphToolsService
 from ..services.llm_routing_seed import (
     build_route_subprocess_env,
     build_runtime_llm_config,
+    prevalidate_ai_model_ref,
     resolve_route_api_key,
     seed_run_stage_routing,
 )
@@ -1204,13 +1206,46 @@ def _resume_report_generate(run: dict):
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 
 
-def _replay_simulation_run(run: dict, run_id: str, overrides):
+def _ai_model_ref_from_manifest_route(stage_route) -> Optional[AiModelRef]:
+    """Baut eine ``AiModelRef`` aus der im Manifest erfassten Original-Route
+    (Issue #1686 P1) — Grundlage für ein 1:1-Replay, wenn kein expliziter
+    Override gesetzt ist.
+
+    Bevorzugt den strikten ``ai_route_snapshot`` (Issue #1274 Punkt 2), weil
+    er die kanonische (Connection, Modell)-Referenz trägt; fällt auf die
+    Top-Level-Felder von ``StageRoute`` zurück, wenn kein Snapshot vorliegt
+    (Alt-Manifest vor #1274). ``None``, wenn beides keine vollständige
+    (Connection, Modell)-Kombination liefert — dann bleibt das Verhalten
+    unverändert (Workspace-Defaults).
+    """
+    if stage_route is None:
+        return None
+    snapshot = stage_route.ai_route_snapshot
+    provider_connection_id = (
+        snapshot.provider_connection_id if snapshot is not None else None
+    ) or stage_route.provider
+    model_id = (snapshot.model_id if snapshot is not None else None) or stage_route.model
+    if not provider_connection_id or not model_id:
+        return None
+    return AiModelRef(provider_connection_id=provider_connection_id, model_id=model_id)
+
+
+def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
     """Klont die Original-Simulation per ``create_branch`` und startet sie neu.
 
     ``create_branch`` liefert bereits Config+Profile-Klon inklusive
     ``llm_model``-Override auf ``READY`` — danach läuft exakt derselbe
     Start-Flow wie ``POST /api/simulation/start`` (Routing auflösen, Route
     sperren, Subprozess starten).
+
+    ``manifest`` ist das bereits geladene ``RunManifest`` des Original-Runs
+    (Issue #1274 Punkt 3): ``platform``/``max_rounds``/
+    ``enable_graph_memory_update``/``memory_update_graph_id`` werden daraus
+    1:1 übernommen statt auf ``platform="parallel"`` und Runner-Defaults
+    zurückzufallen — übersteuerbar bleibt ausschließlich die Modell-Route.
+    Fehlt ``manifest.simulation`` (Alt-Manifest vor dieser Änderung), ist ein
+    ehrlicher 409 der Fehlschlag statt eines stillschweigenden Defaults, der
+    als 1:1-Replay ausgegeben würde.
 
     Rückgabe: entweder ein dict ``{run_id, status}`` (Erfolg) oder eine
     fertige Flask-Error-Response (``json_error(...)``).
@@ -1219,10 +1254,21 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
     if not simulation_id:
         return json_error("Run is missing simulation_id linkage", status=409)
 
+    if manifest.simulation is None:
+        return json_error(
+            f"Run {run_id} has a manifest without captured simulation "
+            "parameters (platform/max_rounds/graph-memory-update) — it "
+            "predates Issue #1274 and cannot be replayed 1:1.",
+            status=409,
+            code="manifest_missing_simulation_params",
+        )
+
     manager = SimulationManager()
     source_state = manager.get_simulation(simulation_id)
     if not source_state:
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+
+    original_stage_route = (manifest.routing.stages or {}).get("simulation_rounds")
 
     branch_overrides: dict = {}
     llm_model_override = None
@@ -1237,6 +1283,29 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
         # JSON-Form, weil create_branch die Overrides in branch_meta persistiert.
         branch_overrides["ai_model_ref"] = ai_model_ref.model_dump(mode="json")
         llm_model_override = ai_model_ref.model_id
+
+    # Issue #1686 (P1): Ohne expliziten Override die im Original-Manifest
+    # erfasste Route seeden statt der aktuellen Workspace-Defaults —
+    # `seed_run_stage_routing` würde sonst auf den heutigen Defaults landen,
+    # und ein "identisches" Replay liefe unbemerkt auf einem anderen Modell,
+    # sobald sich Defaults/Connections seit dem Original-Run geändert haben.
+    # Ist die Original-Connection nicht mehr auflösbar (z. B. gelöscht), ist
+    # ein sichtbarer 409 vor jeder Branch-/Run-Erzeugung ehrlicher als ein
+    # stiller Rückfall auf Defaults, der wie ein 1:1-Replay aussähe.
+    route_seed_ai_model_ref = ai_model_ref
+    if route_seed_ai_model_ref is None:
+        route_seed_ai_model_ref = _ai_model_ref_from_manifest_route(original_stage_route)
+        if route_seed_ai_model_ref is not None:
+            try:
+                prevalidate_ai_model_ref(route_seed_ai_model_ref)
+            except ValueError as exc:
+                return json_error(
+                    f"Run {run_id}'s captured model route is no longer resolvable "
+                    f"({exc}) — refusing to silently fall back to current workspace "
+                    "defaults for what would be presented as a 1:1 replay.",
+                    status=409,
+                    code="manifest_route_unresolvable",
+                )
 
     branch_state = manager.create_branch(
         simulation_id,
@@ -1279,29 +1348,168 @@ def _replay_simulation_run(run: dict, run_id: str, overrides):
         # ai_model_ref durchreichen, nicht nur model_id: dieselbe Modell-ID kann
         # auf mehreren Provider-Connections liegen. Ohne die Connection-ID
         # liefe das Replay auf einer anderen Connection als das Original.
+        # route_seed_ai_model_ref ist entweder der explizite Override oder
+        # (Issue #1686 P1) die aus dem Original-Manifest rekonstruierte Route.
         seed_run_stage_routing(
             new_run_id,
             "simulation_rounds",
             llm_model_override=llm_model_override,
             llm_runtime=None,
-            ai_model_ref=ai_model_ref,
+            ai_model_ref=route_seed_ai_model_ref,
         )
         route_router = StageModelRouter(new_run_id)
         resolved_route = route_router.resolve("simulation_rounds")
         route_router.lock_stage("simulation_rounds", resolved_route)
         resolved_api_key = resolve_route_api_key(resolved_route, None)
 
-        SimulationRunner.start_simulation(
-            simulation_id=new_simulation_id,
-            platform="parallel",
-            runtime_env=build_route_subprocess_env(
-                resolved_route, resolved_api_key, new_run_id
-            ),
+        # Issue #1686 (P2): Draft-Manifest VOR dem Subprozess-Start schreiben,
+        # nicht danach. Der Monitor-Thread finalisiert das Manifest, sobald er
+        # das Ende der Simulation erkennt — bei einem sofort beendeten
+        # Subprozess konnte er das VOR dem bisherigen Draft-Write hier
+        # erreichen und fand keinen Draft (capture_final wirft dann
+        # FileNotFoundError, best-effort geschluckt); der Run blieb dauerhaft
+        # im Status "draft" hängen.
+        _capture_replay_manifest_draft(
+            original_run_id=run_id,
+            new_run_id=new_run_id,
+            new_simulation_id=new_simulation_id,
+            manifest=manifest,
+            resolved_route=resolved_route,
+            original_stage_route=original_stage_route,
+            manager=manager,
         )
+
+        try:
+            SimulationRunner.start_simulation(
+                simulation_id=new_simulation_id,
+                platform=manifest.simulation.platform,
+                max_rounds=manifest.simulation.max_rounds,
+                enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
+                graph_id=manifest.simulation.memory_update_graph_id,
+                runtime_env=build_route_subprocess_env(
+                    resolved_route, resolved_api_key, new_run_id
+                ),
+            )
+        except Exception:
+            # Der Draft wurde bereits geschrieben (s.o.) — scheitert der
+            # Start jetzt doch, darf kein Manifest für einen Run zurück-
+            # bleiben, der nie lief. Analog zum normalen Startpfad, der seit
+            # #1686 denselben Helper für dieselbe Situation nutzt
+            # (simulation_run.py::start_simulation).
+            from ..services.manifest_capture import ManifestCapture
+
+            ManifestCapture.discard_draft_best_effort(
+                run_id=new_run_id, run_dir=ArtifactLocator.run_dir(new_run_id)
+            )
+            raise
+
         manager._set_status(branch_state, SimulationStatus.RUNNING)
         lifecycle.succeed(status="processing", message=f"Replay of {run_id} started")
 
     return {"run_id": new_run["run_id"], "status": "processing"}
+
+
+def _capture_replay_manifest_draft(
+    *,
+    original_run_id: str,
+    new_run_id: str,
+    new_simulation_id: str,
+    manifest,
+    resolved_route,
+    original_stage_route,
+    manager: SimulationManager,
+) -> None:
+    """Draft-Manifest für einen Replay-Run schreiben (Issue #1274 Punkt 3).
+
+    Best-effort, analog zu ``simulation_run._capture_start_manifest_draft``:
+    ein Manifest-Fehler darf weder den Replay-Start (Aufrufer läuft VOR
+    ``SimulationRunner.start_simulation``, Issue #1686 P2) noch einen bereits
+    laufenden Replay gefährden. Übernimmt Eingaben und Simulationsparameter
+    1:1 aus dem Original-Manifest und dokumentiert eine etwaige
+    Modell-Route-Abweichung (die einzige überschreibbare Größe) über
+    ``deviations``.
+
+    Issue #1686 (P1): die aufgelöste Replay-Route wird IMMER mit der im
+    Original-Manifest erfassten Route verglichen — unabhängig davon, ob ein
+    expliziter Override oder die aus dem Manifest rekonstruierte Route
+    geseedet wurde. Ohne diesen Vergleich blieb ``deviations`` leer, sobald
+    kein Override gesetzt war, obwohl sich Defaults/Connections seit dem
+    Original-Run geändert haben konnten.
+    """
+    try:
+        from .. import __version__
+        from ..contracts.run_manifest_contract import ai_route_snapshot_from_ai_route
+        from ..services.manifest_capture import ManifestCapture
+        from ..services.runtime_run_config import RuntimeRunConfig
+
+        # Issue #1686 (P2): den Hash der tatsächlich verwendeten
+        # Branch-Konfiguration berechnen, nicht den des Originals kopieren.
+        # ``create_branch`` hat die Konfiguration bereits umgeschrieben (neue
+        # simulation_id, branch_metadata, ggf. ai_model_ref-Override) — der
+        # kopierte Original-Hash würde diese Änderungen verschleiern.
+        # Gemeinsamer Helper mit dem normalen Startpfad
+        # (``simulation_run.py::_capture_start_manifest_draft``), damit beide
+        # Pfade nicht unabhängig voneinander driften können.
+        branch_config = manager.get_simulation_config(new_simulation_id)
+        branch_config_hash = ManifestCapture.simulation_config_hash(branch_config)
+
+        deviations: list[dict[str, Any]] = []
+        if original_stage_route is not None:
+            original_model = original_stage_route.model
+            original_provider = original_stage_route.provider
+            if original_model != resolved_route.model:
+                deviations.append(
+                    {"field": "model_id", "original": original_model, "replay": resolved_route.model}
+                )
+            if original_provider != resolved_route.provider_id:
+                deviations.append(
+                    {
+                        "field": "provider_connection_id",
+                        "original": original_provider,
+                        "replay": resolved_route.provider_id,
+                    }
+                )
+
+        canonical_route = RuntimeRunConfig(new_run_id).load_ai_route_snapshot("simulation_rounds")
+        ai_route_snapshot = (
+            ai_route_snapshot_from_ai_route(canonical_route).model_dump(mode="json")
+            if canonical_route is not None
+            else None
+        )
+
+        ManifestCapture.capture_draft_best_effort(
+            run_id=new_run_id,
+            run_dir=ArtifactLocator.run_dir(new_run_id),
+            seed_document_hash=manifest.inputs.seed_document_hash,
+            seed_document_filename=manifest.inputs.seed_document_filename,
+            simulation_config_hash=branch_config_hash,
+            graph_id=manifest.inputs.graph_id,
+            agora_version=__version__,
+            schema_version="1.0.0",
+            random_seed=None,
+            simulation_id_seed=new_simulation_id,
+            routing={
+                "simulation_rounds": {
+                    "model": resolved_route.model,
+                    "provider": resolved_route.provider_id,
+                    "base_url": resolved_route.base_url_sanitized or "",
+                    "ai_route_snapshot": ai_route_snapshot,
+                }
+            },
+            prompts=ManifestCapture.oasis_prompt_snapshots(),
+            platform=manifest.simulation.platform,
+            max_rounds=manifest.simulation.max_rounds,
+            enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
+            memory_update_graph_id=manifest.simulation.memory_update_graph_id,
+            replayed_from_run_id=original_run_id,
+            deviations=deviations,
+        )
+    except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
+        logger.warning(
+            "Replay-Draft-Manifest für run_id=%s konnte nicht geschrieben werden",
+            new_run_id,
+            exc_info=True,
+        )
 
 
 @runs_bp.route("/<run_id>/replay", methods=["POST"])
@@ -1336,6 +1544,11 @@ def replay_run(run_id: str):
             status=400,
             code="no_manifest",
         )
+
+    from ..contracts.run_manifest_contract import RunManifest
+
+    with open(manifest_path, encoding="utf-8") as f:
+        original_manifest = RunManifest.model_validate(json.load(f))
 
     # Overrides aus dem Request-Body parsen — body ist die ReplayRequest-Hülle
     # {overrides: {...}}, nicht die flachen ReplayOverrides-Felder selbst.
@@ -1380,7 +1593,7 @@ def replay_run(run_id: str):
             code="random_seed_override_unsupported",
         )
 
-    result = _replay_simulation_run(run, run_id, overrides)
+    result = _replay_simulation_run(run, run_id, overrides, original_manifest)
     if not isinstance(result, dict):
         return result  # bereits eine fertige json_error(...)-Response
 

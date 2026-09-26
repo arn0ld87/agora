@@ -67,7 +67,8 @@ def _create_run_with_manifest(
     )
     run_id = run_id_override or run["run_id"]
 
-    # Manifest im Run-Verzeichnis schreiben
+    # Manifest im Run-Verzeichnis schreiben — inklusive der Replay-1:1-Parameter
+    # (Issue #1274 Punkt 3), sonst lehnt ``_replay_simulation_run`` mit 409 ab.
     run_dir = tmp_path / "runs" / run_id
     ManifestCapture.capture_draft(
         run_id=run_id,
@@ -78,8 +79,18 @@ def _create_run_with_manifest(
         graph_id="graph_001",
         agora_version="0.9.5",
         schema_version="1.0.0",
-        random_seed=42,
+        random_seed=None,
         simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "qwen3",
+                "provider": "conn-local",
+                "base_url": "http://localhost:1234/v1",
+            }
+        },
+        platform="parallel",
+        max_rounds=10,
+        enable_graph_memory_update=False,
     )
 
     return run
@@ -125,6 +136,13 @@ def _stub_replay_infra(monkeypatch, *, new_simulation_id: str = "sim_branch_defa
         "app.api.runs.build_route_subprocess_env", lambda _r, _k, _rid: {}
     )
     monkeypatch.setattr("app.api.runs.seed_run_stage_routing", MagicMock())
+    # Issue #1686 (P1): ohne expliziten Override prüft `_replay_simulation_run`
+    # jetzt vorab, ob die im Manifest erfasste Original-Connection noch
+    # existiert. Die meisten dieser Tests interessieren sich nicht für diese
+    # Connection-Auflösung — ohne den Stub würde jeder Replay ohne Override
+    # an einem echten (in der Testumgebung leeren) ProviderConnectionStore
+    # mit 409 scheitern.
+    monkeypatch.setattr("app.api.runs.prevalidate_ai_model_ref", lambda _ref: MagicMock())
 
     runner = MagicMock()
     runner.start_simulation.return_value = MagicMock(
@@ -249,6 +267,7 @@ def test_replay_starts_a_worker_not_just_a_pending_record(env, monkeypatch):
         "app.api.runs.build_route_subprocess_env", lambda _r, _k, _rid: {}
     )
     monkeypatch.setattr("app.api.runs.seed_run_stage_routing", MagicMock())
+    monkeypatch.setattr("app.api.runs.prevalidate_ai_model_ref", lambda _ref: MagicMock())
 
     runner = MagicMock()
     runner.start_simulation.return_value = MagicMock(
@@ -305,6 +324,7 @@ def test_replay_new_run_has_fresh_linked_ids_not_original(env, monkeypatch):
         "app.api.runs.build_route_subprocess_env", lambda _r, _k, _rid: {}
     )
     monkeypatch.setattr("app.api.runs.seed_run_stage_routing", MagicMock())
+    monkeypatch.setattr("app.api.runs.prevalidate_ai_model_ref", lambda _ref: MagicMock())
 
     runner = MagicMock()
     runner.start_simulation.return_value = MagicMock(
@@ -446,6 +466,368 @@ def test_replay_forwards_full_ai_model_ref_to_create_branch(env, monkeypatch):
     json.dumps(call_kwargs["overrides"])
     assert AiModelRef.model_validate(forwarded).provider_connection_id == "conn-gemini"
     assert forwarded["model_id"] == "gemini-2.5-pro"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1274 Punkt 3: 1:1-Replay von platform/max_rounds/graph-memory-update
+# ---------------------------------------------------------------------------
+
+
+def test_replay_uses_platform_max_rounds_and_graph_memory_update_from_manifest(env, monkeypatch):
+    """Vorher: SimulationRunner.start_simulation bekam hart platform="parallel"
+    und keinerlei max_rounds/enable_graph_memory_update/graph_id — Replay
+    reproduzierte das Original nicht, sondern lief mit Runner-Defaults."""
+    _, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Original-Manifest mit abweichenden Simulationsparametern überschreiben.
+    from app.services.manifest_capture import ManifestCapture
+
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    ManifestCapture.capture_draft(
+        run_id=run_id,
+        run_dir=run_dir,
+        seed_document_hash="sha256:abc",
+        seed_document_filename="test.md",
+        simulation_config_hash="sha256:def",
+        graph_id="graph_001",
+        agora_version="0.9.5",
+        schema_version="1.0.0",
+        random_seed=None,
+        simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "qwen3",
+                "provider": "conn-local",
+                "base_url": "http://localhost:1234/v1",
+            }
+        },
+        platform="twitter",
+        max_rounds=7,
+        enable_graph_memory_update=True,
+        memory_update_graph_id="graph_mem_9",
+    )
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+    assert resp.status_code == 202, resp.get_json()
+
+    call_kwargs = runner.start_simulation.call_args.kwargs
+    assert call_kwargs["platform"] == "twitter"
+    assert call_kwargs["max_rounds"] == 7
+    assert call_kwargs["enable_graph_memory_update"] is True
+    assert call_kwargs["graph_id"] == "graph_mem_9"
+
+
+def test_replay_old_manifest_without_simulation_params_returns_409(env):
+    """Ein Manifest vor Issue #1274 kennt platform/max_rounds/
+    enable_graph_memory_update nicht — stillschweigend Defaults zu setzen
+    würde einen 1:1-Replay vortäuschen, der nicht stattfindet. Ein ehrlicher
+    409 ist hier das Ehrlichere (vs. ein stiller deviation-Eintrag, der einen
+    bekannten Originalwert suggerieren würde, den es gar nicht gibt)."""
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Altes Manifest ohne "simulation"-Feld direkt schreiben (bypässt
+    # ManifestCapture, simuliert einen echten Vor-#1274-Altbestand).
+    manifest_path = os.path.join(str(env["tmp_path"]), "runs", run_id, "manifest.json")
+    with open(manifest_path) as f:
+        data = json.load(f)
+    del data["simulation"]
+    with open(manifest_path, "w") as f:
+        json.dump(data, f)
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 409, resp.get_json()
+    assert resp.get_json()["code"] == "manifest_missing_simulation_params"
+
+
+def test_replay_writes_its_own_manifest_with_deviations(env, monkeypatch):
+    """Vorher bekam ein Replay-Run gar kein eigenes Manifest — capture_final
+    fand später kein Draft und schluckte den Fehler still. Jetzt bekommt der
+    neue Run ein Draft-Manifest mit den Route-Abweichungen gegenüber dem
+    Original (die einzige überschreibbare Größe)."""
+    manager, _runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_dev")
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Original-Route weicht bewusst von der gestubbten Replay-Route ("qwen3")
+    # ab, damit der Modell-Override eine echte, prüfbare Abweichung erzeugt.
+    from app.services.manifest_capture import ManifestCapture
+
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    ManifestCapture.capture_draft(
+        run_id=run_id,
+        run_dir=run_dir,
+        seed_document_hash="sha256:abc",
+        seed_document_filename="test.md",
+        simulation_config_hash="sha256:def",
+        graph_id="graph_001",
+        agora_version="0.9.5",
+        schema_version="1.0.0",
+        random_seed=None,
+        simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "gpt-4o",
+                "provider": "conn-openai",
+                "base_url": "https://api.openai.com",
+            }
+        },
+        platform="parallel",
+        max_rounds=10,
+        enable_graph_memory_update=False,
+    )
+
+    resp = env["client"].post(
+        f"/api/runs/{run_id}/replay",
+        json={
+            "overrides": {
+                "ai_model_ref": {
+                    "provider_connection_id": "conn-gemini",
+                    "model_id": "gemini-2.5-pro",
+                }
+            }
+        },
+    )
+    assert resp.status_code == 202, resp.get_json()
+    new_run_id = resp.get_json()["run_id"]
+
+    new_manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run_id, "manifest.json")
+    assert os.path.exists(new_manifest_path), "Replay-Run muss ein eigenes Draft-Manifest bekommen"
+
+    with open(new_manifest_path) as f:
+        new_data = json.load(f)
+
+    assert new_data["replayed_from_run_id"] == run_id
+    assert new_data["simulation"]["platform"] == "parallel"
+    assert new_data["simulation"]["max_rounds"] == 10
+    deviation_fields = {d["field"] for d in new_data["deviations"]}
+    assert "model_id" in deviation_fields
+
+
+# ---------------------------------------------------------------------------
+# Issue #1686 (P2): simulation_config_hash aus der Branch-Konfiguration
+# ---------------------------------------------------------------------------
+
+
+def test_replay_manifest_hashes_the_actual_branch_config(env, monkeypatch):
+    """``create_branch`` schreibt vor dem Start bereits eine umgeschriebene
+    Konfiguration (neue simulation_id, branch_metadata, ggf. ai_model_ref-
+    Override) — der Hash im Replay-Manifest muss diese tatsächlich
+    verwendete Konfiguration abbilden, nicht den 1:1 kopierten Original-Hash
+    aus ``manifest.inputs.simulation_config_hash`` (hier "sha256:def",
+    siehe ``_create_run_with_manifest``)."""
+    import hashlib
+    from unittest.mock import MagicMock
+
+    manager, _runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_hash")
+    branch_config = {
+        "simulation_id": "sim_branch_hash",
+        "branch_metadata": {"source_simulation_id": "sim_test"},
+        "llm_model": "qwen3",
+    }
+    manager.get_simulation_config = MagicMock(return_value=branch_config)
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+    assert resp.status_code == 202, resp.get_json()
+    new_run_id = resp.get_json()["run_id"]
+
+    manager.get_simulation_config.assert_called_with("sim_branch_hash")
+
+    new_manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run_id, "manifest.json")
+    with open(new_manifest_path) as f:
+        new_data = json.load(f)
+
+    expected_hash = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(branch_config, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+    )
+    assert new_data["inputs"]["simulation_config_hash"] == expected_hash
+    assert new_data["inputs"]["simulation_config_hash"] != "sha256:def", (
+        "Der Original-Hash darf nicht 1:1 kopiert werden — create_branch hat "
+        "die Konfiguration bereits umgeschrieben"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Issue #1686 (P3): Draft-Manifest vor dem Subprozess-Start
+# ---------------------------------------------------------------------------
+
+
+def test_replay_writes_draft_manifest_before_starting_worker(env, monkeypatch):
+    """Der Draft muss existieren, BEVOR ``SimulationRunner.start_simulation``
+    aufgerufen wird — sonst kann ein sofort beendeter Monitor-Thread
+    ``capture_final`` erreichen, bevor der Draft überhaupt geschrieben wurde,
+    und der Run bleibt dauerhaft im Status "draft" hängen (capture_final
+    wirft dann best-effort geschluckt einen FileNotFoundError)."""
+    from unittest.mock import MagicMock
+
+    manager, runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_order")
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    observed: dict[str, Any] = {}
+
+    def _assert_manifest_already_written(**kwargs):
+        latest = RunRegistry().get_latest_by_linked_id(
+            "simulation_id", kwargs["simulation_id"], run_type="simulation_run"
+        )
+        assert latest is not None, "Run-Record muss vor dem Subprozess-Start existieren"
+        manifest_path = os.path.join(
+            str(env["tmp_path"]), "runs", latest["run_id"], "manifest.json"
+        )
+        observed["manifest_exists_before_start"] = os.path.exists(manifest_path)
+        return MagicMock(
+            to_dict=MagicMock(return_value={"simulation_id": kwargs["simulation_id"]})
+        )
+
+    runner.start_simulation.side_effect = _assert_manifest_already_written
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 202, resp.get_json()
+    assert observed.get("manifest_exists_before_start") is True, (
+        "Draft-Manifest muss VOR SimulationRunner.start_simulation geschrieben "
+        "werden, nicht danach"
+    )
+
+
+def test_replay_discards_draft_manifest_when_start_fails(env, monkeypatch):
+    """Scheitert der Subprozess-Start, NACHDEM der Draft bereits geschrieben
+    wurde, darf kein Manifest für einen Run zurückbleiben, der nie lief —
+    analog zum normalen Startpfad, der in diesem Fall gar kein Manifest
+    schreibt."""
+    manager, runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_fail")
+    runner.start_simulation.side_effect = RuntimeError("subprocess spawn failed")
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 500, resp.get_json()
+
+    new_run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", "sim_branch_fail", run_type="simulation_run"
+    )
+    assert new_run is not None
+    assert new_run["status"] == "failed"
+
+    manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run["run_id"], "manifest.json")
+    assert not os.path.exists(manifest_path), (
+        "Ein Run, dessen Start fehlgeschlagen ist, darf kein Manifest "
+        "zurücklassen — sonst sähe ein failed Run wie ein draft-Run aus"
+    )
+
+
+def test_replay_without_override_seeds_original_route_not_workspace_defaults(env, monkeypatch):
+    """Ohne ``ai_model_ref``-Override muss die Original-Route aus dem Manifest
+    an ``seed_run_stage_routing`` gehen — nicht ``None`` (was intern auf die
+    aktuellen Workspace-Defaults zurückfällt). Änderten sich Defaults zwischen
+    Original und Replay, liefe ein "identisches" Replay sonst unbemerkt auf
+    einem anderen Modell."""
+    from unittest.mock import MagicMock
+
+    _stub_replay_infra(monkeypatch)
+    seed_mock = MagicMock()
+    monkeypatch.setattr("app.api.runs.seed_run_stage_routing", seed_mock)
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/replay")
+
+    assert resp.status_code == 202, resp.get_json()
+    passed_ref = seed_mock.call_args.kwargs["ai_model_ref"]
+    assert passed_ref is not None, (
+        "Ohne Override darf ai_model_ref nicht None sein — sonst seedet "
+        "seed_run_stage_routing aus den aktuellen Workspace-Defaults statt "
+        "aus der im Manifest erfassten Original-Route (conn-local/qwen3)"
+    )
+    assert passed_ref.provider_connection_id == "conn-local"
+    assert passed_ref.model_id == "qwen3"
+
+
+def test_replay_without_override_records_deviation_from_current_defaults(env, monkeypatch):
+    """Auch ohne Override muss eine Abweichung zwischen der Original-Route und
+    der tatsächlich aufgelösten Replay-Route sichtbar werden — vorher blieb
+    ``deviations`` in diesem Fall leer, weil der Vergleich nur bei einem
+    expliziten Override lief."""
+    manager, _runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_defaults")
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    # Original-Manifest-Route weicht bewusst von der gestubbten
+    # Resolver-Antwort ("qwen3"/"conn-local", siehe _stub_replay_infra) ab —
+    # simuliert geänderte Workspace-Defaults zwischen Original und Replay.
+    run_dir = os.path.join(str(env["tmp_path"]), "runs", run_id)
+    ManifestCapture.capture_draft(
+        run_id=run_id,
+        run_dir=run_dir,
+        seed_document_hash="sha256:abc",
+        seed_document_filename="test.md",
+        simulation_config_hash="sha256:def",
+        graph_id="graph_001",
+        agora_version="0.9.5",
+        schema_version="1.0.0",
+        random_seed=None,
+        simulation_id_seed="sim_test",
+        routing={
+            "simulation_rounds": {
+                "model": "gpt-4o",
+                "provider": "conn-openai",
+                "base_url": "https://api.openai.com",
+            }
+        },
+        platform="parallel",
+        max_rounds=10,
+        enable_graph_memory_update=False,
+    )
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+    assert resp.status_code == 202, resp.get_json()
+    new_run_id = resp.get_json()["run_id"]
+
+    new_manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run_id, "manifest.json")
+    with open(new_manifest_path) as f:
+        new_data = json.load(f)
+
+    deviation_fields = {d["field"] for d in new_data["deviations"]}
+    assert "model_id" in deviation_fields, (
+        "Ohne Override muss die aufgelöste Replay-Route trotzdem gegen die "
+        "Original-Route verglichen werden"
+    )
+    assert "provider_connection_id" in deviation_fields
+
+
+def test_replay_without_override_returns_409_when_original_connection_gone(env, monkeypatch):
+    """Ist die im Manifest erfasste Connection nicht mehr auflösbar (z.B.
+    gelöscht), darf das Replay nicht still auf die aktuellen Workspace-
+    Defaults zurückfallen und sich als 1:1-Replay ausgeben — ein sichtbarer
+    409 ist hier ehrlicher (analog ``manifest_missing_simulation_params``)."""
+    from unittest.mock import MagicMock
+
+    _stub_replay_infra(monkeypatch)
+    # _stub_replay_infra lässt prevalidate_ai_model_ref standardmäßig
+    # durchlaufen (siehe dortiger Kommentar) — hier gezielt das Gegenteil:
+    # die Original-Connection "conn-local" existiert nicht mehr.
+    monkeypatch.setattr(
+        "app.api.runs.prevalidate_ai_model_ref",
+        MagicMock(side_effect=ValueError("ProviderConnection 'conn-local' nicht gefunden")),
+    )
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 409, resp.get_json()
+    assert resp.get_json()["code"] == "manifest_route_unresolvable"
 
 
 def test_replay_rejects_seed_document_override_not_yet_supported(env):

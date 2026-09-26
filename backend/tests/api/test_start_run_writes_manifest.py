@@ -130,6 +130,17 @@ def test_erfolgreicher_start_schreibt_ein_draft_manifest(client, monkeypatch, tm
     assert data["routing"]["stages"]["simulation_rounds"]["model"] == "qwen3"
     assert data["routing"]["stages"]["simulation_rounds"]["provider"] == "conn-local"
 
+    # Issue #1274 Punkt 1: kein fabrizierter Hash-Platzhalter mehr — Agora hat
+    # kein echtes RNG-Seed-Konzept.
+    assert data["seeds"]["random_seed"] is None
+    # Issue #1274 Punkt 3: platform/enable_graph_memory_update landen im
+    # Manifest, damit ein späteres Replay sie 1:1 übernehmen kann.
+    assert data["simulation"]["platform"] == "parallel"
+    assert data["simulation"]["enable_graph_memory_update"] is False
+    # Issue #1274 Punkt 6: ohne echtes Projekt/Dokument bleibt der
+    # Seed-Dokument-Hash ehrlich None statt "unknown".
+    assert data["inputs"]["seed_document_hash"] is None
+
 
 def test_manifest_fehler_lässt_den_run_trotzdem_erfolgreich_starten(
     client, monkeypatch, tmp_path
@@ -145,3 +156,61 @@ def test_manifest_fehler_lässt_den_run_trotzdem_erfolgreich_starten(
     response = _start(client)
 
     assert response.status_code == 200, response.data
+
+
+# ---------------------------------------------------------------------------
+# Issue #1686 (P2, normaler Startpfad): Draft vor dem Subprozess-Start
+# ---------------------------------------------------------------------------
+
+
+def test_start_schreibt_draft_manifest_vor_dem_subprozess_start(client, monkeypatch, tmp_path):
+    """Der Draft muss existieren, BEVOR ``SimulationRunner.start_simulation``
+    aufgerufen wird — sonst kann ein sofort beendeter Monitor-Thread
+    ``capture_final`` erreichen, bevor der Draft überhaupt geschrieben wurde,
+    und der Run bleibt dauerhaft im Status "draft" hängen (analog zum
+    Replay-Pfad, ``backend/app/api/runs.py::_replay_simulation_run``)."""
+    registry = _stub_start_infra(monkeypatch)
+    from app.api import simulation_run as simulation_run_module
+
+    observed: dict[str, bool] = {}
+
+    def _assert_manifest_already_written(**_kwargs):
+        manifest_path = os.path.join(str(tmp_path), "runs", RUN_ID, "manifest.json")
+        observed["manifest_exists_before_start"] = os.path.exists(manifest_path)
+        return MagicMock(to_dict=MagicMock(return_value={"simulation_id": VALID_SIM_ID}))
+
+    simulation_run_module.SimulationRunner.start_simulation.side_effect = (
+        _assert_manifest_already_written
+    )
+
+    response = _start(client)
+
+    assert response.status_code == 200, response.data
+    assert registry.create_run.called
+    assert observed.get("manifest_exists_before_start") is True, (
+        "Draft-Manifest muss VOR SimulationRunner.start_simulation geschrieben "
+        "werden, nicht danach"
+    )
+
+
+def test_start_verwirft_draft_manifest_wenn_subprozess_start_scheitert(
+    client, monkeypatch, tmp_path
+):
+    """Scheitert der Subprozess-Start, NACHDEM der Draft bereits geschrieben
+    wurde, darf kein Manifest für einen Run zurückbleiben, der nie lief."""
+    _stub_start_infra(monkeypatch)
+    from app.api import simulation_run as simulation_run_module
+
+    simulation_run_module.SimulationRunner.start_simulation.side_effect = RuntimeError(
+        "subprocess spawn failed"
+    )
+
+    response = _start(client)
+
+    assert response.status_code == 500, response.data
+
+    manifest_path = os.path.join(str(tmp_path), "runs", RUN_ID, "manifest.json")
+    assert not os.path.exists(manifest_path), (
+        "Ein Run, dessen Start fehlgeschlagen ist, darf kein Manifest "
+        "zurücklassen — sonst sähe ein failed Run wie ein draft-Run aus"
+    )

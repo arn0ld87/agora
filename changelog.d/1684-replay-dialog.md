@@ -1,0 +1,3 @@
+### Geändert
+
+- `RunReplayDialog`: Modell-Override wählt jetzt über den kanonischen `AiModelPicker` statt über Freitextfelder (`provider_connection_id`/`model_id`) — nur tatsächlich vorhandene Provider-Connections/Modelle sind wählbar. Der Dialog zeigt vor dem Absenden die aus dem Original-Manifest übernommenen Startparameter (Plattform, Max. Runden, Graph-Memory-Update, Graph-ID) und sperrt den Submit, wenn ein Alt-Manifest diese nicht kennt. Nach erfolgreichem Replay werden die `deviations` des neuen Manifests angezeigt; ein `409 manifest_missing_simulation_params` erscheint als verständliche Fehlermeldung. (#1684, Teil von #1274)

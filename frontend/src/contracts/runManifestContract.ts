@@ -14,16 +14,21 @@
 import { z } from 'zod'
 
 import { AiModelSourceSchema } from './aiModelRef'
+import { RouteSourceSchema } from './aiProviderContract'
+import { ReasoningEffortSchema, StageIdSchema } from './llmRoute'
 
 // === ManifestStatus ===
 export const ManifestStatusSchema = z.enum(['draft', 'final', 'legacy'])
 export type ManifestStatus = z.infer<typeof ManifestStatusSchema>
 
 // === ManifestInputs ===
+// seed_document_hash/seed_document_filename sind optional (Issue #1274
+// Punkt 6): ist die Quelle eines Runs nicht ermittelbar, ist `null` ehrlicher
+// als der frühere Platzhalter "unknown".
 export const ManifestInputsSchema = z
   .object({
-    seed_document_hash: z.string(),
-    seed_document_filename: z.string(),
+    seed_document_hash: z.string().nullable().optional(),
+    seed_document_filename: z.string().nullable().optional(),
     simulation_config_hash: z.string(),
     graph_id: z.string(),
     graph_version: z.string().nullable().optional(),
@@ -41,13 +46,34 @@ export const ManifestVersionsSchema = z
   .strict()
 export type ManifestVersions = z.infer<typeof ManifestVersionsSchema>
 
+// === AiRouteSnapshot (Issue #1274 Punkt 2) ===
+// Ersetzt das vorherige offene `z.record(z.string(), z.unknown())`: der
+// interne `__legacy_stage_route__`-Transportkanal von AiRoute ist hier
+// bereits aufgelöst, secret-tragende Provider-Optionen sind entfernt.
+export const AiRouteSnapshotSchema = z
+  .object({
+    stage: StageIdSchema.nullable().optional(),
+    provider_connection_id: z.string().nullable().optional(),
+    model_id: z.string().nullable().optional(),
+    source: RouteSourceSchema,
+    fallback_reason: z.string().nullable().optional(),
+    temperature: z.number().nullable().optional(),
+    max_tokens: z.number().int().nullable().optional(),
+    reasoning_effort: ReasoningEffortSchema.default('none'),
+    provider_options: z.record(z.string(), z.unknown()).default(() => ({})),
+  })
+  .strict()
+export type AiRouteSnapshot = z.infer<typeof AiRouteSnapshotSchema>
+
 // === StageRoute ===
+// base_url ist optional (Issue #1274 Punkt 4): eine aus Run-Metadaten
+// rekonstruierte Legacy-Route kennt oft nur Modell und Provider.
 export const StageRouteSchema = z
   .object({
     model: z.string(),
     provider: z.string(),
-    base_url: z.string(),
-    ai_route_snapshot: z.record(z.string(), z.unknown()).nullable().optional(),
+    base_url: z.string().nullable().optional(),
+    ai_route_snapshot: AiRouteSnapshotSchema.nullable().optional(),
   })
   .strict()
 export type StageRoute = z.infer<typeof StageRouteSchema>
@@ -78,10 +104,13 @@ export const ManifestPromptsSchema = z
 export type ManifestPrompts = z.infer<typeof ManifestPromptsSchema>
 
 // === ManifestSeeds ===
+// random_seed/simulation_id_seed sind optional (Issue #1274 Punkt 1/4): Agora
+// hat kein echtes RNG-Seed-Konzept — `null` ist die ehrliche Aussage "kein
+// Seed vorhanden" statt eines fabrizierten Platzhalters.
 export const ManifestSeedsSchema = z
   .object({
-    random_seed: z.number().int(),
-    simulation_id_seed: z.string(),
+    random_seed: z.number().int().nullable().optional(),
+    simulation_id_seed: z.string().nullable().optional(),
   })
   .strict()
 export type ManifestSeeds = z.infer<typeof ManifestSeedsSchema>
@@ -99,6 +128,30 @@ export const ManifestRuntimeSchema = z
   .strict()
 export type ManifestRuntime = z.infer<typeof ManifestRuntimeSchema>
 
+// === ManifestSimulationParams (Issue #1274 Punkt 3) ===
+// Start-Parameter für 1:1-Replay. Optional auf RunManifest-Ebene, damit
+// Manifeste vor dieser Änderung lesbar bleiben — ein fehlendes Feld dort
+// bedeutet "unbekannt", nicht "Defaults galten".
+export const ManifestSimulationParamsSchema = z
+  .object({
+    platform: z.string(),
+    max_rounds: z.number().int().nullable().optional(),
+    enable_graph_memory_update: z.boolean(),
+    memory_update_graph_id: z.string().nullable().optional(),
+  })
+  .strict()
+export type ManifestSimulationParams = z.infer<typeof ManifestSimulationParamsSchema>
+
+// === ManifestDeviation (Issue #1274 Punkt 3) ===
+export const ManifestDeviationSchema = z
+  .object({
+    field: z.string(),
+    original: z.unknown().nullable().optional(),
+    replay: z.unknown().nullable().optional(),
+  })
+  .strict()
+export type ManifestDeviation = z.infer<typeof ManifestDeviationSchema>
+
 // === RunManifest ===
 export const RunManifestSchema = z
   .object({
@@ -112,6 +165,8 @@ export const RunManifestSchema = z
     prompts: ManifestPromptsSchema,
     seeds: ManifestSeedsSchema,
     runtime: ManifestRuntimeSchema.nullable().optional(),
+    simulation: ManifestSimulationParamsSchema.nullable().optional(),
+    deviations: z.array(ManifestDeviationSchema).default(() => []),
     status: ManifestStatusSchema,
   })
   .strict()

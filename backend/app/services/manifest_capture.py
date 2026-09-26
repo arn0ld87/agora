@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import importlib.metadata
 import json
 import logging
 import os
@@ -10,17 +12,28 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.contracts.run_manifest_contract import (
+    ManifestDeviation,
     ManifestInputs,
     ManifestPrompts,
     ManifestRouting,
     ManifestRuntime,
     ManifestSeeds,
+    ManifestSimulationParams,
     ManifestVersions,
+    PromptSnapshot,
     RunManifest,
     StageRoute,
 )
+from app.models.project import ProjectManager
 
 logger = logging.getLogger("agora.manifest_capture")
+
+#: Site-packages-Pfadende der Datei, die den System-Prompt fuer jede
+#: OASIS-Persona pro Runde baut (``UserInfo.to_system_message``, Issue #1274
+#: Punkt 5). Agora uebergibt kein eigenes ``user_info_template`` — die
+#: Default-Implementierung der gepinnten ``camel-oasis``-Version bestimmt den
+#: tatsaechlichen Prompt-Inhalt der ``simulation_rounds``-Stage vollstaendig.
+_OASIS_USER_PROMPT_MODULE_SUFFIX = "oasis/social_platform/config/user.py"
 
 
 def _write_manifest(manifest_path: str, manifest: RunManifest) -> None:
@@ -58,35 +71,56 @@ class ManifestCapture:
         *,
         run_id: str,
         run_dir: str,
-        seed_document_hash: str,
-        seed_document_filename: str,
+        seed_document_hash: str | None,
+        seed_document_filename: str | None,
         simulation_config_hash: str,
         graph_id: str,
         agora_version: str,
         schema_version: str,
-        random_seed: int,
-        simulation_id_seed: str,
+        random_seed: int | None = None,
+        simulation_id_seed: str | None = None,
         graph_version: str | None = None,
         embedding_version: str | None = None,
-        routing: dict[str, dict[str, str]] | None = None,
+        routing: dict[str, dict[str, Any]] | None = None,
+        prompts: dict[str, dict[str, str]] | None = None,
+        platform: str | None = None,
+        max_rounds: int | None = None,
+        enable_graph_memory_update: bool | None = None,
+        memory_update_graph_id: str | None = None,
+        replayed_from_run_id: str | None = None,
+        deviations: list[dict[str, Any]] | None = None,
     ) -> None:
         """Schreibt ein Draft-Manifest in das Run-Verzeichnis.
 
-        ``routing`` (optional): {stage_id: {model, provider, base_url}} —
-        Stage-Routing-Snapshots zum Zeitpunkt des Run-Starts (Issue #763,
-        Ticket 9).
+        ``routing`` (optional): {stage_id: {model, provider, base_url,
+        ai_route_snapshot}} — Stage-Routing-Snapshots zum Zeitpunkt des
+        Run-Starts (Issue #763, Ticket 9; ``ai_route_snapshot`` seit Issue
+        #1274 Punkt 2). ``prompts`` (optional): {key: {content, source_file}}
+        — byte-genaue Prompt-Modul-Snapshots (Issue #1274 Punkt 5).
+        ``platform``/``max_rounds``/``enable_graph_memory_update`` bilden
+        zusammen mit ``memory_update_graph_id`` die 1:1-Replay-Parameter
+        (Issue #1274 Punkt 3); ohne ``platform`` und
+        ``enable_graph_memory_update`` bleibt ``RunManifest.simulation``
+        ``None`` statt mit Platzhaltern befüllt zu werden.
         """
         stages = {
-            stage_id: StageRoute(
-                model=route["model"],
-                provider=route["provider"],
-                base_url=route["base_url"],
-            )
-            for stage_id, route in (routing or {}).items()
+            stage_id: StageRoute(**route) for stage_id, route in (routing or {}).items()
         }
+        prompt_entries = {
+            key: PromptSnapshot(**entry) for key, entry in (prompts or {}).items()
+        }
+        simulation_params = None
+        if platform is not None and enable_graph_memory_update is not None:
+            simulation_params = ManifestSimulationParams(
+                platform=platform,
+                max_rounds=max_rounds,
+                enable_graph_memory_update=enable_graph_memory_update,
+                memory_update_graph_id=memory_update_graph_id,
+            )
         manifest = RunManifest(
             schema_version=1,
             run_id=run_id,
+            replayed_from_run_id=replayed_from_run_id,
             captured_at=datetime.now(timezone.utc),
             inputs=ManifestInputs(
                 seed_document_hash=seed_document_hash,
@@ -101,11 +135,13 @@ class ManifestCapture:
                 schema_version=schema_version,
             ),
             routing=ManifestRouting(stages=stages),
-            prompts=ManifestPrompts(entries={}),
+            prompts=ManifestPrompts(entries=prompt_entries),
             seeds=ManifestSeeds(
                 random_seed=random_seed,
                 simulation_id_seed=simulation_id_seed,
             ),
+            simulation=simulation_params,
+            deviations=[ManifestDeviation(**d) for d in (deviations or [])],
             status="draft",
         )
 
@@ -159,37 +195,75 @@ class ManifestCapture:
         """Erzeugt ein Legacy-Manifest für einen Alt-Run ohne Manifest.
 
         Überschreibt kein vorhandenes Manifest. Rekonstruiert bekannte Felder
-        aus den Run-Metadaten; nicht rekonstruierbare Felder bleiben auf
-        Platzhalter-Werten.
+        aus den Run-Metadaten; nicht rekonstruierbare Felder bleiben ``None``
+        (Issue #1274 Punkt 4) statt fabrizierter Platzhalter wie dem früheren
+        ``random_seed=0``/``simulation_id_seed="legacy"``. ``"unknown"`` bleibt
+        ausschließlich für Felder, die im Vertrag Pflicht-Strings sind
+        (``simulation_config_hash``, ``graph_id``) — dort ist kein ``None``
+        vorgesehen.
         """
         manifest_path = os.path.join(run_dir, "manifest.json")
         if os.path.exists(manifest_path):
             return  # Kein Überschreiben
 
         started_at_str = run_metadata.get("started_at")
-        captured_at = datetime.now(timezone.utc)
+        parsed_started_at: datetime | None = None
         if started_at_str:
             try:
                 parsed = datetime.fromisoformat(started_at_str)
                 # RunRegistry.create_run schreibt started_at als naives
-                # datetime.now().isoformat() — ohne Coercion würde dieses
-                # captured_at nicht mit den tz-aware Werten aus capture_draft
-                # vergleichbar sein (TypeError bei Subtraktion/Vergleich).
-                captured_at = (
+                # datetime.now().isoformat() — ohne Coercion wäre dieser Wert
+                # nicht mit den tz-aware Werten aus capture_draft vergleichbar
+                # (TypeError bei Subtraktion/Vergleich).
+                parsed_started_at = (
                     parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
                 )
             except (ValueError, TypeError):
                 pass
+        # captured_at (Migrationszeitpunkt) und runtime.started_at
+        # (Run-Startzeitpunkt) sind unterschiedliche Zeitpunkte — captured_at
+        # darf auf "jetzt" zurückfallen, runtime.started_at nicht: ein
+        # fabriziertes "jetzt" als angeblicher Original-Run-Start wäre selbst
+        # der Fehler, den dieses Ticket beheben soll.
+        captured_at = parsed_started_at or datetime.now(timezone.utc)
+
+        runtime = None
+        if parsed_started_at is not None:
+            completed_at_str = run_metadata.get("completed_at")
+            parsed_completed_at: datetime | None = None
+            if completed_at_str:
+                try:
+                    parsed_completed = datetime.fromisoformat(completed_at_str)
+                    parsed_completed_at = (
+                        parsed_completed.replace(tzinfo=timezone.utc)
+                        if parsed_completed.tzinfo is None
+                        else parsed_completed
+                    )
+                except (ValueError, TypeError):
+                    pass
+            status = run_metadata.get("status")
+            if parsed_completed_at is not None or status is not None:
+                runtime = ManifestRuntime(
+                    started_at=parsed_started_at,
+                    completed_at=parsed_completed_at,
+                    termination_reason=str(status) if status is not None else None,
+                )
 
         graph_id = run_metadata.get("graph_id", "unknown")
-        seed_document_filename = run_metadata.get("document_name", "unknown")
+        seed_document_filename = run_metadata.get("document_name")
+
+        llm_model = run_metadata.get("llm_model")
+        llm_provider = run_metadata.get("llm_provider")
+        stages: dict[str, StageRoute] = {}
+        if llm_model is not None and llm_provider is not None:
+            stages["simulation_rounds"] = StageRoute(model=llm_model, provider=llm_provider)
 
         manifest = RunManifest(
             schema_version=1,
             run_id=run_id,
             captured_at=captured_at,
             inputs=ManifestInputs(
-                seed_document_hash="unknown",
+                seed_document_hash=None,
                 seed_document_filename=seed_document_filename,
                 simulation_config_hash="unknown",
                 graph_id=graph_id,
@@ -198,17 +272,74 @@ class ManifestCapture:
                 agora_version=agora_version,
                 schema_version=schema_version,
             ),
-            routing=ManifestRouting(stages={}),
+            routing=ManifestRouting(stages=stages),
             prompts=ManifestPrompts(entries={}),
             seeds=ManifestSeeds(
-                random_seed=0,
-                simulation_id_seed="legacy",
+                random_seed=None,
+                simulation_id_seed=run_metadata.get("simulation_id"),
             ),
+            runtime=runtime,
             status="legacy",
         )
 
         os.makedirs(run_dir, exist_ok=True)
         _write_manifest(manifest_path, manifest)
+
+    @staticmethod
+    def seed_document_snapshot(project_id: str | None) -> tuple[str | None, str | None]:
+        """Reale (Hash, Dateiname)-Werte des Projekt-Quelltexts (Issue #1274 Punkt 6).
+
+        ``ProjectManager.get_extracted_text`` liefert den rohen, kombinierten
+        Upload-Text (ADR-0013); das Dokument-Manifest liefert die
+        Original-Dateinamen. Fehlt beides (Altprojekt ohne Sidecar, Text
+        gelöscht, kein ``project_id``), bleibt ``(None, None)`` — ein
+        fabrizierter Wert wäre hier falsche Evidenz.
+        """
+        if not project_id:
+            return None, None
+        text = ProjectManager.get_extracted_text(project_id)
+        seed_hash = (
+            f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
+            if text is not None
+            else None
+        )
+
+        manifest = ProjectManager.get_document_manifest(project_id)
+        filenames = [entry.filename for entry in manifest.documents] if manifest else []
+        filename = ",".join(filenames) if filenames else None
+        return seed_hash, filename
+
+    @staticmethod
+    def oasis_prompt_snapshots() -> dict[str, dict[str, str]]:
+        """Byte-genauer Snapshot des OASIS-System-Prompt-Templates (Issue #1274 Punkt 5).
+
+        ``oasis.social_platform.config.user.UserInfo.to_system_message`` baut
+        den System-Prompt für jede Persona jeder Simulationsrunde; Agora
+        übergibt der Environment kein eigenes ``user_info_template``, das
+        Standardverhalten der gepinnten ``camel-oasis``-Version bestimmt den
+        tatsächlichen Prompt-Inhalt also vollständig. Pfadauflösung über
+        ``importlib.metadata`` statt ``import oasis`` — ein echter Import
+        zöge Torch/Sentence-Transformers in den Webprozess, den OASIS sonst
+        nur im separaten Simulations-Subprozess lädt. Liefert ``{}`` wenn die
+        Distribution oder Datei nicht auffindbar ist, statt eine Ausnahme zu
+        werfen — der Aufrufer ist ohnehin best-effort.
+        """
+        try:
+            dist = importlib.metadata.distribution("camel-oasis")
+            for file in dist.files or ():
+                if file.as_posix().endswith(_OASIS_USER_PROMPT_MODULE_SUFFIX):
+                    content = dist.locate_file(file).read_text(encoding="utf-8")
+                    return {
+                        "oasis_user_system_message": {
+                            "content": content,
+                            "source_file": (
+                                f"camel-oasis=={dist.version}:{file.as_posix()}"
+                            ),
+                        }
+                    }
+        except (importlib.metadata.PackageNotFoundError, OSError):
+            pass
+        return {}
 
     @staticmethod
     def capture_draft_best_effort(*, run_id: str, **kwargs: Any) -> None:
@@ -241,6 +372,50 @@ class ManifestCapture:
         except Exception:  # noqa: BLE001 — best-effort, siehe Docstring
             logger.warning(
                 "Manifest-Final für run_id=%s konnte nicht geschrieben werden",
+                run_id,
+                exc_info=True,
+            )
+
+    @staticmethod
+    def simulation_config_hash(config: dict[str, Any] | None) -> str:
+        """Kanonischer ``sha256:``-Hash einer Simulationskonfiguration
+        (Issue #763 Ticket 9 / #1686 P2).
+
+        Gemeinsame Hash-Funktion/Serialisierung für ``inputs.
+        simulation_config_hash`` — sowohl beim normalen Start
+        (``simulation_run.py::_capture_start_manifest_draft``) als auch beim
+        Replay (``runs.py::_capture_replay_manifest_draft``), damit beide
+        Pfade nicht unabhängig voneinander driften können. ``sort_keys=True``
+        sorgt für einen stabilen Hash unabhängig von der Schlüsselreihenfolge
+        im gespeicherten JSON; ``default=str`` verhindert einen Absturz auf
+        nicht-JSON-nativen Werten (z. B. Enum-Instanzen) im Config-Dict.
+        """
+        return "sha256:" + hashlib.sha256(
+            json.dumps(config or {}, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+
+    @staticmethod
+    def discard_draft_best_effort(*, run_id: str, run_dir: str) -> None:
+        """Entfernt ein bereits geschriebenes Draft-Manifest, wenn der
+        Simulations-Start danach doch noch fehlschlägt (Issue #1686 P2).
+
+        Der Draft wird seit #1686 VOR ``SimulationRunner.start_simulation``
+        geschrieben (sowohl beim normalen Start als auch beim Replay), damit
+        ein sofort beendeter Monitor-Thread nicht auf ein fehlendes Manifest
+        trifft und den Run dauerhaft im Status ``draft`` belässt (siehe
+        :meth:`capture_draft`/:meth:`capture_final`). Scheitert der Start
+        danach doch, darf kein Manifest für einen Run zurückbleiben, der nie
+        lief. Best-effort wie die übrigen Wrapper dieser Klasse: ein Fehler
+        beim Aufräumen darf die eigentliche Fehlerbehandlung des
+        gescheiterten Starts nicht verdecken.
+        """
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        try:
+            if os.path.exists(manifest_path):
+                os.remove(manifest_path)
+        except OSError:
+            logger.warning(
+                "Verwaistes Draft-Manifest für run_id=%s konnte nicht entfernt werden",
                 run_id,
                 exc_info=True,
             )

@@ -1,8 +1,155 @@
 {
   "$defs": {
+    "AiRouteSnapshot": {
+      "additionalProperties": false,
+      "description": "Strikter Manifest-Snapshot einer aufgel\u00f6sten ``AiRoute`` (Issue #1274 Punkt 2).\n\nErsetzt das vorherige offene ``dict[str, Any]``: der interne\n``__legacy_stage_route__``-Transportkanal von :class:`AiRoute` (siehe\n``ai_provider_contract.stage_route_from_ai_route``) ist hier bereits\naufgel\u00f6st \u2014 ``temperature``/``max_tokens``/``reasoning_effort`` liegen auf\noberster Ebene \u2014 und secret-tragende Provider-Optionen sind entfernt.\n``extra=\"forbid\"`` lehnt jedes weitere Feld ab, damit kein k\u00fcnftiger\ninterner Transportkanal ungepr\u00fcft ins Manifest durchsickert.",
+      "properties": {
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Id"
+        },
+        "provider_connection_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Connection Id"
+        },
+        "provider_options": {
+          "additionalProperties": true,
+          "title": "Provider Options",
+          "type": "object"
+        },
+        "reasoning_effort": {
+          "default": "none",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Reasoning Effort",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "profile",
+            "stage_override",
+            "run_override",
+            "project",
+            "workspace",
+            "provider_fallback",
+            "runtime",
+            "legacy"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "enum": [
+                "document_ingest",
+                "ontology_generation",
+                "graph_build",
+                "persona_generation",
+                "simulation_rounds",
+                "report_generation",
+                "evaluation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "AiRouteSnapshot",
+      "type": "object"
+    },
+    "ManifestDeviation": {
+      "additionalProperties": false,
+      "description": "Eine dokumentierte Abweichung eines Replay-Runs vom Original (Issue #1274 Punkt 3).\n\n\u00dcbersteuerbar ist beim Replay ausschlie\u00dflich die Modell-Route \u2014 jede\nAbweichung hier beschreibt also, wo genau ein Override gegen\u00fcber dem\nOriginal gewirkt hat, statt Replay-Runs stillschweigend als 1:1-Kopien\nauszugeben.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "original": {
+          "default": null,
+          "title": "Original"
+        },
+        "replay": {
+          "default": null,
+          "title": "Replay"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "ManifestDeviation",
+      "type": "object"
+    },
     "ManifestInputs": {
       "additionalProperties": false,
-      "description": "Eingangsdaten-Hashes und -Referenzen.",
+      "description": "Eingangsdaten-Hashes und -Referenzen.\n\n``seed_document_hash``/``seed_document_filename`` sind ``Optional``\n(Issue #1274 Punkt 6): ist die Quelle eines Runs wirklich nicht\nermittelbar, ist ``None`` ehrlicher als der fr\u00fchere Platzhalter\n``\"unknown\"``, der wie ein echter Wert aussah.",
       "properties": {
         "embedding_version": {
           "anyOf": [
@@ -33,12 +180,28 @@
           "title": "Graph Version"
         },
         "seed_document_filename": {
-          "title": "Seed Document Filename",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed Document Filename"
         },
         "seed_document_hash": {
-          "title": "Seed Document Hash",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed Document Hash"
         },
         "simulation_config_hash": {
           "title": "Simulation Config Hash",
@@ -46,8 +209,6 @@
         }
       },
       "required": [
-        "seed_document_hash",
-        "seed_document_filename",
         "simulation_config_hash",
         "graph_id"
       ],
@@ -164,22 +325,78 @@
     },
     "ManifestSeeds": {
       "additionalProperties": false,
-      "description": "Random-Seed-Informationen.",
+      "description": "Random-Seed-Informationen.\n\n``random_seed`` ist ``Optional`` (Issue #1274 Punkt 1): Agora hat kein\nechtes RNG-Seed-Konzept (kein ``np.random.seed`` o.\u00e4.). Ein aus der\n``simulation_id`` abgeleiteter Platzhalter-Hash suggerierte hier\nReproduzierbarkeit, die nicht besteht \u2014 ``None`` ist die ehrliche\nAussage \"kein Seed vorhanden\". ``simulation_id_seed`` ist ``Optional``\naus demselben Grund: eine Legacy-Rekonstruktion ohne bekannte\n``simulation_id`` darf keinen fabrizierten Platzhalter (``\"legacy\"``)\ntragen.",
       "properties": {
         "random_seed": {
-          "title": "Random Seed",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Random Seed"
         },
         "simulation_id_seed": {
-          "title": "Simulation Id Seed",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Simulation Id Seed"
+        }
+      },
+      "title": "ManifestSeeds",
+      "type": "object"
+    },
+    "ManifestSimulationParams": {
+      "additionalProperties": false,
+      "description": "Start-Parameter des Simulationslaufs f\u00fcr 1:1-Replay (Issue #1274 Punkt 3).\n\nOhne diese Felder setzte ``POST /api/runs/<id>/replay`` stillschweigend\n``platform=\"parallel\"`` sowie Runner-Defaults f\u00fcr ``max_rounds`` und das\nGraph-Memory-Update statt das Original zu reproduzieren. ``Optional`` auf\n:class:`RunManifest`-Ebene, damit Manifeste vor dieser \u00c4nderung lesbar\nbleiben \u2014 ein fehlendes Feld dort bedeutet \"unbekannt\", nicht \"Defaults\ngalten\".",
+      "properties": {
+        "enable_graph_memory_update": {
+          "title": "Enable Graph Memory Update",
+          "type": "boolean"
+        },
+        "max_rounds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Rounds"
+        },
+        "memory_update_graph_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Memory Update Graph Id"
+        },
+        "platform": {
+          "title": "Platform",
           "type": "string"
         }
       },
       "required": [
-        "random_seed",
-        "simulation_id_seed"
+        "platform",
+        "enable_graph_memory_update"
       ],
-      "title": "ManifestSeeds",
+      "title": "ManifestSimulationParams",
       "type": "object"
     },
     "ManifestVersions": {
@@ -224,24 +441,30 @@
     },
     "StageRoute": {
       "additionalProperties": false,
-      "description": "Pro-Stage-Modell- und Provider-Information (ohne Secrets).",
+      "description": "Pro-Stage-Modell- und Provider-Information (ohne Secrets).\n\n``base_url`` ist ``Optional`` (Issue #1274 Punkt 4): eine aus\nRun-Metadaten rekonstruierte Legacy-Route kennt oft nur Modell und\nProvider, nie die Basis-URL der Verbindung.",
       "properties": {
         "ai_route_snapshot": {
           "anyOf": [
             {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/$defs/AiRouteSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Ai Route Snapshot"
-        },
-        "base_url": {
-          "title": "Base Url",
-          "type": "string"
+          "title": "Base Url"
         },
         "model": {
           "title": "Model",
@@ -254,8 +477,7 @@
       },
       "required": [
         "model",
-        "provider",
-        "base_url"
+        "provider"
       ],
       "title": "StageRoute",
       "type": "object"
@@ -270,6 +492,13 @@
       "format": "date-time",
       "title": "Captured At",
       "type": "string"
+    },
+    "deviations": {
+      "items": {
+        "$ref": "#/$defs/ManifestDeviation"
+      },
+      "title": "Deviations",
+      "type": "array"
     },
     "inputs": {
       "$ref": "#/$defs/ManifestInputs"
@@ -315,6 +544,17 @@
     },
     "seeds": {
       "$ref": "#/$defs/ManifestSeeds"
+    },
+    "simulation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ManifestSimulationParams"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "status": {
       "enum": [
