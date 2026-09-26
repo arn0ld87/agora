@@ -86,9 +86,21 @@ def _build_subprocess_env(
     _inject_oasis_db_env(env, str(sim_dir))
     pass_fds: Tuple[int, ...] = ()
     if secret_payload_json:
+        # Finding L2 (Security-Review, #1688): the try/finally must start
+        # immediately after ``os.pipe()`` so ``read_fd`` — the FD the child
+        # will read the workspace secret from — is never leaked into this
+        # long-running backend process if the write below fails. It is only
+        # exposed to the caller (``env``/``pass_fds``, ultimately
+        # ``Popen``) once the payload has been written in full.
         read_fd, write_fd = os.pipe()
         try:
-            os.write(write_fd, secret_payload_json.encode("utf-8"))
+            payload_bytes = secret_payload_json.encode("utf-8")
+            offset = 0
+            while offset < len(payload_bytes):
+                offset += os.write(write_fd, payload_bytes[offset:])
+        except Exception:
+            os.close(read_fd)
+            raise
         finally:
             os.close(write_fd)
         env[WORKSPACE_SECRET_FD_ENV_KEY] = str(read_fd)

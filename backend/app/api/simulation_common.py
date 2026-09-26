@@ -2,14 +2,13 @@
 Shared helpers for simulation-related API modules.
 """
 
-import os
-
 from flask import current_app, request
 
 from . import runs_bp, simulation_bp
 from ..contracts.auth_contract import AuthType
 from ..security.principal_context import current_principal
 from ..services.artifact_store import SimulationArtifactStore
+from ..services.llm_routing_seed import demo_mode_enabled
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
@@ -87,10 +86,6 @@ class DemoLimitExceededError(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
-
-
-def demo_mode_enabled() -> bool:
-    return os.environ.get("AGORA_DEMO_MODE", "").lower() in {"1", "true", "yes", "on"}
 
 
 def _demo_jwt_principal_active() -> bool:
