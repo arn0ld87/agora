@@ -212,6 +212,126 @@ _postgres_backends() {
   esac
 }
 
+# Neo4j-Offline-Dump/-Load (#1633). `agora-neo4j` mountet nur /data und
+# /logs, kein /backups — und Neo4j Community kann eine LAUFENDE Datenbank
+# ohnehin nicht dumpen oder laden. Ein Wegwerf-Container mit --volumes-from
+# sieht dieselben Volumes wie der Anwendungscontainer, mountet zusätzlich das
+# Backup-Verzeichnis des Hosts und läuft mit UID 0, damit er innerhalb des
+# Containers auf neo4j:neo4j droppen kann (su-exec/gosu, je nachdem was das
+# offizielle Image mitbringt). Ein Staging-Verzeichnis im Container hält die
+# neo4j-UID (7474) von den Host-Rechten fern: BACKUP_DIR liegt unter umask 077
+# mit 0700, und ein direktes chown auf neo4j:neo4j würde dort kollidieren.
+neo4j_container_id() {
+  # log() schreibt per tee auch auf stdout — innerhalb dieser Command
+  # Substitution ($(neo4j_container_id)) würde jede solche Zeile Teil des
+  # zurückgegebenen Werts. >&2 hält das Protokoll, aber stdout bleibt
+  # ausschließlich für den eigentlichen Rückgabewert reserviert.
+  if [ "$DRY_RUN" = "1" ]; then
+    log "    \$ docker compose ps -a -q neo4j" >&2
+    log "      (dry-run: nicht ausgeführt)" >&2
+    printf '%s' "<neo4j-container>"
+    return 0
+  fi
+  log "    \$ docker compose ps -a -q neo4j" >&2
+  local id
+  id=$(docker compose ps -a -q neo4j 2>>"$PROTOCOL") || true
+  printf '%s\n' "$id" | redact >>"$PROTOCOL"
+  [ -n "$id" ] || return 1
+  printf '%s' "$id"
+}
+
+neo4j_image() {
+  local cid="$1"
+  if [ "$DRY_RUN" = "1" ]; then
+    log "    \$ docker inspect --format '{{.Config.Image}}' $cid" >&2
+    log "      (dry-run: nicht ausgeführt)" >&2
+    printf '%s' "<neo4j-image>"
+    return 0
+  fi
+  log "    \$ docker inspect --format '{{.Config.Image}}' $cid" >&2
+  local image
+  image=$(docker inspect --format '{{.Config.Image}}' "$cid" 2>>"$PROTOCOL") || true
+  printf '%s\n' "$image" | redact >>"$PROTOCOL"
+  [ -n "$image" ] || return 1
+  printf '%s' "$image"
+}
+
+# Ermittelt Container-ID und Image des neo4j-Service und bricht über fail()
+# ab, wenn eins von beidem fehlt. Muss VOR jedem `docker compose stop neo4j`
+# laufen (phase_backup) — sonst bliebe ein laufender Stack gestoppt, ohne
+# dass neo4j_admin_offline je zum Neustart käme.
+neo4j_resolve_target() {
+  NEO4J_TARGET_CID=$(neo4j_container_id) \
+    || fail "Neo4j-Container nicht gefunden (docker compose ps -a -q neo4j liefert nichts)"
+  NEO4J_TARGET_IMAGE=$(neo4j_image "$NEO4J_TARGET_CID") \
+    || fail "Neo4j-Image nicht ermittelbar (docker inspect liefert nichts)"
+}
+
+# Führt neo4j-admin database dump|load in einem Wegwerf-Container gegen
+# Container-ID/Image aus, die der Aufrufer bereits aufgelöst hat (siehe
+# neo4j_resolve_target). Gibt den Exit-Code des Dumps/Loads zurück, statt mit
+# set -e sofort abzubrechen — phase_backup startet Neo4j in jedem Fall neu,
+# bevor es den Rückgabewert auswertet.
+neo4j_admin_offline() {
+  local action="$1" cid="$2" image="$3" host_uid host_gid inline rc=0
+  host_uid=$(id -u)
+  host_gid=$(id -g)
+  case "$action" in
+    dump)
+      inline='mkdir -p /stage && chown neo4j:neo4j /stage'
+      inline="$inline"' && DROP=$(command -v su-exec || command -v gosu)'
+      inline="$inline"' || { echo "weder su-exec noch gosu im Neo4j-Image gefunden" >&2; exit 9; }'
+      inline="$inline"' && "$DROP" neo4j:neo4j neo4j-admin database dump neo4j --to-path=/stage'
+      inline="$inline"' && cp /stage/neo4j.dump /backups/neo4j.dump'
+      inline="$inline"' && chown "$HOST_UID:$HOST_GID" /backups/neo4j.dump'
+      inline="$inline"' && chmod 0600 /backups/neo4j.dump'
+      ;;
+    load)
+      inline='mkdir -p /stage && cp /backups/neo4j.dump /stage/'
+      inline="$inline"' && chown -R neo4j:neo4j /stage'
+      inline="$inline"' && DROP=$(command -v su-exec || command -v gosu)'
+      inline="$inline"' || { echo "weder su-exec noch gosu im Neo4j-Image gefunden" >&2; exit 9; }'
+      inline="$inline"' && "$DROP" neo4j:neo4j neo4j-admin database load neo4j --from-path=/stage --overwrite-destination=true'
+      ;;
+    *) fail "neo4j_admin_offline: unbekannte Aktion $action" ;;
+  esac
+  set +e
+  run docker run --rm --volumes-from "$cid" \
+    -v "$BACKUP_DIR/neo4j:/backups" \
+    -e "HOST_UID=$host_uid" -e "HOST_GID=$host_gid" \
+    --user 0:0 --entrypoint sh "$image" -c "$inline"
+  rc=$?
+  set -e
+  return $rc
+}
+
+# COMPOSE_FILE-Guard (#1633-Nachtrag). Der reale Zielhost (armserver) fährt
+# den Stack mit mehreren Compose-Dateien (Overlays für Ports, Mounts,
+# Prod-/Codex-CLI-Konfiguration); docker compose wertet COMPOSE_FILE nativ
+# aus, dieses Skript braucht dafür keine eigenen -f-Flags. Ist die Variable
+# leer und der vorhandene neo4j-Container stammt nachweislich (Label
+# com.docker.compose.project.config_files) aus mehreren Dateien, würde ein
+# nacktes down/create/up ihn nur mit der Default-Datei neu anlegen und die
+# Overlays stillschweigend verlieren. Die Prüfung selbst braucht Docker — im
+# Dry-Run wird deshalb nur gewarnt, nicht geprüft; ein echter Lauf ruft
+# ohnehin schon docker compose down/create/up auf.
+guard_compose_overlay() {
+  [ -n "${COMPOSE_FILE:-}" ] && return 0
+  if [ "$DRY_RUN" = "1" ]; then
+    log "  WARNUNG: COMPOSE_FILE ist nicht gesetzt. Wurde der vorhandene neo4j-Container mit mehreren Compose-Dateien erzeugt, geht das Overlay bei diesem Schritt sonst verloren — vor einem echten Lauf prüfen und COMPOSE_FILE mit ':' getrennt setzen."
+    return 0
+  fi
+  local cid label
+  cid=$(docker compose ps -a -q neo4j 2>/dev/null) || cid=""
+  [ -n "$cid" ] || return 0
+  label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$cid" 2>/dev/null) || label=""
+  case "$label" in
+    *,*)
+      fail "COMPOSE_FILE ist nicht gesetzt, aber der vorhandene neo4j-Container wurde mit mehreren Compose-Dateien erzeugt ($label). COMPOSE_FILE mit ':' getrennt auf genau diese Dateien setzen, bevor dieser Befehl läuft."
+      ;;
+  esac
+}
+
 archive() {
   local name="$1" dir="$2"
   if [ ! -d "$dir" ] && [ "$DRY_RUN" != "1" ]; then
@@ -293,9 +413,33 @@ phase_backup() {
   log "  Hinweis: Die neo4j-admin-Syntax hängt an der eingesetzten Neo4j-Version"
   log "  und Betriebsform und ist vor dem Drill gegen die laufende Version zu"
   log "  prüfen (docs/backup-restore.md). Dieses Skript pinnt sie bewusst nicht."
-  run docker compose exec -T neo4j neo4j-admin database dump neo4j --to-path=/backups
-  run docker compose cp neo4j:/backups "$BACKUP_DIR/neo4j"
+  # Neo4j Community kann eine laufende Datenbank nicht dumpen (#1633): erst
+  # stoppen, dann offline über einen Wegwerf-Container dumpen, dann in jedem
+  # Fall wieder starten — auch wenn der Dump fehlschlägt. Das PostgreSQL-
+  # Backup läuft unabhängig vom Ergebnis: ein Neo4j-Fehler soll nicht auch
+  # noch das PostgreSQL-Backup verhindern.
+  # Container/Image UND das Zielverzeichnis werden VOR dem stop aufgelöst:
+  # scheitert eins von beidem, bleibt Neo4j einfach laufen, statt gestoppt und
+  # nie wieder gestartet zu werden.
+  neo4j_resolve_target
+  run install -d -m 0700 "$BACKUP_DIR/neo4j"
+  run docker compose stop neo4j
+  local neo4j_rc=0
+  neo4j_admin_offline dump "$NEO4J_TARGET_CID" "$NEO4J_TARGET_IMAGE" || neo4j_rc=$?
+  run docker compose start neo4j
   backup_postgres
+  if [ "$neo4j_rc" -ne 0 ]; then
+    fail "Neo4j-Dump fehlgeschlagen (Exit $neo4j_rc) — PostgreSQL-Backup wurde trotzdem erstellt (bzw. übersprungen, falls kein AGORA_*_BACKEND=postgres aktiv ist)"
+  fi
+  if [ "$DRY_RUN" != "1" ]; then
+    [ -f "$BACKUP_DIR/neo4j/neo4j.dump" ] \
+      || fail "Neo4j-Dump fehlt trotz Exit 0: $BACKUP_DIR/neo4j/neo4j.dump"
+    local digest
+    digest=$(cd "$BACKUP_DIR" && _sha256 "neo4j/neo4j.dump") \
+      || fail "Prüfsumme nicht berechenbar: $BACKUP_DIR/neo4j/neo4j.dump"
+    printf '%s\n' "$digest" >>"$MANIFEST"
+    log "    Prüfsumme in $(basename "$MANIFEST") abgelegt"
+  fi
   log "  Backup abgelegt unter $BACKUP_DIR"
 }
 
@@ -360,23 +504,40 @@ guard_restore_target() {
 phase_restore() {
   step "Phase 2/5 — Restore"
   guard_restore_target
+  guard_compose_overlay
   run docker compose down
   # Recovery-Reihenfolge aus docs/backup-restore.md, Schritte 3-6: erst die
   # Stores, dann die Instanzsettings, dann die Artefakte, dann Neo4j.
   unarchive data     "$STORE_DIR"
   unarchive instance "$INSTANCE_DIR"
   unarchive uploads  "$DATA_DIR"
-  run docker compose up -d neo4j
-  # `docker compose down` hat den alten Container mitgenommen; der neue startet
-  # mit einem leeren /backups. Ohne dieses Zurückkopieren lädt der folgende
-  # `neo4j-admin database load --from-path=/backups` nichts — und ein Drill,
-  # der das nicht bemerkt, hat den Graphen nie restauriert. Der Punkt am Ende
-  # des Quellpfads kopiert den *Inhalt* des Verzeichnisses, nicht das
-  # Verzeichnis selbst.
-  [ -d "$BACKUP_DIR/neo4j" ] || [ "$DRY_RUN" = "1" ] \
-    || fail "Neo4j-Dump fehlt: $BACKUP_DIR/neo4j"
-  run docker compose cp "$BACKUP_DIR/neo4j/." neo4j:/backups
-  run docker compose exec -T neo4j neo4j-admin database load neo4j --from-path=/backups --overwrite-destination=true
+  # Prüfsumme des Neo4j-Dumps vor dem Laden bestätigen, genau wie bei den drei
+  # Archiven — ein durch Bitrot beschädigter Dump soll den Restore-Host nicht
+  # mit einem kaputten Graphen befüllen.
+  if [ "$DRY_RUN" != "1" ]; then
+    [ -f "$BACKUP_DIR/neo4j/neo4j.dump" ] \
+      || fail "Neo4j-Dump fehlt: $BACKUP_DIR/neo4j/neo4j.dump"
+    if [ -f "$MANIFEST" ]; then
+      (cd "$BACKUP_DIR" && grep " neo4j/neo4j.dump\$" "$(basename "$MANIFEST")" \
+        | _sha256_check -) >/dev/null 2>&1 \
+        || fail "Prüfsumme weicht ab oder fehlt im Manifest: neo4j/neo4j.dump"
+      log "    Prüfsumme bestätigt: neo4j/neo4j.dump"
+    else
+      log "    WARNUNG: kein Manifest — neo4j/neo4j.dump wird ungeprüft geladen"
+    fi
+  fi
+  # `docker compose down` hat den alten Neo4j-Container mitgenommen. Ein
+  # Wegwerf-Container mit --volumes-from braucht einen existierenden (nicht
+  # zwingend laufenden) Zielcontainer, um dessen Volumes zu sehen — `create`
+  # legt ihn an, ohne die Datenbank zu starten (#1633; Neo4j Community kann
+  # ohnehin nicht in eine laufende Datenbank laden). Die Auflösung von
+  # Container-ID/Image muss danach passieren, sonst gäbe es noch nichts zu
+  # finden.
+  run docker compose create neo4j
+  neo4j_resolve_target
+  local neo4j_rc=0
+  neo4j_admin_offline load "$NEO4J_TARGET_CID" "$NEO4J_TARGET_IMAGE" || neo4j_rc=$?
+  [ "$neo4j_rc" -eq 0 ] || fail "Neo4j-Load fehlgeschlagen (Exit $neo4j_rc)"
   # PostgreSQL vor dem App-Start (#1583, docs/backup-restore.md Schritt 7).
   restore_postgres
   run docker compose up -d
@@ -472,6 +633,7 @@ phase_upgrade() {
   [ -n "$UPGRADE_REF" ] || { log "  übersprungen: --upgrade-ref nicht gesetzt"; return 0; }
   run git -C "$REPO_ROOT" fetch --tags
   run git -C "$REPO_ROOT" checkout "$UPGRADE_REF"
+  guard_compose_overlay
   run docker compose up -d --build
   phase_verify "Phase 4/5 (nach Upgrade)"
 }
@@ -480,6 +642,7 @@ phase_rollback() {
   step "Phase 5/5 — Rollback"
   [ -n "$ROLLBACK_REF" ] || { log "  übersprungen: --rollback-ref nicht gesetzt"; return 0; }
   run git -C "$REPO_ROOT" checkout "$ROLLBACK_REF"
+  guard_compose_overlay
   run docker compose up -d --build
   phase_verify "Phase 5/5 (nach Rollback)"
 }
@@ -492,6 +655,14 @@ log "Artefakte: $DATA_DIR"
 log "Stores:    $STORE_DIR"
 log "Instanz:   $INSTANCE_DIR"
 log "Repo: $REPO_ROOT"
+# COMPOSE_FILE steuert, welche Overlays docker compose zieht (#1633-Nachtrag).
+# Das Skript setzt nie eigene -f-Flags — docker compose wertet die Variable
+# nativ aus, sobald sie in der Umgebung steht.
+if [ -n "${COMPOSE_FILE:-}" ]; then
+  log "Compose-Files: $COMPOSE_FILE"
+else
+  log "Compose-Files: (nur Default docker-compose.yml)"
+fi
 
 case "$PHASE" in
   backup)     phase_backup ;;

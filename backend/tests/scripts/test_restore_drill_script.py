@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -231,10 +232,14 @@ class TestBackupCoversEveryPersistedDirectory:
 
 
 class TestNeo4jDumpReachesTheNewContainer:
-    """Codex-Befund P1 auf PR #1498. ``docker compose down`` nimmt den
-    Container mit; der neue startet mit einem leeren ``/backups``. Ein
-    ``neo4j-admin database load --from-path=/backups`` ohne vorheriges
-    Zurueckkopieren laedt nichts — und der Drill meldete das als erledigt."""
+    """Codex-Befund P1 auf PR #1498, seit #1633 gegen den Offline-Weg erneuert:
+    ``agora-neo4j`` mountet kein ``/backups`` und Neo4j Community kann eine
+    laufende Datenbank ohnehin nicht laden. ``docker compose down`` nimmt den
+    Container mit; erst ``create`` legt einen neuen (nicht gestarteten) an,
+    gegen den der Wegwerf-Container per ``--volumes-from`` laden kann. Dieselbe
+    Schutzabsicht wie zuvor: der Dump erreicht die Lade-Umgebung, und das Laden
+    passiert erst danach — nur eben ohne den Zwischenschritt ``exec`` gegen
+    einen laufenden Dienst."""
 
     def _protocol(self, tmp_path: Path) -> str:
         protocol = tmp_path / "drill.log"
@@ -247,23 +252,26 @@ class TestNeo4jDumpReachesTheNewContainer:
         )
         return protocol.read_text(encoding="utf-8")
 
-    def test_the_dump_is_copied_into_the_container(self, tmp_path) -> None:
+    def test_no_exec_against_a_running_service_remains(self, tmp_path) -> None:
         text = self._protocol(tmp_path)
 
-        assert "docker compose cp" in text
-        assert "neo4j:/backups" in text
+        assert "docker compose exec -T neo4j neo4j-admin" not in text
 
-    def test_the_copy_happens_before_the_load(self, tmp_path) -> None:
+    def test_the_offline_container_mounts_the_backup_directory(self, tmp_path) -> None:
         text = self._protocol(tmp_path)
 
-        assert text.index("neo4j:/backups") < text.index("neo4j-admin database load")
+        assert "--volumes-from" in text
+        assert ":/backups" in text
 
-    def test_the_container_is_up_before_the_copy(self, tmp_path) -> None:
-        """``docker compose cp`` in einen nicht existierenden Service schlaegt
-        fehl — die Reihenfolge up, cp, load ist die einzige, die traegt."""
+    def test_the_container_exists_before_the_offline_load(self, tmp_path) -> None:
+        """``--volumes-from`` braucht einen existierenden Zielcontainer — ohne
+        ``create`` zuvor gaebe es keine Volumes, gegen die der Wegwerf-
+        Container laden koennte."""
         text = self._protocol(tmp_path)
 
-        assert text.index("docker compose up -d neo4j") < text.index("neo4j:/backups")
+        assert text.index("docker compose create neo4j") < text.index(
+            "neo4j-admin database load"
+        )
 
 
 class TestVerifyPhaseIsReal:
@@ -358,21 +366,97 @@ def _docker_stub(tmp_path: Path, secret_line: str | None = None) -> Path:
     bevor Manifest, Rechte oder Pruefsumme ueberhaupt entstehen. Optional gibt
     der Stub eine Zeile auf stdout aus, um die Redaktion im echten ``run()``-Pfad
     zu pruefen.
+
+    ``compose ps ... -q`` liefert eine feste Fake-Container-ID, ``inspect``
+    je nach ``--format``-Vorlage entweder ein Fake-Image oder — gesteuert
+    ueber ``DOCKER_STUB_CONFIG_FILES`` — den Inhalt des
+    ``com.docker.compose.project.config_files``-Labels (#1633-Nachtrag).
+    ``run ... neo4j-admin database dump`` legt die Dump-Datei im gemounteten
+    Host-Pfad an (aus dem ``-v <host>:/backups``-Argument geparst) und
+    scheitert, wenn ``DOCKER_STUB_FAIL_DUMP=1`` gesetzt ist; ``database load``
+    ist immer erfolgreich. Jeder ``run``-Aufruf protokolliert sein komplettes
+    argv (eine Zeile je Argument) nach ``<stub_dir>/last-docker-run-argv.txt``
+    — Regressionsschutz dafuer, dass ``--volumes-from`` tatsaechlich eine
+    einzeilige Container-ID bekommt und nicht mehrzeiligen Log-Muell aus einer
+    Command Substitution.
     """
     stub_dir = tmp_path / "stubbin"
     stub_dir.mkdir(exist_ok=True)
     docker = stub_dir / "docker"
-    body = "#!/bin/sh\n"
-    if secret_line:
-        body += f'echo "{secret_line}"\n'
-    body += "exit 0\n"
-    docker.write_text(body, encoding="utf-8")
+    secret_echo = f'echo "{secret_line}"\n' if secret_line else ""
+    script = (
+        "#!/bin/sh\n"
+        + secret_echo
+        + textwrap.dedent(
+            """
+            case "$1" in
+              compose)
+                shift
+                case "$1" in
+                  ps)
+                    echo "fake-neo4j-container-id"
+                    exit 0
+                    ;;
+                  *)
+                    exit 0
+                    ;;
+                esac
+                ;;
+              inspect)
+                case "$3" in
+                  *config_files*)
+                    printf '%s' "${DOCKER_STUB_CONFIG_FILES:-}"
+                    exit 0
+                    ;;
+                esac
+                echo "fake-neo4j-image:5.26-community"
+                exit 0
+                ;;
+              run)
+                argv_log="$(dirname "$0")/last-docker-run-argv.txt"
+                : > "$argv_log"
+                for arg in "$@"; do
+                  printf '%s\\n' "$arg" >> "$argv_log"
+                done
+                host_backups=""
+                prev=""
+                for arg in "$@"; do
+                  if [ "$prev" = "-v" ]; then
+                    host_backups="$arg"
+                  fi
+                  prev="$arg"
+                done
+                host_dir="${host_backups%%:*}"
+                case "$*" in
+                  *"database dump"*)
+                    if [ -n "$DOCKER_STUB_FAIL_DUMP" ]; then
+                      exit 1
+                    fi
+                    : > "$host_dir/neo4j.dump"
+                    exit 0
+                    ;;
+                  *"database load"*)
+                    exit 0
+                    ;;
+                esac
+                exit 0
+                ;;
+              *)
+                exit 0
+                ;;
+            esac
+            """
+        )
+    )
+    docker.write_text(script, encoding="utf-8")
     docker.chmod(0o755)
     return stub_dir
 
 
 def _real_backup(
-    tmp_path: Path, stub_bin: Path
+    tmp_path: Path,
+    stub_bin: Path,
+    env: dict[str, str | None] | None = None,
 ) -> tuple[Path, subprocess.CompletedProcess]:
     """Fuehrt ``--phase backup`` echt (nicht dry) gegen tmp-Verzeichnisse aus."""
     backup = tmp_path / "backup"
@@ -384,6 +468,9 @@ def _real_backup(
     instance.mkdir()
     protocol = tmp_path / "backup.log"
 
+    merged_env: dict[str, str | None] = {"PATH": f"{stub_bin}:{os.environ['PATH']}"}
+    merged_env.update(env or {})
+
     result = _run(
         "--phase", "backup",
         "--backup-dir", str(backup),
@@ -391,7 +478,7 @@ def _real_backup(
         "--store-dir", str(data),
         "--instance-dir", str(instance),
         "--protocol", str(protocol),
-        env={"PATH": f"{stub_bin}:{os.environ['PATH']}"},
+        env=merged_env,
     )
     return backup, result
 
@@ -506,6 +593,85 @@ class TestGuardRestoreTarget:
         assert "Restore würde in den eigenen Checkout schreiben" not in text
 
 
+class TestComposeFileOverlayGuard:
+    """Nachtrag zu #1633: Der reale Zielhost (armserver) faehrt den Stack mit
+    vier Compose-Dateien (docker-compose.yml, docker-compose.prod.yml,
+    docker-compose.meinserver.yml, deploy/compose/docker-compose.codex-cli.yml).
+    Ohne gesetztes COMPOSE_FILE legt ein nacktes ``docker compose
+    down``/``create``/``up`` den neo4j-Container nur mit der Default-Datei neu
+    an und verliert die Overlays (Ports, Mounts) still."""
+
+    def test_restore_refuses_without_compose_file_when_the_container_used_several(
+        self, tmp_path
+    ) -> None:
+        stub = _docker_stub(tmp_path)
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            env={
+                "PATH": f"{stub}:{os.environ['PATH']}",
+                "COMPOSE_FILE": None,
+                "DOCKER_STUB_CONFIG_FILES": "docker-compose.yml,docker-compose.prod.yml",
+            },
+        )
+
+        assert result.returncode == 1
+        text = protocol.read_text(encoding="utf-8")
+        assert "COMPOSE_FILE" in text
+        assert "docker compose down" not in text
+
+    def test_restore_proceeds_past_the_guard_when_compose_file_is_set(
+        self, tmp_path
+    ) -> None:
+        """Mit gesetztem COMPOSE_FILE lässt der Guard den Lauf weiterlaufen —
+        ein spaeterer Abbruch (hier: fehlende Archive, das Backup-Verzeichnis
+        ist leer) ist nicht der Guard, sondern ein anderer, unabhaengiger
+        Pruefpunkt."""
+        stub = _docker_stub(tmp_path)
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            env={
+                "PATH": f"{stub}:{os.environ['PATH']}",
+                "COMPOSE_FILE": "docker-compose.yml:docker-compose.prod.yml",
+                "DOCKER_STUB_CONFIG_FILES": "docker-compose.yml,docker-compose.prod.yml",
+            },
+        )
+
+        text = protocol.read_text(encoding="utf-8")
+        assert "docker compose down" in text
+        assert "wurde mit mehreren Compose-Dateien erzeugt" not in text
+        assert result.returncode == 1
+        assert "Backup fehlt" in text
+
+    def test_dry_run_only_warns_without_compose_file(self, tmp_path) -> None:
+        """Der Dry-Run braucht keinen Docker-Daemon — die Pruefung selbst
+        greift nicht auf echte Container zu, sondern warnt pauschal."""
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+            env={"COMPOSE_FILE": None},
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "COMPOSE_FILE" in text
+        assert "Phase 2/5" in text
+
+
 class TestBackupManifestAndPermissions:
     """Codex-Befund aus dem Phase-0-Audit: ein durch volle Platte oder Bitrot
     beschaedigtes Archiv durchlief das Backup bislang unbemerkt gruen, und die
@@ -542,6 +708,132 @@ class TestBackupManifestAndPermissions:
             assert (archive.stat().st_mode & 0o777) == 0o600
 
 
+class TestNeo4jOfflineDumpAndLoad:
+    """#1633: ``agora-neo4j`` mountet kein ``/backups``, und Neo4j Community
+    kann eine laufende Datenbank ohnehin nicht dumpen/laden. Backup und
+    Restore fahren Neo4j deshalb ueber einen Wegwerf-Container mit
+    ``--volumes-from`` statt ``docker compose exec`` gegen den laufenden
+    Dienst."""
+
+    def test_backup_dry_run_stops_dumps_offline_then_restarts(self, tmp_path) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "backup",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "docker compose exec -T neo4j neo4j-admin" not in text
+        order = [
+            text.index("docker compose stop neo4j"),
+            text.index("--volumes-from"),
+            text.index("neo4j-admin database dump"),
+            text.index("docker compose start neo4j"),
+        ]
+        assert order == sorted(order), "Reihenfolge stop/dump/start nicht eingehalten"
+
+    def test_backup_dry_run_uses_placeholders_for_container_and_image(
+        self, tmp_path
+    ) -> None:
+        protocol = tmp_path / "drill.log"
+
+        _run(
+            "--phase", "backup",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+
+        text = protocol.read_text(encoding="utf-8")
+        assert "<neo4j-container>" in text
+        assert "<neo4j-image>" in text
+
+    def test_restore_dry_run_creates_container_before_offline_load_then_ups(
+        self, tmp_path
+    ) -> None:
+        protocol = tmp_path / "drill.log"
+
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(tmp_path / "backup"),
+            *_targets(tmp_path),
+            "--protocol", str(protocol),
+            "--dry-run",
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        text = protocol.read_text(encoding="utf-8")
+        assert "docker compose exec -T neo4j neo4j-admin" not in text
+        order = [
+            text.index("docker compose create neo4j"),
+            text.index("--volumes-from"),
+            text.index("neo4j-admin database load"),
+            text.index("docker compose up -d"),
+        ]
+        assert order == sorted(order), "Reihenfolge create/load/up nicht eingehalten"
+
+    def test_the_volumes_from_argument_is_a_single_line_container_id(
+        self, tmp_path
+    ) -> None:
+        """Regression: ``log()`` schreibt ueber ``tee`` auch auf stdout. Wurde
+        es innerhalb der Command Substitution fuer ``cid``/``image`` benutzt,
+        landeten Log-Zeilen IM Rueckgabewert, und ``docker run
+        --volumes-from`` bekam mehrzeiligen Text statt der reinen
+        Container-ID — der Stub ignoriert Argumente und haette das nicht
+        bemerkt."""
+        stub = _docker_stub(tmp_path)
+        backup, result = _real_backup(tmp_path, stub)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        argv = (stub / "last-docker-run-argv.txt").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        idx = argv.index("--volumes-from")
+        assert argv[idx + 1] == "fake-neo4j-container-id"
+
+    def test_real_backup_writes_the_dump_into_the_manifest(self, tmp_path) -> None:
+        stub = _docker_stub(tmp_path)
+        backup, result = _real_backup(tmp_path, stub)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert (backup / "neo4j" / "neo4j.dump").is_file()
+        manifest = (backup / "MANIFEST.sha256").read_text(encoding="utf-8")
+        assert "neo4j/neo4j.dump" in manifest
+
+    def test_a_failed_dump_still_restarts_neo4j_and_still_runs_the_postgres_backup(
+        self, tmp_path
+    ) -> None:
+        """C) aus der Spec: PostgreSQL-Backup ist unabhaengig vom Neo4j-Schritt
+        — ein Neo4j-Fehlschlag darf das PostgreSQL-Backup nicht verhindern,
+        und Neo4j muss trotzdem wieder anlaufen."""
+        stub = _docker_stub(tmp_path)
+
+        backup, result = _real_backup(
+            tmp_path,
+            stub,
+            env={
+                "DOCKER_STUB_FAIL_DUMP": "1",
+                "AGORA_METADATA_BACKEND": None,
+                "AGORA_LLM_PROFILE_BACKEND": None,
+                "AGORA_PROJECT_BACKEND": None,
+                "DATABASE_URL": None,
+            },
+        )
+
+        assert result.returncode == 1
+        text = (tmp_path / "backup.log").read_text(encoding="utf-8")
+        assert "docker compose start neo4j" in text
+        pg_index = text.index("PostgreSQL-Backup uebersprungen")
+        fail_index = text.index("FEHLGESCHLAGEN")
+        assert pg_index < fail_index, "PostgreSQL-Backup muss vor dem Fehlschlag laufen"
+
+
 class TestRestoreRejectsCorruptedArchive:
     def test_a_corrupted_archive_fails_the_restore_instead_of_silently_loading(
         self, tmp_path
@@ -554,6 +846,33 @@ class TestRestoreRejectsCorruptedArchive:
         assert backup_result.returncode == 0, backup_result.stdout + backup_result.stderr
 
         with (backup / "data.tar.gz").open("ab") as fh:
+            fh.write(b"\x00\x00corrupt-append")
+
+        protocol = tmp_path / "restore.log"
+        result = _run(
+            "--phase", "restore",
+            "--backup-dir", str(backup),
+            "--data-dir", str(tmp_path / "uploads"),
+            "--store-dir", str(tmp_path / "data"),
+            "--instance-dir", str(tmp_path / "instance"),
+            "--protocol", str(protocol),
+            env={"PATH": f"{stub}:{os.environ['PATH']}"},
+        )
+
+        assert result.returncode == 1
+        assert "Prüfsumme weicht ab" in protocol.read_text(encoding="utf-8")
+
+    def test_a_corrupted_neo4j_dump_fails_the_restore_before_loading(
+        self, tmp_path
+    ) -> None:
+        """Dieselbe Prüfsummen-Pflicht gilt für ``neo4j/neo4j.dump`` (#1633) —
+        ein beschaedigter Dump darf nicht in den Wegwerf-Container geladen
+        werden."""
+        stub = _docker_stub(tmp_path)
+        backup, backup_result = _real_backup(tmp_path, stub)
+        assert backup_result.returncode == 0, backup_result.stdout + backup_result.stderr
+
+        with (backup / "neo4j" / "neo4j.dump").open("ab") as fh:
             fh.write(b"\x00\x00corrupt-append")
 
         protocol = tmp_path / "restore.log"
