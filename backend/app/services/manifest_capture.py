@@ -375,3 +375,47 @@ class ManifestCapture:
                 run_id,
                 exc_info=True,
             )
+
+    @staticmethod
+    def simulation_config_hash(config: dict[str, Any] | None) -> str:
+        """Kanonischer ``sha256:``-Hash einer Simulationskonfiguration
+        (Issue #763 Ticket 9 / #1686 P2).
+
+        Gemeinsame Hash-Funktion/Serialisierung für ``inputs.
+        simulation_config_hash`` — sowohl beim normalen Start
+        (``simulation_run.py::_capture_start_manifest_draft``) als auch beim
+        Replay (``runs.py::_capture_replay_manifest_draft``), damit beide
+        Pfade nicht unabhängig voneinander driften können. ``sort_keys=True``
+        sorgt für einen stabilen Hash unabhängig von der Schlüsselreihenfolge
+        im gespeicherten JSON; ``default=str`` verhindert einen Absturz auf
+        nicht-JSON-nativen Werten (z. B. Enum-Instanzen) im Config-Dict.
+        """
+        return "sha256:" + hashlib.sha256(
+            json.dumps(config or {}, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+
+    @staticmethod
+    def discard_draft_best_effort(*, run_id: str, run_dir: str) -> None:
+        """Entfernt ein bereits geschriebenes Draft-Manifest, wenn der
+        Simulations-Start danach doch noch fehlschlägt (Issue #1686 P2).
+
+        Der Draft wird seit #1686 VOR ``SimulationRunner.start_simulation``
+        geschrieben (sowohl beim normalen Start als auch beim Replay), damit
+        ein sofort beendeter Monitor-Thread nicht auf ein fehlendes Manifest
+        trifft und den Run dauerhaft im Status ``draft`` belässt (siehe
+        :meth:`capture_draft`/:meth:`capture_final`). Scheitert der Start
+        danach doch, darf kein Manifest für einen Run zurückbleiben, der nie
+        lief. Best-effort wie die übrigen Wrapper dieser Klasse: ein Fehler
+        beim Aufräumen darf die eigentliche Fehlerbehandlung des
+        gescheiterten Starts nicht verdecken.
+        """
+        manifest_path = os.path.join(run_dir, "manifest.json")
+        try:
+            if os.path.exists(manifest_path):
+                os.remove(manifest_path)
+        except OSError:
+            logger.warning(
+                "Verwaistes Draft-Manifest für run_id=%s konnte nicht entfernt werden",
+                run_id,
+                exc_info=True,
+            )

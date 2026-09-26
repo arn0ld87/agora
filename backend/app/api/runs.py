@@ -4,7 +4,6 @@ Run registry API.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import threading
@@ -1394,41 +1393,20 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         except Exception:
             # Der Draft wurde bereits geschrieben (s.o.) — scheitert der
             # Start jetzt doch, darf kein Manifest für einen Run zurück-
-            # bleiben, der nie lief. Analog zum normalen Startpfad, der in
-            # diesem Fall gar kein Manifest schreibt (Draft folgt dort erst
-            # nach einem erfolgreichen Start).
-            _discard_orphaned_replay_manifest(new_run_id)
+            # bleiben, der nie lief. Analog zum normalen Startpfad, der seit
+            # #1686 denselben Helper für dieselbe Situation nutzt
+            # (simulation_run.py::start_simulation).
+            from ..services.manifest_capture import ManifestCapture
+
+            ManifestCapture.discard_draft_best_effort(
+                run_id=new_run_id, run_dir=ArtifactLocator.run_dir(new_run_id)
+            )
             raise
 
         manager._set_status(branch_state, SimulationStatus.RUNNING)
         lifecycle.succeed(status="processing", message=f"Replay of {run_id} started")
 
     return {"run_id": new_run["run_id"], "status": "processing"}
-
-
-def _discard_orphaned_replay_manifest(run_id: str) -> None:
-    """Entfernt ein bereits geschriebenes Replay-Draft-Manifest, wenn der
-    Subprozess-Start danach doch noch fehlschlägt (Issue #1686 P2).
-
-    Der Draft wird jetzt VOR ``SimulationRunner.start_simulation`` geschrieben
-    (siehe ``_capture_replay_manifest_draft``), damit ein sofort beendeter
-    Monitor-Thread nicht auf ein fehlendes Manifest trifft. Scheitert der
-    Start danach doch, darf kein Manifest für einen Run zurückbleiben, der
-    nie lief — analog zum normalen Startpfad, der in diesem Fall gar kein
-    Manifest schreibt. Best-effort wie die übrige Manifest-Behandlung dieser
-    Funktion: ein Fehler beim Aufräumen darf die eigentliche
-    Fehlerbehandlung des gescheiterten Starts nicht verdecken.
-    """
-    manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
-    try:
-        if os.path.exists(manifest_path):
-            os.remove(manifest_path)
-    except OSError:
-        logger.warning(
-            "Verwaistes Replay-Draft-Manifest für run_id=%s konnte nicht entfernt werden",
-            run_id,
-            exc_info=True,
-        )
 
 
 def _capture_replay_manifest_draft(
@@ -1469,12 +1447,11 @@ def _capture_replay_manifest_draft(
         # ``create_branch`` hat die Konfiguration bereits umgeschrieben (neue
         # simulation_id, branch_metadata, ggf. ai_model_ref-Override) — der
         # kopierte Original-Hash würde diese Änderungen verschleiern.
-        # Gleiche Hash-Funktion/Serialisierung wie beim normalen Start
-        # (``simulation_run.py::_capture_start_manifest_draft``).
-        branch_config = manager.get_simulation_config(new_simulation_id) or {}
-        branch_config_hash = hashlib.sha256(
-            json.dumps(branch_config, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
+        # Gemeinsamer Helper mit dem normalen Startpfad
+        # (``simulation_run.py::_capture_start_manifest_draft``), damit beide
+        # Pfade nicht unabhängig voneinander driften können.
+        branch_config = manager.get_simulation_config(new_simulation_id)
+        branch_config_hash = ManifestCapture.simulation_config_hash(branch_config)
 
         deviations: list[dict[str, Any]] = []
         if original_stage_route is not None:
@@ -1505,7 +1482,7 @@ def _capture_replay_manifest_draft(
             run_dir=ArtifactLocator.run_dir(new_run_id),
             seed_document_hash=manifest.inputs.seed_document_hash,
             seed_document_filename=manifest.inputs.seed_document_filename,
-            simulation_config_hash=f"sha256:{branch_config_hash}",
+            simulation_config_hash=branch_config_hash,
             graph_id=manifest.inputs.graph_id,
             agora_version=__version__,
             schema_version="1.0.0",

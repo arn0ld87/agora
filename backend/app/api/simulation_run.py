@@ -2,7 +2,6 @@
 Run-control and live-status routes split from the main simulation API module.
 """
 
-import json
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -627,8 +626,12 @@ def _capture_start_manifest_draft(
 
     Vollständig best-effort — inklusive der Datenaufbereitung, nicht nur des
     Schreibvorgangs. Ein Fehler hier (z. B. beim Config-Read oder Hashing)
-    darf den bereits erfolgreich gestarteten Run nicht mehr gefährden; die
-    Route hat an dieser Stelle bereits ``run.succeed()`` aufgerufen.
+    darf den bereits erfolgreich gestarteten Run nicht mehr gefährden. Läuft
+    seit #1686 VOR ``SimulationRunner.start_simulation`` (siehe
+    ``start_simulation()``), nicht mehr danach — sonst konnte ein sofort
+    beendeter Monitor-Thread das Manifest finalisieren wollen, bevor der
+    Draft überhaupt existierte, und der Run blieb dauerhaft im Status
+    ``draft`` hängen.
 
     ``random_seed`` bleibt ``None`` — es existiert kein echtes RNG-Seed-
     Konzept im System (kein ``np.random.seed`` o.ä.); ein aus der
@@ -636,16 +639,12 @@ def _capture_start_manifest_draft(
     vortäuschen, die nicht besteht (#1274 Punkt 1).
     """
     try:
-        import hashlib
-
         from .. import __version__
         from ..contracts.run_manifest_contract import ai_route_snapshot_from_ai_route
         from ..services.runtime_run_config import RuntimeRunConfig
 
-        config = SimulationManager().get_simulation_config(req.simulation_id) or {}
-        config_hash = hashlib.sha256(
-            json.dumps(config, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
+        config = SimulationManager().get_simulation_config(req.simulation_id)
+        config_hash = ManifestCapture.simulation_config_hash(config)
 
         seed_document_hash, seed_document_filename = ManifestCapture.seed_document_snapshot(
             state.project_id
@@ -667,7 +666,7 @@ def _capture_start_manifest_draft(
             run_dir=ArtifactLocator.run_dir(run_id),
             seed_document_hash=seed_document_hash,
             seed_document_filename=seed_document_filename,
-            simulation_config_hash=f"sha256:{config_hash}",
+            simulation_config_hash=config_hash,
             graph_id=state.graph_id or "unknown",
             agora_version=__version__,
             schema_version="1.0.0",
@@ -760,18 +759,38 @@ def start_simulation():
             resolved_route, resolved_api_key = _resolve_start_route(run_id, req.llm_runtime)
             _apply_route_to_simulation_config(req, resolved_route, run_id)
 
-            run_state = SimulationRunner.start_simulation(
-                simulation_id=req.simulation_id,
-                platform=req.platform,
-                max_rounds=req.max_rounds,
-                enable_graph_memory_update=req.enable_graph_memory_update,
-                graph_id=graph_id,
-                runtime_env=build_route_subprocess_env(
-                    resolved_route,
-                    resolved_api_key,
-                    run_id,
-                ),
-            )
+            # Issue #763 (Ticket 9) / #1686 (P2): Draft-Manifest VOR dem
+            # Subprozess-Start schreiben, nicht danach. Best-Effort — ein
+            # Manifest-Fehler darf den Start nicht gefährden. Der Monitor-
+            # Thread finalisiert das Manifest, sobald er das Ende der
+            # Simulation erkennt; bei einem sofort beendeten Subprozess
+            # konnte er das vor einem nachträglichen Draft-Write erreichen
+            # und fand keinen Draft (capture_final wirft dann
+            # FileNotFoundError, best-effort geschluckt) — der Run blieb
+            # dauerhaft im Status "draft" hängen.
+            _capture_start_manifest_draft(run_id, req, state, resolved_route, graph_id)
+
+            try:
+                run_state = SimulationRunner.start_simulation(
+                    simulation_id=req.simulation_id,
+                    platform=req.platform,
+                    max_rounds=req.max_rounds,
+                    enable_graph_memory_update=req.enable_graph_memory_update,
+                    graph_id=graph_id,
+                    runtime_env=build_route_subprocess_env(
+                        resolved_route,
+                        resolved_api_key,
+                        run_id,
+                    ),
+                )
+            except Exception:
+                # Der Draft wurde bereits geschrieben (s.o.) — scheitert der
+                # Start jetzt doch, darf kein Manifest für einen Run zurück-
+                # bleiben, der nie lief.
+                ManifestCapture.discard_draft_best_effort(
+                    run_id=run_id, run_dir=ArtifactLocator.run_dir(run_id)
+                )
+                raise
 
             manager._set_status(state, SimulationStatus.RUNNING)
             run.succeed(
@@ -781,11 +800,6 @@ def start_simulation():
                 message_key="run.simulation_run_started",
                 resume_capability=_simulation_resume_capability(req.simulation_id, state),
             )
-
-            # Issue #763 (Ticket 9): Draft-Manifest beim Run-Start. Best-Effort —
-            # ein Manifest-Fehler darf den bereits erfolgreich gestarteten Run
-            # nicht mehr gefährden.
-            _capture_start_manifest_draft(run_id, req, state, resolved_route, graph_id)
     except RunPersistenceError:
         # #844: Die failed-/processing-Markierung wurde nicht persistiert —
         # das darf nicht wie ein sauber abgeschlossener Vorgang aussehen.
