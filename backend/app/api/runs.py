@@ -1363,19 +1363,13 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         route_router.lock_stage("simulation_rounds", resolved_route)
         resolved_api_key = resolve_route_api_key(resolved_route, None)
 
-        SimulationRunner.start_simulation(
-            simulation_id=new_simulation_id,
-            platform=manifest.simulation.platform,
-            max_rounds=manifest.simulation.max_rounds,
-            enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
-            graph_id=manifest.simulation.memory_update_graph_id,
-            runtime_env=build_route_subprocess_env(
-                resolved_route, resolved_api_key, new_run_id
-            ),
-        )
-        manager._set_status(branch_state, SimulationStatus.RUNNING)
-        lifecycle.succeed(status="processing", message=f"Replay of {run_id} started")
-
+        # Issue #1686 (P2): Draft-Manifest VOR dem Subprozess-Start schreiben,
+        # nicht danach. Der Monitor-Thread finalisiert das Manifest, sobald er
+        # das Ende der Simulation erkennt — bei einem sofort beendeten
+        # Subprozess konnte er das VOR dem bisherigen Draft-Write hier
+        # erreichen und fand keinen Draft (capture_final wirft dann
+        # FileNotFoundError, best-effort geschluckt); der Run blieb dauerhaft
+        # im Status "draft" hängen.
         _capture_replay_manifest_draft(
             original_run_id=run_id,
             new_run_id=new_run_id,
@@ -1386,7 +1380,55 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             manager=manager,
         )
 
+        try:
+            SimulationRunner.start_simulation(
+                simulation_id=new_simulation_id,
+                platform=manifest.simulation.platform,
+                max_rounds=manifest.simulation.max_rounds,
+                enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
+                graph_id=manifest.simulation.memory_update_graph_id,
+                runtime_env=build_route_subprocess_env(
+                    resolved_route, resolved_api_key, new_run_id
+                ),
+            )
+        except Exception:
+            # Der Draft wurde bereits geschrieben (s.o.) — scheitert der
+            # Start jetzt doch, darf kein Manifest für einen Run zurück-
+            # bleiben, der nie lief. Analog zum normalen Startpfad, der in
+            # diesem Fall gar kein Manifest schreibt (Draft folgt dort erst
+            # nach einem erfolgreichen Start).
+            _discard_orphaned_replay_manifest(new_run_id)
+            raise
+
+        manager._set_status(branch_state, SimulationStatus.RUNNING)
+        lifecycle.succeed(status="processing", message=f"Replay of {run_id} started")
+
     return {"run_id": new_run["run_id"], "status": "processing"}
+
+
+def _discard_orphaned_replay_manifest(run_id: str) -> None:
+    """Entfernt ein bereits geschriebenes Replay-Draft-Manifest, wenn der
+    Subprozess-Start danach doch noch fehlschlägt (Issue #1686 P2).
+
+    Der Draft wird jetzt VOR ``SimulationRunner.start_simulation`` geschrieben
+    (siehe ``_capture_replay_manifest_draft``), damit ein sofort beendeter
+    Monitor-Thread nicht auf ein fehlendes Manifest trifft. Scheitert der
+    Start danach doch, darf kein Manifest für einen Run zurückbleiben, der
+    nie lief — analog zum normalen Startpfad, der in diesem Fall gar kein
+    Manifest schreibt. Best-effort wie die übrige Manifest-Behandlung dieser
+    Funktion: ein Fehler beim Aufräumen darf die eigentliche
+    Fehlerbehandlung des gescheiterten Starts nicht verdecken.
+    """
+    manifest_path = os.path.join(ArtifactLocator.run_dir(run_id), "manifest.json")
+    try:
+        if os.path.exists(manifest_path):
+            os.remove(manifest_path)
+    except OSError:
+        logger.warning(
+            "Verwaistes Replay-Draft-Manifest für run_id=%s konnte nicht entfernt werden",
+            run_id,
+            exc_info=True,
+        )
 
 
 def _capture_replay_manifest_draft(
@@ -1402,10 +1444,12 @@ def _capture_replay_manifest_draft(
     """Draft-Manifest für einen Replay-Run schreiben (Issue #1274 Punkt 3).
 
     Best-effort, analog zu ``simulation_run._capture_start_manifest_draft``:
-    ein Manifest-Fehler darf den bereits gestarteten Replay nicht mehr
-    gefährden. Übernimmt Eingaben und Simulationsparameter 1:1 aus dem
-    Original-Manifest und dokumentiert eine etwaige Modell-Route-Abweichung
-    (die einzige überschreibbare Größe) über ``deviations``.
+    ein Manifest-Fehler darf weder den Replay-Start (Aufrufer läuft VOR
+    ``SimulationRunner.start_simulation``, Issue #1686 P2) noch einen bereits
+    laufenden Replay gefährden. Übernimmt Eingaben und Simulationsparameter
+    1:1 aus dem Original-Manifest und dokumentiert eine etwaige
+    Modell-Route-Abweichung (die einzige überschreibbare Größe) über
+    ``deviations``.
 
     Issue #1686 (P1): die aufgelöste Replay-Route wird IMMER mit der im
     Original-Manifest erfassten Route verglichen — unabhängig davon, ob ein

@@ -656,6 +656,77 @@ def test_replay_manifest_hashes_the_actual_branch_config(env, monkeypatch):
     )
 
 
+# ---------------------------------------------------------------------------
+# Issue #1686 (P3): Draft-Manifest vor dem Subprozess-Start
+# ---------------------------------------------------------------------------
+
+
+def test_replay_writes_draft_manifest_before_starting_worker(env, monkeypatch):
+    """Der Draft muss existieren, BEVOR ``SimulationRunner.start_simulation``
+    aufgerufen wird — sonst kann ein sofort beendeter Monitor-Thread
+    ``capture_final`` erreichen, bevor der Draft überhaupt geschrieben wurde,
+    und der Run bleibt dauerhaft im Status "draft" hängen (capture_final
+    wirft dann best-effort geschluckt einen FileNotFoundError)."""
+    from unittest.mock import MagicMock
+
+    manager, runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_order")
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    observed: dict[str, Any] = {}
+
+    def _assert_manifest_already_written(**kwargs):
+        latest = RunRegistry().get_latest_by_linked_id(
+            "simulation_id", kwargs["simulation_id"], run_type="simulation_run"
+        )
+        assert latest is not None, "Run-Record muss vor dem Subprozess-Start existieren"
+        manifest_path = os.path.join(
+            str(env["tmp_path"]), "runs", latest["run_id"], "manifest.json"
+        )
+        observed["manifest_exists_before_start"] = os.path.exists(manifest_path)
+        return MagicMock(
+            to_dict=MagicMock(return_value={"simulation_id": kwargs["simulation_id"]})
+        )
+
+    runner.start_simulation.side_effect = _assert_manifest_already_written
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 202, resp.get_json()
+    assert observed.get("manifest_exists_before_start") is True, (
+        "Draft-Manifest muss VOR SimulationRunner.start_simulation geschrieben "
+        "werden, nicht danach"
+    )
+
+
+def test_replay_discards_draft_manifest_when_start_fails(env, monkeypatch):
+    """Scheitert der Subprozess-Start, NACHDEM der Draft bereits geschrieben
+    wurde, darf kein Manifest für einen Run zurückbleiben, der nie lief —
+    analog zum normalen Startpfad, der in diesem Fall gar kein Manifest
+    schreibt."""
+    manager, runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_fail")
+    runner.start_simulation.side_effect = RuntimeError("subprocess spawn failed")
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 500, resp.get_json()
+
+    new_run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", "sim_branch_fail", run_type="simulation_run"
+    )
+    assert new_run is not None
+    assert new_run["status"] == "failed"
+
+    manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run["run_id"], "manifest.json")
+    assert not os.path.exists(manifest_path), (
+        "Ein Run, dessen Start fehlgeschlagen ist, darf kein Manifest "
+        "zurücklassen — sonst sähe ein failed Run wie ein draft-Run aus"
+    )
+
+
 def test_replay_without_override_seeds_original_route_not_workspace_defaults(env, monkeypatch):
     """Ohne ``ai_model_ref``-Override muss die Original-Route aus dem Manifest
     an ``seed_run_stage_routing`` gehen — nicht ``None`` (was intern auf die
