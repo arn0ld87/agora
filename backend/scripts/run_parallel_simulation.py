@@ -97,6 +97,7 @@ try:
         install_memory_sampler,
         install_recsys_mean_pooling_patch,
         install_script_paths,
+        is_workspace_credential_scope,
         load_project_env,
         make_default_memory_sink,
         preflight_model_probe,
@@ -120,6 +121,7 @@ except ImportError:  # direct script execution
         install_memory_sampler,
         install_recsys_mean_pooling_patch,
         install_script_paths,
+        is_workspace_credential_scope,
         load_project_env,
         make_default_memory_sink,
         preflight_model_probe,
@@ -1506,7 +1508,11 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")
     boost_base_url = os.environ.get("LLM_BOOST_BASE_URL", "")
     boost_model = os.environ.get("LLM_BOOST_MODEL_NAME", "")
-    has_boost_config = bool(boost_api_key)
+    # Finding H5 (#1688): _sim_common.load_workspace_secret_env_from_fd()
+    # already pops LLM_BOOST_* for a workspace-scoped run, so boost_api_key
+    # above is normally already empty here — this is defense-in-depth
+    # against boost ever reaching a workspace run through any other path.
+    has_boost_config = bool(boost_api_key) and not is_workspace_credential_scope()
     
     # Choose which LLM to use based on parameters and configuration
     # Model selection precedence: sim-config (UI choice) > .env > fallback.

@@ -74,6 +74,15 @@ _OPERATOR_SENTINEL = object()
 # instead of ever writing it into the child's OS environment block.
 WORKSPACE_SECRET_ENV_MARKER = "__AGORA_WORKSPACE_SECRET_PAYLOAD__"  # noqa: S105 -- env key name, not a credential
 
+# Finding H5 (Security-Review 2026-09-26, #1688): non-secret signal set on
+# EVERY workspace-scoped run's subprocess env, independent of whether a
+# workspace key actually resolved. ``_sim_common.py`` (child) uses its mere
+# presence — not the presence/absence of a secret payload — to refuse
+# ``.env``/acceleration-provider ("boost") fallback and to treat a missing
+# or key-less pipe payload as a hard failure instead of a silent no-op.
+CREDENTIAL_SCOPE_ENV_KEY = "AGORA_CREDENTIAL_SCOPE"  # noqa: S105
+WORKSPACE_CREDENTIAL_SCOPE_VALUE = "workspace"  # noqa: S105
+
 _PROVIDER_ID_MAP = {
     "default": None,
     "openai": "openai",
@@ -885,6 +894,9 @@ def build_route_subprocess_env(
     env: dict[str, str] = {"LLM_MODEL_NAME": route.model}
     if run_id:
         env["AGORA_RUN_ID"] = run_id
+    is_workspace_scoped = workspace_credential_id_for_run(run_id) is not None
+    if is_workspace_scoped:
+        env[CREDENTIAL_SCOPE_ENV_KEY] = WORKSPACE_CREDENTIAL_SCOPE_VALUE
     provider = next(
         (p for p in LlmProviderRegistry().get_providers() if p.id == route.provider_id),
         None,
@@ -964,10 +976,18 @@ def build_route_subprocess_env(
         # in ``process_environment.py`` wandelt ihn in eine Pipe-FD um, bevor
         # ``subprocess.Popen`` je aufgerufen wird — die Env-Merge-Logik dort
         # laesst diesen Marker nie unveraendert durch.
-        if workspace_credential_id_for_run(run_id) is not None:
+        if is_workspace_scoped:
             env[WORKSPACE_SECRET_ENV_MARKER] = json.dumps(secret_env)
         else:
             env.update(secret_env)
+    elif is_workspace_scoped:
+        # Finding H5: a workspace-scoped run must ALWAYS get a pipe, even
+        # when no key resolved (empty payload) — the child treats a
+        # missing pipe (no marker at all) as a hard failure via
+        # AGORA_CREDENTIAL_SCOPE, so this must not look like "no marker
+        # means operator run, .env is fine" for a workspace run that
+        # happens to have no resolvable key.
+        env[WORKSPACE_SECRET_ENV_MARKER] = json.dumps({})
     if base_url:
         env["LLM_BASE_URL"] = base_url
         env["OPENAI_BASE_URL"] = base_url

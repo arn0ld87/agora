@@ -30,6 +30,37 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 
 _SECRET_FD_ENV_KEY = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
 
+#: Finding H5 (Security-Review 2026-09-26, #1688): non-secret signal the
+#: backend sets on EVERY workspace-scoped run's subprocess env, regardless
+#: of whether a workspace key was actually resolvable. Its presence — not
+#: the mere presence/absence of a secret payload — is what this child uses
+#: to decide it must never fall back to the operator's ``.env`` or
+#: acceleration-provider ("boost") config.
+_CREDENTIAL_SCOPE_ENV_KEY = "AGORA_CREDENTIAL_SCOPE"  # noqa: S105
+_WORKSPACE_CREDENTIAL_SCOPE = "workspace"  # noqa: S105
+_BOOST_ENV_KEYS = ("LLM_BOOST_API_KEY", "LLM_BOOST_BASE_URL", "LLM_BOOST_MODEL_NAME")
+_REQUIRED_WORKSPACE_SECRET_KEY = "LLM_API_KEY"  # noqa: S105 -- env var name, not a credential
+
+
+def is_workspace_credential_scope() -> bool:
+    """Whether this subprocess belongs to a workspace-scoped run.
+
+    Read-only (never pops the env var): ``load_project_env`` and the
+    boost-selection in the runner scripts both need to consult this after
+    :func:`load_workspace_secret_env_from_fd` has already run.
+    """
+    return os.environ.get(_CREDENTIAL_SCOPE_ENV_KEY) == _WORKSPACE_CREDENTIAL_SCOPE
+
+
+def _fail_closed(message: str) -> None:
+    """Exit non-zero with a secret-free message (Finding H5, #1688).
+
+    Never interpolates the payload/secret itself — only static text and
+    env VAR NAMES may appear here.
+    """
+    logging.getLogger("agora.sim").error(message)
+    raise SystemExit(f"agora.sim: {message}")
+
 
 def load_workspace_secret_env_from_fd() -> None:
     """Liest ein via Pipe-FD uebergebenes Workspace-Secret ins Prozess-Env.
@@ -45,13 +76,34 @@ def load_workspace_secret_env_from_fd() -> None:
     liegen sie nur noch im Python-Prozessspeicher dieses Kindes, nicht mehr
     im ``envp``-Array, das ``execve`` gesetzt hat — und entfernt die FD-Nummer
     wieder aus dem Env. Operator-Runs setzen diese Variable nie; No-Op.
+
+    Finding H5: for a workspace-scoped run (``AGORA_CREDENTIAL_SCOPE``
+    signal), ``AGORA_SECRET_ENV_FD`` is no longer optional — the backend
+    always creates the pipe for such a run (``build_route_subprocess_env``
+    / ``_build_subprocess_env``). Any failure to read a valid, complete,
+    key-bearing payload from it is now a hard failure (non-zero exit)
+    instead of a silent no-op that would let this process fall through to
+    ``.env``/boost — the operator's credentials for a workspace's run.
+    Boost is force-disabled up front, independent of that outcome.
     """
+    workspace_scoped = is_workspace_credential_scope()
+    if workspace_scoped:
+        for key in _BOOST_ENV_KEYS:
+            os.environ.pop(key, None)
+
     fd_value = os.environ.pop(_SECRET_FD_ENV_KEY, None)
     if not fd_value:
+        if workspace_scoped:
+            _fail_closed(
+                f"workspace-scoped run has no {_SECRET_FD_ENV_KEY} — "
+                "refusing to start without a workspace credential"
+            )
         return
     try:
         fd = int(fd_value)
     except ValueError:
+        if workspace_scoped:
+            _fail_closed(f"{_SECRET_FD_ENV_KEY} ist keine gueltige FD-Nummer")
         logging.getLogger("agora.sim").warning(
             "load_workspace_secret_env_from_fd: %s ist keine gueltige FD-Nummer",
             _SECRET_FD_ENV_KEY,
@@ -65,6 +117,8 @@ def load_workspace_secret_env_from_fd() -> None:
                 break
             chunks.append(chunk)
     except OSError:
+        if workspace_scoped:
+            _fail_closed(f"FD {fd} (workspace credential pipe) nicht lesbar")
         logging.getLogger("agora.sim").warning(
             "load_workspace_secret_env_from_fd: FD %s nicht lesbar", fd
         )
@@ -75,16 +129,27 @@ def load_workspace_secret_env_from_fd() -> None:
         except OSError:
             pass
     if not chunks:
+        if workspace_scoped:
+            _fail_closed("leere Workspace-Credential-Payload")
         return
     try:
         secrets = json.loads(b"".join(chunks).decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
+        if workspace_scoped:
+            _fail_closed("Workspace-Credential-Payload nicht als JSON lesbar")
         logging.getLogger("agora.sim").warning(
             "load_workspace_secret_env_from_fd: Payload nicht als JSON lesbar"
         )
         return
-    if isinstance(secrets, dict):
-        os.environ.update({str(k): str(v) for k, v in secrets.items()})
+    if not isinstance(secrets, dict):
+        if workspace_scoped:
+            _fail_closed("Workspace-Credential-Payload ist kein JSON-Objekt")
+        return
+    if workspace_scoped and _REQUIRED_WORKSPACE_SECRET_KEY not in secrets:
+        _fail_closed(
+            f"Workspace-Credential-Payload enthaelt kein {_REQUIRED_WORKSPACE_SECRET_KEY}"
+        )
+    os.environ.update({str(k): str(v) for k, v in secrets.items()})
 
 
 # Laeuft beim Import dieses Moduls — jedes Runner-Skript importiert
@@ -401,6 +466,12 @@ def install_script_paths(paths: RuntimePaths) -> None:
 
 
 def load_project_env(script_file: str | Path, *, verbose: bool = False) -> Path | None:
+    # Finding H5 (#1688): a workspace-scoped run must never load the
+    # operator's .env — that file may carry LLM_API_KEY/LLM_BOOST_* for an
+    # entirely different (operator) credential, which would silently fill
+    # the gap a rejected/missing workspace key was supposed to leave open.
+    if is_workspace_credential_scope():
+        return None
     paths = resolve_runtime_paths(script_file)
     candidates: Iterable[Path] = (
         paths.project_root / ".env",

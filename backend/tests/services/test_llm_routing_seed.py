@@ -481,6 +481,61 @@ def test_build_route_subprocess_env_operator_run_unchanged(monkeypatch):
     assert env["LLM_API_KEY"] == "operator-key"
     assert env["OPENAI_API_KEY"] == "operator-key"
     assert WORKSPACE_SECRET_ENV_MARKER not in env
+    assert "AGORA_CREDENTIAL_SCOPE" not in env
+
+
+def test_build_route_subprocess_env_sets_credential_scope_signal_for_workspace(monkeypatch):
+    """Finding H5 (#1688): a workspace-scoped run's subprocess env carries
+    the non-secret AGORA_CREDENTIAL_SCOPE=workspace signal — the child
+    (_sim_common.py) uses its mere presence, not the presence/absence of a
+    secret payload, to refuse .env/boost fallback."""
+    from uuid import UUID
+
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.workspace_credential_id_for_run",
+        lambda _run_id: UUID("11111111-1111-4111-8111-111111111111"),
+    )
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    env = build_route_subprocess_env(route, api_key="ws-secret-key", run_id="run_ws")
+
+    assert env["AGORA_CREDENTIAL_SCOPE"] == "workspace"
+
+
+def test_build_route_subprocess_env_always_pipes_workspace_run_even_without_key(monkeypatch):
+    """Finding H5 (#1688): a workspace-scoped run with NO resolvable key
+    (api_key=None) must still get the marker (empty payload) — the child
+    must see a pipe for every workspace run, not just when a key happens to
+    exist, or a missing pipe would look like 'operator run, .env is fine'."""
+    from uuid import UUID
+    import json as _json
+
+    from app.services.llm_routing_seed import WORKSPACE_SECRET_ENV_MARKER
+
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.workspace_credential_id_for_run",
+        lambda _run_id: UUID("11111111-1111-4111-8111-111111111111"),
+    )
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    env = build_route_subprocess_env(route, api_key=None, run_id="run_ws_no_key")
+
+    assert env["AGORA_CREDENTIAL_SCOPE"] == "workspace"
+    assert WORKSPACE_SECRET_ENV_MARKER in env
+    assert _json.loads(env[WORKSPACE_SECRET_ENV_MARKER]) == {}
+    assert "LLM_API_KEY" not in env
 
 
 def _mismatch_connection() -> ProviderConnection:
