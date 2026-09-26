@@ -74,12 +74,13 @@ def test_demo_mode_forbids_round3_operator_vars(monkeypatch, name):
 
 
 def test_demo_mode_embedding_base_url_stays_allowed(monkeypatch):
-    """Owner-Entscheidung: Demo-Embeddings laufen ueber das lokale
-    Betreiber-Ollama, EMBEDDING_BASE_URL ist deshalb nicht gesperrt."""
+    """Demo-Embeddings laufen ueber den freigegebenen Betreiber-Endpoint
+    (gns3), EMBEDDING_BASE_URL und EMBEDDING_API_KEY sind deshalb erlaubt."""
     from app.config import demo_mode_leaked_operator_vars
 
     _clear_all_forbidden_vars(monkeypatch)
-    monkeypatch.setenv("EMBEDDING_BASE_URL", "http://host.docker.internal:11434")
+    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://embed.tailnet.example/v1")
+    monkeypatch.setenv("EMBEDDING_API_KEY", _test_value("embedding-key"))
 
     assert demo_mode_leaked_operator_vars() == []
 

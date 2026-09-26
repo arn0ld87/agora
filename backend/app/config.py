@@ -58,15 +58,16 @@ DEMO_MODE_FORBIDDEN_ENV_VARS: tuple[str, ...] = (
     'ANTHROPIC_API_KEY',
     'OPENROUTER_API_KEY',
     'OLLAMA_API_KEY',
-    'EMBEDDING_API_KEY',
+    # EMBEDDING_API_KEY fehlt bewusst: er gilt nur fuer den per
+    # AGORA_SHARED_EMBEDDING_BASE_URL freigegebenen Betreiber-Endpoint (gns3).
     'LLM_BOOST_API_KEY',
     'LLM_BASE_URL',
     'LLM_BOOST_BASE_URL',
     # #1688 Runde 3: weitere Betreiber-Zugaenge, die ein Workspace-Lauf sonst
     # still mitbenutzen koennte (Web-Recherche, Claude-CLI-Session,
     # OpenAI-/Ollama-Endpunkte fuer OASIS und Legacy-Clients).
-    # EMBEDDING_BASE_URL fehlt bewusst: Demo-Embeddings laufen per
-    # Owner-Entscheidung ueber das lokale Betreiber-Ollama (Runbook).
+    # EMBEDDING_BASE_URL fehlt bewusst: Demo-Embeddings laufen ueber den
+    # Betreiber-Endpoint auf gns3 (qwen3-embedding:4b, Runbook).
     'TAVILY_API_KEY',
     'CLAUDE_CODE_OAUTH_TOKEN',
     'OLLAMA_BASE_URL',

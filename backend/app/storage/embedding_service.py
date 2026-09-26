@@ -474,6 +474,17 @@ class EmbeddingService:
         headers = {'Content-Type': 'application/json'}
         workspace_id = self._workspace_credential_id()
         if workspace_id is not None and self._provider == 'openai':
+            if self._is_shared_operator_endpoint():
+                # #1688: der Betreiber gibt per AGORA_SHARED_EMBEDDING_BASE_URL
+                # ausdruecklich einen eigenen Embedding-Endpoint (gns3) fuer
+                # Workspace-Laeufe frei. Dorthin geht nur der Betreiber-
+                # Embedding-Key, nie ein Workspace-Key.
+                if not self.api_key:
+                    raise EmbeddingError(
+                        'EMBEDDING_API_KEY is required for the shared embedding endpoint'
+                    )
+                headers['Authorization'] = f'Bearer {self.api_key}'
+                return headers
             from ..services.embedding_configurations.runtime import (
                 resolve_active_embedding_route,
             )
@@ -511,6 +522,15 @@ class EmbeddingService:
                 raise EmbeddingError('EMBEDDING_API_KEY is required for OpenAI embeddings')
             headers['Authorization'] = f'Bearer {self.api_key}'
         return headers
+
+    def _is_shared_operator_endpoint(self) -> bool:
+        """Exakter URL-Vergleich gegen die explizite Betreiber-Freigabe.
+
+        Keine Heuristik: ohne gesetzte ``AGORA_SHARED_EMBEDDING_BASE_URL``
+        bleibt es beim Workspace-Key-Zwang.
+        """
+        shared = (os.environ.get('AGORA_SHARED_EMBEDDING_BASE_URL') or '').strip()
+        return bool(shared) and self.base_url.rstrip('/') == shared.rstrip('/')
 
     @staticmethod
     def _workspace_credential_id():

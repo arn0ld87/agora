@@ -111,9 +111,13 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
      exec agora uv run python scripts/bootstrap_public_demo_providers.py
    ```
 
-   Das Public-Overlay erzwingt lokale Ollama-Embeddings (Owner-Entscheidung:
-   Besucher-Embeddings laufen über das Betreiber-Ollama mit `nomic-embed-text`,
-   `EMBEDDING_BASE_URL` ist deshalb erlaubt) und leere globale
+   Embeddings laufen für alle Besucher über den Betreiber-Endpoint auf gns3
+   (llama.cpp, `qwen3-embedding:4b`, 2560 Dimensionen). Die Demo-`.env` setzt
+   dafür `EMBEDDING_BASE_URL` (Tailnet-URL des gns3-Endpoints),
+   `EMBEDDING_MODEL=qwen3-embedding:4b`, `VECTOR_DIM=2560` und
+   `EMBEDDING_API_KEY` (Vaultwarden `GNS3_EMBEDDING_API_KEY`); das Overlay
+   bricht ohne diese Werte ab und gibt genau diese URL per
+   `AGORA_SHARED_EMBEDDING_BASE_URL` frei. Das Overlay erzwingt leere globale
    Cloud-Provider-Variablen. Es begrenzt CPU, RAM und Prozesse der Demo-Container,
    drosselt kostspielige Starts und aktiviert JWT-Demo-Limits für Runden und
    Laufbudgets. Die Betreiber-Instanz bleibt in ihrem eigenen Compose-Projekt.
@@ -121,7 +125,7 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
    Die `.env` des Demo-Checkouts darf keine der folgenden Variablen enthalten:
    `LLM_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`,
    `MINIMAX_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`,
-   `OLLAMA_API_KEY`, `EMBEDDING_API_KEY`, `LLM_BOOST_API_KEY`, `LLM_BASE_URL`,
+   `OLLAMA_API_KEY`, `LLM_BOOST_API_KEY`, `LLM_BASE_URL`,
    `LLM_BOOST_BASE_URL`, `TAVILY_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
    `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE_URL`. Dasselbe gilt
    für `backend/instance/settings.json` des Demo-Checkouts: dort persistierte

@@ -83,3 +83,23 @@ def test_tenant_embedding_does_not_reuse_operator_cache(monkeypatch):
     assert service.embed("same text") == [1.0]
     assert requests == [["same text"]]
     assert service._cache["same text"] == [99.0]
+
+
+def test_shared_operator_endpoint_uses_operator_embedding_key(monkeypatch):
+    """#1688: ein per AGORA_SHARED_EMBEDDING_BASE_URL freigegebener
+    Betreiber-Endpoint bekommt den Betreiber-Key, nie den Workspace-Key."""
+    shared = "https://embed.tailnet.example/v1"
+    monkeypatch.setenv("AGORA_SHARED_EMBEDDING_BASE_URL", shared + "/")
+    service = _service(monkeypatch, uuid4(), "workspace-key", base_url=shared)
+
+    assert service._request_headers()["Authorization"] == "Bearer operator-key"
+
+
+def test_shared_endpoint_env_does_not_open_other_urls(monkeypatch):
+    monkeypatch.setenv("AGORA_SHARED_EMBEDDING_BASE_URL", "https://embed.tailnet.example/v1")
+    service = _service(
+        monkeypatch, uuid4(), "workspace-key", base_url="https://attacker.example.com/v1"
+    )
+
+    with pytest.raises(EmbeddingError, match="canonical"):
+        service._request_headers()
