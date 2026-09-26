@@ -11,7 +11,7 @@ import json
 import os
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator, Mapping, NamedTuple, Optional
+from typing import Iterator, Mapping, NamedTuple, Optional, cast
 from uuid import UUID
 
 from flask import has_request_context
@@ -702,7 +702,9 @@ def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
     # — the sentinel is what makes ``bound_is_set`` True for an explicitly
     # bound operator scope, distinct from a thread that never bound
     # anything (still the plain ``None`` ContextVar default).
-    bound_workspace = None if bound_raw is _OPERATOR_SENTINEL else bound_raw
+    bound_workspace: Optional[UUID] = (
+        None if bound_raw is _OPERATOR_SENTINEL else cast(Optional[UUID], bound_raw)
+    )
 
     if bound_is_set and run_id is None:
         # Fast path, unchanged since before Finding H1: a background job
