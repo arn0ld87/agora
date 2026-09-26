@@ -2,37 +2,36 @@
 
 > Kompakte Orientierung für Agenten. Die verbindliche Reihenfolge und Freigabekriterien stehen in [`../../ROADMAP.md`](../../ROADMAP.md); der verifizierte Istzustand in [`../STATUS.md`](../STATUS.md).
 
-## 0.9.6 → 0.10.0
+**Stand:** 26.09.2026. `v0.9.6` ist getaggt; nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
 
-`0.9.6` ist ein Zwischenrelease zwischen `0.9.5` und `0.10.0` — kein `0.10.0` und erfüllt dessen Release-Gates nicht. Einordnung: Abschnitt „0.9.6 — Zwischenrelease" in [`../../ROADMAP.md`](../../ROADMAP.md).
+## Vor `0.10.0-rc.1`
 
-Priorität vor neuen Features:
+1. **P0 zuerst:** Neo4j-Backup im Restore-Drill reparieren (#1633). Ein neuer P0 stoppt den RC-Schnitt sofort.
+2. **Verhalten und Verträge vor dem Freeze:** `schema_version` (#1663), Kompatibilitäts-ADR (#1664), Cutover-Nachweise (#1592), Checksummen (#1661), Alias-/Koreferenz-Rest (#1470), Role-Leakage-Rest (#1323) und Test-Isolation (#1632).
+3. **Release-Gates vor dem Freeze:** Supabase-Image-Scan/Ausnahmeregister (#1670), Backend-Ratchet (#1671), Frontend-Coverage (#1672) und Upgrade-Runbook (#1673).
 
-1. **Restart-sichere Langläufer** — Prepare, Report und Graph-Build dürfen bei Webprozess-Restarts nicht zustandslos verschwinden (#1472). **Teil erledigt:** Slice 1.1 terminalisiert per SIGTERM abgeschnittene In-Process-Jobs noch im selben Lauf als `failed/process_restart` (#1525/#1528/#1530), statt allein auf die Startup-Reconciliation zu warten. **Offen:** eine persistente Job-Queue mit eigenen Workern und ein wiederaufnehmbarer Zwischenstand — `_BACKEND` bleibt `"thread"`.
-2. **Embedding Runtime SSoT** — aktive Store-/Connection-Konfiguration muss produktive Consumer steuern; Env nur Legacy/Bootstrap (#1417). **Teil erledigt:** Slice 2.1 löst Lese- und Schreibpfad kanonisch über den Store auf (#1533), Slice 2.2 macht den Cutover korruptionssicher — die neue Indexversion wird erst nach erfolgreicher Re-Embedding- und Indexprüfung `active`, ein fehlgeschlagener Lauf schaltet nie um (#1533). **Offen:** `VECTOR_DIM`-SSoT (Slice 2.3), Legacy-View für Bestandsgraphen (Slice 2.4), Frontend-Zod-Spiegel für den neuen `building`-Status.
-3. **Entitäts-/Persona-Kohärenz** — Alias/Koreferenz (#1470) weiterhin offen; Domänendrift (#1471) abgeschlossen.
-4. **Simulationstreue** — Role Leakage und Twitter-Recommender (#1323/#1236). Weiterhin offen.
-5. **Evidence-/Eval-Trust** — Quantoren und Seed-Lösungstexte (#1345/#1240), Claim-/Confidence-Kalibrierung (#1301/#1400). Weiterhin offen; #1492 hat nur die Prüfseite der Fließtext-Faktenprüfung gehärtet, nicht die Quantoren-/Eval-Leakage-Punkte selbst.
-6. **Reproduzierbarkeit** — vollständiges Run-Manifest, echte Seed-Wiring-Semantik und Replay (#763/#1274). **Teil erledigt:** `RunManifest` existiert strukturell und atomar geschrieben, ein Replay-Pfad mit `AiModelRef`-Overrides und strukturierten Fehler-Envelopes ist gemergt (#1273). **Nicht erledigt:** die Garantie selbst. Prompt-Snapshots, Seed-Dokument-Hash, echte RNG-Wiring-Semantik und vollständige Replay-Parameter fehlen weiterhin — „gleicher Seed = reproduzierbarer Run" bleibt eine zu starke Aussage.
-7. **Operations-Nachweis** — Fresh Install, Backup/Restore, Upgrade/Rollback, Release-Artefakte (#766). **Teil erledigt:** Der Restore-Drill ist ausführbar und maschinell prüfbar (`restore-drill.sh`, `restore_verify.py`, Zielschutz gegen Overwrite im eigenen Checkout, `migration_baseline.py` für Vorher/Nachher-Vergleiche, #1514). **Offen:** der tatsächlich durchgeführte Fresh-Host-Restore-/Upgrade-/Rollback-Smoke mit echtem Backup — das Werkzeug ist kein Nachweis.
-8. **Produktnachweis** — Agora gegen Single-Prompt-/statische Persona-Baselines und reale Referenzen messen (#765). Weiterhin offen.
+## Bis `0.10.0` stabil
 
-## Bereits erledigt / nicht erneut als offene Kernarbeit planen
+- P1-Fixes: rote Integration-CI (#1660), Supavisor-Start (#1634), Embedding-Runtime-SSoT (#1417), Eval-Seed-Leakage (#1240), echte Manifest-/Replay-Werte (#1274) und CodeQL-High-Triage (#1669). Offene P0/P1 im 0.10-Milestone verhindern den stabilen Tag.
+- PostgreSQL ist auf armserver seit #1592 produktive Metadaten-Ablage, im Code-Default aber noch nicht. Für den unterstützten 1.0-Install-Pfad muss PostgreSQL kanonisch werden; der volle Supabase-Stack gehört dazu, Artefakte bleiben im Dateisystem ([#1654](https://github.com/arn0ld87/agora/issues/1654)).
+- Zwischen RCs nur Fixes, Tests und Doku. Keine neue Feature- oder Vertragsarbeit ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
 
-- Preflight sowie Zeit-/Token-/Kosten-/LLM-Call-Budgets sind grundsätzlich vorhanden.
-- parallele Persona-Generierung reserviert harte LLM-Calls (#1461).
-- Tool-, Vision- und Interview-Pfade sind in Budget/Ledger integriert (#1478), **ParallelIPCHandler BudgetExceededError-Handling geschlossen (Slice 3.1, #1527)**. Offen bleibt die `SubprocessBudgetGuard`-Anbindung im Default-Parallelrunner (`scripts/run_parallel_simulation.py`) selbst — eigenes Issue.
-- Simulations-Startup-Reconciliation ist vorhanden (#1476).
-- Partial Reports enden ehrlich als `INCOMPLETE` (#1479).
+## Im Freeze vor `1.0.0-rc.1`
 
-## Nicht vor 1.0 priorisieren
+- **Ops:** ein Fresh-Host-Install/Restore mit vollem Supabase-Stack, Referenzbestand, Graph, Lauf und Bericht (#766). Upgrade und Rollback werden über das CI-Gate #1589 und den realen Cutover #1592 belegt; ein trockenes Runbook ersetzt den Drill nicht ([#1659](https://github.com/arn0ld87/agora/issues/1659)).
+- **Produkt:** AURORA mit je einem Lauf gegen Single-Prompt- und statische Persona-Baseline veröffentlichen (#1662, M3 aus #1603). Nachvollziehbarer qualitativer Vergleich, keine statistische Aussage und keine identische Ausgabe bei gleichem Seed ([#1656](https://github.com/arn0ld87/agora/issues/1656)).
+- **Doku:** Grenzen und Non-Goals sichtbar machen (#1674), RC-Notes und Upgrade-Hinweise nach #1673. Vor dem 1.0-Tag müssen alle P0/P1 geschlossen sein; ein neuer P0/P1 setzt den siebentägigen Soak zurück ([#1653](https://github.com/arn0ld87/agora/issues/1653)).
 
-- Multi-User mit Workspaces, Supabase Auth, RLS und Realtime (ADR-0019, Epic #1610; gemergter Code bleibt inaktiv)
-- SaaS/gehosteter Betrieb
-- Kubernetes/Helm
-- Federation
-- allgemeines Plugin-System
-- weiterer großer Frontend-Rewrite
-- neue Provider nur um die Providerliste länger aussehen zu lassen
+## Bereits geschlossen / nicht wieder öffnen
 
-Details und Abnahme: [`../../ROADMAP.md`](../../ROADMAP.md).
+- Restart-Recovery/Resume für Prepare, Report und Graph-Build (#1472); Out-of-Process-Worker bleibt #1551.
+- Report-Parallelitätsproblem #1265 wurde an #1551 übergeben; Parallelität verschiedener Reports ist damit noch nicht bewiesen.
+- Twitter-Recommender (#1236), Quantor-Evidence (#1345), Confidence/Claim-Typen (#1301/#1400), Hauptdomänen-Drift (#1471) und Single-Platform-Observation-Gate (#1224).
+- Manifest-/Replay-Grundlage #763; die Reproduzierbarkeitslücken stehen ausschließlich in #1274.
+- Budgets, Startup-Reconciliation und ehrliche `INCOMPLETE`-Reports (#1461/#1476/#1478/#1479).
+
+## Nach 1.0
+
+Multi-User/Workspaces/Auth/RLS/Realtime (ADR-0019), Supabase-Storage-Blobs, volle Kalibrierungs- und Baseline-Suite (#765), Out-of-Process-Worker (#1551), SaaS, Kubernetes, Federation und Plugin-System.
+
+Details und Abnahme: [`../../ROADMAP.md`](../../ROADMAP.md), Istzustand: [`../STATUS.md`](../STATUS.md).
