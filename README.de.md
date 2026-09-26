@@ -234,19 +234,15 @@ cd frontend && bun run typecheck  # Vue/TypeScript
 
 Der exakt verifizierte Stand, aktuelle Testnachweise, bekannte Grenzen und die geprüfte Baseline werden in [`docs/STATUS.md`](./docs/STATUS.md) gepflegt. Release-Prioritäten und die Gates für 0.10/1.0 stehen in [`ROADMAP.md`](./ROADMAP.md). Diese README enthält bewusst keine schnell alternden Testzähler.
 
-Die wichtigsten Arbeiten vor 1.0 liegen derzeit bei:
+Die verbleibende Release-Arbeit folgt drei Gates:
 
-- restart-sicheren langlaufenden Prepare-/Report-/Graph-Jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
-- den verbleibenden Embedding-Runtime-SSoT-Teilen — `VECTOR_DIM`, Legacy-View, Frontend-`building`-Status-Spiegel ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
-- Persona-/Entitätskohärenz und Rollenkonsistenz ([#1470](https://github.com/arn0ld87/agora/issues/1470), [#1471](https://github.com/arn0ld87/agora/issues/1471), [#1323](https://github.com/arn0ld87/agora/issues/1323)),
-- Simulationstreue und Recommender-Reproduzierbarkeit ([#1236](https://github.com/arn0ld87/agora/issues/1236)),
-- stärkerer Evidenzsemantik und sauberen Evaluationsfixtures ([#1345](https://github.com/arn0ld87/agora/issues/1345), [#1240](https://github.com/arn0ld87/agora/issues/1240)),
-- vollständigen Manifest-/Replay-Daten und Reproduzierbarkeit ([#763](https://github.com/arn0ld87/agora/issues/763), [#1274](https://github.com/arn0ld87/agora/issues/1274)),
-- nachgewiesenem Backup/Restore/Upgrade/Rollback und Baseline-Evaluation ([#766](https://github.com/arn0ld87/agora/issues/766), [#765](https://github.com/arn0ld87/agora/issues/765)).
+- Vor `0.10.0-rc.1`: den P0-Fehler beim Neo4j-Backup schließen ([#1633](https://github.com/arn0ld87/agora/issues/1633)) und Verträge, Cutover-Nachweise, Security-Scans, Coverage-Gates und Upgrade-Anleitung fertigstellen.
+- Vor `0.10.0` stabil: P1-Findings in Integration-CI, Supavisor, Embeddings, Evaluation, Manifest/Replay und CodeQL beheben. Die Recovery für Prepare/Report/Graph ist bereits geschlossen ([#1472](https://github.com/arn0ld87/agora/issues/1472)).
+- Vor `1.0.0`: einen Fresh-Host-Restore mit vollem Supabase-Stack nachweisen ([#766](https://github.com/arn0ld87/agora/issues/766)), den qualitativen AURORA-Vergleich veröffentlichen ([#1662](https://github.com/arn0ld87/agora/issues/1662)) und den siebentägigen finalen RC-Soak abschließen.
 
 ### Grenze der Reproduzierbarkeit
 
-Ein strukturelles `RunManifest` und ein Replay-Dialog existieren, Reports und Simulationen führen seed-bezogene Felder. Das ist keine Garantie: Das Manifest ist noch kein vollständiger Reproduktionsanker. Prompt-Snapshots, Seed-Dokument-Hashing, echtes RNG-Wiring und vollständige Replay-Parameter sind weiterhin offen ([#1274](https://github.com/arn0ld87/agora/issues/1274)). Das System garantiert aktuell **noch nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Dafür müssen alle relevanten Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags eingefroren oder aufgezeichnet werden ([#763](https://github.com/arn0ld87/agora/issues/763)). Das ist 0.10-Arbeit, keine Behauptung von 0.9.6.
+Die Manifest-/Replay-Grundlage ist abgeschlossen ([#763](https://github.com/arn0ld87/agora/issues/763)), aber das Manifest ist noch kein vollständiger Reproduktionsanker. Prompt-Snapshots, Seed-Dokument-Hashing, echtes RNG-Wiring und vollständige Replay-Parameter sind weiterhin offen ([#1274](https://github.com/arn0ld87/agora/issues/1274)). Das System garantiert **nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Die verbleibende 0.10-Arbeit muss relevante Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags einfrieren oder aufzeichnen.
 
 ## Referenzlauf
 

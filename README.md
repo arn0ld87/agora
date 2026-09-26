@@ -234,19 +234,15 @@ Run `bun run build` for the frontend production build. The [pre-push gate](./doc
 
 The exact verified state, recent test evidence, known gaps, and current baseline are maintained in [`docs/STATUS.md`](./docs/STATUS.md). Release priorities and 0.10/1.0 gates are maintained in [`ROADMAP.md`](./ROADMAP.md). This README deliberately avoids embedding fast-aging test counters.
 
-The main pre-1.0 work is currently concentrated on:
+The remaining release work follows three gates:
 
-- restart-safe long-running Prepare/Report/Graph jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
-- closing the remaining embedding runtime SSoT pieces — `VECTOR_DIM`, a legacy view, the frontend `building`-status mirror ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
-- persona/entity coherence and role consistency ([#1470](https://github.com/arn0ld87/agora/issues/1470), [#1471](https://github.com/arn0ld87/agora/issues/1471), [#1323](https://github.com/arn0ld87/agora/issues/1323)),
-- simulation fidelity and recommender reproducibility ([#1236](https://github.com/arn0ld87/agora/issues/1236)),
-- stronger evidence semantics and clean evaluation fixtures ([#1345](https://github.com/arn0ld87/agora/issues/1345), [#1240](https://github.com/arn0ld87/agora/issues/1240)),
-- complete manifests/replay and reproducibility ([#763](https://github.com/arn0ld87/agora/issues/763), [#1274](https://github.com/arn0ld87/agora/issues/1274)),
-- proven backup/restore/upgrade/rollback and baseline evaluation ([#766](https://github.com/arn0ld87/agora/issues/766), [#765](https://github.com/arn0ld87/agora/issues/765)).
+- Before `0.10.0-rc.1`: close the P0 Neo4j backup defect ([#1633](https://github.com/arn0ld87/agora/issues/1633)) and land contract, cutover, security-scan, coverage, and upgrade-guide work.
+- Before stable `0.10.0`: resolve the P1 integration, Supavisor, embedding, evaluation, manifest/replay, and CodeQL findings. The Prepare/Report/Graph recovery work is already closed ([#1472](https://github.com/arn0ld87/agora/issues/1472)).
+- Before `1.0.0`: prove one fresh-host restore with the full Supabase stack ([#766](https://github.com/arn0ld87/agora/issues/766)), publish the qualitative AURORA comparison ([#1662](https://github.com/arn0ld87/agora/issues/1662)), and complete the final seven-day RC soak.
 
 ### Reproducibility boundary
 
-A structural `RunManifest` and a replay dialog exist, and reports and simulations record seed-related fields. That is not the same as a guarantee: the manifest is not yet a complete reproduction anchor. Prompt snapshots, seed-document hashing, real RNG wiring, and full replay parameters are still open ([#1274](https://github.com/arn0ld87/agora/issues/1274)). The current system **does not yet guarantee that the same stored seed reproduces the same experiment**. Full reproducibility requires all relevant random sources, prompts, inputs, routes, model responses, and feature flags to be frozen or recorded ([#763](https://github.com/arn0ld87/agora/issues/763)). That is 0.10 work, not a claim made by 0.9.6.
+The manifest/replay foundation is complete ([#763](https://github.com/arn0ld87/agora/issues/763)), but the manifest is not yet a complete reproduction anchor. Prompt snapshots, seed-document hashing, real RNG wiring, and full replay parameters remain open ([#1274](https://github.com/arn0ld87/agora/issues/1274)). The current system **does not guarantee that the same stored seed reproduces the same experiment**. Remaining 0.10 work must freeze or record the relevant random sources, prompts, inputs, routes, model responses, and feature flags.
 
 ## Reference run
 
