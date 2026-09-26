@@ -138,6 +138,8 @@ Die Run-API umfasst unter anderem:
 - Usage/Budget
 - LLM-Routing je Run bzw. Stage
 
+Ungültige Filterparameter von `GET /api/runs` (z. B. `limit` außerhalb 1–200, unbekannter `status`) liefern `400` mit `code: "validation_error"`, einem Text in `error` und den Pydantic-Details unter `details` (#1679).
+
 Resume ist semantisch **nicht** dasselbe wie Replay. Resume setzt einen bestehenden fachlichen Vorgang fort; Replay startet einen neuen Lauf aus einem Manifest. Vollständige Reproduzierbarkeit des Replay-Pfads ist noch Gegenstand von #763/#1274.
 
 ### LLM — `/api/llm`

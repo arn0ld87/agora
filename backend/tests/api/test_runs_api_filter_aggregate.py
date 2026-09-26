@@ -286,3 +286,48 @@ def test_invalid_status_returns_400(env):
     assert resp.status_code == 400
     payload = resp.get_json()
     assert payload["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Issue #1679: Validierungsfehler als Envelope, nie als rohe errors()-Liste
+# ---------------------------------------------------------------------------
+
+def test_invalid_filter_error_is_text_with_details_in_extra(env):
+    """``error`` ist ein String; die Pydantic-Details stehen unter ``details``.
+
+    Vorher landete ``exc.errors()`` — eine Liste — direkt im ``error``-Feld.
+    """
+    resp = env["client"].get("/api/runs?limit=999")
+
+    assert resp.status_code == 400
+    payload = resp.get_json()
+    assert isinstance(payload["error"], str)
+    assert payload["code"] == "validation_error"
+    assert isinstance(payload["details"], list)
+    assert payload["details"][0]["loc"] == ["limit"]
+
+
+def test_value_error_in_validation_ctx_stays_400(env, monkeypatch):
+    """Ein Validator, der ``ValueError`` wirft, legt die Exception-Instanz in
+    ``ctx`` ab. Ungefiltert bricht Flasks JSON-Encoder daran ab und aus der
+    400 wird eine 500 — derselbe Fehler wie im Replay-Pfad (#1273)."""
+    from pydantic import BaseModel, field_validator
+
+    import app.api.runs as runs_module
+
+    class _RaisingFilter(BaseModel):
+        limit: int = 50
+
+        @field_validator("limit")
+        @classmethod
+        def _reject(cls, value: int) -> int:
+            raise ValueError("limit abgelehnt")
+
+    monkeypatch.setattr(runs_module, "RunsFilterQuery", _RaisingFilter)
+
+    resp = env["client"].get("/api/runs?limit=5")
+
+    assert resp.status_code == 400
+    payload = resp.get_json()
+    assert payload["code"] == "validation_error"
+    assert "limit abgelehnt" in str(payload["details"])
