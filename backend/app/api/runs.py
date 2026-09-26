@@ -194,7 +194,15 @@ def list_runs():
     try:
         fq = RunsFilterQuery.model_validate(raw_params)
     except ValidationError as exc:
-        return json_error(exc.errors(), status=400)
+        # exc.errors() gehört in ``extra``: json_error sanitisiert nur dort,
+        # und ``ctx`` kann lebende ValueError-Instanzen tragen, an denen
+        # Flasks JSON-Encoder abbricht (#1679, wie im Replay-Pfad #1273).
+        return json_error(
+            "Invalid runs filter",
+            status=400,
+            code="validation_error",
+            extra={"details": exc.errors()},
+        )
 
     # Pass legacy filter params through unchanged for backwards compatibility.
     runs = run_registry.list_runs(
