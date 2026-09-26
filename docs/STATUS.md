@@ -470,6 +470,8 @@ Für die in [ADR-0020](decisions/0020-isolated-public-demo-before-1-0.md) begren
 
 Die Compose-Overlays trennen Demo-Artefakte, Neo4j, Redis und Supabase von der bisherigen Instanz und veröffentlichen nur Agora und `/auth/v1` auf dem öffentlichen HTTPS-Eingang. **Der Code und die Overlays allein schalten nichts um:** DNS, SMTP, JWT-Konfiguration und die externe Zwei-Konten-Abnahme sind eigene Deploy-Schritte nach dem Merge.
 
+Seit dem Startup-Guard (#1688) verweigert das Backend mit `AGORA_DEMO_MODE=true` den Start, sobald eine Betreiber-Provider-Env-Var (`LLM_API_KEY`, `OPENAI_API_KEY` u. a., siehe `app.config.DEMO_MODE_FORBIDDEN_ENV_VARS`) gesetzt ist, und `bootstrap_public_demo_providers.py` schreibt in diesem Fall nichts; ohne Demo-Modus warnt der Start bei aktivem Supabase-JWT nur, dass der Workspace-Credential-Default-Deny dann nicht greift.
+
 ### Realtime für Listen-Projektionen (#1618)
 
 Seit #1618 lädt das Frontend Ablage und Run-Listen nach, sobald sich im aktiven Workspace ein Projekt, eine Simulation, ein Run oder ein Report ändert. Das Ereignis ist nur ein Signal: Die Daten kommen weiter über die Flask-API, der Payload wird nicht gelesen. Das SSE laufender Läufe bleibt unverändert, ebenso das Polling als Rückfallebene.

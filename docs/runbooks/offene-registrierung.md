@@ -116,6 +116,16 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
    drosselt kostspielige Starts und aktiviert JWT-Demo-Limits für Runden und
    Laufbudgets. Die Betreiber-Instanz bleibt in ihrem eigenen Compose-Projekt.
 
+   Die `.env` des Demo-Checkouts darf keine der folgenden Variablen enthalten:
+   `LLM_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`,
+   `MINIMAX_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`,
+   `OLLAMA_API_KEY`, `EMBEDDING_API_KEY`, `LLM_BOOST_API_KEY`, `LLM_BASE_URL`,
+   `LLM_BOOST_BASE_URL`. Im Demo-Modus (`AGORA_DEMO_MODE=true`) verweigert das
+   Backend sonst den Start (#1688) — Besucher-Keys leben ausschließlich im
+   verschlüsselten Workspace-Credential-Store, nie in der Prozessumgebung des
+   Betreibers. `enable_graph_memory_update` steht Besuchern nicht zur
+   Verfügung.
+
 ## 4) Überprüfung
 
 ```bash
