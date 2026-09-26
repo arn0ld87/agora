@@ -1,0 +1,3 @@
+### Fixed
+
+- `scripts/restore-drill.sh --phase backup` scheiterte auf dem echten Host am Neo4j-Schritt (`/backups is not an existing directory`): Neo4j Community kann eine laufende Datenbank nicht dumpen, und `agora-neo4j` mountet kein `/backups`. Dump und Load laufen jetzt offline in einem Wegwerf-Container mit `--volumes-from` (Staging im Container, Ergebnis mit Host-UID und `0600`), Neo4j wird nach dem Dump in jedem Fall wieder gestartet, und `neo4j/neo4j.dump` steht mit Prüfsumme im Manifest. Das PostgreSQL-Backup läuft auch bei einem Neo4j-Fehler; der Drill endet dann trotzdem rot. Restore, Upgrade und Rollback brechen ab, wenn der Stack mit mehreren Compose-Dateien läuft und `COMPOSE_FILE` nicht gesetzt ist, statt die Overlays still zu verlieren. (#1633)

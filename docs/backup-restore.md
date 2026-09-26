@@ -104,6 +104,8 @@ Neo4j benötigt einen **konsistenten** Datenbank-/Volume-Stand. Zwei grundsätzl
 
 Die exakte `neo4j-admin`-Syntax hängt an der tatsächlich eingesetzten Neo4j-Version und Betriebsform und soll **vor dem Drill gegen die laufende Version geprüft** werden. Diese Doku pinnt deshalb keinen Monate alten Befehl, der einen Server im Container stoppt und danach so tut, als könne man fröhlich weiter in denselben Prozess `exec`en.
 
+Für Neo4j 5 **Community** gilt: Dump und Load gehen nur bei gestoppter Datenbank, und der Anwendungscontainer hat kein `/backups`. `scripts/restore-drill.sh` fährt deshalb Stopp → Wegwerf-Container mit `--volumes-from` → Start und protokolliert jeden Schritt (#1633); Details in [`runbooks/restore-drill.md`](runbooks/restore-drill.md#neo4j-offline-1633).
+
 ### Minimaler sicherer Ablauf
 
 ```text

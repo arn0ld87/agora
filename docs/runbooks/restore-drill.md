@@ -43,6 +43,13 @@ bash scripts/restore-drill.sh \
   --protocol /srv/agora-drill-$(date -u +%Y%m%d).log
 ```
 
+Läuft der Stack mit mehreren Compose-Dateien — auf armserver sind es vier —, muss `COMPOSE_FILE` genau diese Dateien nennen, sonst legen `down`/`create`/`up` die Container nur mit `docker-compose.yml` neu an und die Overlays (Ports, Mounts, Codex-CLI) fehlen. Das Skript prüft das am Label `com.docker.compose.project.config_files` des vorhandenen `neo4j`-Containers und bricht vor dem ersten zustandsverändernden Compose-Befehl ab, wenn die Variable fehlt (#1633):
+
+```bash
+export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml:docker-compose.meinserver.yml:deploy/compose/docker-compose.codex-cli.yml
+bash scripts/restore-drill.sh --phase backup --backup-dir /srv/agora-backup
+```
+
 ### Der Restore weigert sich, in den eigenen Checkout zu schreiben
 
 Die Vorgabewerte für `--data-dir`, `--store-dir` und `--instance-dir` zeigen auf `backend/uploads`, `backend/data` und `backend/instance` des Checkouts. Für das Backup ist das richtig — gesichert wird die laufende Installation. Für den Restore wäre es der teuerste Tippfehler im Repository, deshalb bricht `--phase restore` ab, sobald eines der drei Ziele unterhalb der Repository-Wurzel liegt:
@@ -75,7 +82,17 @@ Drei Verzeichnisse, je ein Archiv — dieselben, die `docs/backup-restore.md` mi
 | `--store-dir` | `backend/data` (bzw. `AGORA_DATA_DIR`) | `data.tar.gz` | Provider-, Routing- und App-Stores |
 | `--instance-dir` | `backend/instance` | `instance.tar.gz` | Instanzsettings |
 
-Die Restore-Phase spielt sie in der dokumentierten Recovery-Reihenfolge zurück (Stores, Instanz, Artefakte, dann Neo4j) und kopiert den Neo4j-Dump vor dem `database load` zurück in den neu gestarteten Container — `docker compose down` nimmt den alten mitsamt seinem `/backups` mit.
+Die Restore-Phase spielt sie in der dokumentierten Recovery-Reihenfolge zurück (Stores, Instanz, Artefakte, dann Neo4j).
+
+### Neo4j offline (#1633)
+
+Neo4j Community kann eine laufende Datenbank weder dumpen noch laden, und `agora-neo4j` mountet nur `/data` und `/logs` — ein `docker compose exec … neo4j-admin … --to-path=/backups` scheitert deshalb an `/backups is not an existing directory`. Das Skript arbeitet stattdessen offline über einen Wegwerf-Container:
+
+- **Backup:** Container-ID und Image werden *vor* dem Stopp ermittelt, dann `docker compose stop neo4j`, dann `docker run --rm --volumes-from <neo4j> -v <backup>/neo4j:/backups --user 0:0 --entrypoint sh <image>`. Im Container dumpt `neo4j-admin database dump` als `neo4j` (über `su-exec` bzw. `gosu`) in ein Staging-Verzeichnis; erst die fertige `neo4j.dump` wird nach `/backups` kopiert und auf Host-UID/-GID mit `0600` gesetzt. Danach startet `docker compose start neo4j` die Datenbank **in jedem Fall** wieder, auch nach einem fehlgeschlagenen Dump. `neo4j/neo4j.dump` bekommt einen Eintrag in `MANIFEST.sha256`.
+- **PostgreSQL unabhängig:** Das PostgreSQL-Backup läuft auch, wenn der Neo4j-Dump scheitert; der Drill endet danach trotzdem mit Exit 1, weil das Backup unvollständig ist.
+- **Restore:** Nach `docker compose down` und den drei Archiven legt `docker compose create neo4j` den Container an, ohne die Datenbank zu starten, damit `--volumes-from` seine Volumes sieht. Die Prüfsumme von `neo4j.dump` wird vor dem Load bestätigt, dann lädt derselbe Wegwerf-Container mit `neo4j-admin database load --overwrite-destination=true`. Danach folgen PostgreSQL und `docker compose up -d`.
+
+Während des Backups ist Neo4j für die Dauer des Dumps gestoppt; die Anwendung sieht in diesem Fenster keinen Graphen.
 
 ### PostgreSQL (#1583)
 
@@ -91,7 +108,7 @@ Nur wenn mindestens ein `AGORA_*_BACKEND` auf `postgres` steht (`app/infrastruct
 
 ### Vor dem Lauf prüfen
 
-Die `neo4j-admin`-Syntax hängt an der eingesetzten Neo4j-Version und Betriebsform. Das Skript pinnt sie bewusst nicht und protokolliert stattdessen einen Hinweis — ein Monate alter Befehl, der einen Server im Container stoppt und danach so tut, als könne man fröhlich weiter in denselben Prozess `exec`en, ist gefährlicher als gar keiner. Vor dem Drill gegen die laufende Version prüfen.
+Die `neo4j-admin`-Syntax hängt an der eingesetzten Neo4j-Version und Betriebsform. Das Skript nutzt den Offline-Weg für Neo4j 5 Community (`database dump`/`database load` bei gestoppter Datenbank, siehe oben) und protokolliert einen Hinweis; bei einem anderen Image oder einer Enterprise-Installation vor dem Drill gegen die laufende Version prüfen. Das Image muss `su-exec` oder `gosu` mitbringen — das offizielle `neo4j`-Image tut das, sonst bricht der Wegwerf-Container mit einer benannten Meldung ab.
 
 ## Was das Protokoll wert ist
 
