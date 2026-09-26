@@ -4,6 +4,7 @@ Run registry API.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
@@ -1382,6 +1383,7 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             manifest=manifest,
             resolved_route=resolved_route,
             original_stage_route=original_stage_route,
+            manager=manager,
         )
 
     return {"run_id": new_run["run_id"], "status": "processing"}
@@ -1395,6 +1397,7 @@ def _capture_replay_manifest_draft(
     manifest,
     resolved_route,
     original_stage_route,
+    manager: SimulationManager,
 ) -> None:
     """Draft-Manifest für einen Replay-Run schreiben (Issue #1274 Punkt 3).
 
@@ -1416,6 +1419,18 @@ def _capture_replay_manifest_draft(
         from ..contracts.run_manifest_contract import ai_route_snapshot_from_ai_route
         from ..services.manifest_capture import ManifestCapture
         from ..services.runtime_run_config import RuntimeRunConfig
+
+        # Issue #1686 (P2): den Hash der tatsächlich verwendeten
+        # Branch-Konfiguration berechnen, nicht den des Originals kopieren.
+        # ``create_branch`` hat die Konfiguration bereits umgeschrieben (neue
+        # simulation_id, branch_metadata, ggf. ai_model_ref-Override) — der
+        # kopierte Original-Hash würde diese Änderungen verschleiern.
+        # Gleiche Hash-Funktion/Serialisierung wie beim normalen Start
+        # (``simulation_run.py::_capture_start_manifest_draft``).
+        branch_config = manager.get_simulation_config(new_simulation_id) or {}
+        branch_config_hash = hashlib.sha256(
+            json.dumps(branch_config, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
 
         deviations: list[dict[str, Any]] = []
         if original_stage_route is not None:
@@ -1446,7 +1461,7 @@ def _capture_replay_manifest_draft(
             run_dir=ArtifactLocator.run_dir(new_run_id),
             seed_document_hash=manifest.inputs.seed_document_hash,
             seed_document_filename=manifest.inputs.seed_document_filename,
-            simulation_config_hash=manifest.inputs.simulation_config_hash,
+            simulation_config_hash=f"sha256:{branch_config_hash}",
             graph_id=manifest.inputs.graph_id,
             agora_version=__version__,
             schema_version="1.0.0",

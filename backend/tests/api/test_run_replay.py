@@ -608,8 +608,52 @@ def test_replay_writes_its_own_manifest_with_deviations(env, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Issue #1686 (P1): Route-Continuity ohne expliziten Override
+# Issue #1686 (P2): simulation_config_hash aus der Branch-Konfiguration
 # ---------------------------------------------------------------------------
+
+
+def test_replay_manifest_hashes_the_actual_branch_config(env, monkeypatch):
+    """``create_branch`` schreibt vor dem Start bereits eine umgeschriebene
+    Konfiguration (neue simulation_id, branch_metadata, ggf. ai_model_ref-
+    Override) — der Hash im Replay-Manifest muss diese tatsächlich
+    verwendete Konfiguration abbilden, nicht den 1:1 kopierten Original-Hash
+    aus ``manifest.inputs.simulation_config_hash`` (hier "sha256:def",
+    siehe ``_create_run_with_manifest``)."""
+    import hashlib
+    from unittest.mock import MagicMock
+
+    manager, _runner = _stub_replay_infra(monkeypatch, new_simulation_id="sim_branch_hash")
+    branch_config = {
+        "simulation_id": "sim_branch_hash",
+        "branch_metadata": {"source_simulation_id": "sim_test"},
+        "llm_model": "qwen3",
+    }
+    manager.get_simulation_config = MagicMock(return_value=branch_config)
+
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+    assert resp.status_code == 202, resp.get_json()
+    new_run_id = resp.get_json()["run_id"]
+
+    manager.get_simulation_config.assert_called_with("sim_branch_hash")
+
+    new_manifest_path = os.path.join(str(env["tmp_path"]), "runs", new_run_id, "manifest.json")
+    with open(new_manifest_path) as f:
+        new_data = json.load(f)
+
+    expected_hash = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(branch_config, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+    )
+    assert new_data["inputs"]["simulation_config_hash"] == expected_hash
+    assert new_data["inputs"]["simulation_config_hash"] != "sha256:def", (
+        "Der Original-Hash darf nicht 1:1 kopiert werden — create_branch hat "
+        "die Konfiguration bereits umgeschrieben"
+    )
 
 
 def test_replay_without_override_seeds_original_route_not_workspace_defaults(env, monkeypatch):
