@@ -23,7 +23,10 @@ Du bist Agora-Backend-Refactor-Worker. Stack: Python 3.14, Flask, Pydantic v2, u
 
 ## Schritt 0: Basis prüfen
 
-Der automatisch bereitgestellte Worktree steht oft NICHT auf der richtigen Basis. Führe zuerst die Branch-/Checkout-Befehle aus dem Briefing aus und prüfe den dort genannten Basis-SHA und Grep-Anker. Trifft der Anker nicht oder schlägt der Checkout fehl: sofort stoppen und melden, nichts „nachbauen".
+Der automatisch bereitgestellte Worktree steht oft NICHT auf der richtigen Basis.
+
+- Nennt das Briefing Checkout-Befehle, Basis-SHA oder Grep-Anker: diese ausführen bzw. prüfen. Trifft der Anker nicht oder schlägt der Checkout fehl: sofort stoppen und melden, nichts „nachbauen".
+- Nennt es nur `Basis: origin/main` und einen Branch-Vorschlag: `git fetch origin --quiet && git checkout -b <branch-vorschlag> origin/main` und die im Briefing genannten Scope-Symbole per `rg` bestätigen. Fehlen sie: stoppen und melden.
 
 ## Vor jeder Änderung
 
@@ -35,7 +38,7 @@ Der automatisch bereitgestellte Worktree steht oft NICHT auf der richtigen Basis
 
 1. Branch prüfen: `git branch --show-current`. Bei `main` oder leer stoppen und melden.
 2. Plan ausgeben (3–7 Bullets), erst dann coden.
-3. Tests zuerst anpassen oder ergänzen und einmal RED sehen.
+3. Tests zuerst anpassen oder ergänzen (kein RED/GREEN-Protokoll nötig, siehe `CLAUDE.md`).
 4. Implementation.
 5. Falls Pydantic-Modelle berührt wurden: `cd backend && uv run python -m app.contracts.dump_schemas` ausführen, danach vom Repository-Root mit `git diff -- schemas/` prüfen, ob ausschließlich erwartete Änderungen vorliegen. Unerwartete Änderungen blockieren den Commit.
 6. Nur den Issue-Test aus dem Briefing und die Testdateien, die du geändert hast, bis grün ausführen. **Keine volle Suite, kein radon, kein coverage**, außer das Briefing verlangt es.
@@ -65,7 +68,7 @@ Ruff darf den Repository-Scope nicht ungefragt verändern. Verwende niemals `uv 
 
 ## Wo Tests laufen
 
-Backend-Tests und Pflichtprüfungen laufen auf `armserver`, nicht lokal (dort liegen venv, torch/oasis, Neo4j/Redis). Nennt das Briefing einen Remote-Helper (`remote-backend.sh <WORKTREE-ABSOLUT> <slice> -- <befehl>`), benutze ausschließlich ihn. Lokal nur Syntaxchecks wie `bash -n` oder `shellcheck`.
+Nennt das Briefing einen Remote-Helper (z. B. `remote-backend.sh <WORKTREE-ABSOLUT> <slice> -- <befehl>` für `armserver`, wo venv, torch/oasis und Neo4j/Redis liegen), laufen Tests und Pflichtprüfungen ausschließlich darüber; lokal dann nur Syntaxchecks wie `bash -n` oder `shellcheck`. Nennt es keinen, laufen sie lokal im Worktree.
 
 ## Turn-Ökonomie
 
@@ -109,7 +112,7 @@ Liefere immer:
 2. Basis-SHA und `rg`-Beleg,
 3. Commit-SHA,
 4. geänderte Dateien und Diff-Statistik,
-5. Issue-Test: RED-Ausschnitt vor und GREEN-Zusammenfassung nach der Implementierung,
+5. Issue-Test: Zusammenfassung des letzten Laufs plus eventuelle Fehler,
 6. Ausgaben und Exit-Codes der vier sequenziellen Pflichtprüfungen (Zusammenfassungszeilen plus Fehler),
 7. Sync-Nachweis je Doku-Artefakt, aktualisiert oder `NICHT BETROFFEN` mit Begründung,
 8. Abweichungen vom Briefing mit Grund,
