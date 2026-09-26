@@ -14,7 +14,7 @@ from ...services.llm_routing_seed import WORKSPACE_SECRET_ENV_MARKER
 
 #: Env-Var, die dem Subprozess die Lese-FD einer Pipe mit dem JSON-codierten
 #: Workspace-Secret-Payload nennt — nie den Key selbst (Finding B1, #1688).
-WORKSPACE_SECRET_FD_ENV_KEY = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
+WORKSPACE_PAYLOAD_FD_ENV_NAME = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
 
 SAFE_ENV_KEYS: frozenset[str] = frozenset(
     {
@@ -103,7 +103,7 @@ def _build_subprocess_env(
             raise
         finally:
             os.close(write_fd)
-        env[WORKSPACE_SECRET_FD_ENV_KEY] = str(read_fd)
+        env[WORKSPACE_PAYLOAD_FD_ENV_NAME] = str(read_fd)
         pass_fds = (read_fd,)
     return env, pass_fds
 

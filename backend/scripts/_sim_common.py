@@ -28,7 +28,7 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 # statt Subprozess-Env entgegennehmen
 # ---------------------------------------------------------------------------
 
-_SECRET_FD_ENV_KEY = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
+_PAYLOAD_FD_ENV_NAME = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
 
 #: Finding H5 (Security-Review 2026-09-26, #1688): non-secret signal the
 #: backend sets on EVERY workspace-scoped run's subprocess env, regardless
@@ -39,7 +39,7 @@ _SECRET_FD_ENV_KEY = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a 
 _CREDENTIAL_SCOPE_ENV_KEY = "AGORA_CREDENTIAL_SCOPE"  # noqa: S105
 _WORKSPACE_CREDENTIAL_SCOPE = "workspace"  # noqa: S105
 _BOOST_ENV_KEYS = ("LLM_BOOST_API_KEY", "LLM_BOOST_BASE_URL", "LLM_BOOST_MODEL_NAME")
-_REQUIRED_WORKSPACE_SECRET_KEY = "LLM_API_KEY"  # noqa: S105 -- env var name, not a credential
+_REQUIRED_WORKSPACE_ENV_NAME = "LLM_API_KEY"  # noqa: S105 -- env var name, not a credential
 
 
 def is_workspace_credential_scope() -> bool:
@@ -91,11 +91,11 @@ def load_workspace_secret_env_from_fd() -> None:
         for key in _BOOST_ENV_KEYS:
             os.environ.pop(key, None)
 
-    fd_value = os.environ.pop(_SECRET_FD_ENV_KEY, None)
+    fd_value = os.environ.pop(_PAYLOAD_FD_ENV_NAME, None)
     if not fd_value:
         if workspace_scoped:
             _fail_closed(
-                f"workspace-scoped run has no {_SECRET_FD_ENV_KEY} — "
+                f"workspace-scoped run has no {_PAYLOAD_FD_ENV_NAME} — "
                 "refusing to start without a workspace credential"
             )
         return
@@ -103,10 +103,10 @@ def load_workspace_secret_env_from_fd() -> None:
         fd = int(fd_value)
     except ValueError:
         if workspace_scoped:
-            _fail_closed(f"{_SECRET_FD_ENV_KEY} ist keine gueltige FD-Nummer")
+            _fail_closed(f"{_PAYLOAD_FD_ENV_NAME} ist keine gueltige FD-Nummer")
         logging.getLogger("agora.sim").warning(
             "load_workspace_secret_env_from_fd: %s ist keine gueltige FD-Nummer",
-            _SECRET_FD_ENV_KEY,
+            _PAYLOAD_FD_ENV_NAME,
         )
         return
     chunks: list[bytes] = []
@@ -145,9 +145,9 @@ def load_workspace_secret_env_from_fd() -> None:
         if workspace_scoped:
             _fail_closed("Workspace-Credential-Payload ist kein JSON-Objekt")
         return
-    if workspace_scoped and _REQUIRED_WORKSPACE_SECRET_KEY not in secrets:
+    if workspace_scoped and _REQUIRED_WORKSPACE_ENV_NAME not in secrets:
         _fail_closed(
-            f"Workspace-Credential-Payload enthaelt kein {_REQUIRED_WORKSPACE_SECRET_KEY}"
+            f"Workspace-Credential-Payload enthaelt kein {_REQUIRED_WORKSPACE_ENV_NAME}"
         )
     os.environ.update({str(k): str(v) for k, v in secrets.items()})
 

@@ -241,6 +241,30 @@ def _warn_if_jwt_active_without_demo_mode(logger) -> None:
         )
 
 
+def _enforce_demo_mode_guard(logger) -> None:
+    """Fail-closed-Startsperre der Demo-Instanz (#1688), aus ``create_app``
+    ausgelagert, damit dessen Komplexitaetsbudget haelt."""
+    # Fail-closed Demo-Guard: die oeffentliche Demo-Instanz (AGORA_DEMO_MODE)
+    # darf nie Betreiber-Provider-Zugangsdaten halten oder nutzen (#1688,
+    # docs/plans/public-demo-registration.md). Visitors bringen ihre eigenen
+    # Provider-Keys in den verschluesselten Workspace-Credential-Store; ein
+    # .env-Rest des Betreibers waere ein stiller Fallback auf dessen Kosten.
+    # Gilt unabhaengig von FLASK_DEBUG — Demo-Modus und Debug sind getrennte
+    # Achsen, anders als der CORS-Guard oben.
+    from .config import demo_mode_leaked_operator_vars, is_demo_mode
+    if is_demo_mode():
+        _leaked_operator_vars = demo_mode_leaked_operator_vars()
+        if _leaked_operator_vars:
+            logger.error(
+                "AGORA_DEMO_MODE=true: verbotene Betreiber-Env-Vars gesetzt: %s",
+                ", ".join(_leaked_operator_vars),
+            )
+            raise RuntimeError(
+                "AGORA_DEMO_MODE=true verbietet Betreiber-Provider-Env-Vars, "
+                "aber gesetzt: " + ", ".join(_leaked_operator_vars)
+            )
+
+
 def create_app(config_class=Config):
     """Flask application factory function"""
     # Observability: Tracing + Metrics vor Flask-Instanz initialisieren,
@@ -317,25 +341,7 @@ def create_app(config_class=Config):
             "AGORA_EXTRA_ORIGINS fuer explizite Origin-Whitelist."
         )
 
-    # Fail-closed Demo-Guard: die oeffentliche Demo-Instanz (AGORA_DEMO_MODE)
-    # darf nie Betreiber-Provider-Zugangsdaten halten oder nutzen (#1688,
-    # docs/plans/public-demo-registration.md). Visitors bringen ihre eigenen
-    # Provider-Keys in den verschluesselten Workspace-Credential-Store; ein
-    # .env-Rest des Betreibers waere ein stiller Fallback auf dessen Kosten.
-    # Gilt unabhaengig von FLASK_DEBUG — Demo-Modus und Debug sind getrennte
-    # Achsen, anders als der CORS-Guard oben.
-    from .config import demo_mode_leaked_operator_vars, is_demo_mode
-    if is_demo_mode():
-        _leaked_operator_vars = demo_mode_leaked_operator_vars()
-        if _leaked_operator_vars:
-            logger.error(
-                "AGORA_DEMO_MODE=true: verbotene Betreiber-Env-Vars gesetzt: %s",
-                ", ".join(_leaked_operator_vars),
-            )
-            raise RuntimeError(
-                "AGORA_DEMO_MODE=true verbietet Betreiber-Provider-Env-Vars, "
-                "aber gesetzt: " + ", ".join(_leaked_operator_vars)
-            )
+    _enforce_demo_mode_guard(logger)
 
     # Validate configuration
     config_errors = Config.validate()
