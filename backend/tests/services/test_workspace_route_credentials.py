@@ -431,6 +431,39 @@ def test_operator_scoped_run_metadata_is_explicit_not_missing(monkeypatch):
     assert workspace_credential_id_for_run("run-op") is None
 
 
+def test_operator_bound_context_does_not_raise_in_demo_mode_for_nested_lookup(monkeypatch):
+    """Finding H3: an operator job binds its resolved (``None``) scope to
+    the background-thread context via an explicit sentinel, not ``None``
+    itself. A nested call with ``run_id=None`` (e.g. from
+    ``EmbeddingService._workspace_credential_id()``) must recognise this as
+    an EXPLICIT operator scope and return ``None`` — not fall through to
+    re-deriving a scope from scratch and hitting the demo-mode default-deny
+    meant for a genuinely unbound thread."""
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    monkeypatch.setattr(
+        "app.repositories.run_repository.get_run_repository",
+        lambda **_kwargs: MagicMock(
+            get=lambda _id: MagicMock(
+                to_manifest=lambda: {"metadata": {"credential_scope": "operator"}}
+            )
+        ),
+    )
+
+    with workspace_credential_context_for_run("run-operator-job"):
+        assert workspace_credential_id_for_run(None) is None
+
+
+def test_truly_unbound_thread_still_denies_missing_scope_in_demo_mode(monkeypatch):
+    """Finding H3 must not weaken the H1 default-deny: a thread that never
+    entered :func:`workspace_credential_context_for_run` (no sentinel
+    bound at all, still the plain ContextVar default) keeps raising on a
+    missing scope in demo mode."""
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+
+    with pytest.raises(ValueError, match="no persisted credential scope"):
+        workspace_credential_id_for_run(None)
+
+
 def test_workspace_route_rejects_keyless_connection(monkeypatch):
     """Finding H1: a workspace run must not be routed to a keyless/local
     (``auth_mode="none"``) connection such as a local Ollama — only

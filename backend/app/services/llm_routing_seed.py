@@ -50,9 +50,22 @@ from ..utils.logger import get_logger
 
 logger = get_logger("agora.llm_routing_seed")
 
-_credential_workspace: ContextVar[UUID | None] = ContextVar(
+_credential_workspace: ContextVar["UUID | object | None"] = ContextVar(
     "agora_credential_workspace", default=None
 )
+
+# Finding H3 (Security-Review 2026-09-26, #1688): an operator job binds its
+# resolved scope (``None``) to ``_credential_workspace`` exactly like an
+# unbound context's own default value — a nested
+# ``workspace_credential_id_for_run(None)`` call inside that job's thread
+# could then not tell "explicitly bound: operator" apart from "never bound
+# at all" and re-derived a scope from scratch, hitting the demo-mode
+# default-deny raise even for a legitimate operator run. This sentinel is
+# bound instead of ``None`` so the fast path recognises an explicit
+# operator scope without re-deriving anything, while a thread that never
+# entered :func:`workspace_credential_context_for_run` still sees the
+# unbound default and keeps raising in demo mode.
+_OPERATOR_SENTINEL = object()
 
 # Finding B1 (#1688): private marker key ``build_route_subprocess_env`` uses
 # to smuggle a workspace-owned secret payload (JSON) past the plain env dict
@@ -668,8 +681,15 @@ def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
     scope, this defaults to operator (unchanged legacy behaviour) — unless
     ``AGORA_DEMO_MODE`` is enabled, where a missing scope is default-deny.
     """
-    bound_workspace = _credential_workspace.get()
-    if bound_workspace is not None and run_id is None:
+    bound_raw = _credential_workspace.get()
+    bound_is_set = bound_raw is not None
+    # Finding H3: an operator job binds ``_OPERATOR_SENTINEL``, not ``None``
+    # — the sentinel is what makes ``bound_is_set`` True for an explicitly
+    # bound operator scope, distinct from a thread that never bound
+    # anything (still the plain ``None`` ContextVar default).
+    bound_workspace = None if bound_raw is _OPERATOR_SENTINEL else bound_raw
+
+    if bound_is_set and run_id is None:
         # Fast path, unchanged since before Finding H1: a background job
         # already bound its validated scope for this thread/context — no
         # need to re-derive it from persisted/request state.
@@ -678,7 +698,7 @@ def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
     run_exists, persisted = _persisted_workspace_for_run(run_id)
     resolved = _request_workspace_for_run(run_id, run_exists, persisted)
 
-    if bound_workspace is not None:
+    if bound_is_set:
         # Finding H1: this branch (``run_id`` given) previously never
         # consulted the bound value at all — a background job that
         # (correctly) passed its own ``run_id`` through could fail open to
@@ -703,7 +723,9 @@ def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
 def workspace_credential_context_for_run(run_id: str) -> Iterator[UUID | None]:
     """Bind a persisted run's validated credential scope to its job thread."""
     workspace_id = workspace_credential_id_for_run(run_id)
-    token = _credential_workspace.set(workspace_id)
+    token = _credential_workspace.set(
+        workspace_id if workspace_id is not None else _OPERATOR_SENTINEL
+    )
     try:
         yield workspace_id
     finally:
