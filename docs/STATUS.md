@@ -530,7 +530,7 @@ Bekannte Simulationstreue-Grenzen:
 Reproduzierbarkeit:
 
 - Ein `RunManifest` existiert strukturell, ist aber noch kein vollständiger Reproduktionsanker.
-- Prompt-Snapshots, Seed-Dokument-Hash/Dateiname, echte RNG-Wiring-Semantik, vollständige Replay-Parameter und einige Route-/Export-Grenzen sind in [#1274](https://github.com/arn0ld87/agora/issues/1274) offen.
+- Prompt-Snapshots, Seed-Dokument-Hash/Dateiname, echte RNG-Wiring-Semantik und vollständige Replay-Parameter sind in [#1274](https://github.com/arn0ld87/agora/issues/1274) offen. Die Export-Grenze ist seit #1680 geschlossen: Der Run-ZIP-Export liefert nur Allowlist-Artefakte und meldet Übersprungenes sichtbar in einer `export-report.json`.
 - Deshalb ist die Aussage **„gleicher Seed = reproduzierbarer Agora-Run“ derzeit zu stark**. `0.10` muss kontrollierbare Inputs vollständig einfrieren und Replay-Abweichungen explizit machen (#763).
 
 ## 0.10-Blocker aus heutiger Sicht
