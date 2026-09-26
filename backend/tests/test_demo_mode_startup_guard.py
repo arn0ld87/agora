@@ -9,8 +9,11 @@ nur Variablennamen nennen, nie Werte.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
+from app import _warn_if_jwt_active_without_demo_mode
 from app.config import DEMO_MODE_FORBIDDEN_ENV_VARS
 
 
@@ -59,6 +62,56 @@ def test_demo_mode_succeeds_without_operator_keys(monkeypatch):
         assert "AGORA_DEMO_MODE=true verbietet" not in str(exc), (
             f"Demo-Guard darf ohne gesetzte Betreiber-Vars nicht feuern: {exc}"
         )
+
+
+def test_warns_when_jwt_active_without_demo_mode(monkeypatch, caplog):
+    """Item 5a: aktives Supabase-JWT ohne AGORA_DEMO_MODE loggt eine
+    unmissverstaendliche WARNING statt den Start zu verweigern."""
+    monkeypatch.delenv("AGORA_DEMO_MODE", raising=False)
+    monkeypatch.setattr(
+        "app.security.principal_context.tenant_mode_active", lambda: True
+    )
+    # Kein "agora."-Praefix: der Produktions-Logger "agora" laeuft mit
+    # propagate=False (setup_logger), was caplogs Root-Handler nichts sehen
+    # liesse. Der Test prueft nur ``logger.warning(...)``, nicht welcher
+    # konkrete Logger-Name in create_app() verwendet wird.
+    logger = logging.getLogger("test_demo_mode_startup_guard")
+
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        _warn_if_jwt_active_without_demo_mode(logger)
+
+    assert any("AGORA_DEMO_MODE" in record.getMessage() for record in caplog.records)
+    assert any("Supabase-JWT" in record.getMessage() for record in caplog.records)
+
+
+def test_no_warning_in_demo_mode_even_with_jwt_active(monkeypatch, caplog):
+    """In AGORA_DEMO_MODE=true greift der Startup-Guard aus Item 4; die
+    Item-5a-Warnung ist dort nicht nötig und darf nicht doppelt feuern."""
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    monkeypatch.setattr(
+        "app.security.principal_context.tenant_mode_active", lambda: True
+    )
+    logger = logging.getLogger("test_demo_mode_startup_guard")
+
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        _warn_if_jwt_active_without_demo_mode(logger)
+
+    assert not caplog.records
+
+
+def test_no_warning_without_jwt(monkeypatch, caplog):
+    """Ohne aktives Supabase-JWT bleibt es beim Nichtstun, auch ausserhalb
+    von AGORA_DEMO_MODE."""
+    monkeypatch.delenv("AGORA_DEMO_MODE", raising=False)
+    monkeypatch.setattr(
+        "app.security.principal_context.tenant_mode_active", lambda: False
+    )
+    logger = logging.getLogger("test_demo_mode_startup_guard")
+
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        _warn_if_jwt_active_without_demo_mode(logger)
+
+    assert not caplog.records
 
 
 def test_non_demo_mode_ignores_operator_keys(monkeypatch):
