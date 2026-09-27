@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 import LogDrawer from './components/LogDrawer.vue'
+import DemoPreviewFrame from './components/v4/shell/DemoPreviewFrame.vue'
 import { useLogDrawer } from './composables/useLogDrawer'
 
 // Muss zu den .fade-*-Regeln in assets/styles/global.css passen.
@@ -16,16 +17,24 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 </script>
 
 <template>
-  <router-view v-slot="{ Component }">
-    <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
-         bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
-         laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
-         aus und die leave-Phase endet nie: die URL wechselt, der alte View
-         bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
-    <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
-      <component :is="Component" />
-    </transition>
-  </router-view>
+  <!-- DemoPreviewFrame liest die aktuelle Route selbst (useRoute) und
+       rendert den Default-Slot fuer alle Routen ohne meta.operatorOnly
+       unveraendert durch — Vue-Slots sind Funktionen, das eingebettete
+       <component :is="Component" /> wird also nur gemountet, wenn der
+       Slot tatsaechlich gerendert wird (kein zusaetzlicher Betreiber-Fetch
+       fuer statische Vorschau-Seiten). -->
+  <DemoPreviewFrame>
+    <router-view v-slot="{ Component }">
+      <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
+           bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
+           laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
+           aus und die leave-Phase endet nie: die URL wechselt, der alte View
+           bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
+      <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
+        <component :is="Component" />
+      </transition>
+    </router-view>
+  </DemoPreviewFrame>
 
   <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L oder
        das Kopfzeilen-Icon "Protokoll" (Topbar.vue/ShellRoot.vue). Die frueher

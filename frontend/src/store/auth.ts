@@ -84,6 +84,9 @@ export const useAuthStore = defineStore('auth', () => {
   /** Betreiber-Zugang: Legacy-Token oder offener Modus, keine Supabase-Session.
    *  Prozessweite Bereiche (Logs, Einstellungen) sind für JWT gesperrt. */
   const operatorAccess = computed(() => !(jwtEnabled.value && session.value))
+  // Öffentliche Demo-Instanz: Besucher mit Supabase-Session sehen Betreiber-
+  // Bereiche als nicht-editierbare Vorschau statt eines Redirects (DemoPreviewFrame).
+  const demoPreview = computed(() => jwtEnabled.value && !!session.value)
   // Session ohne aktiven Workspace (Recovery-Link, Start gescheitert): kein
   // regulärer Zugang, Tenant-Anfragen liefen ohne X-Agora-Workspace.
   const sessionWithoutWorkspace = computed(() => !!session.value && !activeWorkspaceId.value)
@@ -356,6 +359,7 @@ export const useAuthStore = defineStore('auth', () => {
     jwtEnabled,
     isAuthenticated,
     operatorAccess,
+    demoPreview,
     sessionWithoutWorkspace,
     tokenExpiry,
     roles,

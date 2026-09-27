@@ -18,9 +18,11 @@
         />
       </template>
 
-      <!-- Settings group (IA-Matrix: nur wire-Sub-Items) -->
+      <!-- Settings group (IA-Matrix: nur wire-Sub-Items). Fuer Besucher ohne
+           Betreiber-Zugang bleibt die Gruppe sichtbar — jede Unterseite ist
+           per DemoPreviewFrame einsehbar, nur die eigenen Provider-Keys sind
+           editierbar. -->
       <SidebarGroup
-        v-if="operatorAccess"
         group-key="settings"
         :label="t('sidebar.settings.label')"
         icon="settings"
@@ -35,6 +37,9 @@
             @click="handleNavClick"
           >
             {{ sub.label }}
+            <span v-if="!operatorAccess && sub.id !== 'provider-keys'" class="sidebar-sub-item__badge">
+              {{ t('sidebar.settings.previewBadge') }}
+            </span>
           </RouterLink>
         </template>
       </SidebarGroup>
@@ -54,6 +59,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useOperatorAccess } from '../../../composables/useOperatorAccess'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
@@ -127,8 +133,10 @@ const navWorkspace = [
   { id: 'runs',       icon: 'branch', label: t('sidebar.nav.runs'),       to: { name: 'Runs' } },
 ] satisfies NavItem[]
 
-/** IA-Matrix: nur wire-Settings-Sub-Items. */
-const navSettings: NavSettingsItem[] = [
+/** IA-Matrix: nur wire-Settings-Sub-Items.
+ *  Besucher ohne Betreiber-Zugang sehen zusaetzlich vorne "Provider-Keys" —
+ *  die einzige Unterseite, die sie tatsaechlich bearbeiten duerfen. */
+const navSettingsOperator: NavSettingsItem[] = [
   { id: 'general',       label: t('sidebar.settings.general'),       to: { name: 'SettingsGeneral' } },
   { id: 'integrations',  label: t('sidebar.settings.integrations'),  to: { name: 'SettingsIntegrations' } },
   { id: 'profile',       label: t('sidebar.settings.profile'),       to: { name: 'SettingsProfile' } },
@@ -136,6 +144,15 @@ const navSettings: NavSettingsItem[] = [
   { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },
   { id: 'embedding',     label: t('sidebar.settings.embedding'),     to: { name: 'SettingsEmbedding' } },
 ]
+
+const navSettings = computed<NavSettingsItem[]>(() =>
+  operatorAccess.value
+    ? navSettingsOperator
+    : [
+        { id: 'provider-keys', label: t('sidebar.settings.providerKeys'), to: { name: 'WorkspaceProviderKeys' } },
+        ...navSettingsOperator,
+      ],
+)
 </script>
 
 <style scoped>
@@ -217,6 +234,21 @@ const navSettings: NavSettingsItem[] = [
 .sidebar-sub-item:focus-visible {
   outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
   outline-offset: var(--v4-state-focus-ring-offset);
+}
+
+/* Demo-Vorschau (Besucher ohne Betreiber-Zugang): kennzeichnet die
+   Betreiber-Unterseiten in der Einstellungen-Gruppe. */
+.sidebar-sub-item__badge {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--accent-tint-bg);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .sidebar__footer:focus-visible {

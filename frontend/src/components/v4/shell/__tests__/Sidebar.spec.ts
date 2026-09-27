@@ -36,6 +36,16 @@ const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', mes
 
 import Sidebar from '../Sidebar.vue'
 import { useSidebarState } from '@/composables/useSidebarState'
+import { useAuthStore } from '@/store/auth'
+import type { AuthConfigResponse } from '@/contracts/authConfigContract'
+
+const SUPABASE_CONFIG: AuthConfigResponse = {
+  auth_backend: 'supabase',
+  jwt_enabled: true,
+  supabase_url: null,
+  supabase_anon_key: null,
+  realtime_enabled: false,
+}
 
 const router = makeTestRouter()
 
@@ -269,5 +279,35 @@ describe('Sidebar', () => {
     const nav = wrapper.find('nav.sidebar__body')
     expect(nav.exists()).toBe(true)
     expect(nav.attributes('aria-label')).toBe('Hauptnavigation')
+  })
+
+  describe('Besucher ohne Betreiber-Zugang (Demo-Vorschau)', () => {
+    it('zeigt die Einstellungen-Gruppe weiterhin, mit Provider-Keys vorne und Vorschau-Badges auf Betreiber-Punkten', async () => {
+      lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
+      useSidebarState._resetForTesting()
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      const auth = useAuthStore()
+      auth.config = SUPABASE_CONFIG
+      auth.session = { access_token: 'tok', user: { id: 'u1' } } as never
+
+      await router.push('/')
+      const wrapper = mount(Sidebar, {
+        global: { plugins: [router, pinia, i18n] },
+      })
+      await wrapper.vm.$nextTick()
+
+      const text = wrapper.text()
+      // Gruppe bleibt sichtbar — nur die eigenen Provider-Keys sind editierbar.
+      expect(text).toContain('Einstellungen')
+      expect(text).toContain('Provider-Keys')
+      expect(text).toContain('Vorschau')
+
+      const subItems = wrapper.findAll('.sidebar-sub-item')
+      expect(subItems.length).toBeGreaterThan(0)
+      expect(subItems[0]?.text()).toContain('Provider-Keys')
+      // Provider-Keys selbst traegt kein Vorschau-Badge.
+      expect(subItems[0]?.text()).not.toContain('Vorschau')
+    })
   })
 })

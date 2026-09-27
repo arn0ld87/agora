@@ -98,8 +98,9 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/profile',
     name: 'SettingsProfile',
     component: () => import('../views/Settings/SettingsProfileView.vue'),
-    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
-    meta: { operatorOnly: true },
+    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617).
+    // demoPreview: 'static' — Besucher sehen nur einen Erklaertext.
+    meta: { operatorOnly: true, demoPreview: 'static' },
   },
   // Sidebar-IA-Fix (Onboarding-Epic): "Users & Teams" wurde durch das
   // Profil-Setting ersetzt — bestehende Deep-Links leiten weiter um.
@@ -112,13 +113,15 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/api-keys',
     name: 'SettingsApiKeys',
     component: () => import('../views/Settings/SettingsApiKeysView.vue'),
-    meta: { operatorOnly: true, requiresAuth: true },
+    // demoPreview: 'static' — Besucher sehen nur einen Erklaertext statt der
+    // Workspace-API-Keys (DemoPreviewFrame).
+    meta: { operatorOnly: true, requiresAuth: true, demoPreview: 'static' },
   },
   {
     path: '/settings/audit-logs',
     name: 'SettingsAuditLogs',
     component: () => import('../views/Settings/SettingsAuditLogsView.vue'),
-    meta: { operatorOnly: true, requiresAuth: true },
+    meta: { operatorOnly: true, requiresAuth: true, demoPreview: 'static' },
   },
   {
     path: '/settings/llm-routing',
@@ -327,8 +330,11 @@ router.beforeEach(async (to) => {
     }
     if (!auth.isAuthenticated) return { name: 'Login', query: { next: to.fullPath } }
     // Einstellungen und Onboarding sind Betreiber-Zustand; das Backend
-    // antwortet Supabase-Nutzern dort mit 403.
-    if (to.meta?.operatorOnly && !auth.operatorAccess) return '/'
+    // antwortet Supabase-Nutzern dort mit 403. Besucher mit Session sehen
+    // stattdessen eine nicht-editierbare Vorschau (DemoPreviewFrame) statt
+    // eines Redirects — kein separater Zustand fuer "kein Zugang und keine
+    // Vorschau" existiert, solange eine Session vorliegt.
+    if (to.meta?.operatorOnly && !auth.operatorAccess && !auth.demoPreview) return '/'
     return true
   }
 
