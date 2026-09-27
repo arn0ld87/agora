@@ -237,3 +237,15 @@ def test_public_overlay_host_is_required_env(overlay: Path) -> None:
     raw = overlay.read_text(encoding="utf-8")
     assert "Host(`${AGORA_PUBLIC_HOST:?" in raw
     assert "alexle135.de`)" not in raw
+
+
+@pytest.mark.parametrize(
+    "kind", ["INVITE", "CONFIRMATION", "RECOVERY", "EMAIL_CHANGE"]
+)
+def test_gotrue_mail_links_keep_auth_prefix(kind: str) -> None:
+    """API_EXTERNAL_URL endet auf /auth/v1, GoTrue haengt den Mail-Pfad aber
+    absolut an. Ohne /auth/v1/verify zeigt der Bestaetigungslink auf die SPA
+    und die Registrierung laesst sich nie abschliessen.
+    """
+    env = _load(SUPABASE_COMPOSE)["services"]["auth"]["environment"]
+    assert env.get(f"GOTRUE_MAILER_URLPATHS_{kind}") == "/auth/v1/verify"
