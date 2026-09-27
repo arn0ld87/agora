@@ -49,6 +49,8 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
 
    Die Mail-Links setzt `supabase/docker-compose.yml` fest auf `/auth/v1/verify` (`GOTRUE_MAILER_URLPATHS_*`), weil GoTrue den Pfad absolut an `API_EXTERNAL_URL` anhängt. Kommt ausgehendes SMTP (Port 587) vom Host nicht durch, ist ein Relay nötig, sonst läuft `/signup` in einen 10-s-Timeout.
 
+   Die gestalteten deutschen Mail-Vorlagen lädt GoTrue per HTTP von `${SITE_URL}/email/<typ>.html` (aus `frontend/public/email/`). Liegt die Oberfläche woanders, `MAILER_TEMPLATES_BASE_URL` setzen; Betreffzeilen über `MAILER_SUBJECT_*`. Ist die URL für den Auth-Container nicht erreichbar, verschickt GoTrue seine englische Standardmail.
+
 2. Das dedizierte Docker-Netz anlegen, den Supabase-Stack bootstrapen und mit
    dem öffentlichen Auth-Overlay starten. `AGORA_SUPABASE_BACKEND_NETWORK`
    muss in beiden Compose-Projekten denselben, nur für die Demo verwendeten
