@@ -72,7 +72,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: proxy
-      traefik.http.routers.agora-demo.rule: "Host(`agora.alexle135.de`)"
+      traefik.http.routers.agora-demo.rule: "Host(`${AGORA_PUBLIC_HOST:?AGORA_PUBLIC_HOST (oeffentlicher Demo-Host) fehlt}`)"
       traefik.http.routers.agora-demo.entrypoints: websecure
       traefik.http.routers.agora-demo.tls.certresolver: letsencrypt
       traefik.http.routers.agora-demo.middlewares: security-headers@file

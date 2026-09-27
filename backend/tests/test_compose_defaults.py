@@ -217,3 +217,23 @@ def test_supavisor_nofile_ulimit_matches_image_requirement() -> None:
         "services.supavisor.ulimits.nofile muss soft=hard=100000 sein, sonst "
         f"droht der Restart-Loop aus #1634 (gefunden: {nofile!r})"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Öffentliche Demo: Host kommt aus der Umgebung
+# --------------------------------------------------------------------------- #
+
+PUBLIC_OVERLAYS = [
+    REPO_ROOT / "deploy" / "compose" / "docker-compose.public.yml",
+    REPO_ROOT / "supabase" / "docker-compose.public.yml",
+]
+
+
+@pytest.mark.parametrize("overlay", PUBLIC_OVERLAYS)
+def test_public_overlay_host_is_required_env(overlay: Path) -> None:
+    """Der Demo-Host steht nicht fest im Overlay, sondern ist Pflichtvariable —
+    ein vergessener Wert soll `docker compose` abbrechen lassen statt einen
+    fremden oder den privaten Host öffentlich zu routen."""
+    raw = overlay.read_text(encoding="utf-8")
+    assert "Host(`${AGORA_PUBLIC_HOST:?" in raw
+    assert "alexle135.de`)" not in raw
