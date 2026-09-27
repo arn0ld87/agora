@@ -68,7 +68,10 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
 
         self._driver = GraphDatabase.driver(self._uri, **self._driver_kwargs())
         self._embedding = embedding_service or EmbeddingService()
-        self._ner = ner_extractor or NERExtractor()
+        # Lazy: der Default-NER baut einen Betreiber-LLMClient. Auf einer
+        # Demo-Instanz ohne Betreiber-LLM_API_KEY darf das den Start nicht
+        # blockieren; Graph-Builds reichen ohnehin ihren Routen-NER durch.
+        self._ner_instance: Optional[NERExtractor] = ner_extractor
         # Kanonische Index-/Property-Namen-Aufloesung (Issue #1417 Slice
         # 2.1) — geteilt zwischen Such- (SearchService) und Schreibpfad
         # (Neo4jWriteMixin._persist_episode).
@@ -97,6 +100,16 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
 
         # Initialize schema (indexes, constraints)
         self._ensure_schema()
+
+    @property
+    def _ner(self) -> NERExtractor:
+        if self._ner_instance is None:
+            self._ner_instance = NERExtractor()
+        return self._ner_instance
+
+    @_ner.setter
+    def _ner(self, value: NERExtractor) -> None:
+        self._ner_instance = value
 
     def close(self):
         """Close the Neo4j driver connection."""

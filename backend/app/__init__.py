@@ -131,9 +131,14 @@ def _validate_embedding_at_startup(app, logger, *, should_log_startup: bool) -> 
         EmbeddingError,
         validate_embedding_configuration,
     )
+    from .services.llm_routing_seed import operator_credential_context
+
     app.config['EMBEDDING_DEGRADED'] = False
     try:
-        actual_embedding_dim = validate_embedding_configuration(skip_probe=skip_embedding_probe)
+        # Die Startup-Probe ist Betreiberarbeit ohne Lauf; im Demo-Modus wuerde
+        # der implizite Operator-Rueckfall sonst abgewiesen.
+        with operator_credential_context():
+            actual_embedding_dim = validate_embedding_configuration(skip_probe=skip_embedding_probe)
         if skip_embedding_probe:
             logger.warning(
                 "Embedding probe skipped via AGORA_SKIP_EMBEDDING_PROBE — only static "
@@ -399,9 +404,14 @@ def create_app(config_class=Config):
     from .services.artifact_store import LocalFilesystemArtifactStore
     from .storage import Neo4jStorage
 
+    from .services.llm_routing_seed import operator_credential_context
+
     neo4j_storage_error = None
     try:
-        neo4j_storage = Neo4jStorage()
+        # Prozessweites Storage-Setup ist Betreiberarbeit ohne Lauf; der
+        # Credential-Scope einzelner Requests wird spaeter pro Aufruf aufgeloest.
+        with operator_credential_context():
+            neo4j_storage = Neo4jStorage()
         if should_log_startup:
             logger.info("Neo4jStorage initialized (connected to %s)", Config.NEO4J_URI)
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
