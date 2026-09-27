@@ -8,6 +8,11 @@
       "title": "Auth Backend",
       "type": "string"
     },
+    "demo_mode": {
+      "default": false,
+      "title": "Demo Mode",
+      "type": "boolean"
+    },
     "jwt_enabled": {
       "title": "Jwt Enabled",
       "type": "boolean"

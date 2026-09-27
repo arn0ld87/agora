@@ -12,22 +12,10 @@
       </RouterLink>
     </div>
 
-    <!-- Statische Erklaerkarte statt der echten Ansicht (Besucher duerfen die
-         zugrunde liegenden Daten nicht sehen, z.B. API-Keys, Audit-Logs). -->
-    <div v-if="staticContent" class="demo-preview__static">
-      <h1 class="demo-preview__static-title">{{ staticContent.title }}</h1>
-      <ul class="demo-preview__static-bullets">
-        <li v-for="(bullet, i) in staticContent.bullets" :key="i">{{ bullet }}</li>
-      </ul>
-      <div class="demo-preview__mock" aria-hidden="true">
-        <Skeleton variant="text" :lines="1" width="40%" />
-        <Skeleton variant="text" :lines="3" />
-        <Skeleton variant="rect" height="64px" />
-      </div>
-    </div>
-
-    <!-- Echte Ansicht, gesperrt und ausgegraut. -->
-    <div v-else class="demo-preview__content" inert>
+    <!-- Echte Ansicht, gesperrt und ausgegraut. Statische Erklaerkarten
+         (meta.demoPreview:'static') mounten hier gar nicht erst — App.vue
+         rendert dafuer DemoPreviewStaticView.vue statt der Route-Komponente. -->
+    <div class="demo-preview__content" inert>
       <slot />
     </div>
   </div>
@@ -38,48 +26,15 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, RouterLink } from 'vue-router'
 import Icon from './Icon.vue'
-import Skeleton from '../forms/Skeleton.vue'
-import { useAuthStore } from '../../../store/auth'
+import { useOperatorAccess } from '../../../composables/useOperatorAccess'
 
 const { t } = useI18n()
 const route = useRoute()
-
-function operatorAccessValue(): boolean {
-  try {
-    return useAuthStore().operatorAccess
-  } catch {
-    return true
-  }
-}
-
-const operatorAccess = computed(operatorAccessValue)
+const operatorAccess = useOperatorAccess()
 
 /** Betreiber-Route, die der aktuelle Besucher nicht bearbeiten darf. */
 const isOperatorOnly = computed(() => !!route.meta?.operatorOnly)
 const showPreview = computed(() => isOperatorOnly.value && !operatorAccess.value)
-const isStatic = computed(() => route.meta?.demoPreview === 'static')
-
-interface StaticContent {
-  title: string
-  bullets: string[]
-}
-
-const STATIC_ROUTE_KEYS: Record<string, string> = {
-  SettingsApiKeys: 'apiKeys',
-  SettingsAuditLogs: 'auditLogs',
-  SettingsProfile: 'profile',
-}
-
-const staticContent = computed<StaticContent | null>(() => {
-  if (!showPreview.value || !isStatic.value) return null
-  const key = STATIC_ROUTE_KEYS[String(route.name ?? '')]
-  if (!key) return null
-  // Jede Bullet ist ein eigener i18n-Schluessel (bullet1..bulletN) — vue-i18n
-  // liefert Listen erst ueber tm(), die einfache Nummerierung reicht hier.
-  const count = Number(t(`demoPreview.static.${key}.bulletCount`))
-  const bullets = Array.from({ length: count }, (_, i) => t(`demoPreview.static.${key}.bullet${i + 1}`))
-  return { title: t(`demoPreview.static.${key}.title`), bullets }
-})
 </script>
 
 <style scoped>
@@ -125,38 +80,5 @@ const staticContent = computed<StaticContent | null>(() => {
   opacity: 0.6;
   filter: grayscale(0.4);
   pointer-events: none;
-}
-
-.demo-preview__static {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.demo-preview__static-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.demo-preview__static-bullets {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-left: 20px;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.demo-preview__mock {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--surface-elevated);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-3, 6px);
-  opacity: 0.6;
-  filter: grayscale(0.4);
 }
 </style>

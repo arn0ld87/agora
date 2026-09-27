@@ -116,6 +116,7 @@ def test_auth_config_exposes_the_browser_settings_only_with_jwt(client, monkeypa
         'supabase_url': 'https://supabase.example.test',
         'supabase_anon_key': 'public-anon-key',
         'realtime_enabled': False,
+        'demo_mode': False,
     }
 
     monkeypatch.setattr(Config, 'SUPABASE_REALTIME', True)
@@ -127,6 +128,14 @@ def test_auth_config_exposes_the_browser_settings_only_with_jwt(client, monkeypa
     assert body['supabase_url'] is None and body['supabase_anon_key'] is None
     # Ohne JWT kein Realtime, auch wenn der Schalter an ist.
     assert body['realtime_enabled'] is False
+
+
+def test_auth_config_reports_demo_mode_from_env(client, monkeypatch):
+    monkeypatch.delenv('AGORA_DEMO_MODE', raising=False)
+    assert client.get('/api/auth/config').get_json()['data']['demo_mode'] is False
+
+    monkeypatch.setenv('AGORA_DEMO_MODE', 'true')
+    assert client.get('/api/auth/config').get_json()['data']['demo_mode'] is True
 
 
 def test_cors_allow_all_keeps_jwt_off(client, monkeypatch):

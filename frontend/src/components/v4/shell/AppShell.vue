@@ -44,9 +44,20 @@
       </slot>
     </div>
 
-    <!-- Main content — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
+    <!-- Main content — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y).
+         DemoPreviewFrame liest die aktuelle Route selbst und sperrt NUR diesen
+         Bereich (Banner + ausgegrauter, inert-Slot) fuer Besucher ohne
+         Betreiber-Zugang auf operatorOnly-Routen — Sidebar/Topbar bleiben
+         bedienbar (#1697). Fuer alle anderen Routen ist es ein Passthrough.
+         `demoFrame=false` (DemoPreviewStaticView) ueberspringt den Wrapper:
+         die statische Erklaerkarte bringt Banner + Inhalt schon selbst mit,
+         ein zweiter Banner + grauer/inert-Slot waere doppelt und falsch
+         (die Karte ist keine gesperrte Ansicht, sondern der Ersatz dafuer). -->
     <main class="app-shell__main" :inert="shellStore.mobileNavOpen ? true : undefined">
-      <slot />
+      <DemoPreviewFrame v-if="demoFrame">
+        <slot />
+      </DemoPreviewFrame>
+      <slot v-else />
     </main>
 
     <!-- Inspector (optional, default closed) -->
@@ -70,6 +81,7 @@ import { useCommandsStore } from '@/stores/commandsStore'
 import { MOBILE_BREAKPOINT_PX } from '@/constants/breakpoints'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
+import DemoPreviewFrame from './DemoPreviewFrame.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
 
 // Async-Import: CommandPalette in eigenem Chunk → kein AppShell-Bundle-Overhead
@@ -78,9 +90,12 @@ const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue')
 const props = withDefaults(
   defineProps<{
     breadcrumbs?: BreadcrumbItem[]
+    /** false: DemoPreviewFrame um den Hauptinhalt-Slot ueberspringen (#1697). */
+    demoFrame?: boolean
   }>(),
   {
     breadcrumbs: () => [],
+    demoFrame: true,
   },
 )
 

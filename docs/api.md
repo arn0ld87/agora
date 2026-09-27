@@ -30,7 +30,7 @@ Wichtige Funktionen:
 - signierte Tickets für Browser-Streams/Downloads
 - API-Key-Erzeugung, Widerruf und Scope-Prüfung
 - Mastertoken-/API-Key-Auflösung über die zentrale Auth-/Scope-Schicht
-- `GET /api/auth/config` (öffentlich): `auth_backend`, `jwt_enabled` und nur bei aktivem JWT `supabase_url` und `supabase_anon_key` für den Browser-Client. Kein Geheimnis (#1616).
+- `GET /api/auth/config` (öffentlich): `auth_backend`, `jwt_enabled`, `demo_mode` (aus `AGORA_DEMO_MODE`, Gate für die Frontend-Demo-Vorschau, #1697) und nur bei aktivem JWT `supabase_url` und `supabase_anon_key` für den Browser-Client. Kein Geheimnis (#1616).
 
 ### Workspaces — `/api/workspaces` (#1616)
 

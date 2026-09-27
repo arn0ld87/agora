@@ -135,6 +135,26 @@ describe('aiModels — llmProviders-Teil', () => {
     expect(store.hasKey('ollama')).toBe(true)
   })
 
+  it('loadProviders() behält den Katalog, wenn listLlmProviderKeys() 403 wirft (Demo-Vorschau #1697)', async () => {
+    mock(listLlmProviders).mockResolvedValue([{ id: 'ollama', label: 'Ollama' }])
+    mock(listLlmProviderKeys).mockRejectedValue(new Error('operator_only'))
+    const store = useLlmProvidersStore()
+
+    await store.loadProviders()
+
+    expect(store.providers).toHaveLength(1)
+    expect(store.hasKey('ollama')).toBe(false)
+  })
+
+  it('loadProviders() wirft weiterhin, wenn der Katalog selbst (listLlmProviders) scheitert', async () => {
+    mock(listLlmProviders).mockRejectedValue(new Error('network'))
+    mock(listLlmProviderKeys).mockResolvedValue({ items: [] })
+    const store = useLlmProvidersStore()
+
+    await expect(store.loadProviders()).rejects.toThrow('network')
+    expect(store.providers).toHaveLength(0)
+  })
+
   it('loadConnections() mappt items nach id', async () => {
     mock(listProviderConnections).mockResolvedValue({ items: [makeConnection()] })
     const store = useLlmProvidersStore()

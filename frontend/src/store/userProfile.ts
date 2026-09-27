@@ -88,26 +88,43 @@ export const useUserProfileStore = defineStore('userProfile', () => {
   async function _load(): Promise<void> {
     loading.value = true
     error.value = null
-    try {
-      const [profileResult, onboardingResult] = await Promise.all([
-        getProfile(),
-        getOnboardingStatus(),
-      ])
-      profile.value = profileResult
-      onboarding.value = {
-        state: onboardingResult.state,
-        requirements: onboardingResult.requirements,
-        onboardingRequired: onboardingResult.onboarding_required,
-      }
+    // allSettled statt Promise.all (Demo-Vorschau #1697): GET /api/profile ist
+    // operator_only und liefert JWT-Besuchern dort 403, GET .../onboarding/status
+    // ist erlaubt. Ein Promise.all liesse den erfolgreichen Onboarding-Status
+    // am gescheiterten Profil-Call mitscheitern — beide Ergebnisse einzeln
+    // uebernehmen, statt das eine am anderen haengen zu lassen.
+    const [profileResult, onboardingResult] = await Promise.allSettled([
+      getProfile(),
+      getOnboardingStatus(),
+    ])
+
+    if (profileResult.status === 'fulfilled') {
+      profile.value = profileResult.value
       await _refreshAvatarPreview()
-    } catch (err) {
-      // Fail-open: niemals die App sperren, nur sichtbaren Fehler setzen.
-      error.value = _errorMessage(err, 'Profil/Onboarding konnten nicht geladen werden.')
-      onboarding.value = { ...onboarding.value, onboardingRequired: false }
-    } finally {
-      loading.value = false
-      loaded.value = true
+    } else {
+      error.value = _errorMessage(profileResult.reason, 'Profil konnte nicht geladen werden.')
     }
+
+    if (onboardingResult.status === 'fulfilled') {
+      const status = onboardingResult.value
+      onboarding.value = {
+        state: status.state,
+        requirements: status.requirements,
+        onboardingRequired: status.onboarding_required,
+      }
+    } else {
+      // Fail-open: niemals die App sperren, nur sichtbaren Fehler setzen.
+      onboarding.value = { ...onboarding.value, onboardingRequired: false }
+      if (error.value === null) {
+        error.value = _errorMessage(
+          onboardingResult.reason,
+          'Profil/Onboarding konnten nicht geladen werden.',
+        )
+      }
+    }
+
+    loading.value = false
+    loaded.value = true
   }
 
   /** Lädt Profil + Onboarding-Status genau einmal; wiederholte Aufrufe sind No-Ops. */

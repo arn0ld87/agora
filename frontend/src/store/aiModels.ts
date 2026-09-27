@@ -98,9 +98,24 @@ export const useLlmProvidersStore = defineStore("llmProviders", () => {
   async function loadProviders(): Promise<void> {
     loading.value = true;
     try {
-      const [list, keys] = await Promise.all([listLlmProviders(), listLlmProviderKeys()]);
-      providers.value = list;
-      entries.value = Object.fromEntries(keys.items.map((k) => [k.provider_id, k]));
+      // allSettled statt Promise.all (Demo-Vorschau #1697): der Katalog
+      // (listLlmProviders) ist fuer JWT-Besucher erlaubt, die persistierten
+      // Keys (listLlmProviderKeys) sind operator_only und liefern dort 403.
+      // Ein Promise.all liesse dann auch den Katalog scheitern — die Liste
+      // bliebe komplett leer statt nur die eigenen Keys zu vermissen.
+      const [listResult, keysResult] = await Promise.allSettled([
+        listLlmProviders(),
+        listLlmProviderKeys(),
+      ]);
+      if (listResult.status === "rejected") throw listResult.reason;
+      providers.value = listResult.value;
+      entries.value =
+        keysResult.status === "fulfilled"
+          ? Object.fromEntries(keysResult.value.items.map((k) => [k.provider_id, k]))
+          : {};
+      if (keysResult.status === "rejected") {
+        console.error("Failed to load LLM provider keys:", keysResult.reason);
+      }
     } catch (err) {
       console.error("Failed to load LLM providers:", err);
       throw err;

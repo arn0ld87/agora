@@ -72,6 +72,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   // --- Computed ---
   const jwtEnabled = computed(() => config.value?.jwt_enabled ?? false)
+  // Oeffentliche Demo-Instanz (#1697): das Backend meldet demo_mode explizit,
+  // damit ein regulaerer JWT-Mandant (kuenftig Multi-Tenant) ohne Betreiber-
+  // Rolle NICHT versehentlich die Vorschau bekommt — nur eine echte Demo
+  // schaltet sie frei.
+  const demoMode = computed(() => config.value?.demo_mode ?? false)
 
   // Im Modus `supabase` lehnt das Backend den Master-Token ab: dort zählt
   // nur eine Session. `hybrid`/`legacy` akzeptieren weiter den Token.
@@ -86,7 +91,9 @@ export const useAuthStore = defineStore('auth', () => {
   const operatorAccess = computed(() => !(jwtEnabled.value && session.value))
   // Öffentliche Demo-Instanz: Besucher mit Supabase-Session sehen Betreiber-
   // Bereiche als nicht-editierbare Vorschau statt eines Redirects (DemoPreviewFrame).
-  const demoPreview = computed(() => jwtEnabled.value && !!session.value)
+  // Nur wenn das Backend demo_mode meldet — sonst waere jeder regulaere
+  // JWT-Nutzer ohne Betreiber-Rolle faelschlich in der Vorschau (#1697).
+  const demoPreview = computed(() => demoMode.value && jwtEnabled.value && !!session.value)
   // Session ohne aktiven Workspace (Recovery-Link, Start gescheitert): kein
   // regulärer Zugang, Tenant-Anfragen liefen ohne X-Agora-Workspace.
   const sessionWithoutWorkspace = computed(() => !!session.value && !activeWorkspaceId.value)
@@ -112,6 +119,7 @@ export const useAuthStore = defineStore('auth', () => {
     supabase_url: null,
     supabase_anon_key: null,
     realtime_enabled: false,
+    demo_mode: false,
   }
 
   async function loadConfig(): Promise<void> {
@@ -359,6 +367,7 @@ export const useAuthStore = defineStore('auth', () => {
     jwtEnabled,
     isAuthenticated,
     operatorAccess,
+    demoMode,
     demoPreview,
     sessionWithoutWorkspace,
     tokenExpiry,

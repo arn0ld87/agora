@@ -1,12 +1,15 @@
 /**
- * DemoPreviewFrame — Demo-Vorschau fuer Betreiber-Routen (BYOK-Demoinstanz).
+ * DemoPreviewFrame — Banner + inert-Sperre fuer Betreiber-Routen (BYOK-Demoinstanz).
  *
- * Prueft:
+ * Nach #1697 traegt die Komponente nur noch Banner + inert-Wrapper; die
+ * statische Erklaerkarte (meta.demoPreview:'static') lebt in
+ * DemoPreviewStaticView.vue und wird von App.vue statt der Route-Komponente
+ * gerendert — DemoPreviewFrame sieht diese Routen im normalen Betrieb also
+ * nie (siehe App.spec.ts). Prueft hier nur noch:
  * 1. Passthrough ohne Banner/Sperre fuer Betreiber (operatorAccess=true).
  * 2. Banner + inert-gesperrter, ausgegrauter Slot fuer Besucher auf
- *    operatorOnly-Routen ohne demoPreview:'static'.
- * 3. Statische Erklaerkarte statt der echten Ansicht bei demoPreview:'static'.
- * 4. Passthrough fuer Routen ohne meta.operatorOnly, unabhaengig vom Zugang.
+ *    operatorOnly-Routen.
+ * 3. Passthrough fuer Routen ohne meta.operatorOnly, unabhaengig vom Zugang.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -21,12 +24,13 @@ import type { AuthConfigResponse } from '@/contracts/authConfigContract'
 
 const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
 
-const SUPABASE_CONFIG: AuthConfigResponse = {
+const DEMO_CONFIG: AuthConfigResponse = {
   auth_backend: 'supabase',
   jwt_enabled: true,
   supabase_url: null,
   supabase_anon_key: null,
   realtime_enabled: false,
+  demo_mode: true,
 }
 
 const ViewStub = { template: '<div class="real-view">Echte Ansicht</div>' }
@@ -43,12 +47,6 @@ function makeRouter() {
         component: ViewStub,
         meta: { operatorOnly: true },
       },
-      {
-        path: '/settings/api-keys',
-        name: 'SettingsApiKeys',
-        component: ViewStub,
-        meta: { operatorOnly: true, demoPreview: 'static' },
-      },
     ],
   })
 }
@@ -58,7 +56,7 @@ async function mountFrame(path: string, asVisitor: boolean) {
   setActivePinia(pinia)
   const auth = useAuthStore()
   if (asVisitor) {
-    auth.config = SUPABASE_CONFIG
+    auth.config = DEMO_CONFIG
     auth.session = { access_token: 'tok', user: { id: 'u1' } } as never
   }
   const router = makeRouter()
@@ -91,7 +89,7 @@ describe('DemoPreviewFrame', () => {
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
   })
 
-  it('zeigt Banner + gesperrten, ausgegrauten Slot fuer Besucher auf einer operatorOnly-Route ohne demoPreview:static', async () => {
+  it('zeigt Banner + gesperrten, ausgegrauten Slot fuer Besucher auf einer operatorOnly-Route', async () => {
     const wrapper = await mountFrame('/settings/general', true)
     const banner = wrapper.find('[role="status"]')
     expect(banner.exists()).toBe(true)
@@ -100,15 +98,6 @@ describe('DemoPreviewFrame', () => {
     expect(content.exists()).toBe(true)
     expect(content.attributes('inert')).not.toBeUndefined()
     expect(wrapper.find('.slot-content').exists()).toBe(true)
-  })
-
-  it('zeigt eine statische Erklaerkarte statt der echten Ansicht bei demoPreview:static', async () => {
-    const wrapper = await mountFrame('/settings/api-keys', true)
-    expect(wrapper.find('[role="status"]').exists()).toBe(true)
-    expect(wrapper.find('.demo-preview__static').exists()).toBe(true)
-    // Die echte Ansicht (Slot-Inhalt) wird gar nicht erst gemountet.
-    expect(wrapper.find('.slot-content').exists()).toBe(false)
-    expect(wrapper.text()).toContain('API-Schlüssel')
   })
 
   it('Link zu den eigenen Provider-Keys ist im Banner vorhanden', async () => {

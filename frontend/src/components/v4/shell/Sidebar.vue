@@ -19,10 +19,13 @@
       </template>
 
       <!-- Settings group (IA-Matrix: nur wire-Sub-Items). Fuer Besucher ohne
-           Betreiber-Zugang bleibt die Gruppe sichtbar — jede Unterseite ist
-           per DemoPreviewFrame einsehbar, nur die eigenen Provider-Keys sind
-           editierbar. -->
+           Betreiber-Zugang bleibt die Gruppe nur auf der Demo-Instanz sichtbar
+           (demoPreview) — jede Unterseite ist dort per DemoPreviewFrame
+           einsehbar, nur die eigenen Provider-Keys sind editierbar. Ein
+           regulaerer JWT-Nutzer ohne Demo-Modus sieht die Gruppe gar nicht,
+           da er ohnehin ueberall herausredirected wuerde (#1697). -->
       <SidebarGroup
+        v-if="showSettingsGroup"
         group-key="settings"
         :label="t('sidebar.settings.label')"
         icon="settings"
@@ -61,6 +64,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useOperatorAccess } from '../../../composables/useOperatorAccess'
+import { useDemoPreview } from '../../../composables/useDemoPreview'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
 import SidebarItem from './SidebarItem.vue'
@@ -73,6 +77,10 @@ import { MOBILE_MEDIA_QUERY } from '@/constants/breakpoints'
 const { t } = useI18n()
 // Einstellungen sind Betreiber-Zustand: für Supabase-Nutzer ausgeblendet (#1617).
 const operatorAccess = useOperatorAccess()
+// Demo-Vorschau (#1697): nur auf der Demo-Instanz sehen Besucher ohne
+// Betreiber-Zugang die Gruppe ueberhaupt (als nicht-editierbare Vorschau).
+const demoPreview = useDemoPreview()
+const showSettingsGroup = computed(() => operatorAccess.value || demoPreview.value)
 const shellStore = useShellStore()
 
 function handleNavClick(): void {
