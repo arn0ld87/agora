@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from . import runs_bp
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
+from ..contracts.auth_contract import AuthType
 from ..contracts.job_lease_contract import JobLease
 from ..contracts.runs_contract import (
     RunDetail,
@@ -43,7 +44,10 @@ from ..services.llm_routing_seed import (
     prevalidate_ai_model_ref,
     resolve_route_api_key,
     seed_run_stage_routing,
+    workspace_credential_context_for_run,
+    workspace_credential_metadata,
 )
+from .simulation_common import DemoLimitExceededError, apply_demo_run_limits
 from ..services.document_roles import load_document_roles
 from ..services.report_agent import ReportAgent, ReportManager
 from ..services.report_agent.output_contract import is_deliverable_report_status
@@ -60,7 +64,10 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.stage_model_router import StageModelRouter
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
+from ..security.principal_context import current_principal
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
+from ..utils.endpoints import is_local_endpoint
 from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
@@ -644,7 +651,7 @@ def _restart_graph_build(run: dict):
         linked_ids={"project_id": project_id},
         artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
         resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
-        metadata={"graph_name": graph_name},
+        metadata={"graph_name": graph_name, **workspace_credential_metadata()},
     ) as lifecycle:
         new_run = lifecycle.record
         task_manager = TaskManager()
@@ -825,7 +832,11 @@ def _restart_graph_build(run: dict):
                 )
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        threading.Thread(target=build_task, daemon=True).start()
+        def scoped_build_task():
+            with workspace_credential_context_for_run(new_run["run_id"]):
+                build_task()
+
+        threading.Thread(target=scoped_build_task, daemon=True).start()
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
@@ -863,7 +874,7 @@ def _restart_simulation_prepare(run: dict):
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
-        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
+        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name, **workspace_credential_metadata()},
     ) as lifecycle:
         new_run = lifecycle.record
         run_id = new_run["run_id"]
@@ -990,9 +1001,83 @@ def _restart_simulation_prepare(run: dict):
                 task_manager.fail_task(task_id, str(exc))
                 run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        threading.Thread(target=run_prepare, daemon=True).start()
+        def scoped_prepare_job():
+            with workspace_credential_context_for_run(new_run["run_id"]):
+                run_prepare()
+
+        threading.Thread(target=scoped_prepare_job, daemon=True).start()
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
+
+
+def _reject_if_route_api_key_missing(resolved_route, resolved_api_key):
+    """Fail-closed guard mirroring ``simulation_run._resolve_start_route``.
+
+    A workspace-scoped run without a resolvable key must never fall through
+    to an operator-configured route. Session-auth (CLI) providers and local
+    endpoints do not require a key and are exempt, exactly like the initial
+    start path. Returns a ready ``json_error(...)`` response, or ``None``.
+    """
+    from ..services.llm_provider_registry import LlmProviderRegistry
+
+    is_session_auth = LlmProviderRegistry.uses_session_auth(resolved_route.provider_id)
+    if (
+        resolved_api_key is None
+        and not is_session_auth
+        and not is_local_endpoint(resolved_route.base_url_sanitized)
+    ):
+        return json_error(
+            f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+            f"für Provider '{resolved_route.provider_id}'. "
+            "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+            "oder im Sitzungsfeld eingeben.",
+            status=422,
+            code="provider_api_key_missing",
+        )
+    return None
+
+
+def _original_run_is_workspace_scoped(original_run: dict) -> bool:
+    """Whether the ORIGINAL run (not the requester, not the replacement run
+    the restart is about to create) is workspace-scoped — a plain metadata
+    read, deliberately not ``workspace_credential_id_for_run`` (#1688 item
+    4): that helper cross-checks ownership against the workspace store and
+    default-denies a run with no explicit persisted scope on a demo
+    instance — the right behaviour when resolving a credential to *use*, but
+    it would turn "decide whether the demo cap applies to a restart" into a
+    hard failure for any pre-#1688 legacy run. The actual key resolution
+    still goes through that fail-closed path via
+    ``resolve_route_api_key(..., run_id=run["run_id"])`` below.
+    """
+    return (original_run.get("metadata") or {}).get("credential_scope") == "workspace"
+
+
+def _inherited_credential_scope_metadata(original_run: dict) -> dict:
+    """Copy the ORIGINAL run's persisted credential-scope metadata onto a
+    restart's replacement run record (#1688 item 3, follow-up to Finding H2).
+
+    ``workspace_credential_metadata()`` reflects the REQUESTING principal —
+    correct for a fresh start, wrong for a restart: an operator restarting a
+    workspace-owned run must not silently reclassify that run as
+    ``credential_scope="operator"``. ``build_route_subprocess_env`` /
+    ``workspace_credential_id_for_run`` read exactly this persisted metadata
+    (by the NEW run's id) to decide whether the resolved key goes through the
+    workspace secret-FD path or lands in the subprocess env as plaintext —
+    whoever clicks "restart", the new run must keep following its original
+    owner's scope.
+    """
+    metadata = original_run.get("metadata") or {}
+    scope = metadata.get("credential_scope")
+    if scope == "workspace" and metadata.get("credential_workspace_id"):
+        return {
+            "credential_scope": "workspace",
+            "credential_workspace_id": metadata["credential_workspace_id"],
+        }
+    if scope == "operator":
+        return {"credential_scope": "operator"}
+    # Legacy run with no explicit persisted scope (pre-#1688): fall back to
+    # the requesting principal, exactly like a fresh start would.
+    return workspace_credential_metadata()
 
 
 def _resume_or_restart_simulation_run(run: dict):
@@ -1016,6 +1101,43 @@ def _resume_or_restart_simulation_run(run: dict):
         )
         return {"run_id": run["run_id"], "status": "processing", "message": "Simulation resumed"}
 
+    # Finding H2 (#1688): a restart previously called
+    # ``SimulationRunner.start_simulation`` bare — no route, no
+    # ``runtime_env``, no demo round/budget cap. It inherited the OASIS
+    # subprocess's whitelisted backend env instead of a workspace-scoped
+    # key, i.e. a JWT visitor's restart could run on operator credentials.
+    # Resolve the same locked stage route the original run used
+    # (``StageModelRouter(run_id)`` returns the snapshot ``lock_stage``
+    # persisted at start — no re-seeding needed), resolve its API key with
+    # the same fail-closed guard as ``/simulation/start``, and cap
+    # max_rounds/budget for a demo JWT visitor exactly like a fresh start.
+    route_router = StageModelRouter(run["run_id"])
+    resolved_route = route_router.resolve("simulation_rounds")
+    resolved_api_key = resolve_route_api_key(resolved_route, None, run_id=run["run_id"])
+    key_error = _reject_if_route_api_key_missing(resolved_route, resolved_api_key)
+    if key_error is not None:
+        return key_error
+
+    # Finding #1688 item 4: carry over the ORIGINAL run's persisted budget
+    # instead of unconditionally recomputing from (None, None) — that always
+    # handed ``_apply_budget_to_simulation`` a ``None`` config for an
+    # operator restart, whose else-branch deletes budget_config.json /
+    # budget_abort.json outright, wiping ANY run's budget cap on restart.
+    # Whether the demo cap itself applies is likewise decided from the
+    # ORIGINAL run's persisted owner, not the live requester — an operator
+    # restarting a demo-capped workspace run must not lift that cap just by
+    # being the one clicking "restart".
+    from ..services.run_budget import get_run_budget_config as _get_run_budget_config
+
+    original_is_workspace_scoped = _original_run_is_workspace_scoped(run)
+    original_budget_config = _get_run_budget_config(run["run_id"])
+    try:
+        max_rounds, budget_config = apply_demo_run_limits(
+            None, original_budget_config, demo_scoped=original_is_workspace_scoped
+        )
+    except DemoLimitExceededError as exc:
+        return json_error(exc.message, status=400, code="demo_limit_exceeded")
+
     # Issue #1183: Der Run-Record entsteht VOR dem Prozessstart im
     # Lifecycle-Fenster — schlägt der Start fehl, existiert ein failed-Record
     # statt gar keinem (vorher: create_run erst nach start_simulation).
@@ -1032,9 +1154,19 @@ def _resume_or_restart_simulation_run(run: dict):
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=state.branch_name,
-        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
+        metadata={
+            "graph_id": state.graph_id,
+            "branch_name": state.branch_name,
+            **_inherited_credential_scope_metadata(run),
+        },
     ) as lifecycle:
         new_run = lifecycle.record
+        from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+        from .simulation_run import _apply_budget_to_simulation
+
+        _apply_budget_to_simulation(
+            simulation_id, new_run["run_id"], budget_config, _set_run_budget_config
+        )
         # Finding F1 (Codex-Review Runde 3, PR #1476): requested_run_id ist
         # run["run_id"] — der urspruenglich angefragte, hier zu resumierende
         # (moeglicherweise verwaiste) Run, NICHT das gerade eben angelegte
@@ -1042,7 +1174,13 @@ def _resume_or_restart_simulation_run(run: dict):
         # Weitergabe koennte die Stale-Korrektur bei mehreren historischen
         # "processing"-Manifesten einen falschen, neueren Run treffen.
         new_run_state = SimulationRunner.start_simulation(
-            simulation_id=simulation_id, platform="parallel", requested_run_id=run["run_id"]
+            simulation_id=simulation_id,
+            platform="parallel",
+            max_rounds=max_rounds,
+            requested_run_id=run["run_id"],
+            runtime_env=build_route_subprocess_env(
+                resolved_route, resolved_api_key, new_run["run_id"]
+            ),
         )
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
@@ -1202,7 +1340,11 @@ def _resume_report_generate(run: dict):
             task_manager.fail_task(task_id, str(exc))
 
     run_registry.update_run(run["run_id"], status="processing", progress=0, message="Report generation resumed", message_key="run.report_resumed")
-    threading.Thread(target=run_generate, daemon=True).start()
+    def scoped_run_generate():
+        with workspace_credential_context_for_run(run["run_id"]):
+            run_generate()
+
+    threading.Thread(target=scoped_run_generate, daemon=True).start()
     return {"run_id": run["run_id"], "task_id": task_id, "status": "processing"}
 
 
@@ -1261,6 +1403,57 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             "predates Issue #1274 and cannot be replayed 1:1.",
             status=409,
             code="manifest_missing_simulation_params",
+        )
+
+    # #1688 Runde 3: ``/simulation/start`` verweigert JWT-Principals das
+    # Graph-Memory-Update (403) — ein Replay eines Runs, der es aktiv hatte,
+    # darf diese Sperre nicht umgehen. Ehrlicher 403 statt stillem Abschalten,
+    # das den 1:1-Replay-Versprechen widerspraeche.
+    principal = current_principal()
+    if (
+        manifest.simulation.enable_graph_memory_update
+        and principal is not None
+        and principal.auth_type == AuthType.JWT
+    ):
+        return json_error(
+            ApiErrorCode.AUTH_FORBIDDEN,
+            status=403,
+            message="Graph memory update is unavailable for workspace simulations",
+        )
+
+    # Finding M1 (#1688): ein Demo-JWT-Run darf die Rundenobergrenze aus
+    # ``/simulation/start`` nicht per Replay eines älteren, nicht gedeckelten
+    # Runs umgehen. Ein stiller Cap wäre hier zudem ein 1:1-Replay-Versprechen
+    # (Manifest-Kommentar oben), das die tatsächlich gefahrenen Runden nicht
+    # mehr widerspiegelt — deshalb ehrlicher 400 statt stillem Downgrade.
+    #
+    # Finding H4 (#1688): der Rueckgabewert wurde bisher verworfen — der
+    # tatsaechliche ``start_simulation()``-Aufruf unten benutzte weiterhin
+    # ``manifest.simulation.max_rounds`` UNGEDECKELT, der Call oben pruefte
+    # nur die ">5"-Grenze. Ein Manifest mit ``max_rounds=None`` (unbegrenzt)
+    # loeste GAR KEINE Exception aus und lief unbeschraenkt weiter. Jetzt:
+    # den gedeckelten Rueckgabewert tatsaechlich verwenden, und ein
+    # ``None``-Manifest in der Demo-Cap-Regime explizit als 400 ablehnen
+    # statt es stillschweigend auf 5 zu setzen — das waere kein 1:1-Replay
+    # mehr, sondern ein unausgesprochener anderer Lauf.
+    try:
+        capped_max_rounds, capped_budget_config = apply_demo_run_limits(
+            manifest.simulation.max_rounds, None
+        )
+    except DemoLimitExceededError as exc:
+        return json_error(exc.message, status=400, code="demo_limit_exceeded")
+    if manifest.simulation.max_rounds is None and capped_max_rounds is not None:
+        # apply_demo_run_limits() only ever turns a None max_rounds into a
+        # concrete cap while the demo/JWT regime is active (operator runs
+        # and non-demo instances return max_rounds unchanged) — so this
+        # condition alone identifies "demo cap would silently replace an
+        # unbounded manifest", without re-deriving that check here.
+        return json_error(
+            f"Run {run_id}'s manifest has no round limit (max_rounds=None) — "
+            "a demo instance cannot replay this 1:1 without silently capping "
+            "it to a different round count than the original run.",
+            status=400,
+            code="demo_limit_exceeded",
         )
 
     manager = SimulationManager()
@@ -1333,6 +1526,7 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=branch_state.branch_name,
         metadata={
+            **workspace_credential_metadata(),
             "graph_id": branch_state.graph_id,
             "branch_name": branch_state.branch_name,
             **(
@@ -1361,6 +1555,20 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
         resolved_route = route_router.resolve("simulation_rounds")
         route_router.lock_stage("simulation_rounds", resolved_route)
         resolved_api_key = resolve_route_api_key(resolved_route, None)
+        # Finding H2 (#1688): same fail-closed condition as
+        # simulation_run._resolve_start_route — a replay must not silently
+        # fall through to an operator-configured route when a workspace key
+        # is missing. Raising (rather than returning) lets RunLifecycle's
+        # __exit__ mark the new run "failed" instead of leaving it "pending"
+        # — the same mechanism already relied on below when start_simulation()
+        # itself fails. handle_api_errors turns ValueError into a 400.
+        if _reject_if_route_api_key_missing(resolved_route, resolved_api_key) is not None:
+            raise ValueError(
+                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                f"für Provider '{resolved_route.provider_id}'. "
+                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                "oder im Sitzungsfeld eingeben."
+            )
 
         # Issue #1686 (P2): Draft-Manifest VOR dem Subprozess-Start schreiben,
         # nicht danach. Der Monitor-Thread finalisiert das Manifest, sobald er
@@ -1377,13 +1585,26 @@ def _replay_simulation_run(run: dict, run_id: str, overrides, manifest):
             resolved_route=resolved_route,
             original_stage_route=original_stage_route,
             manager=manager,
+            max_rounds=capped_max_rounds,
+        )
+
+        # Finding H4 (#1688): apply the same (possibly demo-capped) budget
+        # to the replay's subprocess artifacts as a fresh start does — the
+        # capped_max_rounds computed above only bounds the round count;
+        # without this the demo LLM-call/duration hardcap never reached the
+        # replayed run at all.
+        from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+        from .simulation_run import _apply_budget_to_simulation
+
+        _apply_budget_to_simulation(
+            new_simulation_id, new_run_id, capped_budget_config, _set_run_budget_config
         )
 
         try:
             SimulationRunner.start_simulation(
                 simulation_id=new_simulation_id,
                 platform=manifest.simulation.platform,
-                max_rounds=manifest.simulation.max_rounds,
+                max_rounds=capped_max_rounds,
                 enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
                 graph_id=manifest.simulation.memory_update_graph_id,
                 runtime_env=build_route_subprocess_env(
@@ -1418,6 +1639,7 @@ def _capture_replay_manifest_draft(
     resolved_route,
     original_stage_route,
     manager: SimulationManager,
+    max_rounds: "int | None" = None,
 ) -> None:
     """Draft-Manifest für einen Replay-Run schreiben (Issue #1274 Punkt 3).
 
@@ -1498,7 +1720,13 @@ def _capture_replay_manifest_draft(
             },
             prompts=ManifestCapture.oasis_prompt_snapshots(),
             platform=manifest.simulation.platform,
-            max_rounds=manifest.simulation.max_rounds,
+            # Finding H4 (#1688): record the ACTUALLY applied max_rounds
+            # (possibly demo-capped) here, not the original manifest's value
+            # — otherwise the replay's own manifest would claim a round
+            # count it never ran with.
+            max_rounds=(
+                max_rounds if max_rounds is not None else manifest.simulation.max_rounds
+            ),
             enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
             memory_update_graph_id=manifest.simulation.memory_update_graph_id,
             replayed_from_run_id=original_run_id,
@@ -1701,7 +1929,13 @@ def resume_run(run_id: str):
     elif run_type == "simulation_prepare":
         data = _restart_simulation_prepare(run)
     elif run_type == "simulation_run":
-        data = _resume_or_restart_simulation_run(run)
+        # _resume_or_restart_simulation_run kann bei fehlendem Workspace-Key
+        # oder ueberschrittenem Demo-Limit direkt eine Fehler-Response
+        # zurueckgeben (Finding H2, #1688) — in dem Fall weiterleiten.
+        result = _resume_or_restart_simulation_run(run)
+        if not isinstance(result, dict):
+            return result
+        data = result
     elif run_type == "report_generate":
         # _resume_report_generate kann bei fehlendem LLM-Key direkt eine
         # Fehler-Response (Tuple) zurückgeben — in dem Fall weiterleiten.

@@ -88,13 +88,30 @@ class FixedWindowRateLimiter:
 
 
 def build_rate_limit_key(prefix: str, *, include_endpoint: bool = False) -> str:
-    """Build a stable limiter key from the trusted Flask client address."""
+    """Build a stable limiter key: the verified JWT identity when present,
+    otherwise the trusted Flask client address.
+
+    #1688: on the public demo every request passes Cloudflare → Traefik →
+    nginx, so ``remote_addr`` can collapse to a shared proxy address and one
+    visitor would exhaust the bucket for everyone. An authenticated JWT
+    principal therefore gets its own bucket per workspace and user.
+    """
 
     parts = [prefix]
     if include_endpoint:
         parts.append(request.endpoint or "unknown")
-    parts.append(request.remote_addr or "unknown")
+    parts.append(_client_identity())
     return ":".join(parts)
+
+
+def _client_identity() -> str:
+    from ..contracts.auth_contract import AuthType
+    from ..security.principal_context import current_principal
+
+    principal = current_principal()
+    if principal is not None and principal.auth_type == AuthType.JWT:
+        return f"jwt:{principal.workspace_id}:{principal.user_id}"
+    return request.remote_addr or "unknown"
 
 
 ticket_rate_limiter = FixedWindowRateLimiter()

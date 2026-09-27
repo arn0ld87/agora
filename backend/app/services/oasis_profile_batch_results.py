@@ -5,6 +5,7 @@ The public compatibility surface remains app.services.oasis_profile_generator.
 
 from __future__ import annotations
 
+from contextvars import copy_context
 from typing import Any
 
 from . import oasis_profile_generator as _legacy
@@ -194,7 +195,7 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
     cancel_requested =False
     with concurrent .futures .ThreadPoolExecutor (max_workers =parallel_count )as executor :
         future_to_entity ={
-        executor .submit (generate_single_profile ,idx ,entity ):(idx ,entity )
+        executor .submit (copy_context ().run ,generate_single_profile ,idx ,entity ):(idx ,entity )
         for idx ,entity in enumerate (entities )
         }
 

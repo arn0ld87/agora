@@ -132,6 +132,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/Settings/LlmProvidersView.vue'),
     meta: { operatorOnly: true, requiresAuth: true },
   },
+  {
+    path: '/workspace/provider-keys',
+    name: 'WorkspaceProviderKeys',
+    component: () => import('../views/Settings/WorkspaceProviderKeysView.vue'),
+    meta: { requiresAuth: true },
+  },
   // Onboarding Slice 4.3.3: eigene Route für die kanonische
   // Embedding-Konfiguration (Store, View, Migrations, Ollama-Download).
   {

@@ -9,12 +9,17 @@ abgedeckt — hier geht es um das Verhalten der Phasen selbst.
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 from flask import Flask
 
 from app.api import simulation_run as mod
+from app.api import simulation_bp
+from app.contracts.auth_contract import AuthType, Principal
 from app.contracts.llm_routing_contract import ResolvedRoute
+from app.contracts.workspace_contract import WorkspaceRole
+from app.security.principal_context import legacy_principal, set_principal
 from app.services.llm_runtime import RuntimeLlmConfig
 from app.services.simulation_manager import SimulationStatus
 
@@ -65,6 +70,109 @@ def test_parse_start_request_returns_defaults(app_ctx):
     assert req.budget_config is None
     assert req.enable_graph_memory_update is False
     assert req.force is False
+
+
+def test_jwt_start_rejects_graph_memory_before_operator_clients_are_called(monkeypatch):
+    app = Flask(__name__)
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
+    app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
+
+    @app.before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    manager = MagicMock()
+    runner = MagicMock()
+    monkeypatch.setattr(mod, "SimulationManager", manager)
+    monkeypatch.setattr(mod, "SimulationRunner", runner)
+
+    response = app.test_client().post(
+        "/api/simulation/start",
+        json={"simulation_id": VALID_SIM_ID, "enable_graph_memory_update": True},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["code"] == "auth_forbidden"
+    manager.assert_not_called()
+    runner.start_simulation.assert_not_called()
+
+
+def test_demo_jwt_start_applies_default_hard_limits(app_ctx, monkeypatch):
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    set_principal(Principal(
+        auth_type=AuthType.JWT,
+        user_id=UUID("11111111-1111-4111-8111-111111111111"),
+        workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+        roles=frozenset({WorkspaceRole.MEMBER}),
+    ))
+
+    req = mod._parse_start_request({"simulation_id": VALID_SIM_ID})
+
+    assert req.max_rounds == 5
+    assert req.budget_config is not None
+    assert req.budget_config.enforcement == "hard"
+    assert req.budget_config.max_llm_calls == 200
+    assert req.budget_config.max_duration_seconds == 1800
+
+
+def test_demo_jwt_start_caps_existing_budget_without_losing_stricter_limits(app_ctx, monkeypatch):
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    set_principal(Principal(
+        auth_type=AuthType.JWT,
+        user_id=UUID("11111111-1111-4111-8111-111111111111"),
+        workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+        roles=frozenset({WorkspaceRole.MEMBER}),
+    ))
+
+    req = mod._parse_start_request({
+        "simulation_id": VALID_SIM_ID,
+        "max_rounds": 3,
+        "budget": {
+            "max_llm_calls": 50,
+            "max_duration_seconds": 7200,
+            "max_tokens": 1000,
+            "enforcement": "soft",
+        },
+    })
+
+    assert req.max_rounds == 3
+    assert req.budget_config is not None
+    assert req.budget_config.max_llm_calls == 50
+    assert req.budget_config.max_duration_seconds == 1800
+    assert req.budget_config.max_tokens == 1000
+    assert req.budget_config.enforcement == "hard"
+
+
+def test_demo_jwt_start_rejects_more_than_five_rounds(app_ctx, monkeypatch):
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    set_principal(Principal(
+        auth_type=AuthType.JWT,
+        user_id=UUID("11111111-1111-4111-8111-111111111111"),
+        workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+        roles=frozenset({WorkspaceRole.MEMBER}),
+    ))
+
+    with pytest.raises(mod._StartRejected) as excinfo:
+        mod._parse_start_request({"simulation_id": VALID_SIM_ID, "max_rounds": 6})
+
+    assert _status(excinfo) == 400
+    assert _body(excinfo)["code"] == "validation_failed"
+
+
+def test_demo_limits_leave_operator_start_unchanged(app_ctx, monkeypatch):
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    set_principal(legacy_principal(AuthType.MASTER_TOKEN))
+
+    req = mod._parse_start_request({"simulation_id": VALID_SIM_ID, "max_rounds": 6})
+
+    assert req.max_rounds == 6
+    assert req.budget_config is None
 
 
 def test_parse_start_request_requires_simulation_id(app_ctx):

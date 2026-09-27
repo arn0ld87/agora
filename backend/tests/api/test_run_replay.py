@@ -14,6 +14,7 @@ from app.config import Config
 from app.services.artifact_store import InMemoryArtifactStore
 from app.services.manifest_capture import ManifestCapture
 from app.services.run_registry import RunRegistry
+from app.utils.rate_limit import llm_trigger_rate_limiter
 
 
 # ---------------------------------------------------------------------------
@@ -30,11 +31,18 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("AGORA_INSTANCE_DIR", str(tmp_path))
     RunRegistry._instance = None
     os.makedirs(RunRegistry.REGISTRY_DIR, exist_ok=True)
+    # Finding M1 (#1688): /replay läuft jetzt durch denselben LLM-Trigger-
+    # Rate-Limiter wie /simulation/start. Der Limiter ist ein Prozess-Global —
+    # ohne Reset würden die vielen Replay-POSTs dieser Datei sich gegenseitig
+    # ins 429 laufen lassen.
+    llm_trigger_rate_limiter.reset_for_tests()
 
     artifact_store = InMemoryArtifactStore()
 
     app = Flask(__name__)
     app.extensions = {"artifact_store": artifact_store}
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
 
     registry = RunRegistry()
@@ -55,6 +63,8 @@ def _create_run_with_manifest(
     *,
     run_id_override: str | None = None,
     status: str = "completed",
+    max_rounds: int = 10,
+    enable_graph_memory_update: bool = False,
 ) -> dict[str, Any]:
     """Erzeugt einen Run mit Draft-Manifest im Run-Verzeichnis."""
     run = registry.create_run(
@@ -89,8 +99,9 @@ def _create_run_with_manifest(
             }
         },
         platform="parallel",
-        max_rounds=10,
-        enable_graph_memory_update=False,
+        max_rounds=max_rounds,
+        enable_graph_memory_update=enable_graph_memory_update,
+        memory_update_graph_id="graph_mem" if enable_graph_memory_update else None,
     )
 
     return run
@@ -166,6 +177,165 @@ def test_replay_returns_202_with_new_run_id(env, monkeypatch):
     payload = resp.get_json()
     assert "run_id" in payload
     assert payload["run_id"] != run_id
+
+
+def test_replay_rejects_demo_limit_exceeding_max_rounds(env, monkeypatch):
+    """Finding M1 (#1688): ein Demo-JWT darf die Rundenobergrenze aus
+    ``/simulation/start`` nicht per Replay eines älteren, nicht gedeckelten
+    Runs umgehen — der Cap muss auch auf ``/replay`` greifen."""
+    from uuid import UUID
+
+    from app.contracts.auth_contract import AuthType, Principal
+    from app.contracts.workspace_contract import WorkspaceRole
+    from app.security.principal_context import set_principal
+
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+
+    @env["app"].before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"], max_rounds=10)
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 400, (
+        f"Erwartet 400, erhalten: {resp.status_code} — {resp.get_json()}"
+    )
+    assert resp.get_json()["code"] == "demo_limit_exceeded"
+    manager.create_branch.assert_not_called()
+    runner.start_simulation.assert_not_called()
+
+
+def test_replay_rejects_unbounded_manifest_in_demo_mode(env, monkeypatch):
+    """Finding H4 (#1688): apply_demo_run_limits() silently turns a
+    ``max_rounds=None`` manifest into a capped 5 for a demo JWT visitor —
+    that is no longer a 1:1 replay of the original (unbounded) run. Reject
+    it honestly instead of silently running a different round count."""
+    from uuid import UUID
+
+    from app.contracts.auth_contract import AuthType, Principal
+    from app.contracts.workspace_contract import WorkspaceRole
+    from app.security.principal_context import set_principal
+
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+
+    @env["app"].before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"], max_rounds=None)
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 400, (
+        f"Erwartet 400, erhalten: {resp.status_code} — {resp.get_json()}"
+    )
+    assert resp.get_json()["code"] == "demo_limit_exceeded"
+    manager.create_branch.assert_not_called()
+    runner.start_simulation.assert_not_called()
+
+
+def test_replay_rejects_graph_memory_update_for_jwt_principal(env, monkeypatch):
+    """#1688 Runde 3: ``/simulation/start`` sperrt das Graph-Memory-Update
+    fuer JWT-Principals mit 403 — ein Replay eines Runs, der es aktiv hatte,
+    darf diese Sperre nicht umgehen."""
+    from uuid import UUID
+
+    from app.contracts.auth_contract import AuthType, Principal
+    from app.contracts.workspace_contract import WorkspaceRole
+    from app.security.principal_context import set_principal
+
+    @env["app"].before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(
+        env["registry"], env["tmp_path"], max_rounds=3, enable_graph_memory_update=True
+    )
+
+    resp = env["client"].post(f"/api/runs/{run['run_id']}/replay")
+
+    assert resp.status_code == 403, resp.get_json()
+    assert resp.get_json()["code"] == "auth_forbidden"
+    manager.create_branch.assert_not_called()
+    runner.start_simulation.assert_not_called()
+
+
+def test_replay_operator_run_ignores_demo_limit(env, monkeypatch):
+    """Demo-Cap gilt nur für JWT-Principals — Operator-Replays (Master-Token,
+    kein gebundener Principal) bleiben unverändert unbeschränkt."""
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    _stub_replay_infra(monkeypatch)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"], max_rounds=10)
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 202, (
+        f"Erwartet 202, erhalten: {resp.status_code} — {resp.get_json()}"
+    )
+
+
+def test_replay_rejects_when_resolved_route_has_no_api_key(env, monkeypatch):
+    """Finding H2 (#1688): fehlt der aufgeloeste API-Key fuer die Replay-Route
+    (kein Workspace-Key, kein Session-Auth-Provider, kein lokaler Endpunkt),
+    darf der Replay NICHT stillschweigend auf einen Operator-Key
+    durchfallen — die neue Run-Manifest wird als 'failed' markiert statt als
+    laufend, und die Antwort ist ein 4xx-Client-Fehler statt 202/500."""
+    from unittest.mock import MagicMock
+
+    from app.contracts.llm_routing_contract import ResolvedRoute
+
+    manager, runner = _stub_replay_infra(monkeypatch)
+    # Non-local, non-session-auth route — a missing key here has no
+    # exemption and must be rejected instead of silently proceeding.
+    remote_route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+        provider_options={},
+    )
+    router = MagicMock()
+    router.resolve.return_value = remote_route
+    router.lock_stage.return_value = remote_route
+    monkeypatch.setattr("app.api.runs.StageModelRouter", lambda _rid: router)
+    monkeypatch.setattr("app.api.runs.resolve_route_api_key", lambda _r, _rt: None)
+    run = _create_run_with_manifest(env["registry"], env["tmp_path"])
+    run_id = run["run_id"]
+
+    resp = env["client"].post(f"/api/runs/{run_id}/replay")
+
+    assert resp.status_code == 400, (
+        f"Erwartet 400 (ValueError -> handle_api_errors), erhalten: "
+        f"{resp.status_code} — {resp.get_json()}"
+    )
+    payload = resp.get_json()
+    assert payload["success"] is False
+    assert "api_key" in payload["error"] or "kein Key" in payload["error"]
+    runner.start_simulation.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

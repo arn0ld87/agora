@@ -4,8 +4,11 @@ Shared helpers for simulation-related API modules.
 
 from flask import current_app, request
 
-from . import simulation_bp
+from . import runs_bp, simulation_bp
+from ..contracts.auth_contract import AuthType
+from ..security.principal_context import current_principal
 from ..services.artifact_store import SimulationArtifactStore
+from ..services.llm_routing_seed import demo_mode_enabled
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
@@ -24,9 +27,17 @@ INTERVIEW_PROMPT_PREFIX = (
     "with text without calling any tools:"
 )
 
+# Finding M1 (Security-Review 2026-09-26, #1688): ein Replay oder Resume löst
+# denselben LLM-Traffic aus wie ein frischer Start, lief bisher aber weder
+# durch dieses Rate-Limit noch durch die Demo-Rundenobergrenze — beide
+# Endpoints leben auf ``runs_bp``, nicht auf ``simulation_bp``, dessen
+# ``before_request`` sie deshalb nie erreichte.
 _LLM_TRIGGER_ENDPOINTS = {
     "simulation.generate_profiles",
     "simulation.prepare_simulation",
+    "simulation.start_simulation",
+    "runs.replay_run",
+    "runs.resume_run",
 }
 
 
@@ -34,15 +45,21 @@ def _llm_trigger_rate_limit_key() -> str:
     return build_rate_limit_key("simulation-llm-trigger", include_endpoint=True)
 
 
-@simulation_bp.before_request
 def _limit_llm_trigger_endpoints():
     if request.method != "POST" or request.endpoint not in _LLM_TRIGGER_ENDPOINTS:
         return None
 
+    # Finding M1: ``runs_bp`` läuft in einigen bestehenden Tests als
+    # eigenständige Blueprint-App ohne vollen ``Config``-Import — ``.get()``
+    # mit denselben Defaults wie ``Config`` statt hartem Key-Zugriff, sonst
+    # würde jeder POST auf ``/replay``/``/resume`` in diesen Tests mit einem
+    # ``KeyError`` statt der beabsichtigten Rate-Limit-Prüfung scheitern.
     result = llm_trigger_rate_limiter.check(
         _llm_trigger_rate_limit_key(),
-        max_requests=current_app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"],
-        window_seconds=current_app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"],
+        max_requests=current_app.config.get("AGORA_LLM_TRIGGER_RATE_LIMIT_MAX", 20),
+        window_seconds=current_app.config.get(
+            "AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS", 60
+        ),
     )
     if result.allowed:
         return None
@@ -54,6 +71,63 @@ def _limit_llm_trigger_endpoints():
     )
     response.headers["Retry-After"] = str(result.retry_after_seconds)
     return response, status
+
+
+# ``runs_bp.route("/<run_id>/replay")`` und ``.../resume`` liegen auf einem
+# eigenen Blueprint (Issue-Fund M1) — derselbe Rate-Limiter muss deshalb auf
+# beiden Blueprints registriert werden, nicht nur auf ``simulation_bp``.
+simulation_bp.before_request(_limit_llm_trigger_endpoints)
+runs_bp.before_request(_limit_llm_trigger_endpoints)
+
+
+class DemoLimitExceededError(Exception):
+    """Raised when a demo-mode JWT run would exceed the hard round/budget cap."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+def _demo_jwt_principal_active() -> bool:
+    if not demo_mode_enabled():
+        return False
+    principal = current_principal()
+    return principal is not None and principal.auth_type == AuthType.JWT
+
+
+def apply_demo_run_limits(max_rounds, budget_config, *, demo_scoped: bool = False):
+    """Cap max_rounds/budget for a JWT run on an explicitly enabled demo instance.
+
+    Finding M1: shared by ``/simulation/start``
+    (``simulation_run._apply_demo_start_limits``) and the run replay/resume
+    endpoints in ``runs.py``, so a demo JWT visitor cannot bypass the hard
+    round/budget cap by cloning or restarting a run instead of starting a
+    fresh one. Operator (master-token) runs and non-demo instances are
+    returned unchanged.
+
+    ``demo_scoped`` (#1688 item 4): additionally treat this as demo-scoped
+    when the ORIGINAL run being restarted (not the live requester) was
+    workspace-owned — ``_demo_jwt_principal_active()`` alone only sees the
+    live requester and would silently lift the cap the moment an operator
+    restarts a demo-capped workspace run. Ored with the requester check, not
+    a replacement for it: a demo JWT visitor restarting their own (possibly
+    legacy, unscoped) run must keep the cap too.
+    """
+    is_scoped = _demo_jwt_principal_active() or (demo_scoped and demo_mode_enabled())
+    if not is_scoped:
+        return max_rounds, budget_config
+    if max_rounds is not None and max_rounds > 5:
+        raise DemoLimitExceededError("Demo simulations allow at most 5 rounds")
+
+    from ..contracts.run_budget_contract import RunBudgetConfig
+
+    budget = budget_config or RunBudgetConfig.model_validate({})
+    bounded_budget = budget.model_copy(update={
+        "enforcement": "hard",
+        "max_llm_calls": min(budget.max_llm_calls or 200, 200),
+        "max_duration_seconds": min(budget.max_duration_seconds or 1800, 1800),
+    })
+    return max_rounds or 5, bounded_budget
 
 
 def optimize_interview_prompt(prompt: str) -> str:

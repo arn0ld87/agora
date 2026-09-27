@@ -1,6 +1,7 @@
 import type { AiModelRefPayload } from '@/api/report'
 import { getRunModelOverride } from '@/store/runModelOverride'
 import { useEffectiveModelSelection } from './useEffectiveModelSelection'
+import { useOperatorAccess } from './useOperatorAccess'
 
 export interface RunModelResolution {
   ref: AiModelRefPayload | null
@@ -28,11 +29,16 @@ export function useRunModelResolver(): {
   resolveRunModel: () => Promise<RunModelResolution>
 } {
   const effectiveModel = useEffectiveModelSelection()
+  const operatorAccess = useOperatorAccess()
 
   async function resolveRunModel(): Promise<RunModelResolution> {
     const override = getRunModelOverride()
     if (override) {
       return { ref: toPayload(override), usedRunOverride: true }
+    }
+
+    if (!operatorAccess.value) {
+      return { ref: null, usedRunOverride: false }
     }
 
     try {

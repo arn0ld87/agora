@@ -45,6 +45,66 @@ NEO4J_PASSWORD_PLACEHOLDERS = frozenset({
     'password',
 })
 
+# Betreiber-Provider-Zugangsdaten, die die oeffentliche Demo-Instanz nie
+# halten oder nutzen darf (Workspace-BYOK-Modell, #1688). Geteilte Liste fuer
+# den Startup-Guard (siehe unten) und
+# ``backend/scripts/bootstrap_public_demo_providers.py``.
+DEMO_MODE_FORBIDDEN_ENV_VARS: tuple[str, ...] = (
+    'LLM_API_KEY',
+    'OPENAI_API_KEY',
+    'GEMINI_API_KEY',
+    'GOOGLE_API_KEY',
+    'MINIMAX_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'OPENROUTER_API_KEY',
+    'OLLAMA_API_KEY',
+    # EMBEDDING_API_KEY fehlt bewusst: er gilt nur fuer den per
+    # AGORA_SHARED_EMBEDDING_BASE_URL freigegebenen Betreiber-Endpoint (gns3).
+    'LLM_BOOST_API_KEY',
+    'LLM_BASE_URL',
+    'LLM_BOOST_BASE_URL',
+    # #1688 Runde 3: weitere Betreiber-Zugaenge, die ein Workspace-Lauf sonst
+    # still mitbenutzen koennte (Web-Recherche, Claude-CLI-Session,
+    # OpenAI-/Ollama-Endpunkte fuer OASIS und Legacy-Clients).
+    # EMBEDDING_BASE_URL fehlt bewusst: Demo-Embeddings laufen ueber den
+    # Betreiber-Endpoint auf gns3 (qwen3-embedding:4b, Runbook).
+    'TAVILY_API_KEY',
+    'CLAUDE_CODE_OAUTH_TOKEN',
+    'OLLAMA_BASE_URL',
+    'OPENAI_BASE_URL',
+    'OPENAI_API_BASE_URL',
+)
+
+
+def is_demo_mode() -> bool:
+    """``AGORA_DEMO_MODE``-Gate, identisches Muster zu
+    ``app/api/simulation_common.py``/``app/services/llm_routing_seed.py``."""
+    return os.environ.get('AGORA_DEMO_MODE', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def demo_mode_leaked_operator_vars() -> list[str]:
+    """Namen der in ``AGORA_DEMO_MODE`` verbotenen, aber gesetzten Env-Vars.
+
+    Nur Namen, nie Werte — auch nicht in Fehlermeldungen oder Logs.
+
+    Prueft neben ``os.environ`` auch ``instance/settings.json``: der
+    Settings-Layer legt Datei-Werte ueber die Env, ein dort persistierter
+    Betreiber-Key waere sonst ein stiller Fallback trotz leerer ``.env``.
+    """
+    leaked = [
+        name for name in DEMO_MODE_FORBIDDEN_ENV_VARS
+        if (os.environ.get(name) or '').strip()
+    ]
+    from .services.settings_layer import get_default_service
+
+    file_layer = get_default_service()._read_file_layer()
+    for name in DEMO_MODE_FORBIDDEN_ENV_VARS:
+        value = file_layer.get(name)
+        if value is not None and str(value).strip():
+            leaked.append(f'instance/settings.json:{name}')
+    return leaked
+
+
 # Metadaten-Backend (docs/plans/supabase.md §8). 'legacy' ist der heutige Weg:
 # Dateisystem und Neo4j tragen die Wahrheit. 'postgres' schaltet ab Phase 4
 # einzelne Stores auf die Datenbank um, Store fuer Store, nicht auf einmal.

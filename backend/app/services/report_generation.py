@@ -17,7 +17,12 @@ from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
 from ..services.secret_resolver import SecretResolver
-from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
+from ..services.llm_routing_seed import (
+    resolve_route_api_key,
+    seed_run_stage_routing,
+    workspace_credential_context_for_run,
+    workspace_credential_metadata,
+)
 from ..services.stage_model_router import StageModelRouter
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
@@ -237,6 +242,7 @@ class ReportGenerationService:
             resume_capability={"available": True, "action": "resume", "label": "Continue report generation"},
             branch_label=state.branch_name,
             metadata={
+                **workspace_credential_metadata(),
                 "graph_id": graph_id,
                 "source_simulation_id": state.source_simulation_id,
                 "root_simulation_id": state.root_simulation_id,
@@ -499,4 +505,8 @@ class ReportGenerationService:
 
         from ..jobs import enqueue
         # run_id: Issue #1472 — siehe simulation_prepare.
-        enqueue("report_generate", run_generate, run_id=run_record["run_id"])
+        def scoped_run_generate():
+            with workspace_credential_context_for_run(run_record["run_id"]):
+                run_generate()
+
+        enqueue("report_generate", scoped_run_generate, run_id=run_record["run_id"])

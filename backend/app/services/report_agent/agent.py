@@ -52,6 +52,7 @@ from .sections import (
     section_dedup_check,
     truncate_text,
 )
+from ..llm_routing_seed import workspace_credential_id_for_run
 from ..web_tools import WebToolsService
 from ...utils.logger import get_logger
 from ...models.report import (
@@ -295,8 +296,14 @@ class ReportAgent:
         else:
             self.llm = LLMClient(model=model_name) if model_name else LLMClient()
 
-        # Optional live-web tools (Tavily). Disabled silently when no API key.
-        self.web_tools = WebToolsService()
+        # Optional live-web tools (Tavily). Disabled silently when no API key
+        # — and hard-disabled for a workspace-scoped (JWT/BYOK) run, whose
+        # principal never brought a Tavily key of their own: the operator's
+        # TAVILY_API_KEY must not be usable through a visitor's report (#1688).
+        is_workspace_scoped_run = workspace_credential_id_for_run(None) is not None
+        self.web_tools = (
+            WebToolsService(enabled=False) if is_workspace_scoped_run else WebToolsService()
+        )
         if graph_tools is None:
             raise ValueError(
                 "graph_tools (GraphToolsService) is required. "

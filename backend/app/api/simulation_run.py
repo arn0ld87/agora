@@ -10,12 +10,15 @@ from flask import jsonify, request
 
 from . import simulation_bp
 from ..config import Config
+from ..contracts.auth_contract import AuthType
 from ..models.project import ProjectManager
+from ..security.principal_context import current_principal
 from ..services.persona_review_service import PersonaReviewService
 from ..services.llm_routing_seed import (
     build_route_subprocess_env,
     resolve_route_api_key,
     seed_run_stage_routing,
+    workspace_credential_metadata,
 )
 from ..utils.endpoints import is_local_endpoint
 from ..services.llm_runtime import RuntimeLlmConfig, parse_runtime_llm_config
@@ -240,6 +243,31 @@ def _parse_budget_config(data: "dict[str, Any]") -> "RunBudgetConfig | None":
         ) from exc
 
 
+def _apply_demo_start_limits(
+    max_rounds: int | None, budget_config: "RunBudgetConfig | None"
+) -> tuple[int | None, "RunBudgetConfig | None"]:
+    """Enforce bounded JWT runs only on an explicitly enabled demo instance.
+
+    Finding M1: the round/budget cap itself now lives in
+    ``simulation_common.apply_demo_run_limits`` so the replay/resume paths in
+    ``runs.py`` enforce the identical limit — this wrapper only translates
+    the shared ``DemoLimitExceededError`` into the ``_StartRejected``
+    response shape this endpoint's callers expect.
+    """
+    from .simulation_common import DemoLimitExceededError, apply_demo_run_limits
+
+    try:
+        return apply_demo_run_limits(max_rounds, budget_config)
+    except DemoLimitExceededError as exc:
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=exc.message,
+            )
+        ) from exc
+
+
 def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
     """Phase 1 — Request-Payload validieren und in einen Container überführen.
 
@@ -259,6 +287,19 @@ def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
             json_error(
                 ApiErrorCode.INVALID_ID,
                 message="Invalid simulation_id format",
+            )
+        )
+    principal = current_principal()
+    if (
+        data.get('enable_graph_memory_update')
+        and principal is not None
+        and principal.auth_type == AuthType.JWT
+    ):
+        raise _StartRejected(
+            json_error(
+                ApiErrorCode.AUTH_FORBIDDEN,
+                status=403,
+                message="Graph memory update is unavailable for workspace simulations",
             )
         )
 
@@ -300,6 +341,8 @@ def _parse_start_request(data: "dict[str, Any]") -> _StartRequest:
         range_message="simulation_days must be between 1 and 365",
         type_message="simulation_days must be a valid integer",
     )
+
+    max_rounds, budget_config = _apply_demo_start_limits(max_rounds, budget_config)
 
     if platform not in ['twitter', 'reddit', 'parallel']:
         raise _StartRejected(
@@ -429,6 +472,8 @@ def _precheck_runtime_provider_key(llm_runtime: RuntimeLlmConfig) -> None:
 
     from ..services.llm_routing_seed import map_runtime_provider_to_route_provider
     from ..services.secret_resolver import SecretResolver
+    from ..services.llm_routing_seed import workspace_credential_id_for_run
+    from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
     from ..services.llm_provider_registry import LlmProviderRegistry
     provider_id_preview = map_runtime_provider_to_route_provider(llm_runtime.provider)
     if not provider_id_preview:
@@ -437,7 +482,12 @@ def _precheck_runtime_provider_key(llm_runtime: RuntimeLlmConfig) -> None:
     registry = LlmProviderRegistry()
     descriptor = next((p for p in registry.get_providers() if p.id == provider_id_preview), None)
     p_type = descriptor.type if descriptor else "openai_compatible"
-    stored_key = SecretResolver().get_api_key(provider_id_preview, p_type)
+    workspace_id = workspace_credential_id_for_run(None)
+    stored_key = (
+        WorkspaceProviderCredentialsStore().get_plaintext(workspace_id, provider_id_preview)
+        if workspace_id is not None
+        else SecretResolver().get_api_key(provider_id_preview, p_type)
+    )
     if not stored_key and not is_local_endpoint(
         (descriptor.base_url if descriptor else None) or llm_runtime.base_url
     ):
@@ -496,6 +546,7 @@ def _begin_start_run(req: _StartRequest, state) -> RunLifecycle:
         resume_capability=_simulation_resume_capability(req.simulation_id, state),
         branch_label=state.branch_name,
         metadata={
+            **workspace_credential_metadata(),
             "graph_id": state.graph_id,
             "platform": req.platform,
             "source_simulation_id": state.source_simulation_id,

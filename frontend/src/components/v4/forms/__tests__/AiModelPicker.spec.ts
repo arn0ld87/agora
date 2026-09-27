@@ -21,12 +21,21 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
 const discovery = vi.hoisted(() => ({
-  models: { value: [] as any[] }, loading: { value: false }, error: { value: null as string | null }, refresh: vi.fn(),
+  models: { value: [] as any[] }, providers: { value: [] as Array<{ provider_connection_id: string; provider_kind: string; display_name: string }> }, loading: { value: false }, error: { value: null as string | null }, refresh: vi.fn(),
 }))
+const operator = vi.hoisted(() => ({ value: true }))
 
-vi.mock('@/composables/useAvailableModels', () => ({
-  useAvailableModels: () => discovery,
-}))
+vi.mock('@/composables/useAvailableModels', async () => {
+  const { computed } = await import('vue')
+  return { useAvailableModels: () => ({
+    ...discovery,
+    models: computed(() => discovery.models.value),
+    providers: computed(() => discovery.providers.value),
+    loading: computed(() => discovery.loading.value),
+    error: computed(() => discovery.error.value),
+  }) }
+})
+vi.mock('@/composables/useOperatorAccess', () => ({ useOperatorAccess: () => operator }))
 
 import AiModelPicker from '../AiModelPicker.vue'
 import aiModelPickerSource from '../AiModelPicker.vue?raw'
@@ -111,6 +120,11 @@ function makeI18n() {
           workspaceDefault: 'Workspace default',
           inheritWorkspaceDefault: 'Use workspace default',
           loading: 'Loading models …',
+          discoveryError: 'Models could not be loaded',
+          retry: 'Try again',
+          customProvider: 'Provider',
+          customModel: 'Custom model ID',
+          useCustomModel: 'Use model',
           badge: {
             local: 'local',
             cloud: 'Cloud',
@@ -136,6 +150,32 @@ async function mountPicker(overrides: Record<string, unknown> = {}) {
 describe('AiModelPicker (Slice 5.1, isolated)', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
+    operator.value = true
+    discovery.providers.value = []
+    discovery.error.value = null
+    discovery.refresh.mockReset()
+  })
+
+  it('erlaubt JWT-Nutzern eine eigene Modell-ID für einen konfigurierten Anbieter', async () => {
+    operator.value = false
+    discovery.providers.value = [{ provider_connection_id: 'minimax', provider_kind: 'minimax', display_name: 'MiniMax' }]
+    const w = await mountPicker({ options: [] })
+    const form = w.find('form.ai-model-picker__custom')
+    expect(form.exists()).toBe(true)
+    await form.find('input').setValue('MiniMax-M2.5')
+    await form.trigger('submit')
+    expect(w.emitted('update:modelValue')?.at(-1)?.[0]).toEqual({
+      provider_connection_id: 'minimax', model_id: 'MiniMax-M2.5',
+      source: 'explicit', capability_filter: 'chat',
+    })
+  })
+
+  it('zeigt einen Discovery-Fehler mit Wiederholen-Aktion', async () => {
+    discovery.error.value = 'invalid response'
+    const w = await mountPicker()
+    expect(w.find('[role="alert"]').text()).toContain('invalid response')
+    await w.find('[role="alert"] button').trigger('click')
+    expect(discovery.refresh).toHaveBeenCalledWith({ force: true })
   })
 
   it('mountet ohne Crash', async () => {

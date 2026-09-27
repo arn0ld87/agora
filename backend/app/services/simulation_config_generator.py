@@ -116,18 +116,29 @@ class SimulationConfigGenerator:
         run_id: Optional[str] = None,
     ):
         self.provider_type = provider_type
+        from .llm_routing_seed import workspace_credential_id_for_run
+
+        tenant_scoped = workspace_credential_id_for_run(run_id) is not None
+        if tenant_scoped:
+            if not api_key or not base_url or not model_name:
+                raise ValueError("Workspace simulation config requires an explicit LLM route and credential")
+            resolved_base_url: str = base_url
+            resolved_model_name: str = model_name
+        else:
+            resolved_base_url = base_url or Config.LLM_BASE_URL
+            resolved_model_name = model_name or Config.LLM_MODEL_NAME
         # ``self.base_url``/``self.api_key`` bleiben absichtlich beim
         # ``.env``-Fallback-Schema (#778) — ``generate_config`` schreibt sie
         # weiter unten in ``SimulationParameters.llm_base_url`` fuer die
         # Simulations-Runden, ein Pfad, den Issue #1418 nicht anfasst.
-        self.base_url = base_url or Config.LLM_BASE_URL
+        self.base_url = resolved_base_url
         # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
         # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
         # sonst geht der lokale Ollama-Key an einen Fremd-Provider (404/401).
-        self.api_key = api_key or (
+        self.api_key = api_key if tenant_scoped else api_key or (
             Config.LLM_API_KEY if self.base_url == Config.LLM_BASE_URL else None
         )
-        self.model_name = model_name or Config.LLM_MODEL_NAME
+        self.model_name = resolved_model_name
         # Normalize language to two-letter code; defaults from Config.AGENT_LANGUAGE.
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
         # Batching-Granularität (#870): ENV-konfigurierbar, Default 8.
@@ -162,6 +173,8 @@ class SimulationConfigGenerator:
             # Ohne provider_type erkennt LLMClient codex_cli nicht als
             # Subprozess-Provider und versucht einen HTTP-Call.
             provider_type=self.provider_type,
+            use_active_config=not tenant_scoped,
+            allow_api_key_fallback=not tenant_scoped,
         )
 
     @staticmethod

@@ -7,6 +7,10 @@
  */
 import { ref, type Ref } from 'vue'
 import { useLlmProvidersStore } from '@/store/aiModels'
+import { useOperatorAccess } from '@/composables/useOperatorAccess'
+import { listWorkspaceAvailableModels } from '@/api/workspaceAvailableModels'
+import type { WorkspaceAvailableProvider } from '@/contracts/workspaceAvailableModelsContract'
+import { AiCapabilitySchema } from '@/contracts/aiModelRef'
 import type { AiCapability, AiModelRefInput, AiModelStatus, AiProviderKind } from '@/contracts/aiModelRef'
 import type { AiModel, ProviderConnection } from '@/contracts/aiProviderContract'
 
@@ -37,6 +41,7 @@ export interface RefreshOptions {
 
 export interface UseAvailableModelsReturn {
   models: Ref<DiscoveredPickerModel[]>
+  providers: Ref<WorkspaceAvailableProvider[]>
   loading: Ref<boolean>
   error: Ref<string | null>
   refresh: (options?: RefreshOptions) => Promise<void>
@@ -87,7 +92,9 @@ function toPickerModel(
 
 export function useAvailableModels(): UseAvailableModelsReturn {
   const providerStore = useLlmProvidersStore()
+  const operatorAccess = useOperatorAccess()
   const models = ref<DiscoveredPickerModel[]>([])
+  const providers = ref<WorkspaceAvailableProvider[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   let cache: CacheEntry | null = null
@@ -101,6 +108,31 @@ export function useAvailableModels(): UseAvailableModelsReturn {
     loading.value = true
     error.value = null
     try {
+      if (!operatorAccess.value) {
+        const discovered = await listWorkspaceAvailableModels()
+        providers.value = discovered.providers
+        const mapped = discovered.items.map((model): DiscoveredPickerModel => {
+          const { context_window, ...fields } = model
+          return {
+            ...fields,
+            ...(context_window == null ? {} : { context_window }),
+            capabilities: model.capabilities.flatMap((name) => {
+              const parsed = AiCapabilitySchema.safeParse(name)
+              return parsed.success ? [parsed.data] : []
+            }),
+            unsupported_capabilities: model.unsupported_capabilities.flatMap((name) => {
+              const parsed = AiCapabilitySchema.safeParse(name)
+              return parsed.success ? [parsed.data] : []
+            }),
+            provider_id: model.provider_connection_id,
+            provider_label: model.display_name,
+            model_label: model.model_label,
+          }
+        })
+        cache = { data: mapped, fetchedAt: Date.now() }
+        models.value = mapped
+        return
+      }
       await providerStore.loadConnections()
       const connections = Object.values(providerStore.connections)
       const settled = await Promise.allSettled(
@@ -131,6 +163,7 @@ export function useAvailableModels(): UseAvailableModelsReturn {
       const message = cause instanceof Error ? cause.message : String(cause)
       error.value = message
       models.value = []
+      providers.value = []
       console.error('[useAvailableModels] fetch error:', message)
     } finally {
       loading.value = false
@@ -138,5 +171,5 @@ export function useAvailableModels(): UseAvailableModelsReturn {
   }
 
   void refresh()
-  return { models, loading, error, refresh }
+  return { models, providers, loading, error, refresh }
 }

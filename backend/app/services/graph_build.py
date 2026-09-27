@@ -17,7 +17,12 @@ from ..services.graph_build_checkpoint import (
     save_checkpoint,
 )
 from ..services.ontology_generator import OntologyGenerator
-from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
+from ..services.llm_routing_seed import (
+    resolve_route_api_key,
+    seed_run_stage_routing,
+    workspace_credential_context_for_run,
+    workspace_credential_metadata,
+)
 from ..services.stage_model_router import StageModelRouter
 from ..services.text_processor import TextProcessor
 from ..storage.ner_chunk_context import build_chunk_contexts
@@ -220,6 +225,7 @@ class GraphBuildService:
             progress=0,
             message="Ontology generation started",
             linked_ids={"project_id": project.project_id},
+            metadata=workspace_credential_metadata(),
         )
         run_id = run_record["run_id"]
         # Routing-Phase: nur hier ist ein Fehler tatsächlich ein
@@ -421,7 +427,7 @@ class GraphBuildService:
                 "project_dir": ProjectManager._get_project_dir(project_id),
             }),
             resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
-            metadata={"graph_name": graph_name},
+            metadata={"graph_name": graph_name, **workspace_credential_metadata()},
         )
         task_id: str | None = None
         with _terminalize_ai_model_ref_sync_failure(
@@ -833,7 +839,11 @@ class GraphBuildService:
 
             from ..jobs import enqueue
             # run_id: Issue #1472 — siehe simulation_prepare.
-            enqueue("graph_build", build_task, run_id=run_record["run_id"])
+            def scoped_build_task():
+                with workspace_credential_context_for_run(run_record["run_id"]):
+                    build_task()
+
+            enqueue("graph_build", scoped_build_task, run_id=run_record["run_id"])
         return task_id, run_record["run_id"]
 
     @classmethod
@@ -929,7 +939,7 @@ class GraphBuildService:
                 "project_dir": ProjectManager._get_project_dir(project_id),
             }),
             resume_capability={"available": True, "action": "resume", "label": "Resume graph build"},
-            metadata={"graph_name": project.name or "Agora Graph"},
+            metadata={"graph_name": project.name or "Agora Graph", **workspace_credential_metadata()},
         ) as lifecycle:
             new_run = lifecycle.record
             task_manager = TaskManager()
@@ -1140,6 +1150,10 @@ class GraphBuildService:
                     )
 
             from ..jobs import enqueue
-            enqueue("graph_build", build_task, run_id=new_run["run_id"])
+            def scoped_build_task():
+                with workspace_credential_context_for_run(new_run["run_id"]):
+                    build_task()
+
+            enqueue("graph_build", scoped_build_task, run_id=new_run["run_id"])
 
         return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}

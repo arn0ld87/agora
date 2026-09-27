@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import time
 from typing import Any, List, Optional
+from uuid import uuid4
 
 import pytest
 
 from app.services import oasis_profile_batch_results as mod
+from app.services import llm_routing_seed
+from app.services.embedding_configurations.runtime import ResolvedEmbeddingRoute
 from app.services.run_budget import BudgetExceededError
+from app.storage.embedding_service import EmbeddingError, EmbeddingService
 
 
 class _Entity:
@@ -160,3 +164,61 @@ def test_thread_path_without_budget_error_processes_every_entity() -> None:
     assert cancel_requested is False
     assert sorted(started) == list(range(TOTAL))
     assert sorted(processed) == list(range(TOTAL))
+
+
+@pytest.mark.parametrize(
+    ("workspace_key", "expected"),
+    [("workspace-key", "Bearer workspace-key"), (None, "missing-workspace-key")],
+)
+def test_thread_path_uses_workspace_embedding_credential_or_fails_closed(
+    monkeypatch, workspace_key, expected
+) -> None:
+    workspace_id = uuid4()
+    monkeypatch.setattr(
+        llm_routing_seed, "_persisted_workspace_for_run",
+        lambda run_id: (
+            (True, llm_routing_seed._RunCredentialScope(workspace_id, True))
+            if run_id == "run-test"
+            else (False, llm_routing_seed._UNSCOPED)
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.embedding_configurations.runtime.resolve_active_embedding_route",
+        lambda *, include_secret=True: ResolvedEmbeddingRoute(
+            model="text-embedding-3-small",
+            base_url="https://api.openai.com/v1",
+            api_key="operator-key" if include_secret else None,
+            configuration_id="embedding",
+            dimensions=1536,
+            provider_id="openai",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.workspace_provider_credentials_store.WorkspaceProviderCredentialsStore",
+        lambda: type(
+            "Credentials", (),
+            {"get_plaintext": lambda _self, current_id, provider_id: workspace_key
+             if current_id == workspace_id and provider_id == "openai" else None},
+        )(),
+    )
+
+    def generate_single_profile(idx: int, entity: _Entity) -> tuple:
+        service = EmbeddingService(
+            model="text-embedding-3-small",
+            base_url="https://api.openai.com/v1",
+            api_key="operator-key",
+        )
+        try:
+            result = service._request_headers()["Authorization"]
+        except EmbeddingError:
+            result = "missing-workspace-key"
+        return idx, result, None
+
+    results: list[str] = []
+    with llm_routing_seed.workspace_credential_context_for_run("run-test"):
+        mod._consume_thread_results(
+            _Self(), generate_single_profile, [_Entity("one"), _Entity("two")], 2,
+            lambda _idx, profile, _error: results.append(profile), [0], 2,
+        )
+
+    assert results == [expected, expected]

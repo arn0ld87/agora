@@ -30,13 +30,27 @@ logger = logging.getLogger(__name__)
 # Allow importing backend modules (run scripts already do sys.path.insert)
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
 _backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-# Load .env for Neo4j credentials
+try:
+    from ._sim_common import is_workspace_credential_scope
+except ImportError:  # direct script execution
+    from _sim_common import is_workspace_credential_scope
+
+# Load .env for Neo4j credentials — but never for a workspace-scoped run
+# (#1688, Finding H5 sibling): the runners already skip this via
+# ``load_project_env`` before importing this module, but this module is
+# also imported lazily inside long-running functions (e.g. the
+# ``enforce_memory_token_limit``/``_heuristic_context_limit`` call sites),
+# where a bare, ungated ``load_dotenv`` here would otherwise repopulate the
+# operator's ``.env`` (LLM_API_KEY/LLM_BOOST_*) into a workspace subprocess
+# that must never see it.
 _project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
 _env_file = os.path.join(_project_root, '.env')
-if os.path.exists(_env_file):
+if os.path.exists(_env_file) and not is_workspace_credential_scope():
     load_dotenv(_env_file)
 
 
@@ -1012,7 +1026,21 @@ def build_camel_function_tools(config: Dict[str, Any]) -> List[Any]:
     Uses closures over the registry so each tool call reuses the same Neo4j
     connection and Tavily key, but presents itself to CAMEL as a plain
     Python function (name + docstring + type hints → OpenAI function schema).
+
+    A workspace-scoped (JWT/BYOK) run gets no tools at all (#1688): the
+    operator's ``TAVILY_API_KEY`` (``web_search``) must never be reachable
+    through a visitor's simulation, and the visitor brought no Tavily key of
+    their own to use instead. ``web_fetch``/``search_graph`` carry no
+    external credential, but disabling the whole set here — not just the
+    Tavily-backed one — keeps this a single, auditable gate instead of a
+    per-tool allowlist that the next tool addition could miss.
     """
+    if is_workspace_credential_scope():
+        logger.info(
+            "[agent_tools] workspace-scoped run — no FunctionTools attached "
+            "(web_search/web_fetch/search_graph disabled)"
+        )
+        return []
     try:
         from camel.toolkits import FunctionTool
     except ImportError:

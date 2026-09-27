@@ -13,6 +13,7 @@ orchestration in ``app.llm.json_mode``, and native tool-calling in
 import os
 import re
 import time as _time_mod
+from uuid import UUID
 from typing import Literal, Optional, Dict, Any, List, Tuple
 from openai import OpenAI
 from pydantic import BaseModel
@@ -123,6 +124,77 @@ def _resolve_active_api_key(
         return None, current_source
 
 
+def _apply_active_config(
+    model: Optional[str],
+    base_url: Optional[str],
+    api_key: Optional[str],
+    resolved_source: Optional[str],
+    provider_type: Optional[str],
+) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    active = _read_active_config_safely()
+    if not active:
+        return model, base_url, api_key, resolved_source, provider_type, None
+    active_pid = active.get("provider_id")
+    active_model = active.get("model")
+    active_base = active.get("base_url")
+    active_used = False
+    if active_model and not model:
+        model = active_model
+        active_used = True
+    if active_base and not base_url:
+        base_url = active_base
+        active_used = True
+    if active_pid and not api_key:
+        active_used = True
+        descriptor = _lookup_provider_descriptor(active_pid)
+        if descriptor is not None:
+            if provider_type is None:
+                provider_type = descriptor.type
+            if not base_url:
+                base_url = descriptor.base_url
+            api_key, resolved_source = _resolve_active_api_key(
+                active_pid, descriptor.type, resolved_source
+            )
+    if active_pid and active_used and provider_type is None:
+        descriptor = _lookup_provider_descriptor(active_pid)
+        if descriptor is not None:
+            provider_type = descriptor.type
+    active_provider_id = active_pid if active_pid and active_used else None
+    return model, base_url, api_key, resolved_source, provider_type, active_provider_id
+
+
+def _route_api_key(
+    route: ResolvedRoute,
+    credential_workspace_id: UUID | None,
+    connection_only: bool,
+    api_key_override: Optional[str],
+    secret_resolver: Any,
+    provider_type: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    if credential_workspace_id is not None:
+        from ..services.workspace_provider_credentials_store import WorkspaceProviderCredentialsStore
+
+        api_key = WorkspaceProviderCredentialsStore().get_plaintext(
+            credential_workspace_id, route.provider_id
+        )
+        return api_key, "workspace_store" if api_key else None
+    if connection_only:
+        from ..services.secret_resolver import get_bound_store_api_key
+
+        raw_secret_ref = route.provider_options.get("secret_ref")
+        secret_ref = raw_secret_ref if isinstance(raw_secret_ref, str) else ""
+        api_key = get_bound_store_api_key(
+            secret_ref, secrets_store=get_llm_provider_secrets_store()
+        )
+        return api_key, "store" if api_key else None
+    api_key = api_key_override
+    api_key_source = "passed_in" if api_key_override else None
+    if secret_resolver and not api_key:
+        api_key = secret_resolver.get_api_key(route.provider_id, provider_type or "unknown")
+        api_key_source = getattr(secret_resolver, "last_source", None)
+    return api_key, api_key_source
+
+
 class LLMClient:
     """LLM Client"""
 
@@ -160,6 +232,13 @@ class LLMClient:
         # Ein übergebener api_key ohne explizite Annotation gilt als "passed_in"
         # (Caller hat den Key direkt übergeben), statt auf "unknown" durchzufallen.
         resolved_source: Optional[str] = (api_key_source or "passed_in") if api_key else None
+        from ..services.llm_routing_seed import workspace_credential_id_for_run
+
+        if workspace_credential_id_for_run(run_id) is not None:
+            use_active_config = False
+            allow_api_key_fallback = False
+            if not api_key or not base_url or not model:
+                raise ValueError("Workspace LLM route requires explicit model, endpoint and credential")
         active_provider_id: Optional[str] = None
         # Issue #1405: codex_cli hat weder base_url noch api_key — die
         # Ollama/Minimax-URL-Heuristiken und der OpenAI-SDK-Client-Bau
@@ -186,43 +265,14 @@ class LLMClient:
         # herangezogen wurde (model, base_url oder api_key). Hat der Caller
         # alle drei explizit übergeben, behält die aufgelöste Route den Vorrang.
         if use_active_config:
-            active = _read_active_config_safely()
-            if active:
-                active_pid = active.get("provider_id")
-                active_model = active.get("model")
-                active_base = active.get("base_url")
-                active_used = False
-                if active_model and not model:
-                    model = active_model
-                    active_used = True
-                if active_base and not base_url:
-                    base_url = active_base
-                    active_used = True
-                if active_pid and not api_key:
-                    active_used = True
-                    descriptor = _lookup_provider_descriptor(active_pid)
-                    if descriptor is not None:
-                        if resolved_provider_type is None:
-                            resolved_provider_type = descriptor.type
-                        if not base_url:
-                            base_url = descriptor.base_url
-                        api_key, resolved_source = _resolve_active_api_key(
-                            active_pid, descriptor.type, resolved_source
-                        )
-                if active_pid and active_used and resolved_provider_type is None:
-                    # Codex-Review zu PR #1457: Der Descriptor-Lookup oben
-                    # haengt unter ``not api_key``, weil er dort primaer den
-                    # Key aufloest. Traegt die Active-Config nur ``model``
-                    # oder ``base_url`` bei und bringt der Caller den Key
-                    # selbst mit, ist der Provider damit zwar bekannt
-                    # (``active_provider_id`` wird unten gesetzt), sein Typ
-                    # aber nicht — die Audit-Zeile las sich dann als
-                    # ``provider_id=openai provider_type=unknown``.
-                    descriptor = _lookup_provider_descriptor(active_pid)
-                    if descriptor is not None:
-                        resolved_provider_type = descriptor.type
-                if active_pid and active_used:
-                    active_provider_id = active_pid
+            (
+                model,
+                base_url,
+                api_key,
+                resolved_source,
+                resolved_provider_type,
+                active_provider_id,
+            ) = _apply_active_config(model, base_url, api_key, resolved_source, resolved_provider_type)
 
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
@@ -412,6 +462,7 @@ class LLMClient:
         timeout: float = 300.0,
         run_id: Optional[str] = None,
         api_key_override: Optional[str] = None,
+        workspace_id: UUID | None = None,
     ) -> "LLMClient":
         """Factory: create LLMClient from a resolved stage route.
 
@@ -420,6 +471,14 @@ class LLMClient:
         """
         base_url = route.base_url_sanitized
         connection_only = route.provider_options.get("connection_only") is True
+        from ..services.llm_routing_seed import (
+            validate_workspace_route,
+            workspace_credential_id_for_run,
+        )
+
+        credential_workspace_id = workspace_id or workspace_credential_id_for_run(run_id)
+        if credential_workspace_id is not None:
+            validate_workspace_route(route)
 
         # Issue #1405 Codex-Review-Finding: der Provider-Typ der Route wurde
         # zwar hier nachgeschlagen (fuer die api_key-Aufloesung unten), aber
@@ -435,30 +494,15 @@ class LLMClient:
             None,
         )
         provider_type = _route_descriptor.type if _route_descriptor else None
-        if connection_only:
-            from ..services.secret_resolver import get_bound_store_api_key
-
-            raw_secret_ref = route.provider_options.get("secret_ref")
-            secret_ref = raw_secret_ref if isinstance(raw_secret_ref, str) else ""
-            api_key = get_bound_store_api_key(
-                secret_ref,
-                secrets_store=get_llm_provider_secrets_store(),
-            )
-            api_key_source: Optional[str] = "store" if api_key else None
-        else:
-            api_key = api_key_override
-            api_key_source = "passed_in" if api_key_override else None
+        api_key, api_key_source = _route_api_key(
+            route, credential_workspace_id, connection_only, api_key_override,
+            secret_resolver, provider_type,
+        )
 
         # If a secret resolver is provided, we try to get the real secrets.
         # This prevents leaking them into ResolvedRoute but allows LLMClient
         # to use them.
-        if secret_resolver and not connection_only:
-            # Provider-Typ kommt aus dem Lookup oben (``_route_descriptor``) —
-            # ResolvedRoute traegt selbst nur provider_id.
-            if not api_key:
-                api_key = secret_resolver.get_api_key(route.provider_id, provider_type or "unknown")
-                api_key_source = getattr(secret_resolver, "last_source", None)
-
+        if secret_resolver and not connection_only and credential_workspace_id is None:
             # Use real base_url from provider_options if present, otherwise from descriptor
             real_base = route.provider_options.get("base_url") or (
                 _route_descriptor.base_url if _route_descriptor else None
@@ -479,8 +523,8 @@ class LLMClient:
             route_provider_id=route.provider_id,
             provider_type=provider_type,
             api_key_source=api_key_source,
-            use_active_config=not connection_only,
-            allow_api_key_fallback=not connection_only,
+            use_active_config=not connection_only and credential_workspace_id is None,
+            allow_api_key_fallback=not connection_only and credential_workspace_id is None,
         )
 
     def _is_ollama(self) -> bool:

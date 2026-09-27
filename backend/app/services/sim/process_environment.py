@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from ...llm.providers.codex_cli import CLI_TRANSPORT_VALUE, TRANSPORT_ENV_KEY
+from ...services.llm_routing_seed import WORKSPACE_SECRET_ENV_MARKER
+
+#: Env-Var, die dem Subprozess die Lese-FD einer Pipe mit dem JSON-codierten
+#: Workspace-Secret-Payload nennt — nie den Key selbst (Finding B1, #1688).
+WORKSPACE_PAYLOAD_FD_ENV_NAME = "AGORA_SECRET_ENV_FD"  # noqa: S105 -- env key name, not a credential
 
 SAFE_ENV_KEYS: frozenset[str] = frozenset(
     {
@@ -36,7 +41,7 @@ def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
 
 def _build_subprocess_env(
     runtime_env: Optional[Dict[str, str]], sim_dir: Any
-) -> Dict[str, str]:
+) -> Tuple[Dict[str, str], Tuple[int, ...]]:
     """Env für den OASIS-Subprozess — Whitelist-only (Code-Review 2026-05-17 §1.6).
 
     Nur explizit erlaubte Keys aus ``os.environ``; Secrets wie SECRET_KEY,
@@ -46,12 +51,28 @@ def _build_subprocess_env(
 
     Aus ``start_simulation`` extrahiert, als der CLI-Sonderfall unten die
     Funktion über das radon-Gate (MAI-17) gehoben hätte.
+
+    Finding B1 (#1688): trägt ``runtime_env`` den privaten
+    ``WORKSPACE_SECRET_ENV_MARKER`` (Workspace-Run, siehe
+    ``llm_routing_seed.build_route_subprocess_env``), landet dessen
+    JSON-Payload nie im zurückgegebenen Env-Dict — stattdessen in einer Pipe,
+    deren Lese-Ende als zweites Rückgabeelement für ``pass_fds`` gedacht ist.
+    Der Aufrufer (``process_manager.start_simulation``) übergibt beides 1:1
+    an ``subprocess.Popen``.
     """
     env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    secret_payload_json: Optional[str] = None
     if runtime_env:
-        env.update({k: v for k, v in runtime_env.items() if v})
+        secret_payload_json = runtime_env.get(WORKSPACE_SECRET_ENV_MARKER)
+        env.update(
+            {
+                k: v
+                for k, v in runtime_env.items()
+                if v and k != WORKSPACE_SECRET_ENV_MARKER
+            }
+        )
     # Issue #1423: Bei CLI-Transport (codex_cli) darf das aus der Whitelist
     # geerbte ``LLM_BASE_URL`` NICHT stehen bleiben. Der Provider hat keinen
     # HTTP-Endpunkt; das geerbte Feld ist die ``.env``-URL des Backends, und
@@ -63,7 +84,28 @@ def _build_subprocess_env(
         env.pop("LLM_BASE_URL", None)
     # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
     _inject_oasis_db_env(env, str(sim_dir))
-    return env
+    pass_fds: Tuple[int, ...] = ()
+    if secret_payload_json:
+        # Finding L2 (Security-Review, #1688): the try/finally must start
+        # immediately after ``os.pipe()`` so ``read_fd`` — the FD the child
+        # will read the workspace secret from — is never leaked into this
+        # long-running backend process if the write below fails. It is only
+        # exposed to the caller (``env``/``pass_fds``, ultimately
+        # ``Popen``) once the payload has been written in full.
+        read_fd, write_fd = os.pipe()
+        try:
+            payload_bytes = secret_payload_json.encode("utf-8")
+            offset = 0
+            while offset < len(payload_bytes):
+                offset += os.write(write_fd, payload_bytes[offset:])
+        except Exception:
+            os.close(read_fd)
+            raise
+        finally:
+            os.close(write_fd)
+        env[WORKSPACE_PAYLOAD_FD_ENV_NAME] = str(read_fd)
+        pass_fds = (read_fd,)
+    return env, pass_fds
 
 
 def _compute_oasis_db_path(sim_dir: str) -> str:

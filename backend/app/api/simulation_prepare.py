@@ -17,6 +17,9 @@ from ..services.llm_routing_seed import (
     build_runtime_llm_config,
     resolve_route_api_key,
     seed_run_stage_routing,
+    workspace_credential_context_for_run,
+    workspace_credential_id_for_run,
+    workspace_credential_metadata,
 )
 from ..contracts.prepare_status_contract import PrepareStatusResponse
 from ..services.persona_eligibility import filter_eligible_entities
@@ -287,6 +290,7 @@ def _begin_prepare_run(
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
         metadata={
+            **workspace_credential_metadata(),
             "project_id": state.project_id,
             "graph_id": state.graph_id,
             "source_simulation_id": state.source_simulation_id,
@@ -343,6 +347,14 @@ def _resolve_prepare_route(run_record: "dict[str, Any]", llm_runtime):
     resolved_route = route_router.resolve("persona_generation")
     route_router.lock_stage("persona_generation", resolved_route)
     if LlmProviderRegistry.uses_session_auth(resolved_route.provider_id):
+        if workspace_credential_id_for_run(run_record["run_id"]) is not None:
+            raise _PrepareRejected(
+                json_error(
+                    ApiErrorCode.VALIDATION_FAILED,
+                    status=422,
+                    message="Workspace provider route is unavailable",
+                )
+            )
         # Session-Provider (codex_cli) authentifizieren über die lokale
         # CLI-Anmeldung und haben gar kein Secret — für sie gibt es nichts
         # aufzulösen und nichts einzufordern.
@@ -615,7 +627,11 @@ def _prepare_simulation_under_start_lock(
                 # Manifest, damit ein per SIGTERM abgeschnittener Prepare-Job
                 # beim naechsten Start als verwaist erkannt wird statt fuer
                 # immer auf "processing" zu stehen.
-                enqueue("simulation_prepare", tracked_job, run_id=run_record["run_id"])
+                def scoped_prepare_job():
+                    with workspace_credential_context_for_run(run_record["run_id"]):
+                        tracked_job()
+
+                enqueue("simulation_prepare", scoped_prepare_job, run_id=run_record["run_id"])
             except BaseException:
                 _discard_active_prepare_job(simulation_id)
                 raise

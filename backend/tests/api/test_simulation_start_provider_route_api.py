@@ -26,6 +26,8 @@ def client(monkeypatch):
     monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
     app.config["AGORA_AUTH_TOKEN"] = ""
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.config["TESTING"] = True
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
     with app.test_request_context(), app.test_client() as test_client:

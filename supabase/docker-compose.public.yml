@@ -1,0 +1,63 @@
+# Public Auth endpoint for Agora. Only /auth/v1 reaches the Supabase gateway.
+# Apply after docker-compose.yml on a host with the external Traefik `proxy` network.
+services:
+  db:
+    cpus: 2.0
+    mem_limit: 4g
+    pids_limit: 256
+
+  auth:
+    cpus: 1.0
+    mem_limit: 768m
+    pids_limit: 128
+
+  rest:
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+
+  realtime:
+    cpus: 0.5
+    mem_limit: 768m
+    pids_limit: 128
+
+  storage:
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+
+  meta:
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+
+  studio:
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+
+  supavisor:
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+
+  api-gw:
+    cpus: 0.5
+    mem_limit: 512m
+    pids_limit: 64
+    # Kein Host-Port: öffentlich nur über den Traefik-Router für /auth/v1.
+    ports: !reset []
+    networks:
+      proxy:
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.agora-supabase-auth.rule: "Host(`agora.alexle135.de`) && PathPrefix(`/auth/v1`)"
+      traefik.http.routers.agora-supabase-auth.entrypoints: websecure
+      traefik.http.routers.agora-supabase-auth.tls.certresolver: letsencrypt
+      traefik.http.routers.agora-supabase-auth.priority: "100"
+      traefik.http.services.agora-supabase-auth.loadbalancer.server.port: "8000"
+
+networks:
+  proxy:
+    external: true

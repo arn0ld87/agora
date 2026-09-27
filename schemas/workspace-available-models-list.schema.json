@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "WorkspaceAvailableModel": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Window"
+        },
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "local_or_cloud": {
+          "default": "cloud",
+          "enum": [
+            "local",
+            "cloud"
+          ],
+          "title": "Local Or Cloud",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "model_label": {
+          "minLength": 1,
+          "title": "Model Label",
+          "type": "string"
+        },
+        "provider_connection_id": {
+          "minLength": 1,
+          "title": "Provider Connection Id",
+          "type": "string"
+        },
+        "provider_kind": {
+          "enum": [
+            "ollama",
+            "openai",
+            "google",
+            "anthropic",
+            "custom",
+            "ollama_cloud",
+            "openai_compatible",
+            "minimax",
+            "opencode_go",
+            "github_copilot",
+            "bedrock",
+            "cloud",
+            "codex_cli",
+            "claude_cli",
+            "unknown"
+          ],
+          "title": "Provider Kind",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "live",
+            "cached",
+            "fallback",
+            "custom"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "unavailable",
+            "degraded",
+            "unsupported",
+            "invalid_credentials"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unsupported_capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unsupported Capabilities",
+          "type": "array"
+        }
+      },
+      "required": [
+        "provider_connection_id",
+        "provider_kind",
+        "display_name",
+        "model_id",
+        "model_label",
+        "source",
+        "status"
+      ],
+      "title": "WorkspaceAvailableModel",
+      "type": "object"
+    },
+    "WorkspaceAvailableProvider": {
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "provider_connection_id": {
+          "minLength": 1,
+          "title": "Provider Connection Id",
+          "type": "string"
+        },
+        "provider_kind": {
+          "enum": [
+            "ollama",
+            "openai",
+            "google",
+            "anthropic",
+            "custom",
+            "ollama_cloud",
+            "openai_compatible",
+            "minimax",
+            "opencode_go",
+            "github_copilot",
+            "bedrock",
+            "cloud",
+            "codex_cli",
+            "claude_cli",
+            "unknown"
+          ],
+          "title": "Provider Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_connection_id",
+        "provider_kind",
+        "display_name"
+      ],
+      "title": "WorkspaceAvailableProvider",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/workspace-available-models-list.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceAvailableModel"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "providers": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceAvailableProvider"
+      },
+      "title": "Providers",
+      "type": "array"
+    },
+    "total": {
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "providers",
+    "total"
+  ],
+  "title": "WorkspaceAvailableModelsList",
+  "type": "object"
+}

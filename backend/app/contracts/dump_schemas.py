@@ -97,6 +97,12 @@ from app.contracts.workspace_contract import (
     WorkspaceMemberUpsert,
     WorkspaceSummary,
 )
+from app.contracts.workspace_provider_credentials_contract import (
+    WorkspaceAvailableModelsList,
+    WorkspaceProviderCredentialStatus,
+    WorkspaceProviderCredentialUpsert,
+    WorkspaceProviderCredentialsList,
+)
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationResponse,
@@ -200,6 +206,10 @@ CONTRACTS: dict[str, type] = {
     "workspace-membership.schema.json": WorkspaceMembership,
     "workspace-member-upsert.schema.json": WorkspaceMemberUpsert,
     "workspace-member-removal.schema.json": WorkspaceMemberRemoval,
+    "workspace-provider-credential-upsert.schema.json": WorkspaceProviderCredentialUpsert,
+    "workspace-provider-credential-status.schema.json": WorkspaceProviderCredentialStatus,
+    "workspace-provider-credentials-list.schema.json": WorkspaceProviderCredentialsList,
+    "workspace-available-models-list.schema.json": WorkspaceAvailableModelsList,
     "system-status-ollama.schema.json": SystemStatusOllama,
     "system-status-e2e.schema.json": SystemStatusE2E,
     # Neo4j-/Disk-Teilbaeume von /api/status (Issue #1466)

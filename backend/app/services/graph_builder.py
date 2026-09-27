@@ -6,6 +6,7 @@ Uses GraphStorage (Neo4j) to replace Zep Cloud API.
 import time
 import logging
 import threading
+from contextvars import copy_context
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
@@ -502,7 +503,10 @@ class GraphBuilderService:
 
         completed = 0
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
+            futures = {
+                pool.submit(copy_context().run, _process, idx, chunk): idx
+                for idx, chunk in enumerate(chunks)
+            }
             for future in as_completed(futures):
                 idx = futures[future]
                 try:

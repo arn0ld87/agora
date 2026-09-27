@@ -34,7 +34,7 @@ import sys
 import threading
 from datetime import datetime
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
@@ -270,6 +270,41 @@ def start_simulation(
         )
 
 
+def _spawn_simulation_process(
+    cmd: List[str],
+    sim_dir: Any,
+    log_file: Any,
+    env: Dict[str, str],
+    pass_fds: Tuple[int, ...],
+) -> subprocess.Popen:  # type: ignore[type-arg]
+    """Startet den OASIS-Subprozess und schliesst danach die geerbten FDs.
+
+    Der Subprozess erbt die Secret-Pipe beim exec() (``pass_fds``, #1688) —
+    die Kopie im Elternprozess (langlebiger Gunicorn-Worker) muss unabhaengig
+    vom Erfolg des Popen-Aufrufs geschlossen werden, sonst sammeln sich offene
+    Pipe-FDs an.
+    """
+    try:
+        return subprocess.Popen(
+            cmd,
+            cwd=str(sim_dir),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            bufsize=1,
+            env=env,
+            start_new_session=True,
+            pass_fds=pass_fds,
+        )
+    finally:
+        for fd in pass_fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
 def _start_simulation_impl(
     simulation_id: str,
     platform: str,
@@ -466,9 +501,18 @@ def _start_simulation_impl(
         main_log_path = sim_dir / "simulation.log"
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
-        env = _build_subprocess_env(runtime_env, sim_dir)
+        # Finding B1 (#1688): fuer Workspace-Runs traegt ``pass_fds`` die
+        # Lese-Seite einer Pipe mit dem Secret-Payload statt dem Klartext-Key
+        # im Env-Block (``build_route_subprocess_env`` verpackt ihn dafuer
+        # hinter einem privaten Marker, den ``_build_subprocess_env`` hier in
+        # die Pipe umwandelt). Fuer Operator-Runs ist ``secret_pass_fds`` immer
+        # leer und dieser Pfad unveraendert.
+        env, secret_pass_fds = _build_subprocess_env(runtime_env, sim_dir)
 
         # Slice 1c: Trace-Context via W3C-traceparent in den Subprozess propagieren.
+        # ``span.set_attribute`` traegt nie ``env``/``cmd``-Werte, die ein Secret
+        # enthalten koennten — ``cmd`` ist Skriptpfad + ``--config``/``--max-rounds``,
+        # kein Env-Dump (Finding B1 Review-Hinweis: kein Secret-Leak ins Tracing).
         with _tracer.start_as_current_span("agora.subprocess.spawn") as span:
             span.set_attribute("agora.simulation.id", simulation_id)
             span.set_attribute("agora.subprocess.cmd", " ".join(cmd))
@@ -478,16 +522,8 @@ def _start_simulation_impl(
             if traceparent:
                 env["TRACEPARENT"] = traceparent
 
-            process = subprocess.Popen(
-                cmd,
-                cwd=str(sim_dir),
-                stdout=main_log_file,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                bufsize=1,
-                env=env,
-                start_new_session=True,
+            process = _spawn_simulation_process(
+                cmd, sim_dir, main_log_file, env, secret_pass_fds
             )
 
         stdout_files[simulation_id] = main_log_file

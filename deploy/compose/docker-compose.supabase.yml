@@ -33,3 +33,4 @@ services:
 networks:
   agora-backend:
     external: true
+    name: ${AGORA_SUPABASE_BACKEND_NETWORK:-agora-backend}

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from ..config import Config
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 from .simulation_config_generator import (
     EventConfig,
@@ -263,7 +264,14 @@ def _register_run(state: "SimulationState", profile_count: int) -> None:
         artifacts=ArtifactLocator.existing_paths(
             {"simulation": ArtifactLocator.simulation_artifacts(state.simulation_id)}
         ),
-        metadata={"persona_source": "library", "persona_count": profile_count},
+        # Finding H1 (#1688): explizit persistierter credential_scope, sonst
+        # faellt die spaetere Routen-Aufloesung fuer diesen Run ausserhalb
+        # eines gebundenen Kontexts auf den Operator zurueck.
+        metadata={
+            "persona_source": "library",
+            "persona_count": profile_count,
+            **workspace_credential_metadata(),
+        },
     )
 
 

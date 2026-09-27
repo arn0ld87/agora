@@ -19,11 +19,15 @@ fehlendem Routing-Kandidaten bzw. fehlendem Store-Key mit HTTP 422.
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 from flask import Flask
 
 from app.api import simulation_bp
+from app.contracts.auth_contract import AuthType, Principal
+from app.contracts.workspace_contract import WorkspaceRole
+from app.security.principal_context import set_principal
 from app.utils.endpoints import LOCAL_NO_AUTH_API_KEY
 
 
@@ -40,6 +44,36 @@ def client():
 @pytest.fixture
 def captured_generator_kwargs():
     return {}
+
+
+def test_jwt_generate_profiles_rejected_before_graph_or_provider_lookup(monkeypatch):
+    app = Flask(__name__)
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
+    app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
+
+    @app.before_request
+    def bind_jwt_principal():
+        set_principal(Principal(
+            auth_type=AuthType.JWT,
+            user_id=UUID("11111111-1111-4111-8111-111111111111"),
+            workspace_id=UUID("22222222-2222-4222-8222-222222222222"),
+            roles=frozenset({WorkspaceRole.MEMBER}),
+        ))
+
+    reader = MagicMock()
+    generator = MagicMock()
+    monkeypatch.setattr("app.api.simulation_history.EntityReader", reader)
+    monkeypatch.setattr("app.api.simulation_history.OasisProfileGenerator", generator)
+
+    response = app.test_client().post(
+        "/api/simulation/generate-profiles", json={"graph_id": "graph_abc"}
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["code"] == "auth_forbidden"
+    reader.assert_not_called()
+    generator.assert_not_called()
 
 
 @pytest.fixture

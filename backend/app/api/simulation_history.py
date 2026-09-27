@@ -12,7 +12,9 @@ from typing import Any, Dict, Optional
 from flask import current_app, request
 
 from . import simulation_bp
+from ..contracts.auth_contract import AuthType
 from ..contracts.post_event_contract import Platform, PostCreatedEvent
+from ..security.principal_context import current_principal
 from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 from ..models.project import ProjectManager
 from ..repositories.report_repository import get_report_repository
@@ -186,6 +188,15 @@ def _resolve_profile_connection(resolved_route, llm_runtime):
 @handle_api_errors(logger=logger, log_prefix="GenerateProfileFailed")
 def generate_profiles():
     """Generate profiles directly from a graph without creating a simulation."""
+    principal = current_principal()
+    if principal is not None and principal.auth_type == AuthType.JWT:
+        # This endpoint has no persisted run to validate before worker threads
+        # access the graph and its embedding client.
+        return json_error(
+            ApiErrorCode.AUTH_FORBIDDEN,
+            status=403,
+            message="Direct profile generation is unavailable for workspace simulations",
+        )
     data = request.get_json() or {}
     graph_id = data.get('graph_id')
     if not graph_id:
