@@ -888,6 +888,7 @@
       "integrations": "Integrations",
       "usersTeams": "Users & Teams",
       "apiKeys": "API Keys",
+      "providerKeys": "Provider keys",
       "llmProviders": "LLM Providers",
       "embedding": "Embedding configuration",
       "profile": "Profile"

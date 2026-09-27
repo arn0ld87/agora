@@ -38,6 +38,26 @@
           </RouterLink>
         </template>
       </SidebarGroup>
+
+      <!-- Workspace-Einstellungen fuer JWT-Besucher (BYOK, #1688): ohne
+           Betreiberzugang bleibt nur die Pflege der eigenen Provider-Keys. -->
+      <SidebarGroup
+        v-else
+        group-key="workspace-settings"
+        :label="t('sidebar.settings.label')"
+        icon="settings"
+        :active-route-names="['WorkspaceProviderKeys']"
+      >
+        <RouterLink
+          :to="{ name: 'WorkspaceProviderKeys' }"
+          class="sidebar-sub-item"
+          active-class="sidebar-sub-item--active"
+          exact-active-class="sidebar-sub-item--active"
+          @click="handleNavClick"
+        >
+          {{ t('sidebar.settings.providerKeys') }}
+        </RouterLink>
+      </SidebarGroup>
     </nav>
 
     <!-- Footer collapse toggle -->
