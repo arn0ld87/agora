@@ -1,6 +1,9 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import LogDrawer from './components/LogDrawer.vue'
+import DemoPreviewStaticView from './components/v4/shell/DemoPreviewStaticView.vue'
+import { useDemoPreview } from './composables/useDemoPreview'
 import { useLogDrawer } from './composables/useLogDrawer'
 
 // Muss zu den .fade-*-Regeln in assets/styles/global.css passen.
@@ -13,6 +16,19 @@ const TRANSITION_DURATION = { enter: 400, leave: 160 }
 const { visible: logDrawerOpen, close: closeLogDrawer, handleHotkey } = useLogDrawer()
 onMounted(() => window.addEventListener('keydown', handleHotkey))
 onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
+
+// Demo-Vorschau (#1697): DemoPreviewFrame darf NICHT mehr aussen um
+// RouterView liegen — jede Settings-View rendert ihr eigenes AppShell, ein
+// Wrapper hier sperrte also Sidebar/Topbar mit oder liess sie fuer statische
+// Seiten ganz verschwinden. Betreiber-Sperre + Vorschau-Banner leben jetzt
+// im Hauptbereich von AppShell.vue selbst. Nur fuer statische Vorschau-
+// Routen (meta.demoPreview:'static') wird hier die echte Route-Komponente
+// durch DemoPreviewStaticView ersetzt — sie mountet nie (kein Betreiber-Fetch).
+const route = useRoute()
+const demoPreview = useDemoPreview()
+const showStaticPreview = computed(
+  () => route.meta?.demoPreview === 'static' && demoPreview.value,
+)
 </script>
 
 <template>
@@ -23,7 +39,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
          aus und die leave-Phase endet nie: die URL wechselt, der alte View
          bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
     <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
-      <component :is="Component" />
+      <DemoPreviewStaticView v-if="showStaticPreview" />
+      <component :is="Component" v-else />
     </transition>
   </router-view>
 

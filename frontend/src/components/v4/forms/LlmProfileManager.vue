@@ -338,7 +338,13 @@ async function handleSetDefault(profile: LlmProfile): Promise<void> {
 // Init
 // ---------------------------------------------------------------------------
 onMounted(() => {
-  void store.fetch()
+  // Profile sind operator_only — in der Demo-Vorschau (#1697) liefert der
+  // Endpoint 403. store.fetch() setzt den Fehler bereits sichtbar in
+  // store.error; hier nur die unhandled rejection abfangen, damit die
+  // uebrige Ansicht (Connections/Picker) unbeeintraechtigt bleibt.
+  // Promise.resolve(...) statt direktem .catch(), weil createTestingPinia
+  // gestubbte Actions synchron `undefined` zurueckgibt (kein Promise).
+  void Promise.resolve(store.fetch()).catch(() => undefined)
   // Connections laden, damit das Connection-Lookup in pickerAiRef/onPickerChange
   // bereitsteht.
   void providersStore.loadConnections()

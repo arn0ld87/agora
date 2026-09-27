@@ -629,6 +629,43 @@ describe('Codex-Runde 7 (#1617)', () => {
   })
 })
 
+describe('Demo-Vorschau (#1697)', () => {
+  it('demoPreview bleibt false ohne demo_mode, auch mit JWT-Session', async () => {
+    mocks._svcGet.mockResolvedValueOnce(AUTH_CFG_ENABLED)
+    const store = useAuthStore()
+    await store.loadConfig()
+    store.session = { access_token: 'x' } as never
+
+    expect(store.demoMode).toBe(false)
+    expect(store.operatorAccess).toBe(false)
+    expect(store.demoPreview).toBe(false)
+  })
+
+  it('demoPreview wird true, wenn das Backend demo_mode meldet', async () => {
+    mocks._svcGet.mockResolvedValueOnce({
+      success: true,
+      data: { ...AUTH_CFG_ENABLED.data, demo_mode: true },
+    })
+    const store = useAuthStore()
+    await store.loadConfig()
+    store.session = { access_token: 'x' } as never
+
+    expect(store.demoMode).toBe(true)
+    expect(store.demoPreview).toBe(true)
+  })
+
+  it('demoPreview bleibt false ohne Session, auch mit demo_mode', async () => {
+    mocks._svcGet.mockResolvedValueOnce({
+      success: true,
+      data: { ...AUTH_CFG_ENABLED.data, demo_mode: true },
+    })
+    const store = useAuthStore()
+    await store.loadConfig()
+
+    expect(store.demoPreview).toBe(false)
+  })
+})
+
 describe('Codex-Runde 8 (#1617)', () => {
   it('leert den Speicher nicht, wenn die Abmeldung beim Server klappt', async () => {
     mocks._sbGetSession.mockResolvedValue({

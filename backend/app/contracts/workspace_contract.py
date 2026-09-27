@@ -106,6 +106,9 @@ class AuthConfigResponse(BaseModel):
     #: Realtime-Kanal für Listen-Projektionen (#1618). Ein Change-Event ist
     #: nur ein Signal zum Nachladen über die API, nie selbst Datenquelle.
     realtime_enabled: bool = False
+    #: Server läuft mit ``AGORA_DEMO_MODE`` (#1697). Gate für die
+    #: Demo-Vorschau im Frontend, kein Ersatz für eine echte Auth-Prüfung.
+    demo_mode: bool = False
 
 
 __all__ = [

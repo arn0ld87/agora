@@ -15,6 +15,11 @@ export const AuthConfigResponseSchema = z
     supabase_anon_key: z.string().nullable().default(null),
     // Realtime für Listen-Projektionen (#1618): nur Invalidierungssignal.
     realtime_enabled: z.boolean().default(false),
+    // Oeffentliche Demo-Instanz (#1697): erlaubt Besuchern mit Supabase-Session
+    // eine nicht-editierbare Vorschau der Betreiber-Einstellungen statt eines
+    // Redirects. Optional mit Default false — aeltere Server ohne das Feld
+    // brechen sonst am strikten Zod-Parse.
+    demo_mode: z.boolean().default(false),
   })
   .strict()
 

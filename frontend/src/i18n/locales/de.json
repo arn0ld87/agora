@@ -890,11 +890,45 @@
       "apiKeys": "API-Schlüssel",
       "llmProviders": "LLM-Anbieter",
       "embedding": "Embedding-Konfiguration",
-      "profile": "Profil"
+      "profile": "Profil",
+      "providerKeys": "Provider-Keys",
+      "previewBadge": "Vorschau"
     },
     "footer": {
       "collapse": "Einklappen",
       "expand": "Ausklappen"
+    }
+  },
+  "demoPreview": {
+    "banner": {
+      "text": "Demo-Vorschau – Diese Einstellungen verwaltet der Betreiber. Du kannst dir alles ansehen, aber nichts ändern.",
+      "manageKeys": "Eigene Provider-Keys verwalten"
+    },
+    "static": {
+      "auditLogs": {
+        "title": "Audit-Logs",
+        "bulletCount": "4",
+        "bullet1": "Live-Log-Stream aller Jobs (Graph, Personas, Simulation, Bericht)",
+        "bullet2": "Filter nach Stufe und Level",
+        "bullet3": "Streaming per SSE",
+        "bullet4": "Nützlich zur Nachvollziehbarkeit jedes Laufs"
+      },
+      "apiKeys": {
+        "title": "API-Schlüssel",
+        "bulletCount": "5",
+        "bullet1": "Workspace-API-Keys mit Präfix „ago_…“",
+        "bullet2": "Scopes pro Key",
+        "bullet3": "Verschlüsselt gespeichert (Fernet)",
+        "bullet4": "Jederzeit widerrufbar",
+        "bullet5": "Für Automatisierung über die REST-API"
+      },
+      "profile": {
+        "title": "Profil",
+        "bulletCount": "3",
+        "bullet1": "Name",
+        "bullet2": "Avatar",
+        "bullet3": "Sprache der Oberfläche"
+      }
     }
   },
   "cmd": {

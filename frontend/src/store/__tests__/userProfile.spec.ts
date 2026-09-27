@@ -159,7 +159,10 @@ describe('useUserProfileStore', () => {
     expect(_getOnboardingStatus).toHaveBeenCalledTimes(1)
   })
 
-  it('Test 3: Fehlerpfad sperrt die App nicht (loaded=true, onboardingRequired=false)', async () => {
+  it('Test 3: Profil-Fehler sperrt die App nicht und reisst den erfolgreichen Onboarding-Status nicht mit (#1697)', async () => {
+    // allSettled statt Promise.all: ein 403 auf GET /api/profile (Demo-Vorschau,
+    // operator_only) darf den bereits erfolgreichen Onboarding-Status nicht
+    // verwerfen — vorher hing der Status am gescheiterten Profil-Call.
     _getProfile.mockRejectedValue(new Error('Backend offline'))
     _getOnboardingStatus.mockResolvedValue(makeOnboardingStatus())
 
@@ -168,6 +171,22 @@ describe('useUserProfileStore', () => {
 
     expect(store.loaded).toBe(true)
     expect(store.loading).toBe(false)
+    expect(store.profile).toBeNull()
+    expect(store.onboarding.state).toEqual(makeOnboardingStatus().state)
+    expect(store.onboardingRequired).toBe(true)
+    expect(store.error).toBe('Backend offline')
+  })
+
+  it('Test 3b: Onboarding-Status-Fehler sperrt die App nicht (Fail-open, onboardingRequired=false)', async () => {
+    _getProfile.mockResolvedValue(makeProfile())
+    _getOnboardingStatus.mockRejectedValue(new Error('Backend offline'))
+
+    const store = useUserProfileStore()
+    await store.ensureLoaded()
+
+    expect(store.loaded).toBe(true)
+    expect(store.loading).toBe(false)
+    expect(store.profile).toEqual(makeProfile())
     expect(store.onboardingRequired).toBe(false)
     expect(store.error).toBe('Backend offline')
   })

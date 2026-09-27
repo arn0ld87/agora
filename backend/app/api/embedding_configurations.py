@@ -104,6 +104,12 @@ def _ensure_known_provider_connection(connection_id: str) -> None:
 @llm_bp.route("/embedding/configurations", methods=["GET"])
 @handle_api_errors(logger=logger)
 def list_embedding_configurations():
+    # Demo-Vorschau (#1688): Teil des JWT-Readonly-Allowlists
+    # (DEMO_READONLY_OPERATOR_ENDPOINTS). ``EmbeddingConfiguration`` trägt
+    # keine Endpoint-/Base-URL — nur ``provider_connection_id`` als
+    # Referenz. Es gibt hier also kein URL-Feld zu maskieren; die
+    # Betreiber-Base-URL bleibt dort unmaskiert, wo sie tatsächlich steht
+    # (``list_provider_connections``, aus Typgründen — siehe dort).
     scope_raw: Optional[str] = request.args.get("scope")
     scope: str | None = None
     if scope_raw:

@@ -23,6 +23,7 @@ const fakeAuth = vi.hoisted(() => ({
   jwtEnabled: false,
   isAuthenticated: false,
   operatorAccess: true,
+  demoPreview: false,
   sessionWithoutWorkspace: false,
   passwordRecovery: false,
   ensureInit: vi.fn(async () => {}),
@@ -54,6 +55,7 @@ beforeEach(async () => {
   fakeAuth.jwtEnabled = false
   fakeAuth.isAuthenticated = false
   fakeAuth.operatorAccess = true
+  fakeAuth.demoPreview = false
   fakeAuth.sessionWithoutWorkspace = false
   fakeAuth.passwordRecovery = false
   fakeAuth.ensureInit.mockClear()
@@ -121,14 +123,25 @@ describe('Betreiber-Routen im JWT-Modus', () => {
   })
 
   it.each(['/settings/general', '/settings/api-keys', '/onboarding'])(
-    'hält Supabase-Nutzer von %s fern',
+    'laesst Besucher mit Session auf %s (Demo-Vorschau statt Redirect)',
     async (path) => {
+      // Im echten Store impliziert operatorAccess=false immer eine Session
+      // und damit demoPreview=true — der Mock bildet beides nach.
       fakeAuth.operatorAccess = false
+      fakeAuth.demoPreview = true
       await go(path)
-      expect(router.currentRoute.value.path).not.toBe(path)
-      expect(router.currentRoute.value.name).toBe('Shelf')
+      expect(router.currentRoute.value.path).toBe(path)
     },
   )
+
+  it('leitet Betreiber-Routen um, wenn weder operatorAccess noch demoPreview vorliegen (Verteidigungslinie)', async () => {
+    // Dieser Zustand ist im echten Store nicht erreichbar (operatorAccess=false
+    // impliziert demoPreview=true), der Guard bleibt aber defensiv korrekt.
+    fakeAuth.operatorAccess = false
+    fakeAuth.demoPreview = false
+    await go('/settings/general')
+    expect(router.currentRoute.value.name).toBe('Shelf')
+  })
 
   it('lässt Betreiber (Master-Token in hybrid) auf die Einstellungen', async () => {
     fakeAuth.operatorAccess = true

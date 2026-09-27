@@ -46,6 +46,7 @@ Ohne `AGORA_SUPABASE_JWT_ISSUER` ist `hybrid` gleich `legacy`; der Startlog sagt
 - **Principal:** Jeder zugelassene Request trägt einen Principal (`app/security/principal_context.py`). Master-Token, `ago_`-Keys und der offene Modus landen im Default-Workspace mit Rolle `owner`.
 - **Scopes aus der Rolle:** `owner` und `admin` erhalten `admin`, `member` erhält `write`, `viewer` erhält `read`. `require_scope` liest sie aus dem Principal.
 - **Betreiber-Blueprints:** `settings`, `settings/llm-profiles`, `api-keys`, `logs`, `onboarding`, `profile` und `llm` verwalten prozessweiten Zustand. Für JWT-Nutzer sind sie gesperrt (`403 operator_only`).
+- **Demo-Ausnahme (#1688):** Mit `AGORA_DEMO_MODE=true` lässt der Guard für JWT-Nutzer GET/HEAD auf einer fest benannten, einzeln geprüften Menge lesender Betreiber-Endpoints durch (`DEMO_READONLY_OPERATOR_ENDPOINTS` in `app/utils/auth.py`: Provider-Katalog, Provider-Connections, LLM-Routing-Defaults, Embedding-Konfigurationen, Onboarding-Status); Mutationen und alle übrigen Betreiber-Endpoints bleiben `403 operator_only`.
 - **Tickets:** Ein Ticket trägt den Principal seines Ausstellers in der signierten Scope-Bindung (`<scope>@<typ>~<workspace>~<user>~<rollen>`). Mit aktivem JWT gilt nur ein gebundenes Ticket. Clients dürfen kein `@` im Scope senden.
 
 ---

@@ -24,7 +24,7 @@ from flask import Blueprint, current_app, request
 from werkzeug.exceptions import BadRequest
 from pydantic import ValidationError
 
-from ..config import Config
+from ..config import Config, is_demo_mode
 from ..contracts.auth_contract import AuthType
 from ..contracts.workspace_contract import (
     DEFAULT_WORKSPACE_ID,
@@ -83,6 +83,7 @@ def auth_config():
         supabase_url=(Config.SUPABASE_URL or None) if jwt_enabled else None,
         supabase_anon_key=(Config.SUPABASE_ANON_KEY or None) if jwt_enabled else None,
         realtime_enabled=jwt_enabled and Config.SUPABASE_REALTIME,
+        demo_mode=is_demo_mode(),
     )
     return json_success(response.model_dump(mode='json'))
 
