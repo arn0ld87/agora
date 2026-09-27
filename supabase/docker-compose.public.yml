@@ -52,7 +52,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: proxy
-      traefik.http.routers.agora-supabase-auth.rule: "Host(`agora.alexle135.de`) && PathPrefix(`/auth/v1`)"
+      traefik.http.routers.agora-supabase-auth.rule: "Host(`${AGORA_PUBLIC_HOST:?AGORA_PUBLIC_HOST (oeffentlicher Demo-Host) fehlt}`) && PathPrefix(`/auth/v1`)"
       traefik.http.routers.agora-supabase-auth.entrypoints: websecure
       traefik.http.routers.agora-supabase-auth.tls.certresolver: letsencrypt
       traefik.http.routers.agora-supabase-auth.priority: "100"

@@ -89,6 +89,12 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
    PostgreSQL, Supavisor, Studio und alle übrigen Supabase-Pfade bleiben intern.
    Der öffentliche DNS-Eintrag von `<agora-host>` muss auf den öffentlichen
    Reverse-Proxy zeigen; eine Tailscale-Adresse ist von außen nicht erreichbar.
+   Beide Overlays lesen den Host aus `AGORA_PUBLIC_HOST` in der `.env` des
+   Demo-Checkouts und des Supabase-Stacks (Pflichtwert, z. B.
+   `AGORA_PUBLIC_HOST=ag.agora.alexle135.de`). Liegt der Host zwei Ebenen unter
+   der Zone (`ag.agora.…`), deckt das Cloudflare-Universal-Zertifikat
+   (`*.alexle135.de`) ihn nicht ab: den Eintrag dann **DNS only** anlegen, das
+   Zertifikat stellt Traefik (`letsencrypt`) aus.
 
    ```bash
    AGORA_SUPABASE_BACKEND_NETWORK=agora-demo-backend docker compose -p agora-demo \

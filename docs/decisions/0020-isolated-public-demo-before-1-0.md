@@ -8,7 +8,8 @@
 
 ADR-0019 hält den Produktivbetrieb bis 1.0 bei einem Nutzer und deaktiviert
 offene Registrierung. Für eine Bewerbung soll Agora dennoch von externen
-Personen unter `agora.alexle135.de` registriert und mit eigenen Provider-Keys
+Personen unter einer eigenen öffentlichen Subdomain (`AGORA_PUBLIC_HOST`, z. B.
+`ag.agora.alexle135.de`) registriert und mit eigenen Provider-Keys
 benutzt werden können. Die bisherige Agora-Instanz enthält persönliche
 Bestandsdaten und nutzt eine Datenbank eines anderen Supabase-Projekts.
 
