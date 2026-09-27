@@ -17,7 +17,11 @@ from app.utils.logger import get_logger
 
 logger = get_logger("agora.bootstrap_public_demo_providers")
 
-_PROVIDERS = ("openai", "google", "minimax")
+# Alle BYOK-faehigen Provider aus der Registry (#1688), damit die Demo
+# dieselbe Anbieterauswahl zeigt wie die Workspace-Key-API.
+_PROVIDERS = tuple(
+    definition.provider_kind for definition in LlmProviderRegistry.workspace_key_definitions()
+)
 
 
 def bootstrap_public_demo_providers() -> None:

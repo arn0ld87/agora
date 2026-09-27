@@ -2,6 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('@/components/v4/shell/AppShell.vue', () => ({
+  default: { name: 'AppShell', template: '<div class="app-shell-stub"><slot /></div>' },
+}))
+
+const SUPPORTED = [
+  { provider_id: 'openai', display_name: 'OpenAI' },
+  { provider_id: 'google', display_name: 'Google Gemini' },
+  { provider_id: 'minimax', display_name: 'MiniMax' },
+  { provider_id: 'ollama_cloud', display_name: 'Ollama (Cloud)' },
+  { provider_id: 'bedrock', display_name: 'Amazon Bedrock' },
+]
 
 const auth = vi.hoisted(() => ({
   activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -24,7 +35,7 @@ import WorkspaceProviderKeysView from '../WorkspaceProviderKeysView.vue'
 
 beforeEach(() => {
   auth.roles['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'] = 'owner'
-  api.list.mockReset().mockResolvedValue({ items: [], total: 0 })
+  api.list.mockReset().mockResolvedValue({ items: [], total: 0, supported_providers: SUPPORTED })
   api.save.mockReset()
   api.remove.mockReset()
 })
@@ -43,6 +54,17 @@ describe('WorkspaceProviderKeysView', () => {
     expect((wrapper.find('#workspace-key-openai').element as HTMLInputElement).value).toBe('')
     expect(wrapper.text()).not.toContain('private-api-key')
     expect(wrapper.text()).toContain('auth.workspaceProviderKeys.configured')
+  })
+
+  it('renders every provider the backend offers inside the app shell', async () => {
+    const wrapper = mount(WorkspaceProviderKeysView)
+    await flushPromises()
+
+    expect(wrapper.find('.app-shell-stub').exists()).toBe(true)
+    for (const provider of SUPPORTED) {
+      expect(wrapper.find(`#workspace-key-${provider.provider_id}`).exists()).toBe(true)
+      expect(wrapper.text()).toContain(provider.display_name)
+    }
   })
 
   it('does not offer key editing to a viewer', async () => {

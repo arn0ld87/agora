@@ -58,6 +58,9 @@ DEMO_MODE_FORBIDDEN_ENV_VARS: tuple[str, ...] = (
     'ANTHROPIC_API_KEY',
     'OPENROUTER_API_KEY',
     'OLLAMA_API_KEY',
+    # Bedrock ist ebenfalls BYOK-faehig; ein Betreiber-Bearer-Token darf in
+    # der Demo nie als Fallback bereitliegen.
+    'AWS_BEARER_TOKEN_BEDROCK',
     # EMBEDDING_API_KEY fehlt bewusst: er gilt nur fuer den per
     # AGORA_SHARED_EMBEDDING_BASE_URL freigegebenen Betreiber-Endpoint (gns3).
     'LLM_BOOST_API_KEY',

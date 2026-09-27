@@ -43,6 +43,8 @@ Der aktive Workspace kommt immer aus dem Principal (`X-Agora-Workspace`, vom Gua
 | `GET /api/workspaces/current/members` | jedes Mitglied | Mitglieder des aktiven Workspace |
 | `PUT /api/workspaces/current/members/<user_id>` | Owner, Admin | Mitglied anlegen oder Rolle ändern, Body `{"role": "owner"\|"admin"\|"member"\|"viewer"}` |
 | `DELETE /api/workspaces/current/members/<user_id>` | Owner, Admin, jeder für sich selbst | Mitglied entfernen, Antwort `{"user_id": ...}` (`WorkspaceMemberRemoval`) |
+| `GET /api/workspaces/current/provider-credentials` | jedes Mitglied (nur JWT) | Status der eigenen Provider-Keys ohne Key-Werte plus `supported_providers` (alle BYOK-fähigen Anbieter aus `LlmProviderRegistry.workspace_key_definitions()`, #1688) |
+| `PUT`/`DELETE /api/workspaces/current/provider-credentials/<provider_id>` | Owner, Admin (nur JWT) | eigenen Key setzen (Body `{"api_key": "..."}`) oder löschen; Anbieter außerhalb von `supported_providers`: `400 invalid_provider` |
 
 Regeln: Owner-Rollen vergibt und entzieht nur ein Owner (`403 owner_required`); der letzte Owner bleibt (`409 last_owner`); Member und Viewer verwalten niemanden (`403 role_required`). Ein neues Mitglied muss in `auth.users` existieren (`404 not_found`), ist `auth.users` nicht lesbar: `503 user_directory_unavailable`. Ohne `DATABASE_URL` antworten Bootstrap und Mitgliederpfade mit `503 workspaces_unavailable`. Ein Body, der kein JSON-Objekt ist, ergibt `400`. `POST`, `PUT` und `DELETE` sind rate-limitiert (`AGORA_WORKSPACE_RATE_LIMIT_*`, `429` mit `Retry-After`), erst nach dem Guard und je Nutzer; Anfragen ohne gültige Anmeldung zählen nicht.
 

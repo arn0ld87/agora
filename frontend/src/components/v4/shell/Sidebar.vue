@@ -131,6 +131,8 @@ const settingsRouteNames = [
   'SettingsLlmRouting',
   'SettingsLlmProviders',
   'SettingsEmbedding',
+  // Deep-Link aus dem Demo-Vorschau-Banner: Gruppe muss auch hier auto-oeffnen.
+  'WorkspaceProviderKeys',
 ]
 
 /** IA-Matrix Slice 7.3 — nur wire-Ziele in der Sidebar.
