@@ -71,7 +71,8 @@ def test_workspace_key_api_keeps_secret_out_of_response_and_enforces_role(
 
     principal["value"] = _principal(BOB_WORKSPACE)
     response = client.get("/api/workspaces/current/provider-credentials")
-    assert response.get_json()["data"] == {"items": [], "total": 0}
+    data = response.get_json()["data"]
+    assert (data["items"], data["total"]) == ([], 0)
 
     principal["value"] = _principal(role=WorkspaceRole.VIEWER)
     response = client.put(
@@ -146,3 +147,32 @@ def test_available_models_never_probes_redirected_connection(key_environment, mo
     response = app.test_client().get("/api/workspaces/current/available-models")
     assert response.status_code == 200
     assert response.get_json()["data"] == {"items": [], "providers": [], "total": 0}
+
+
+def test_workspace_key_api_lists_every_byok_provider_from_registry(key_environment, monkeypatch):
+    """#1688: the key page offers every BYOK-capable provider, not a fixed trio."""
+    monkeypatch.setattr(workspace_api, "current_principal", lambda: _principal())
+    app = Flask(__name__)
+    app.register_blueprint(workspace_api.workspaces_bp, url_prefix="/api/workspaces")
+    client = app.test_client()
+
+    response = client.get("/api/workspaces/current/provider-credentials")
+    supported = {
+        entry["provider_id"]: entry["display_name"]
+        for entry in response.get_json()["data"]["supported_providers"]
+    }
+    assert set(supported) == {"openai", "google", "minimax", "ollama_cloud", "bedrock"}
+    assert supported["bedrock"] == "Amazon Bedrock"
+
+    for provider_id in ("ollama_cloud", "bedrock"):
+        response = client.put(
+            f"/api/workspaces/current/provider-credentials/{provider_id}",
+            json={"api_key": f"{provider_id}-private-key"},
+        )
+        assert response.status_code == 200
+    for provider_id in ("ollama", "codex_cli", "claude_cli", "openai_compatible", "anthropic"):
+        response = client.put(
+            f"/api/workspaces/current/provider-credentials/{provider_id}",
+            json={"api_key": "not-accepted-key"},
+        )
+        assert (response.status_code, response.get_json()["code"]) == (400, "invalid_provider")

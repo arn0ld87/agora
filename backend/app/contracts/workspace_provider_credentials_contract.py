@@ -28,11 +28,21 @@ class WorkspaceProviderCredentialStatus(BaseModel):
     updated_at: datetime | None = None
 
 
+class WorkspaceSupportedProvider(BaseModel):
+    """A provider this workspace may store its own key for (BYOK)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: str = Field(min_length=1, max_length=64)
+    display_name: str = Field(min_length=1)
+
+
 class WorkspaceProviderCredentialsList(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[WorkspaceProviderCredentialStatus]
     total: int = Field(ge=0)
+    supported_providers: list[WorkspaceSupportedProvider] = Field(default_factory=list)
 
 
 class WorkspaceAvailableProvider(BaseModel):

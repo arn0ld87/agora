@@ -40,7 +40,9 @@ def test_bootstrap_seeds_secret_free_connections_and_default(tmp_path, monkeypat
     bootstrap_public_demo_providers()
 
     connections = ProviderConnectionStore().list_connections()
-    assert {connection.id for connection in connections} == {"openai", "google", "minimax"}
+    assert {connection.id for connection in connections} == {
+        "openai", "google", "minimax", "ollama_cloud", "bedrock",
+    }
     assert all(connection.secret_ref is None for connection in connections)
     assert WorkspaceRoutingStore().load().global_default.provider_id == "openai"
 

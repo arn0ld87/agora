@@ -108,10 +108,16 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
      -f deploy/compose/docker-compose.public.yml up -d --build
    ```
 
-5. Im **Demo-Container** die kanonischen OpenAI-, Google- und MiniMax-
-   Provider-Verbindungen ohne Betreiber-Key anlegen. Der idempotente Bootstrap
-   verweigert vorhandene Betreiber-Secrets und fremde Base-URLs. Danach kann
-   jeder bestätigte Nutzer Modelle nur mit seinem eigenen Key abrufen:
+5. Im **Demo-Container** die kanonischen Provider-Verbindungen aller
+   BYOK-fähigen Anbieter ohne Betreiber-Key anlegen (OpenAI, Google Gemini,
+   MiniMax, Ollama Cloud, Amazon Bedrock; Quelle ist
+   `LlmProviderRegistry.workspace_key_definitions()`). Der idempotente Bootstrap
+   verweigert vorhandene Betreiber-Secrets und fremde Base-URLs und ergänzt bei
+   erneutem Lauf neu hinzugekommene Anbieter. Danach kann jeder bestätigte
+   Nutzer Modelle nur mit seinem eigenen Key abrufen. Nicht BYOK-fähig sind
+   lokales Ollama und die CLI-Brücken (Betreiber-Hardware bzw. -Session),
+   `openai_compatible` (freie URL), Anthropic (kein nativer Chat, #1284) sowie
+   GitHub Copilot und OpenCode Go (kein Discovery-Adapter):
 
    ```bash
    docker compose -p agora-demo -f docker-compose.yml -f docker-compose.prod.yml \
@@ -135,7 +141,7 @@ bestätigte Adresse oder ein fremder Workspace erreichbar wird.
    Die `.env` des Demo-Checkouts darf keine der folgenden Variablen enthalten:
    `LLM_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`,
    `MINIMAX_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`,
-   `OLLAMA_API_KEY`, `LLM_BOOST_API_KEY`, `LLM_BASE_URL`,
+   `OLLAMA_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`, `LLM_BOOST_API_KEY`, `LLM_BASE_URL`,
    `LLM_BOOST_BASE_URL`, `TAVILY_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
    `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE_URL`. Dasselbe gilt
    für `backend/instance/settings.json` des Demo-Checkouts: dort persistierte

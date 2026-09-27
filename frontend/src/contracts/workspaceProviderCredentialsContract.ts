@@ -15,10 +15,19 @@ export const WorkspaceProviderCredentialStatusSchema = z
   .strict()
 export type WorkspaceProviderCredentialStatus = z.infer<typeof WorkspaceProviderCredentialStatusSchema>
 
+export const WorkspaceSupportedProviderSchema = z
+  .object({
+    provider_id: z.string().min(1).max(64),
+    display_name: z.string().min(1),
+  })
+  .strict()
+export type WorkspaceSupportedProvider = z.infer<typeof WorkspaceSupportedProviderSchema>
+
 export const WorkspaceProviderCredentialsListSchema = z
   .object({
     items: z.array(WorkspaceProviderCredentialStatusSchema),
     total: z.number().int().nonnegative(),
+    supported_providers: z.array(WorkspaceSupportedProviderSchema).default([]),
   })
   .strict()
 export type WorkspaceProviderCredentialsList = z.infer<typeof WorkspaceProviderCredentialsListSchema>

@@ -42,6 +42,7 @@ from ..contracts.workspace_provider_credentials_contract import (
     WorkspaceProviderCredentialStatus,
     WorkspaceProviderCredentialUpsert,
     WorkspaceProviderCredentialsList,
+    WorkspaceSupportedProvider,
 )
 from ..services.llm_provider_registry import LlmProviderRegistry
 from ..services.provider_connection_store import ProviderConnectionStore
@@ -362,14 +363,7 @@ def _credential_principal(*, write: bool = False):
 
 
 def _provider_accepts_workspace_key(provider_id: str) -> bool:
-    definition = LlmProviderRegistry.connection_definition(provider_id)
-    return bool(
-        definition is not None
-        and definition.auth_mode == 'api_key'
-        and definition.transport == 'http'
-        and definition.adapter_kind not in ('unsupported', 'anthropic')
-        and definition.default_base_url is not None
-    )
+    return LlmProviderRegistry.accepts_workspace_key(provider_id)
 
 
 @workspaces_bp.route('/current/provider-credentials', methods=['GET'])
@@ -378,7 +372,16 @@ def list_workspace_provider_credentials():
     if error:
         return error
     entries = WorkspaceProviderCredentialsStore().list_entries(principal.workspace_id)
-    response = WorkspaceProviderCredentialsList(items=entries, total=len(entries))
+    supported = [
+        WorkspaceSupportedProvider(
+            provider_id=definition.provider_kind,
+            display_name=definition.display_name,
+        )
+        for definition in LlmProviderRegistry.workspace_key_definitions()
+    ]
+    response = WorkspaceProviderCredentialsList(
+        items=entries, total=len(entries), supported_providers=supported
+    )
     return json_success(response.model_dump(mode='json'))
 
 

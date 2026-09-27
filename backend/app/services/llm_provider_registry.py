@@ -234,6 +234,36 @@ class LlmProviderRegistry:
         definition = LlmProviderRegistry.connection_definition(provider_kind)
         return definition is not None and definition.auth_mode == "session"
 
+    @staticmethod
+    def accepts_workspace_key(provider_kind: str) -> bool:
+        """Ob ein Workspace einen eigenen Key fuer diesen Provider hinterlegen darf.
+
+        Einzige Quelle fuer die BYOK-Anbieterliste (#1688): API, Demo-Bootstrap
+        und Frontend lesen alle hier. Zugelassen sind nur HTTP-Provider mit
+        API-Key und fester kanonischer Endpoint-URL, deren Chat-Pfad existiert.
+        Ausgeschlossen bleiben lokale Dienste und CLI-Bruecken (laufen auf
+        Betreiber-Hardware bzw. -Session), ``openai_compatible`` (freie URL),
+        Anthropic (kein nativer Chat-Transport, #1284) und Provider ohne
+        Discovery-Adapter.
+        """
+        definition = LlmProviderRegistry.connection_definition(provider_kind)
+        return bool(
+            definition is not None
+            and definition.auth_mode == "api_key"
+            and definition.transport == "http"
+            and definition.adapter_kind not in ("unsupported", "anthropic")
+            and definition.default_base_url is not None
+        )
+
+    @staticmethod
+    def workspace_key_definitions() -> tuple[ProviderConnectionDefinition, ...]:
+        """Alle Provider, fuer die ein Workspace eigene Keys hinterlegen darf."""
+        return tuple(
+            definition
+            for definition in _CONNECTION_DEFINITIONS
+            if LlmProviderRegistry.accepts_workspace_key(definition.provider_kind)
+        )
+
     def get_providers(
         self, session_api_keys: Optional[dict] = None
     ) -> list[ProviderDescriptor]:
