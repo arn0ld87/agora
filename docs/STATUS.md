@@ -472,6 +472,8 @@ Die Compose-Overlays trennen Demo-Artefakte, Neo4j, Redis und Supabase von der b
 
 Seit dem Startup-Guard (#1688) verweigert das Backend mit `AGORA_DEMO_MODE=true` den Start, sobald eine Betreiber-Provider-Env-Var (`LLM_API_KEY`, `OPENAI_API_KEY` u. a., siehe `app.config.DEMO_MODE_FORBIDDEN_ENV_VARS`) gesetzt oder in `instance/settings.json` persistiert ist, und `bootstrap_public_demo_providers.py` schreibt in diesem Fall nichts; ohne Demo-Modus warnt der Start bei aktivem Supabase-JWT nur, dass der Workspace-Credential-Default-Deny dann nicht greift.
 
+Seit der Demo-Vorschau (#1688) sehen JWT-Besucherinnen jede Betreiber-Einstellungsseite als ausgegraute, nicht editierbare Vorschau statt einer Weiterleitung; editierbar bleiben nur eigene Workspace-Provider-Keys und eigene Runs, und der Guard lässt dafür nur unter `AGORA_DEMO_MODE=true` eine geprüfte, fest benannte Menge lesender Betreiber-Endpoints (`DEMO_READONLY_OPERATOR_ENDPOINTS` in `backend/app/utils/auth.py`) exklusiv für GET/HEAD durch — Mutationen und alle übrigen Betreiber-Endpoints bleiben für JWT `403 operator_only`.
+
 ### Realtime für Listen-Projektionen (#1618)
 
 Seit #1618 lädt das Frontend Ablage und Run-Listen nach, sobald sich im aktiven Workspace ein Projekt, eine Simulation, ein Run oder ein Report ändert. Das Ereignis ist nur ein Signal: Die Daten kommen weiter über die Flask-API, der Payload wird nicht gelesen. Das SSE laufender Läufe bleibt unverändert, ebenso das Polling als Rückfallebene.

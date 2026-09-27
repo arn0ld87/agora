@@ -1,0 +1,3 @@
+### Geändert
+
+- **Demo-Instanz zeigt jede Menüseite als Demo-Vorschau statt Weiterleitung:** JWT-Besucherinnen sehen jetzt alle Betreiber-Einstellungen (Provider, Routing, Embedding, Onboarding, API-Keys, Audit-Logs, Profil, Team) — bearbeitbar bleiben nur eigene Workspace-Provider-Keys (`/workspace/provider-keys`) und eigene Runs. Der Backend-Guard lässt dafür eine geprüfte, kleine Menge lesender Betreiber-Endpoints (`app.utils.auth.DEMO_READONLY_OPERATOR_ENDPOINTS`: Provider-Katalog, Provider-Connections, LLM-Routing-Defaults, Embedding-Konfigurationen, Onboarding-Status) exklusiv für GET/HEAD und ausschließlich unter `AGORA_DEMO_MODE=true` durch; Mutationen und alle übrigen Betreiber-Endpoints bleiben für JWT in jedem Modus `403 operator_only`. (#1688)

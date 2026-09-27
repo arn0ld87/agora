@@ -42,7 +42,7 @@ from flask import Blueprint, Flask, current_app, request
 
 from . import signed_ticket
 from .api_responses import json_error
-from ..config import Config, supabase_jwt_configured, supabase_jwt_settings
+from ..config import Config, is_demo_mode, supabase_jwt_configured, supabase_jwt_settings
 from ..contracts.auth_contract import AuthType, Principal
 from ..security.principal_context import (
     WORKSPACE_HEADER,
@@ -336,6 +336,25 @@ _GUARD_INSTALLED_ATTR = "_agora_guard_installed"
 _GUARD_TOKEN_ONLY_ATTR = "_agora_guard_token_only"  # noqa: S105 - Attributname, kein Secret
 _GUARD_TENANT_ACCESS_ATTR = "_agora_guard_tenant_access"
 
+# Öffentliche Demo-Instanz (#1688): Besucherinnen loggen sich per Supabase-JWT
+# ein und sollen jede Einstellungsseite ansehen können, auch die eigentlich
+# Betreiber-only sind (Provider, Routing, Embedding, Onboarding). Diese
+# Endpoints bleiben nur **lesend** offen — reine GET/HEAD-Abfragen ohne
+# Secret- oder Fremdnutzer-Daten in der Antwort (einzeln gegen den jeweiligen
+# View-Code geprüft, siehe PR #1688). Mutationen bleiben für JWT-Prinzipale
+# in jedem Modus 403 (operator_only), ausserhalb von AGORA_DEMO_MODE greift
+# dieselbe Ausnahme nicht. Nie erweitern ohne erneute Prüfung: API-Keys,
+# Audit-Logs und Nutzerprofile bleiben bewusst aussen vor.
+DEMO_READONLY_OPERATOR_ENDPOINTS: frozenset[str] = frozenset(
+    {
+        "llm.list_providers",  # GET /api/llm/providers — statischer Provider-Katalog, keine Secrets
+        "llm.list_provider_connections",  # GET /api/llm/provider-connections — Metadaten/Status, kein Key-Material
+        "llm.get_routing_defaults",  # GET /api/llm/routing/defaults — Workspace-Routing-Defaults, keine Secrets
+        "llm.list_embedding_configurations",  # GET /api/llm/embedding/configurations — Konfig-Metadaten, keine Secrets
+        "onboarding.get_onboarding_status",  # GET /api/onboarding[/] — Wizard-Status, Single-User, keine Secrets
+    }
+)
+
 
 def install_blueprint_guard(
     bp: Blueprint,
@@ -388,7 +407,18 @@ def install_blueprint_guard(
         if principal is None or principal.auth_type != AuthType.JWT:
             return None
         if not getattr(bp, _GUARD_TENANT_ACCESS_ATTR, True) or _view_is_operator_only():
-            return json_error("forbidden", status=403, code="operator_only")
+            if (
+                is_demo_mode()
+                and request.method in ("GET", "HEAD")
+                and request.endpoint in DEMO_READONLY_OPERATOR_ENDPOINTS
+            ):
+                # Demo-Vorschau (#1688): lesender Zugriff für JWT-Besucherinnen
+                # auf einzelne, geprüft-secretfreie Betreiber-Endpoints. Alles
+                # andere (Mutation, andere Endpoints, Nicht-Demo-Betrieb) fällt
+                # weiterhin auf den 403 darunter.
+                pass
+            else:
+                return json_error("forbidden", status=403, code="operator_only")
         # Jede Kennung im Request muss im Workspace des Nutzers liegen, bevor
         # eine View Dateien, Graphen oder Metadaten dazu liest (#1614).
         if first_foreign_reference(principal.workspace_id) is not None:

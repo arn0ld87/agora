@@ -118,6 +118,14 @@ def _probe_response(connection: ProviderConnection) -> tuple:
 @llm_bp.route("/provider-connections", methods=["GET"])
 @handle_api_errors(logger=logger)
 def list_provider_connections():
+    # Demo-Vorschau (#1688): dieser Endpoint ist Teil des JWT-Readonly-
+    # Allowlists (DEMO_READONLY_OPERATOR_ENDPOINTS). ``base_url`` bleibt
+    # trotzdem unmaskiert — ``ProviderConnection.base_url`` ist als
+    # ``PublicBaseUrl | LocalOllamaBaseUrl`` typisiert und das Frontend
+    # parst die Antwort strikt gegen den gespiegelten Zod-Schema
+    # (unwrapAndParse, kein Silent-Fallback bei Schema-Drift). Ein
+    # Platzhalter wie "(vom Betreiber verwaltet)" wäre keine valide URL und
+    # würde die Demo-Vorschau der Integrations-Seite crashen.
     connections = get_provider_connection_store().list_connections()
     return json_success(
         {
