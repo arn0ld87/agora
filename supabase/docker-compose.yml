@@ -164,10 +164,10 @@ services:
       # Gestaltete deutsche Mails; GoTrue laedt die Vorlagen per HTTP von der
       # Agora-Oberflaeche (frontend/public/email/). Ist die URL nicht erreichbar,
       # faellt GoTrue auf seine englische Standardvorlage zurueck.
-      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: ${MAILER_SUBJECT_CONFIRMATION:-Willkommen bei Agora – bitte E-Mail bestätigen}
-      GOTRUE_MAILER_SUBJECTS_RECOVERY: ${MAILER_SUBJECT_RECOVERY:-Agora – Passwort zurücksetzen}
-      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: ${MAILER_SUBJECT_EMAIL_CHANGE:-Agora – neue E-Mail-Adresse bestätigen}
-      GOTRUE_MAILER_SUBJECTS_INVITE: ${MAILER_SUBJECT_INVITE:-Einladung zu Agora}
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: ${MAILER_SUBJECT_CONFIRMATION:-Bestätige deine E-Mail-Adresse für Agora}
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: ${MAILER_SUBJECT_RECOVERY:-Passwort für Agora zurücksetzen}
+      GOTRUE_MAILER_SUBJECTS_EMAIL_CHANGE: ${MAILER_SUBJECT_EMAIL_CHANGE:-Neue E-Mail-Adresse für Agora bestätigen}
+      GOTRUE_MAILER_SUBJECTS_INVITE: ${MAILER_SUBJECT_INVITE:-Du bist zu Agora eingeladen}
       GOTRUE_MAILER_TEMPLATES_CONFIRMATION: ${MAILER_TEMPLATES_BASE_URL:-${SITE_URL}/email}/confirmation.html
       GOTRUE_MAILER_TEMPLATES_RECOVERY: ${MAILER_TEMPLATES_BASE_URL:-${SITE_URL}/email}/recovery.html
       GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: ${MAILER_TEMPLATES_BASE_URL:-${SITE_URL}/email}/email_change.html
