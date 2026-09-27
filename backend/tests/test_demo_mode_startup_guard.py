@@ -197,3 +197,36 @@ def test_non_demo_mode_ignores_operator_keys(monkeypatch):
         assert "AGORA_DEMO_MODE=true verbietet" not in str(exc), (
             f"Demo-Guard darf ohne AGORA_DEMO_MODE nicht feuern: {exc}"
         )
+
+
+def test_validate_does_not_require_llm_api_key_in_demo_mode(monkeypatch):
+    """Das Public-Overlay leert LLM_API_KEY; der Guard verbietet ihn sogar.
+    Config.validate() darf den Start dann nicht an genau diesem Feld scheitern
+    lassen, ausserhalb des Demo-Modus bleibt er Pflicht.
+    """
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "LLM_API_KEY", "")
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    assert not any("LLM_API_KEY" in e for e in Config.validate())
+
+    monkeypatch.delenv("AGORA_DEMO_MODE")
+    assert any("LLM_API_KEY" in e for e in Config.validate())
+
+
+def test_operator_credential_context_allows_startup_work_in_demo_mode(monkeypatch):
+    """Startup-Arbeit ohne Lauf (Embedding-Probe, Storage-Init) laeuft im
+    Demo-Modus nur im ausdruecklich gebundenen Operator-Scope; ungebunden
+    bleibt der implizite Rueckfall gesperrt.
+    """
+    from app.services import llm_routing_seed as seed
+
+    monkeypatch.setenv("AGORA_DEMO_MODE", "true")
+    with pytest.raises(ValueError, match="no persisted credential scope"):
+        seed.workspace_credential_id_for_run(None)
+
+    with seed.operator_credential_context():
+        assert seed.workspace_credential_id_for_run(None) is None
+
+    with pytest.raises(ValueError, match="no persisted credential scope"):
+        seed.workspace_credential_id_for_run(None)

@@ -737,6 +737,22 @@ def workspace_credential_id_for_run(run_id: str | None) -> UUID | None:
 
 
 @contextmanager
+def operator_credential_context() -> Iterator[None]:
+    """Bind the explicit operator scope for process-level work without a run.
+
+    Used by the startup embedding probe: it is operator work by definition
+    (operator endpoint, operator key) and has no run whose persisted scope
+    could be resolved. Without this binding a demo instance refuses the
+    implicit operator fallback and the backend never starts.
+    """
+    token = _credential_workspace.set(_OPERATOR_SENTINEL)
+    try:
+        yield
+    finally:
+        _credential_workspace.reset(token)
+
+
+@contextmanager
 def workspace_credential_context_for_run(run_id: str) -> Iterator[UUID | None]:
     """Bind a persisted run's validated credential scope to its job thread."""
     workspace_id = workspace_credential_id_for_run(run_id)

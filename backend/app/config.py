@@ -1081,7 +1081,10 @@ class Config:
                 "SECRET_KEY uses a placeholder value (%s). Acceptable in debug only.",
                 secret_key_value,
             )
-        if not cls.LLM_API_KEY:
+        # Im Demo-Modus kommen LLM-Keys ausschliesslich aus den Workspace-
+        # Connections (BYOK); ein Betreiber-LLM_API_KEY ist dort sogar verboten
+        # (DEMO_MODE_FORBIDDEN_ENV_VARS).
+        if not cls.LLM_API_KEY and not is_demo_mode():
             errors.append("LLM_API_KEY not configured (set to any non-empty value, e.g. 'ollama')")
         if not cls.NEO4J_URI:
             errors.append("NEO4J_URI not configured")
