@@ -317,6 +317,27 @@ describe('Sidebar', () => {
     })
   })
 
+  describe('Deep-Link auf /workspace/provider-keys (#1688)', () => {
+    it('oeffnet die geschlossene Einstellungen-Gruppe und zeigt Provider-Keys als aktives Ziel', async () => {
+      // Kein localStorage-State: Gruppe waere ohne Route-Match geschlossen.
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      const auth = useAuthStore()
+      auth.config = DEMO_CONFIG
+      auth.session = { access_token: 'tok', user: { id: 'u1' } } as never
+
+      await router.push({ name: 'WorkspaceProviderKeys' })
+      const wrapper = mount(Sidebar, {
+        global: { plugins: [router, pinia, i18n] },
+      })
+      await wrapper.vm.$nextTick()
+
+      const subItems = wrapper.findAll('.sidebar-sub-item')
+      expect(subItems.length).toBeGreaterThan(0)
+      expect(subItems[0]?.text()).toContain('Provider-Keys')
+    })
+  })
+
   describe('Besucher ohne Betreiber-Zugang OHNE Demo-Modus (regulaerer JWT-Mandant, #1697)', () => {
     it('blendet die Einstellungen-Gruppe komplett aus — kein Vorschau-Badge, keine Provider-Keys-Verknuepfung', async () => {
       lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
