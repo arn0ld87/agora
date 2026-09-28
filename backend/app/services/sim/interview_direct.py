@@ -30,6 +30,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ...utils.logger import get_logger
+from ...utils.path_safety import validate_path_id
 from ..artifact_store import resolve_default_store
 
 logger = get_logger("agora.interview_direct")
@@ -63,6 +64,9 @@ def _load_personas(
     CSV neben den Simulationsdaten. Fehler werden geloggt und als leere Liste
     behandelt — der Aufrufer entscheidet, ob das ein harter Fehler ist.
     """
+    # SEC-1 (CodeQL py/path-injection #372, #373): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     if platform == "twitter":
         profiles_path = os.path.join(run_state_dir, simulation_id, "twitter_profiles.csv")
         if not os.path.exists(profiles_path):
@@ -567,6 +571,9 @@ def interview_agents_batch_direct(
         ValueError: Simulation existiert nicht oder es sind für keine Plattform
             Personas persistiert.
     """
+    # SEC-1 (CodeQL py/path-injection #374): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
