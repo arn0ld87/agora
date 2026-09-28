@@ -185,6 +185,7 @@ const adoptModalOpen = ref(false);
 function openAdoptModal(): void {
   adoptDraft.providerConnectionId = providerConnections.value[0]?.id ?? '';
   adoptDraft.lastError = null;
+  store.clearLegacyConflict();
   adoptModalOpen.value = true;
 }
 
@@ -196,7 +197,14 @@ async function submitAdoptLegacy(): Promise<void> {
   adoptDraft.isSubmitting = true;
   adoptDraft.lastError = null;
   try {
-    const adopted = await store.syncLegacy(adoptDraft.providerConnectionId);
+    const result = await store.syncLegacy(adoptDraft.providerConnectionId);
+    if (result.outcome === 'conflict') {
+      // Kein Fehlertext: die Divergenz-Warnung unten im Modal zeigt beide
+      // Werte. Der Server hat nichts geschrieben (#1417) — der Operator
+      // entscheidet, nicht die UI.
+      return;
+    }
+    const adopted = result.configuration as EmbeddingConfiguration;
     try {
       await store.testConfiguration(adopted.id);
     } catch {
@@ -653,6 +661,25 @@ function errorMessage(err: unknown): string {
         <p v-if="adoptDraft.lastError" class="text-warn" data-testid="adopt-legacy-error">
           {{ adoptDraft.lastError }}
         </p>
+
+        <!-- Divergenz-Warnung (#1417): die aktive Store-Konfiguration weicht
+             von Config.EMBEDDING_* ab. Der Server hat nichts geschrieben —
+             der Konflikt wird nur gemeldet, nie automatisch aufgeloest. -->
+        <div v-if="store.legacyConflict" class="text-warn" data-testid="adopt-legacy-conflict">
+          <p>
+            {{ $t('embedding.adopt.conflict.title', 'Aktive Konfiguration weicht von Config.EMBEDDING_* ab — nichts wurde uebernommen.') }}
+          </p>
+          <dl>
+            <dt>{{ $t('embedding.adopt.conflict.active', 'Aktiv (Store)') }}</dt>
+            <dd data-testid="adopt-legacy-conflict-active">
+              {{ store.legacyConflict.active.provider_kind }} / {{ store.legacyConflict.active.model_id }} ({{ store.legacyConflict.active.dimensions }}d)
+            </dd>
+            <dt>{{ $t('embedding.adopt.conflict.legacy', 'Config.EMBEDDING_*') }}</dt>
+            <dd data-testid="adopt-legacy-conflict-legacy">
+              {{ store.legacyConflict.legacy.provider_kind }} / {{ store.legacyConflict.legacy.model_id }} ({{ store.legacyConflict.legacy.dimensions }}d)
+            </dd>
+          </dl>
+        </div>
 
         <div class="modal-actions">
           <button type="button" class="btn btn--secondary" @click="adoptModalOpen = false">

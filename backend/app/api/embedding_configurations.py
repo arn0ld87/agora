@@ -14,7 +14,11 @@ Routen unter ``/api/llm/embedding/configurations``:
 * ``POST /<id>/test`` fuehrt die Probe aus und aktualisiert den Status.
 * ``POST /sync-legacy`` uebernimmt ``Config.EMBEDDING_*`` als neue,
   persistente Konfiguration (Status ``proposed``), sofern noch keine
-  aktive globale Konfiguration existiert.
+  aktive globale Konfiguration existiert. Existiert bereits eine aktive
+  globale Konfiguration, antwortet die Route mit 200 (``outcome=noop``),
+  wenn sie identisch ist, oder mit 409 (``outcome=conflict``), wenn sie in
+  Provider, Modell oder Dimension abweicht — dann wird nichts geschrieben
+  (#1417).
 * ``GET /index-versions`` (unter ``/api/llm/embedding``) listet alle
   ``EmbeddingIndexVersion``-Datensaetze, neueste zuerst — macht den
   ``building``-Status einer laufenden Migration und die weiterhin
@@ -298,16 +302,26 @@ def sync_legacy_embedding_configuration():
             code="no_legacy_config",
         )
 
-    config = get_embedding_configuration_service().sync_legacy(
+    result = get_embedding_configuration_service().sync_legacy(
         provider_connection_id=request_model.provider_connection_id,
         provider_kind=view.provider_kind,
         model_id=view.model_id,
         dimensions=view.dimensions,
     )
-    if config is None:
+    if result.outcome == "conflict":
+        assert result.active_configuration is not None  # Vertrag garantiert dies
+        assert result.legacy is not None
         return json_error(
-            "Es existiert bereits eine aktive globale Embedding-Konfiguration",
+            "Aktive Embedding-Konfiguration weicht von Config.EMBEDDING_* ab",
             status=409,
-            code="active_configuration_exists",
+            code="embedding_legacy_conflict",
+            extra={
+                "details": {
+                    "active_configuration": result.active_configuration.model_dump(
+                        mode="json"
+                    ),
+                    "legacy": result.legacy.model_dump(mode="json"),
+                }
+            },
         )
-    return json_success({"configuration": config.model_dump(mode="json")})
+    return json_success(result.model_dump(mode="json"))

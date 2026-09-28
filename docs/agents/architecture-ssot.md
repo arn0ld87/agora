@@ -38,13 +38,13 @@
 
 ## Bekannte SSoT-Ausnahme
 
-**Embedding #1417:** Der `EmbeddingConfigurationStore` ist die beabsichtigte persistente Wahrheit, aber noch nicht jeder produktive Runtime-Consumer bezieht seine effektive Konfiguration ausschließlich von dort. Einige Pfade können weiterhin `Config.EMBEDDING_*`/Env lesen.
+**Embedding #1417:** Der `EmbeddingConfigurationStore` ist die alleinige Wahrheit für die aktive Embedding-Konfiguration. `Config.EMBEDDING_*`/`VECTOR_DIM` (Env) bleiben ausschließlich Bootstrap:
 
-Daher bis zur Behebung nicht behaupten:
-
-```text
-aktive Embedding-Konfiguration in der UI == garantiert effektive Runtime-Konfiguration
-```
+* **SSoT:** eine aktive globale `EmbeddingConfiguration` im `EmbeddingConfigurationStore` — sobald sie existiert, entscheidet sie, nicht die Env.
+* **Bewusster Bootstrap (kein zweiter Wahrheitspfad):** die aus `Config.EMBEDDING_*` abgeleitete Legacy-Sicht (`build_legacy_view()`), solange noch keine aktive globale Konfiguration existiert, sowie der Stub-Modus (`_NoopReEmbedder`) für Tests und Cold-Start-Migrationen ohne vorhandene Vektoren.
+* **Divergenz wird gemeldet, nie automatisch übernommen** (Maintainer-Entscheidung 2026-09): weicht die Env vom Store ab, meldet `POST /sync-legacy` das als `outcome="conflict"` (HTTP 409, beide Werte im Body) statt die Env-Werte zu übernehmen, und `/readyz` markiert den `embedding_config`-Check als `state="degraded"` (beide Werte im Body). In keinem Fall schreibt das Backend die Env-Werte in den Store oder den Store-Wert in `Config.*`.
+* **Fail-Fast bei der Migration:** `EmbeddingMigrationService.run()` verifiziert vor dem ersten Vektor-Write per Probe-Embed die tatsächliche Ausgabedimension des konfigurierten Embedders gegen die Ziel-Indexversion; eine Abweichung beendet den Job `failed`, ohne einen Vektor zu schreiben, die Quellversion bleibt `active`.
+* **Offen:** ein echter Modellwechsel-Lauf gegen das produktive Neo4j-/Embedding-Backend (armserver-Cutover, #1592) ist noch nicht gefahren — die oben genannten Garantien sind strukturell (Contracts, Tests), aber noch nicht gegen die reale Migrationslast auf armserver verifiziert.
 
 Chat-Routing und Embedding-Konfiguration bleiben strukturell getrennt.
 

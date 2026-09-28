@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "EmbeddingLegacyDivergence": {
+      "additionalProperties": false,
+      "description": "Ein Vergleichswert (Provider/Modell/Dimension) fuer Env-vs-Store-\nKonflikte (#1417).\n\nWird sowohl fuer den Legacy-Sync-Konflikt (``sync_legacy``) als auch fuer\nden ``/readyz``-Check (``_check_embedding_config``) genutzt, damit beide\ndenselben Divergenz-Vertrag teilen statt zwei Ad-hoc-Formen zu erfinden.",
+      "properties": {
+        "dimensions": {
+          "exclusiveMinimum": 0,
+          "title": "Dimensions",
+          "type": "integer"
+        },
+        "model_id": {
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "provider_kind": {
+          "enum": [
+            "ollama",
+            "openai",
+            "google",
+            "custom",
+            "ollama_cloud",
+            "openai_compatible"
+          ],
+          "title": "Provider Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_kind",
+        "model_id",
+        "dimensions"
+      ],
+      "title": "EmbeddingLegacyDivergence",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/readiness-embedding-config-check.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ein Eintrag im ``embedding_config``-Schl\u00fcssel der `/readyz`-Antwort (#1417).\n\nErg\u00e4nzt das bisherige ``{ok, detail}``-Format (weiterhin in Kraft f\u00fcr die\n\u00fcbrigen Checks) um ein maschinenlesbares ``state`` und \u2014 im Konfliktfall \u2014\nbeide Vergleichswerte:\n\n* ``ok``            \u2014 ``EMBEDDING_MODEL``/``VECTOR_DIM`` sind intern\n  konsistent, UND falls eine aktive Store-Konfiguration existiert,\n  stimmt sie mit ihnen \u00fcberein. ``store``/``env`` bleiben ``None``.\n* ``misconfigured``  \u2014 ``EMBEDDING_MODEL``/``VECTOR_DIM`` fehlen oder\n  sind bereits intern inkonsistent (unabh\u00e4ngig vom Store).\n* ``degraded``       \u2014 eine aktive Store-Konfiguration existiert und\n  weicht in Provider, Modell oder Dimension von ``Config.EMBEDDING_*``\n  ab. Maintainer-Entscheidung (2026-09): der Konflikt wird gemeldet,\n  nichts wird automatisch \u00fcbernommen \u2014 der Store bleibt die Wahrheit.\n  ``store``/``env`` tragen beide Werte.",
+  "properties": {
+    "detail": {
+      "title": "Detail",
+      "type": "string"
+    },
+    "env": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EmbeddingLegacyDivergence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "state": {
+      "enum": [
+        "ok",
+        "misconfigured",
+        "degraded"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "store": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EmbeddingLegacyDivergence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "ok",
+    "detail",
+    "state"
+  ],
+  "title": "EmbeddingConfigReadinessCheck",
+  "type": "object"
+}

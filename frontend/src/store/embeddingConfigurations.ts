@@ -17,6 +17,8 @@ import type {
   EmbeddingConfiguration,
   EmbeddingConfigurationScope,
   EmbeddingIndexVersion,
+  EmbeddingLegacyDivergence,
+  EmbeddingLegacySyncResult,
   EmbeddingMigrationJob,
   EmbeddingProviderKind,
   OllamaPullReport,
@@ -68,6 +70,19 @@ interface EmbeddingConfigurationsState {
   indexVersions: EmbeddingIndexVersion[];
   indexVersionsLoading: boolean;
   indexVersionsError: string | null;
+
+  /**
+   * Divergenz aus dem letzten ``syncLegacy()``-Aufruf (#1417): die aktive
+   * Konfiguration weicht in Provider, Modell oder Dimension von
+   * ``Config.EMBEDDING_*`` ab. Der Server hat nichts geschrieben — der
+   * Store bleibt die Wahrheit (Maintainer-Entscheidung 2026-09). ``null``
+   * sobald ein Sync ohne Konflikt lief oder der Operator die Warnung
+   * geschlossen hat.
+   */
+  legacyConflict: {
+    active: EmbeddingConfiguration;
+    legacy: EmbeddingLegacyDivergence;
+  } | null;
 }
 
 export const useEmbeddingConfigurationsStore = defineStore(
@@ -87,6 +102,7 @@ export const useEmbeddingConfigurationsStore = defineStore(
       indexVersions: [],
       indexVersionsLoading: false,
       indexVersionsError: null,
+      legacyConflict: null,
     }),
 
     getters: {
@@ -219,20 +235,42 @@ export const useEmbeddingConfigurationsStore = defineStore(
       /**
        * Uebernimmt die Legacy-Config.EMBEDDING_*-Konfiguration einer
        * Provider-Connection als kanonische, proposed EmbeddingConfiguration
-       * (Issue #1193). Nach dem Sync muessen Liste und Active-Konfiguration
-       * neu geladen werden, damit die UI den neuen Vorschlag sofort sieht.
+       * (Issue #1193, erweitert #1417).
+       *
+       * Drei Ausgaenge, siehe ``EmbeddingLegacySyncResult``:
+       * ``created``/``noop`` laden Liste und aktive Konfiguration neu und
+       * loeschen einen vorherigen ``legacyConflict``. ``conflict`` schreibt
+       * nichts serverseitig — ``legacyConflict`` wird gesetzt, damit die
+       * View beide Werte (aktive Store-Konfiguration vs. Legacy-Sicht)
+       * anzeigen kann, statt nur einen generischen Fehlertext.
        */
       async syncLegacy(
         providerConnectionId: string,
-      ): Promise<EmbeddingConfiguration> {
-        const synced = await api.syncLegacyEmbeddingConfiguration(
+      ): Promise<EmbeddingLegacySyncResult> {
+        const result = await api.syncLegacyEmbeddingConfiguration(
           providerConnectionId,
         );
+        if (result.outcome === "conflict") {
+          this.legacyConflict = {
+            active: result.active_configuration as EmbeddingConfiguration,
+            legacy: result.legacy as EmbeddingLegacyDivergence,
+          };
+          return result;
+        }
+        this.legacyConflict = null;
         await Promise.all([
           this.loadConfigurations(),
           this.loadActiveConfiguration(),
         ]);
-        return synced;
+        return result;
+      },
+
+      /**
+       * Setzt eine zuvor angezeigte Divergenz-Warnung zurueck (#1417) —
+       * z. B. wenn der Operator das Uebernahme-Modal erneut oeffnet.
+       */
+      clearLegacyConflict(): void {
+        this.legacyConflict = null;
       },
 
       // ----------------------------------------------------------------

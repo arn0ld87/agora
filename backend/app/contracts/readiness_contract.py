@@ -23,6 +23,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from .embedding_contract import EmbeddingLegacyDivergence
+
 
 class PostgresReadinessCheck(BaseModel):
     """Ein Eintrag im ``postgres``-Schlüssel der `/readyz`-Antwort."""
@@ -32,3 +34,31 @@ class PostgresReadinessCheck(BaseModel):
     ok: bool
     detail: str
     state: Literal['ok', 'unavailable', 'disabled']
+
+
+class EmbeddingConfigReadinessCheck(BaseModel):
+    """Ein Eintrag im ``embedding_config``-Schlüssel der `/readyz`-Antwort (#1417).
+
+    Ergänzt das bisherige ``{ok, detail}``-Format (weiterhin in Kraft für die
+    übrigen Checks) um ein maschinenlesbares ``state`` und — im Konfliktfall —
+    beide Vergleichswerte:
+
+    * ``ok``            — ``EMBEDDING_MODEL``/``VECTOR_DIM`` sind intern
+      konsistent, UND falls eine aktive Store-Konfiguration existiert,
+      stimmt sie mit ihnen überein. ``store``/``env`` bleiben ``None``.
+    * ``misconfigured``  — ``EMBEDDING_MODEL``/``VECTOR_DIM`` fehlen oder
+      sind bereits intern inkonsistent (unabhängig vom Store).
+    * ``degraded``       — eine aktive Store-Konfiguration existiert und
+      weicht in Provider, Modell oder Dimension von ``Config.EMBEDDING_*``
+      ab. Maintainer-Entscheidung (2026-09): der Konflikt wird gemeldet,
+      nichts wird automatisch übernommen — der Store bleibt die Wahrheit.
+      ``store``/``env`` tragen beide Werte.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    ok: bool
+    detail: str
+    state: Literal['ok', 'misconfigured', 'degraded']
+    store: EmbeddingLegacyDivergence | None = None
+    env: EmbeddingLegacyDivergence | None = None

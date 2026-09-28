@@ -14,6 +14,11 @@ Engine.
 
 Was der Service garantiert (Slice 4.3):
 
+* **Dimensions-Fail-Fast** (#1417): ``run()`` verifiziert vor dem ersten
+  Batch per Probe-Embed die tatsaechliche Ausgabedimension des Embedders
+  gegen die Ziel-Indexversion. Weicht sie ab, wird kein einziger Vektor
+  geschrieben, der Job endet ueber denselben Rollback-Pfad wie jeder
+  andere Fehlschlag, und die Quellversion bleibt unangetastet aktiv.
 * **Vollstaendiger Lifecycle** mit Statusuebergaengen aus dem Vertrag:
   ``pending -> running -> validating -> completed | rolled_back | failed``.
 * **Checkpoint** nach jedem verarbeiteten Batch (``processed`` und
@@ -62,6 +67,7 @@ from app.contracts.embedding_contract import (
     EmbeddingMigrationStatus,
 )
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore
+from app.utils.path_safety import validate_path_id
 
 
 class ReEmbedder(Protocol):
@@ -90,6 +96,19 @@ class ReEmbedder(Protocol):
         fact_target_index_name: str | None = None,
         fact_target_property_key: str | None = None,
     ) -> EmbeddingMigrationStatus: ...
+
+    def probe_dimensions(self, configuration: EmbeddingConfiguration) -> int:
+        """Embeddet einen kurzen Testtext und liefert die tatsaechliche
+        Ausgabedimension (#1417, Fail-Fast vor dem ersten Vektor-Write).
+
+        Optionales Protocol-Mitglied — ``EmbeddingMigrationService.run()``
+        prueft mit ``getattr(..., "probe_dimensions", None)``, ob der
+        injizierte Re-Embedder es anbietet, und ueberspringt den Vorab-
+        Check sonst (z. B. Test-Stubs). ``Neo4jReEmbedder`` implementiert
+        es ueber denselben ``embedder_factory``, den ``run()`` fuer den
+        eigentlichen Loop nutzt.
+        """
+        ...
 
 
 class _NoopReEmbedder:
@@ -255,6 +274,41 @@ class EmbeddingMigrationService:
                 update={"started_at": started_at}
             ),
         )
+
+        # Fail-Fast (#1417): bevor ein einziger Batch gelesen oder ein
+        # Vektor geschrieben wird, verifiziert ein Probe-Embed die
+        # tatsaechliche Ausgabedimension des konfigurierten Embedders gegen
+        # die Ziel-Indexversion. Ein Modell-/Provider-Missverhaeltnis (z. B.
+        # ein falscher Modellname in der Konfiguration) soll nicht erst
+        # nach einem vollstaendigen, folgenlosen Durchlauf des gesamten
+        # Graphen sichtbar werden. ``probe_dimensions`` ist optional — fehlt
+        # es (Test-Stubs, ``_NoopReEmbedder``), greift weiterhin die
+        # bestehende Per-Batch-Pruefung in ``Neo4jReEmbedder._drain``.
+        probe = getattr(self._re_embedder, "probe_dimensions", None)
+        if probe is not None:
+            try:
+                actual_dimensions = probe(config)
+            except Exception as exc:  # noqa: BLE001 — jeder Probe-Fehler ist ein Abbruchgrund
+                job = self._load_job(job_id)
+                self._rollback_target_index(job)
+                return self._update_job_status(
+                    job,
+                    status="failed",
+                    error_message=f"Probe-Embed fehlgeschlagen: {type(exc).__name__}: {exc}",
+                )
+            if actual_dimensions != target_index.dimensions:
+                job = self._load_job(job_id)
+                self._rollback_target_index(job)
+                return self._update_job_status(
+                    job,
+                    status="failed",
+                    error_message=(
+                        f"Probe-Embed lieferte Dimension {actual_dimensions}, "
+                        f"Ziel-Index v{target_index.version} erwartet "
+                        f"{target_index.dimensions} — kein Vektor geschrieben, "
+                        "alter Index bleibt aktiv."
+                    ),
+                )
 
         def _persist_checkpoint(progress: EmbeddingMigrationProgress) -> None:
             latest = self._load_job(job_id)
@@ -503,8 +557,16 @@ class EmbeddingMigrationService:
         return f"job-{secrets.token_hex(12)}"
 
     def _job_path(self, job_id: str):
+        """Loest den Job-Pfad auf. ``job_id`` kommt bei ``get``/``run``/
+        ``cancel`` unmittelbar aus der URL (``/embedding/migrations/<job_id>``)
+        und ist damit user-kontrolliert — ``validate_path_id`` erzwingt die
+        SEC-1-Boundary (``[A-Za-z0-9_-]+``, kein ``..``, kein Separator),
+        bevor der Wert in den Dateinamen eingesetzt wird (CodeQL
+        ``py/path-injection``, Alerts 357/358 auf #1417).
+        """
         from pathlib import Path
         import os
+        validate_path_id(job_id, field_name="job_id")
         data_dir = os.environ.get("AGORA_DATA_DIR") or str(
             Path(__file__).resolve().parents[2] / "data"
         )
@@ -526,7 +588,15 @@ class EmbeddingMigrationService:
         return job
 
     def _load_job_or_none(self, job_id: str) -> EmbeddingMigrationJob | None:
-        path = self._job_path(job_id)
+        # Ein ``job_id``, der die SEC-1-Boundary verletzt (siehe
+        # ``_job_path``), kann strukturell nie ein existierender Job sein —
+        # ``None`` fuehrt denselben 404-Pfad wie eine fehlende Datei.
+        from app.utils.path_safety import PathTraversalError
+
+        try:
+            path = self._job_path(job_id)
+        except PathTraversalError:
+            return None
         if not path.exists():
             return None
         return EmbeddingMigrationJob.model_validate_json(

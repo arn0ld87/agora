@@ -100,9 +100,15 @@ beforeEach(() => {
 });
 
 describe("embeddingConfigurations store — syncLegacy()", () => {
-  it("ruft die API mit der Provider-Connection-ID und laedt Liste + Active neu", async () => {
+  it("ruft die API mit der Provider-Connection-ID und laedt Liste + Active neu bei outcome='created'", async () => {
     const synced = makeConfiguration({ id: "cfg-synced" });
-    mock(api.syncLegacyEmbeddingConfiguration).mockResolvedValue(synced);
+    const result_ = {
+      outcome: "created" as const,
+      configuration: synced,
+      active_configuration: null,
+      legacy: null,
+    };
+    mock(api.syncLegacyEmbeddingConfiguration).mockResolvedValue(result_);
     mock(api.listEmbeddingConfigurations).mockResolvedValue({
       configurations: [synced],
     });
@@ -115,10 +121,72 @@ describe("embeddingConfigurations store — syncLegacy()", () => {
     const result = await store.syncLegacy("ollama");
 
     expect(api.syncLegacyEmbeddingConfiguration).toHaveBeenCalledWith("ollama");
-    expect(result).toEqual(synced);
+    expect(result).toEqual(result_);
     expect(api.listEmbeddingConfigurations).toHaveBeenCalled();
     expect(api.getActiveEmbeddingConfiguration).toHaveBeenCalled();
     expect(store.configurations).toEqual([synced]);
+    expect(store.legacyConflict).toBeNull();
+  });
+
+  it("laedt Liste + Active neu bei outcome='noop', ohne einen Write zu erwarten", async () => {
+    const active = makeConfiguration({ id: "emb-active", status: "active" });
+    mock(api.syncLegacyEmbeddingConfiguration).mockResolvedValue({
+      outcome: "noop",
+      configuration: active,
+      active_configuration: null,
+      legacy: null,
+    });
+    mock(api.listEmbeddingConfigurations).mockResolvedValue({
+      configurations: [active],
+    });
+    mock(api.getActiveEmbeddingConfiguration).mockResolvedValue({
+      configuration: active,
+      source: "store",
+    });
+
+    const store = useEmbeddingConfigurationsStore();
+    const result = await store.syncLegacy("ollama");
+
+    expect(result.outcome).toBe("noop");
+    expect(api.listEmbeddingConfigurations).toHaveBeenCalled();
+    expect(store.legacyConflict).toBeNull();
+  });
+
+  it("setzt legacyConflict bei outcome='conflict', ohne Liste/Active neu zu laden (kein Server-Write, #1417)", async () => {
+    const active = makeConfiguration({ id: "emb-active", status: "active" });
+    const legacy = { provider_kind: "ollama" as const, model_id: "mxbai-embed-large", dimensions: 1024 };
+    mock(api.syncLegacyEmbeddingConfiguration).mockResolvedValue({
+      outcome: "conflict",
+      configuration: null,
+      active_configuration: active,
+      legacy,
+    });
+
+    const store = useEmbeddingConfigurationsStore();
+    const result = await store.syncLegacy("ollama");
+
+    expect(result.outcome).toBe("conflict");
+    expect(store.legacyConflict).toEqual({ active, legacy });
+    expect(api.listEmbeddingConfigurations).not.toHaveBeenCalled();
+    expect(api.getActiveEmbeddingConfiguration).not.toHaveBeenCalled();
+  });
+
+  it("clearLegacyConflict() setzt legacyConflict zurueck", async () => {
+    const active = makeConfiguration({ id: "emb-active", status: "active" });
+    const legacy = { provider_kind: "ollama" as const, model_id: "mxbai-embed-large", dimensions: 1024 };
+    mock(api.syncLegacyEmbeddingConfiguration).mockResolvedValue({
+      outcome: "conflict",
+      configuration: null,
+      active_configuration: active,
+      legacy,
+    });
+
+    const store = useEmbeddingConfigurationsStore();
+    await store.syncLegacy("ollama");
+    expect(store.legacyConflict).not.toBeNull();
+
+    store.clearLegacyConflict();
+    expect(store.legacyConflict).toBeNull();
   });
 
   it("propagiert Fehler der API, ohne den Store in einen inkonsistenten Zustand zu bringen", async () => {

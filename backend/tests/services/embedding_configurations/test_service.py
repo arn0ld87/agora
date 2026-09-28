@@ -283,21 +283,24 @@ def test_sync_legacy_creates_proposed_configuration(
         connection_store=_FakeConnectionStore([]),
         secrets_store=_NoopSecretsStore(),
     )
-    config = service.sync_legacy(
+    result = service.sync_legacy(
         provider_connection_id="legacy",
         provider_kind="ollama",
         model_id="nomic-embed-text",
         dimensions=768,
     )
-    assert config is not None
-    assert config.status == "proposed"
-    assert "Config.EMBEDDING" in (config.status_message or "")
+    assert result.outcome == "created"
+    assert result.configuration is not None
+    assert result.configuration.status == "proposed"
+    assert "Config.EMBEDDING" in (result.configuration.status_message or "")
+    assert result.active_configuration is None
+    assert result.legacy is None
 
 
-def test_sync_legacy_is_noop_when_active_configuration_exists(
+def test_sync_legacy_is_noop_when_active_configuration_is_identical(
     store: EmbeddingConfigurationStore,
 ) -> None:
-    store.upsert_configuration(
+    active = store.upsert_configuration(
         configuration_id="emb-active",
         provider_connection_id="conn-ollama",
         provider_kind="ollama",
@@ -312,13 +315,55 @@ def test_sync_legacy_is_noop_when_active_configuration_exists(
         connection_store=_FakeConnectionStore([_make_connection(kind="ollama")]),
         secrets_store=_NoopSecretsStore(),
     )
-    config = service.sync_legacy(
+    result = service.sync_legacy(
         provider_connection_id="legacy",
         provider_kind="ollama",
         model_id="nomic-embed-text",
         dimensions=768,
     )
-    assert config is None
+    assert result.outcome == "noop"
+    assert result.configuration is not None
+    assert result.configuration.id == active.id
+    # Kein Write: der Store enthaelt weiterhin nur die eine Konfiguration.
+    assert len(store.list_configurations(scope="global")) == 1
+
+
+def test_sync_legacy_is_conflict_when_active_configuration_diverges(
+    store: EmbeddingConfigurationStore,
+) -> None:
+    """Maintainer-Entscheidung (2026-09): eine Abweichung in Modell,
+    Provider oder Dimension wird gemeldet, nicht automatisch aufgeloest —
+    der Store bleibt die Wahrheit, es wird nichts geschrieben."""
+    active = store.upsert_configuration(
+        configuration_id="emb-active",
+        provider_connection_id="conn-ollama",
+        provider_kind="ollama",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        scope="global",
+        project_id=None,
+        status="active",
+    )
+    service = EmbeddingConfigurationService(
+        store=store,
+        connection_store=_FakeConnectionStore([_make_connection(kind="ollama")]),
+        secrets_store=_NoopSecretsStore(),
+    )
+    result = service.sync_legacy(
+        provider_connection_id="legacy",
+        provider_kind="ollama",
+        model_id="mxbai-embed-large",
+        dimensions=1024,
+    )
+    assert result.outcome == "conflict"
+    assert result.configuration is None
+    assert result.active_configuration is not None
+    assert result.active_configuration.id == active.id
+    assert result.legacy is not None
+    assert result.legacy.model_id == "mxbai-embed-large"
+    assert result.legacy.dimensions == 1024
+    # Kein Write: der Store enthaelt weiterhin nur die aktive Konfiguration.
+    assert len(store.list_configurations(scope="global")) == 1
 
 
 # ----------------------------------------------------------------------

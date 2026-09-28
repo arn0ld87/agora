@@ -22,7 +22,10 @@ from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.persona_target_contract import PersonaTargetContract
 from app.contracts.prepare_status_contract import PrepareStatusResponse
-from app.contracts.readiness_contract import PostgresReadinessCheck
+from app.contracts.readiness_contract import (
+    EmbeddingConfigReadinessCheck,
+    PostgresReadinessCheck,
+)
 from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
@@ -109,6 +112,8 @@ from app.contracts.embedding_contract import (
     EmbeddingConfigurationUpsertRequest,
     EmbeddingIndexVersion,
     EmbeddingIndexVersionListResponse,
+    EmbeddingLegacyDivergence,
+    EmbeddingLegacySyncResult,
     EmbeddingMigrationJob,
     EmbeddingMigrationJobResponse,
     EmbeddingModelMetadata,
@@ -155,6 +160,8 @@ CONTRACTS: dict[str, type] = {
     "prepare-status-response.schema.json": PrepareStatusResponse,
     # /readyz-Postgres-Check mit Literal-Zustand (Issue #1581)
     "readiness-postgres-check.schema.json": PostgresReadinessCheck,
+    # /readyz-Embedding-Config-Check mit Env/Store-Divergenz (Issue #1417)
+    "readiness-embedding-config-check.schema.json": EmbeddingConfigReadinessCheck,
     "report-status-response.schema.json": ReportStatusResponse,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
@@ -222,6 +229,10 @@ CONTRACTS: dict[str, type] = {
     "embedding-configuration.schema.json": EmbeddingConfiguration,
     "embedding-configuration-upsert-request.schema.json": EmbeddingConfigurationUpsertRequest,
     "embedding-configuration-response.schema.json": EmbeddingConfigurationResponse,
+    # Env/Store-Divergenz (Issue #1417): geteilter Vertrag fuer
+    # Legacy-Sync-Konflikt und /readyz-Check.
+    "embedding-legacy-divergence.schema.json": EmbeddingLegacyDivergence,
+    "embedding-legacy-sync-result.schema.json": EmbeddingLegacySyncResult,
     "embedding-migration-job.schema.json": EmbeddingMigrationJob,
     "embedding-migration-job-response.schema.json": EmbeddingMigrationJobResponse,
     "embedding-index-version.schema.json": EmbeddingIndexVersion,

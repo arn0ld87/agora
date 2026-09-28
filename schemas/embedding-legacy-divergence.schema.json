@@ -1,0 +1,37 @@
+{
+  "$id": "https://alexle135.de/schemas/embedding-legacy-divergence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ein Vergleichswert (Provider/Modell/Dimension) fuer Env-vs-Store-\nKonflikte (#1417).\n\nWird sowohl fuer den Legacy-Sync-Konflikt (``sync_legacy``) als auch fuer\nden ``/readyz``-Check (``_check_embedding_config``) genutzt, damit beide\ndenselben Divergenz-Vertrag teilen statt zwei Ad-hoc-Formen zu erfinden.",
+  "properties": {
+    "dimensions": {
+      "exclusiveMinimum": 0,
+      "title": "Dimensions",
+      "type": "integer"
+    },
+    "model_id": {
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "provider_kind": {
+      "enum": [
+        "ollama",
+        "openai",
+        "google",
+        "custom",
+        "ollama_cloud",
+        "openai_compatible"
+      ],
+      "title": "Provider Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider_kind",
+    "model_id",
+    "dimensions"
+  ],
+  "title": "EmbeddingLegacyDivergence",
+  "type": "object"
+}

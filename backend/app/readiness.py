@@ -57,7 +57,11 @@ from typing import Any, Tuple
 from flask import Flask, Response, current_app, jsonify
 
 from .config import Config, infer_vector_dim_for_model
-from .contracts.readiness_contract import PostgresReadinessCheck
+from .contracts.embedding_contract import EmbeddingLegacyDivergence
+from .contracts.readiness_contract import (
+    EmbeddingConfigReadinessCheck,
+    PostgresReadinessCheck,
+)
 from .infrastructure.postgres import Database
 from .infrastructure.postgres.backends import any_postgres_backend
 from .utils.logger import get_logger
@@ -159,30 +163,121 @@ def _check_upload_dir() -> CheckResult:
     return True, str(folder)
 
 
-def _check_embedding_config() -> CheckResult:
-    """``EMBEDDING_MODEL`` und ``VECTOR_DIM`` müssen zusammenpassen.
+def _check_embedding_config() -> EmbeddingConfigReadinessCheck:
+    """``EMBEDDING_MODEL`` und ``VECTOR_DIM`` müssen zusammenpassen — UND,
+
+    falls eine aktive Store-Konfiguration existiert, muss sie mit der Env
+    übereinstimmen (#1417, Slice ``embedding-ssot``).
 
     Eine falsche Dimension lässt Neo4j-Vector-Index-Inserts beim ersten
     Persist-Aufruf scheitern — fail-fast in /readyz, statt im
-    Graph-Build-Job.
+    Graph-Build-Job. Eine Env/Store-Divergenz ist derselbe Fail-Fast-
+    Gedanke, nur auf der SSoT-Ebene: einige Runtime-Consumer lesen noch
+    ``Config.EMBEDDING_*`` (dokumentierte Ausnahme #1417), obwohl der
+    ``EmbeddingConfigurationStore`` etwas anderes aktiv hat.
+
+    Maintainer-Entscheidung (2026-09): eine Divergenz wird nur gemeldet
+    (``state="degraded"``), niemals automatisch aufgelöst — der Store
+    bleibt die Wahrheit.
     """
     model = current_app.config.get("EMBEDDING_MODEL")
     dim = current_app.config.get("VECTOR_DIM")
     if not model:
-        return False, "EMBEDDING_MODEL not configured"
+        return EmbeddingConfigReadinessCheck(
+            ok=False, detail="EMBEDDING_MODEL not configured", state="misconfigured"
+        )
     if dim is None:
-        return False, "VECTOR_DIM not configured"
+        return EmbeddingConfigReadinessCheck(
+            ok=False, detail="VECTOR_DIM not configured", state="misconfigured"
+        )
     expected = infer_vector_dim_for_model(model)
     try:
         dim_int = int(dim)
     except (TypeError, ValueError):
-        return False, f"VECTOR_DIM not an integer: {dim!r}"
-    if expected and dim_int != expected:
-        return False, (
-            f"VECTOR_DIM mismatch for EMBEDDING_MODEL '{model}': "
-            f"configured {dim_int}, expected {expected}"
+        return EmbeddingConfigReadinessCheck(
+            ok=False,
+            detail=f"VECTOR_DIM not an integer: {dim!r}",
+            state="misconfigured",
         )
-    return True, f"{model} → dim={dim_int}"
+    if expected and dim_int != expected:
+        return EmbeddingConfigReadinessCheck(
+            ok=False,
+            detail=(
+                f"VECTOR_DIM mismatch for EMBEDDING_MODEL '{model}': "
+                f"configured {dim_int}, expected {expected}"
+            ),
+            state="misconfigured",
+        )
+
+    try:
+        divergence = _detect_embedding_env_divergence()
+    except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden im Body sichtbar
+        logger.warning(
+            "embedding_config divergence probe failed: %s", exc, exc_info=True
+        )
+        return EmbeddingConfigReadinessCheck(
+            ok=False,
+            detail="embedding_config connectivity probe failed",
+            state="misconfigured",
+        )
+    if divergence is not None:
+        store_value, env_value = divergence
+        return EmbeddingConfigReadinessCheck(
+            ok=False,
+            detail=(
+                f"Store-Konfiguration ({store_value.provider_kind}/"
+                f"{store_value.model_id}, dim={store_value.dimensions}) weicht "
+                f"von Env ({env_value.provider_kind}/{env_value.model_id}, "
+                f"dim={env_value.dimensions}) ab"
+            ),
+            state="degraded",
+            store=store_value,
+            env=env_value,
+        )
+    return EmbeddingConfigReadinessCheck(
+        ok=True, detail=f"{model} → dim={dim_int}", state="ok"
+    )
+
+
+def _detect_embedding_env_divergence() -> (
+    tuple[EmbeddingLegacyDivergence, EmbeddingLegacyDivergence] | None
+):
+    """Vergleicht die aktive globale Store-Konfiguration gegen
+    ``Config.EMBEDDING_*`` (#1417).
+
+    ``None``, wenn nichts zu vergleichen ist: keine aktive globale
+    Konfiguration im Store (dann gilt allein die bereits oben geprüfte
+    Env-Kohärenz), oder eine leere Legacy-Sicht (``Config.EMBEDDING_BASE_URL``
+    unset). Wirft weiter, wenn der Store selbst nicht lesbar ist — der
+    Aufrufer übersetzt das in ``misconfigured`` statt eine 500 zu riskieren.
+    """
+    from .services.embedding_configuration_store import EmbeddingConfigurationStore
+    from .services.embedding_configurations.legacy import build_legacy_view
+
+    active = EmbeddingConfigurationStore().get_active_global_configuration()
+    if active is None:
+        return None
+    legacy = build_legacy_view()
+    if legacy is None:
+        return None
+    if (
+        legacy.provider_kind == active.provider_kind
+        and legacy.model_id == active.model_id
+        and legacy.dimensions == active.dimensions
+    ):
+        return None
+    return (
+        EmbeddingLegacyDivergence(
+            provider_kind=active.provider_kind,
+            model_id=active.model_id,
+            dimensions=active.dimensions,
+        ),
+        EmbeddingLegacyDivergence(
+            provider_kind=legacy.provider_kind,
+            model_id=legacy.model_id,
+            dimensions=legacy.dimensions,
+        ),
+    )
 
 
 def _check_embedding_index_version() -> CheckResult:
@@ -335,15 +430,20 @@ def _run_checks() -> dict[str, Any]:
         "neo4j": _check_neo4j(),
         "redis": _check_redis(),
         "upload_dir": _check_upload_dir(),
-        "embedding_config": _check_embedding_config(),
         "embedding_index_version": _check_embedding_index_version(),
     }
+    embedding_config_check = _check_embedding_config()
     postgres_check = _check_postgres()
     checks: dict[str, dict[str, Any]] = {
         name: {"ok": ok, "detail": detail} for name, (ok, detail) in results.items()
     }
+    checks["embedding_config"] = embedding_config_check.model_dump()
     checks["postgres"] = postgres_check.model_dump()
-    all_ok = all(ok for ok, _ in results.values()) and postgres_check.ok
+    all_ok = (
+        all(ok for ok, _ in results.values())
+        and embedding_config_check.ok
+        and postgres_check.ok
+    )
     return {
         "status": "ready" if all_ok else "not_ready",
         "checks": checks,
