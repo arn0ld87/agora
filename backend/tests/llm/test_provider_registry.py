@@ -104,6 +104,13 @@ HTTP_CASES = [
         "some-model",
         "unknown",
     ),
+    # CodeQL #1669 — OpenAI: gleiche Hostnamen-Regel. Lookalike-Hosts und
+    # Path-False-Positives fallen auf "unknown", Subdomains bleiben "openai".
+    ("https://evil-openai.com/v1", "some-model", "unknown"),
+    ("https://api.openai.com.attacker.test/v1", "some-model", "unknown"),
+    ("https://example.com/api.openai.com/v1", "some-model", "unknown"),
+    ("https://eu.api.openai.com/v1", "some-model", "openai"),
+    ("https://openai.com/v1", "some-model", "openai"),
 ]
 
 

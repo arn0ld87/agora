@@ -7,8 +7,10 @@
   die API-Schicht zu verlassen. Der Query-Parameter `platform` der
   Simulationshistorie wird geprüft (400 statt Dateisystemzugriff). Der
   SPA-Catch-all prüft Containment, bevor er das Dateisystem befragt. Die
-  Provider-Erkennung vergleicht bei Ollama Cloud und Google den Hostnamen statt
-  eines Teilstrings; das Stichwort `generativelanguage` außerhalb von
+  Provider-Erkennung vergleicht bei Ollama Cloud, OpenAI und Google den
+  Hostnamen statt eines Teilstrings; Lookalike-Hosts wie `evil-openai.com` und
+  Pfade, die einen Anbieter-Host nur enthalten, zählen nicht mehr als dieser
+  Anbieter, und das Stichwort `generativelanguage` außerhalb von
   `*.googleapis.com` zählt nicht mehr als Google. Die Ollama-Cloud-Regex ist gegen
   ReDoS gehärtet. `join_within` löst Symlinks jetzt über `realpath` auf. Die
   übrigen 42 Alerts sind False Positives und in GitHub mit der Stelle der
