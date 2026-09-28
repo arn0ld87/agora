@@ -278,6 +278,10 @@ curl -fsS \
 
 Migrationsschritte nur ausführen, wenn die konkrete Release-Doku sie verlangt. Kein generisches Fantasie-`migrate` als religiöses Ritual.
 
+### Update ohne lokalen Build (GHCR)
+
+Statt `--build` kann der Host die fertigen Images `ghcr.io/arn0ld87/agora` und `ghcr.io/arn0ld87/agora-proxy` ziehen. Dafür gibt es das Overlay `deploy/compose/docker-compose.ghcr.yml` (als letztes `-f`, `AGORA_IMAGE_TAG=sha-<7>` oder `vX.Y.Z` ist Pflicht). Tags, Attestation-Prüfung und Rollback stehen in [`runbooks/ghcr-deploy.md`](runbooks/ghcr-deploy.md) (#1708). `sha-<7>` von `main` ist nur build- und Trivy-geprüft, der Reverse-Proxy-Smoke gilt erst für Release-Tags.
+
 ---
 
 ## Release-/CI-Hinweis

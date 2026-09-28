@@ -13,6 +13,7 @@ from datetime import datetime
 from queue import Queue
 
 from ..utils.logger import get_logger
+from ..utils.path_safety import validate_path_id
 from .artifact_store import resolve_default_store
 from .event_bus import CHANNEL_STATE, SimulationEvent, resolve_default_event_bus
 from .run_registry import RunRegistry
@@ -131,6 +132,9 @@ class SimulationRunner:
     @classmethod
     def get_console_log(cls, simulation_id: str, from_line: int = 0) -> Dict[str, Any]:
         """Return incremental slice of simulation.log for client-side polling."""
+        # SEC-1 (CodeQL py/path-injection #79): simulation_id speist unten
+        # os.path.join gegen RUN_STATE_DIR. Guard vor der Pfad-Konstruktion.
+        validate_path_id(simulation_id, field_name="simulation_id")
         all_lines = read_console_log(simulation_id, cls.RUN_STATE_DIR)
 
         if not all_lines and not os.path.exists(

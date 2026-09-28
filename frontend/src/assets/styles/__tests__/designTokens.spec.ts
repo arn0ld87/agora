@@ -154,7 +154,7 @@ describe('Slice 7.1 — Dark-Readiness-Klausel (tokens-v3.css)', () => {
         // Kein Dark-Block → Klausel trivial erfüllt, kein Fail.
         return
       }
-      const re = new RegExp(name.replace(/-/g, '\\-') + '\\s*:')
+      const re = new RegExp(name.replaceAll('-', '\\-') + '\\s*:')
       expect(
         darkBlocks.join('\n').match(re),
         `${name} ist in keinem [data-theme="dark"]-Block redefiniert`,

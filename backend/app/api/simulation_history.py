@@ -29,6 +29,7 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_profile_resolver import expand_profile_in_data
+from ..utils.path_safety import validate_path_id
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger
 
@@ -305,6 +306,11 @@ def get_simulation_posts(simulation_id: str):
         )
 
     platform = request.args.get('platform', 'reddit')
+    # ``platform`` landet ungeprueft im Dateinamen (CodeQL py/path-injection,
+    # #1669 Slice B) — anders als ``simulation_id`` gibt es hierfuer keine
+    # vorgelagerte Formatpruefung. ``validate_path_id`` ist ``ValueError``,
+    # ``@handle_api_errors`` mappt das bereits auf HTTP 400.
+    validate_path_id(platform, field_name="platform")
     limit = request.args.get('limit', 50, type=int)
     offset = request.args.get('offset', 0, type=int)
 
