@@ -236,6 +236,76 @@ class EmbeddingLegacySyncRequest(BaseModel):
     provider_connection_id: str = Field(min_length=1)
 
 
+class EmbeddingLegacyDivergence(BaseModel):
+    """Ein Vergleichswert (Provider/Modell/Dimension) fuer Env-vs-Store-
+    Konflikte (#1417).
+
+    Wird sowohl fuer den Legacy-Sync-Konflikt (``sync_legacy``) als auch fuer
+    den ``/readyz``-Check (``_check_embedding_config``) genutzt, damit beide
+    denselben Divergenz-Vertrag teilen statt zwei Ad-hoc-Formen zu erfinden.
+    """
+
+    model_config = _STRICT
+
+    provider_kind: EmbeddingProviderKind
+    model_id: str = Field(min_length=1)
+    dimensions: int = Field(gt=0)
+
+
+class EmbeddingLegacySyncResult(BaseModel):
+    """Ergebnis von ``EmbeddingConfigurationService.sync_legacy`` (#1417).
+
+    Vor #1417 gab ``sync_legacy`` still ``None`` zurueck, sobald irgendeine
+    aktive globale Konfiguration existierte — der Aufrufer konnte nicht
+    unterscheiden, ob die Legacy-Sicht bereits deckungsgleich war oder ob
+    Env und Store tatsaechlich auseinanderliefen. Dieser Vertrag macht die
+    drei moeglichen Faelle strukturell explizit:
+
+    * ``created``  — keine aktive globale Konfiguration existierte; die aus
+      ``Config.EMBEDDING_*`` abgeleitete Konfiguration wurde persistiert
+      und steht in ``configuration``.
+    * ``noop``     — eine aktive globale Konfiguration existiert bereits und
+      ist identisch (Provider, Modell, Dimension) zur Legacy-Sicht. Es wird
+      nichts geschrieben; ``configuration`` ist die bereits aktive
+      Konfiguration.
+    * ``conflict`` — eine aktive globale Konfiguration existiert und weicht
+      in Provider, Modell oder Dimension von der Legacy-Sicht ab.
+      Maintainer-Entscheidung (2026-09): der Konflikt wird gemeldet, nichts
+      wird automatisch uebernommen oder vorgeschlagen — der Store bleibt die
+      Wahrheit. Es wird nichts geschrieben; ``active_configuration`` und
+      ``legacy`` tragen beide Werte.
+    """
+
+    model_config = _STRICT
+
+    outcome: Literal["created", "noop", "conflict"]
+    configuration: EmbeddingConfiguration | None = None
+    active_configuration: EmbeddingConfiguration | None = None
+    legacy: EmbeddingLegacyDivergence | None = None
+
+    @model_validator(mode="after")
+    def validate_outcome_payload(self) -> EmbeddingLegacySyncResult:
+        if self.outcome in ("created", "noop"):
+            if self.configuration is None:
+                raise ValueError(
+                    f"configuration is required when outcome='{self.outcome}'"
+                )
+            if self.active_configuration is not None or self.legacy is not None:
+                raise ValueError(
+                    "active_configuration/legacy must be None when "
+                    f"outcome='{self.outcome}'"
+                )
+        else:  # conflict
+            if self.configuration is not None:
+                raise ValueError("configuration must be None when outcome='conflict'")
+            if self.active_configuration is None or self.legacy is None:
+                raise ValueError(
+                    "active_configuration and legacy are required when "
+                    "outcome='conflict'"
+                )
+        return self
+
+
 class EmbeddingConfigurationResponse(BaseModel):
     """Antwort-Wrapper analog zu ``ProviderConnectionResponse``."""
 
@@ -411,6 +481,8 @@ __all__ = [
     "EmbeddingConfiguration",
     "EmbeddingConfigurationUpsertRequest",
     "EmbeddingLegacySyncRequest",
+    "EmbeddingLegacyDivergence",
+    "EmbeddingLegacySyncResult",
     "EmbeddingConfigurationResponse",
     "EmbeddingMigrationProgress",
     "EmbeddingMigrationJob",

@@ -21,8 +21,10 @@ import {
   EmbeddingConfigurationScope,
   EmbeddingIndexVersion,
   EmbeddingIndexVersionListResponseSchema,
+  EmbeddingLegacySyncResult,
+  EmbeddingLegacySyncResultSchema,
 } from "../contracts/embeddingContract";
-import { ApiSuccessEnvelope } from "./envelope";
+import { ApiSuccessEnvelope, isApiError } from "./envelope";
 import { unwrapAndParse } from "./parse";
 
 export async function listEmbeddingConfigurations(
@@ -107,14 +109,38 @@ export async function activateEmbeddingConfiguration(
   return unwrapAndParse(resp, EmbeddingConfigurationResponseSchema).configuration;
 }
 
+/**
+ * Uebernimmt ``Config.EMBEDDING_*`` als kanonische Konfiguration (#1417).
+ *
+ * Drei Faelle, siehe ``EmbeddingLegacySyncResultSchema``: ``created`` (200,
+ * keine aktive Konfiguration existierte), ``noop`` (200, identisch zur
+ * aktiven Konfiguration, nichts geschrieben) und ``conflict`` (409, die
+ * aktive Konfiguration weicht ab — Backend schreibt nichts, meldet den
+ * Konflikt ueber ``details.active_configuration``/``details.legacy``).
+ * Der 409-Fall wird hier in denselben Ergebnis-Vertrag uebersetzt, statt
+ * als Exception durchgereicht zu werden — Aufrufer (Store/View) muessen
+ * nur noch auf ``outcome`` verzweigen, nicht auf HTTP-Status.
+ */
 export async function syncLegacyEmbeddingConfiguration(
   providerConnectionId: string,
-): Promise<EmbeddingConfiguration> {
-  const resp = await service.post<ApiSuccessEnvelope<unknown>>(
-    "/api/llm/embedding/configurations/sync-legacy",
-    { provider_connection_id: providerConnectionId },
-  );
-  return unwrapAndParse(resp, EmbeddingConfigurationResponseSchema).configuration;
+): Promise<EmbeddingLegacySyncResult> {
+  try {
+    const resp = await service.post<ApiSuccessEnvelope<unknown>>(
+      "/api/llm/embedding/configurations/sync-legacy",
+      { provider_connection_id: providerConnectionId },
+    );
+    return unwrapAndParse(resp, EmbeddingLegacySyncResultSchema);
+  } catch (err) {
+    if (isApiError(err) && err.code === "embedding_legacy_conflict" && err.details) {
+      return EmbeddingLegacySyncResultSchema.parse({
+        outcome: "conflict",
+        configuration: null,
+        active_configuration: err.details["active_configuration"],
+        legacy: err.details["legacy"],
+      });
+    }
+    throw err;
+  }
 }
 
 /**

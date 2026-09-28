@@ -235,10 +235,95 @@ def test_readyz_returns_503_on_embedding_config_mismatch(app, client):
     assert response.status_code == 503
     payload = response.get_json()
     assert payload["checks"]["embedding_config"]["ok"] is False
+    assert payload["checks"]["embedding_config"]["state"] == "misconfigured"
     detail = payload["checks"]["embedding_config"]["detail"]
     assert "vector_dim" in detail.lower()
     assert "768" in detail
     assert "2560" in detail
+
+
+# ---------------------------------------------------------------------------
+# Readiness — Env/Store-Divergenz (#1417, Maintainer-Entscheidung 2026-09:
+# eine Divergenz wird gemeldet, nicht automatisch uebernommen)
+# ---------------------------------------------------------------------------
+
+
+def _seed_active_global_configuration(
+    monkeypatch, tmp_path, *, model_id: str, dimensions: int
+) -> None:
+    monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+    from app.services.embedding_configuration_store import EmbeddingConfigurationStore
+
+    EmbeddingConfigurationStore(data_dir=tmp_path).upsert_configuration(
+        configuration_id="emb-active",
+        provider_connection_id="conn-1",
+        provider_kind="ollama",
+        model_id=model_id,
+        dimensions=dimensions,
+        scope="global",
+        project_id=None,
+        status="active",
+    )
+
+
+def test_readyz_stays_ready_when_store_configuration_matches_env(
+    app, client, tmp_path, monkeypatch
+):
+    """Aktive Store-Konfiguration identisch zu ``Config.EMBEDDING_*`` -> ok,
+    kein Konflikt (Gegenstueck zum ``sync-legacy``-Noop)."""
+    _seed_active_global_configuration(
+        monkeypatch, tmp_path, model_id="qwen3-embedding:4b", dimensions=2560
+    )
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "qwen3-embedding:4b")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://localhost:11434")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", None)
+    monkeypatch.setattr(Config, "VECTOR_DIM", 2560)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    check = response.get_json()["checks"]["embedding_config"]
+    assert check["ok"] is True
+    assert check["state"] == "ok"
+    assert check["store"] is None
+    assert check["env"] is None
+
+
+def test_readyz_returns_503_when_store_configuration_diverges_from_env(
+    app, client, tmp_path, monkeypatch
+):
+    """Aktive Store-Konfiguration weicht von ``Config.EMBEDDING_*`` ab ->
+    ``degraded``, beide Werte im Body. Nichts wird automatisch uebernommen —
+    der Store bleibt die Wahrheit (Maintainer-Entscheidung 2026-09)."""
+    _seed_active_global_configuration(
+        monkeypatch, tmp_path, model_id="qwen3-embedding:4b", dimensions=2560
+    )
+    from app.config import Config
+
+    # Env zeigt auf ein anderes Modell/eine andere Dimension als der Store.
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "nomic-embed-text")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://localhost:11434")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", None)
+    monkeypatch.setattr(Config, "VECTOR_DIM", 768)
+    app.config["EMBEDDING_MODEL"] = "nomic-embed-text"
+    app.config["VECTOR_DIM"] = 768
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    payload = response.get_json()
+    assert payload["status"] == "not_ready"
+    check = payload["checks"]["embedding_config"]
+    assert check["ok"] is False
+    assert check["state"] == "degraded"
+    assert check["store"]["model_id"] == "qwen3-embedding:4b"
+    assert check["store"]["dimensions"] == 2560
+    assert check["env"]["model_id"] == "nomic-embed-text"
+    assert check["env"]["dimensions"] == 768
+    # Andere Checks bleiben gruen — nur dieser eine Punkt ist rot.
+    assert payload["checks"]["neo4j"]["ok"] is True
 
 
 # ---------------------------------------------------------------------------

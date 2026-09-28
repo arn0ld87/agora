@@ -25,14 +25,16 @@ const migrationByConfigurationObj = reactive<Record<string, unknown>>({})
 
 const probeByConfigurationObj = reactive<Record<string, unknown>>({})
 
-// Steuerbar, damit einzelne Tests die Legacy-Quelle bzw. eine aktive
-// Konfiguration einstellen koennen.
+// Steuerbar, damit einzelne Tests die Legacy-Quelle, eine aktive
+// Konfiguration bzw. eine Env/Store-Divergenz (#1417) einstellen koennen.
 const storeState = reactive<{
   activeConfiguration: unknown
   activeSource: 'store' | 'legacy' | 'none'
+  legacyConflict: { active: unknown; legacy: unknown } | null
 }>({
   activeConfiguration: null,
   activeSource: 'none',
+  legacyConflict: null,
 })
 
 const indexVersionsArr = reactive<unknown[]>([])
@@ -43,6 +45,7 @@ const storeMock = {
   get configurationsError() { return null },
   get activeConfiguration() { return storeState.activeConfiguration },
   get activeSource() { return storeState.activeSource },
+  get legacyConflict() { return storeState.legacyConflict },
   get migrationByConfiguration() { return migrationByConfigurationObj },
   get probeByConfiguration() { return probeByConfigurationObj },
   get indexVersions() { return indexVersionsArr },
@@ -60,6 +63,7 @@ const storeMock = {
   upsertConfiguration: vi.fn(),
   testConfiguration: vi.fn().mockResolvedValue(undefined),
   syncLegacy: vi.fn(),
+  clearLegacyConflict: vi.fn(() => { storeState.legacyConflict = null }),
   deleteConfiguration: vi.fn().mockResolvedValue(undefined),
 }
 
@@ -123,12 +127,19 @@ async function mountView(initial: { connections?: unknown[] } = {}) {
   storeMock.upsertConfiguration.mockResolvedValue({ id: 'cfg-new-1' })
   storeMock.testConfiguration.mockResolvedValue(undefined)
   storeMock.syncLegacy.mockClear()
-  storeMock.syncLegacy.mockResolvedValue({ id: 'cfg-adopted' })
+  storeMock.syncLegacy.mockResolvedValue({
+    outcome: 'created',
+    configuration: { id: 'cfg-adopted' },
+    active_configuration: null,
+    legacy: null,
+  })
+  storeMock.clearLegacyConflict.mockClear()
   storeMock.deleteConfiguration.mockClear()
   storeMock.deleteConfiguration.mockResolvedValue(undefined)
   for (const k of Object.keys(probeByConfigurationObj)) delete probeByConfigurationObj[k]
   storeState.activeConfiguration = null
   storeState.activeSource = 'none'
+  storeState.legacyConflict = null
 
   listProviderConnectionsMock.mockClear()
   listProviderConnectionsMock.mockResolvedValue({
@@ -321,14 +332,73 @@ describe('EmbeddingConfigurationsView — Legacy-Uebernahme (#1193)', () => {
     storeState.activeConfiguration = CONFIG_PROBED
     storeState.activeSource = 'legacy'
     await flushPromises()
-    storeMock.syncLegacy.mockRejectedValue(new Error('active_configuration_exists'))
+    storeMock.syncLegacy.mockRejectedValue(new Error('Netzwerkfehler'))
 
     await w.find('[data-testid="adopt-legacy"]').trigger('click')
     await w.find('[data-testid="adopt-legacy-submit"]').trigger('click')
     await flushPromises()
 
     expect(w.find('[data-testid="adopt-legacy-modal"]').exists()).toBe(true)
-    expect(w.find('[data-testid="adopt-legacy-error"]').text()).toContain('active_configuration_exists')
+    expect(w.find('[data-testid="adopt-legacy-error"]').text()).toContain('Netzwerkfehler')
+  })
+
+  // #1417: eine abweichende aktive Konfiguration wirft KEINEN Fehler mehr
+  // (kein 409 als Exception) — syncLegacy loest mit outcome="conflict" auf,
+  // und die View muss die Divergenz sichtbar machen statt den Flow als
+  // fehlgeschlagen zu behandeln.
+  const ACTIVE_DIVERGENT = {
+    id: 'emb-active',
+    provider_kind: 'ollama',
+    model_id: 'nomic-embed-text',
+    dimensions: 768,
+  }
+  const LEGACY_DIVERGENT = {
+    provider_kind: 'ollama',
+    model_id: 'mxbai-embed-large',
+    dimensions: 1024,
+  }
+
+  it('zeigt die Divergenz-Warnung bei outcome="conflict", ohne den Flow als Fehler zu behandeln', async () => {
+    const w = await mountView()
+    storeState.activeConfiguration = CONFIG_PROBED
+    storeState.activeSource = 'legacy'
+    await flushPromises()
+    storeMock.syncLegacy.mockImplementation(async () => {
+      storeState.legacyConflict = { active: ACTIVE_DIVERGENT, legacy: LEGACY_DIVERGENT }
+      return {
+        outcome: 'conflict',
+        configuration: null,
+        active_configuration: ACTIVE_DIVERGENT,
+        legacy: LEGACY_DIVERGENT,
+      }
+    })
+
+    await w.find('[data-testid="adopt-legacy"]').trigger('click')
+    await w.find('[data-testid="adopt-legacy-submit"]').trigger('click')
+    await flushPromises()
+
+    // Modal bleibt offen, kein generischer Fehlertext, aber sichtbare Warnung.
+    expect(w.find('[data-testid="adopt-legacy-modal"]').exists()).toBe(true)
+    expect(w.find('[data-testid="adopt-legacy-error"]').exists()).toBe(false)
+    expect(w.find('[data-testid="adopt-legacy-conflict"]').exists()).toBe(true)
+    expect(w.find('[data-testid="adopt-legacy-conflict-active"]').text()).toContain('nomic-embed-text')
+    expect(w.find('[data-testid="adopt-legacy-conflict-active"]').text()).toContain('768')
+    expect(w.find('[data-testid="adopt-legacy-conflict-legacy"]').text()).toContain('mxbai-embed-large')
+    expect(w.find('[data-testid="adopt-legacy-conflict-legacy"]').text()).toContain('1024')
+    // Ohne persistierte Konfiguration darf keine Probe angestossen werden.
+    expect(storeMock.testConfiguration).not.toHaveBeenCalled()
+  })
+
+  it('setzt eine vorherige Divergenz-Warnung zurueck, wenn das Modal erneut geoeffnet wird', async () => {
+    const w = await mountView()
+    storeState.activeConfiguration = CONFIG_PROBED
+    storeState.activeSource = 'legacy'
+    storeState.legacyConflict = { active: ACTIVE_DIVERGENT, legacy: LEGACY_DIVERGENT }
+    await flushPromises()
+
+    await w.find('[data-testid="adopt-legacy"]').trigger('click')
+
+    expect(storeMock.clearLegacyConflict).toHaveBeenCalled()
   })
 })
 

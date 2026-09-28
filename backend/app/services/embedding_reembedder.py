@@ -271,6 +271,27 @@ class Neo4jReEmbedder:
         return "completed"
 
     # ------------------------------------------------------------------
+    # Dimensions-Probe (Slice 2.2/2.3-Folgescope, #1417)
+    # ------------------------------------------------------------------
+
+    def probe_dimensions(self, configuration: EmbeddingConfiguration) -> int:
+        """Embeddet einen einzelnen kurzen Testtext und liefert die
+        tatsaechliche Ausgabedimension.
+
+        Wird von ``EmbeddingMigrationService.run()`` vor dem ersten Batch
+        aufgerufen (Fail-Fast): ohne diesen Vorab-Check wuerde ein falsch
+        konfigurierter Embedder (z. B. ein falscher Modellname) erst nach
+        einem vollstaendigen, folgenlosen Durchlauf des gesamten Graphen
+        als Fehlschlag sichtbar. Nutzt denselben ``embedder_factory`` wie
+        ``run()`` — keine zweite Provider-Aufloesung.
+        """
+        embed_texts = self._embedder_factory(configuration)
+        vectors = embed_texts(["agora embedding dimension probe"])
+        if not vectors or vectors[0] is None:
+            raise RuntimeError("Probe-Embed lieferte keinen Vektor")
+        return len(vectors[0])
+
+    # ------------------------------------------------------------------
     # Index-Validierung (Slice 2.2, #1417)
     # ------------------------------------------------------------------
 

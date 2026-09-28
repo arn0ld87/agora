@@ -164,6 +164,80 @@ export type EmbeddingConfigurationResponse = z.infer<
   typeof EmbeddingConfigurationResponseSchema
 >
 
+// ----------------------------------------------------------------------
+// EmbeddingLegacyDivergence / EmbeddingLegacySyncResult (#1417)
+// ----------------------------------------------------------------------
+
+/**
+ * Ein Vergleichswert (Provider/Modell/Dimension) fuer Env-vs-Store-
+ * Konflikte. Wird sowohl fuer den Legacy-Sync-Konflikt als auch fuer den
+ * `/readyz`-Check genutzt (siehe `EmbeddingLegacyDivergence` in
+ * backend/app/contracts/embedding_contract.py).
+ */
+export const EmbeddingLegacyDivergenceSchema = z
+  .object({
+    provider_kind: EmbeddingProviderKindSchema,
+    model_id: z.string().min(1),
+    dimensions: z.number().int().positive(),
+  })
+  .strict()
+export type EmbeddingLegacyDivergence = z.infer<
+  typeof EmbeddingLegacyDivergenceSchema
+>
+
+/**
+ * Ergebnis von `POST /sync-legacy`. Drei Faelle: `created` (keine aktive
+ * globale Konfiguration existierte), `noop` (aktive Konfiguration ist
+ * identisch zur Legacy-Sicht, nichts geschrieben) und `conflict` (aktive
+ * Konfiguration weicht ab — kommt bei `outcome="conflict"` nur ueber den
+ * `details`-Zweig des 409-Fehler-Envelopes, siehe
+ * `syncLegacyEmbeddingConfiguration` im API-Client).
+ */
+export const EmbeddingLegacySyncResultSchema = z
+  .object({
+    outcome: z.enum(['created', 'noop', 'conflict']),
+    configuration: EmbeddingConfigurationSchema.nullable().default(null),
+    active_configuration: EmbeddingConfigurationSchema.nullable().default(null),
+    legacy: EmbeddingLegacyDivergenceSchema.nullable().default(null),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.outcome === 'created' || value.outcome === 'noop') {
+      if (!value.configuration) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['configuration'],
+          message: `configuration is required when outcome="${value.outcome}"`,
+        })
+      }
+      if (value.active_configuration || value.legacy) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['active_configuration'],
+          message: `active_configuration/legacy must be null when outcome="${value.outcome}"`,
+        })
+      }
+    } else {
+      if (value.configuration) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['configuration'],
+          message: 'configuration must be null when outcome="conflict"',
+        })
+      }
+      if (!value.active_configuration || !value.legacy) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['active_configuration'],
+          message: 'active_configuration and legacy are required when outcome="conflict"',
+        })
+      }
+    }
+  })
+export type EmbeddingLegacySyncResult = z.infer<
+  typeof EmbeddingLegacySyncResultSchema
+>
+
 export const EmbeddingConfigurationsListResponseSchema = z
   .object({
     configurations: z.array(EmbeddingConfigurationSchema),

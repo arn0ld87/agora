@@ -141,6 +141,89 @@ def test_run_with_non_pending_job_raises(
         service.run(job.id)
 
 
+def test_run_fails_fast_on_embedder_dimension_mismatch_without_writing_vectors(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    """Fail-Fast (#1417): ein Probe-Embed vor dem ersten Batch verhindert,
+    dass ein falsch konfigurierter Embedder (z. B. falsches Modell) erst
+    nach einem vollstaendigen Graph-Durchlauf als Fehlschlag sichtbar wird —
+    kein Vektor wird geschrieben, die Quellversion/Konfiguration bleiben
+    unveraendert.
+    """
+    _seed_probed_configuration(store)  # dimensions=768
+
+    class _WrongDimensionEmbedder:
+        def __init__(self) -> None:
+            self.run_called = False
+
+        def probe_dimensions(self, configuration: EmbeddingConfiguration) -> int:
+            return 1024  # weicht von der Ziel-Dimension (768) ab
+
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            self.run_called = True
+            return "completed"
+
+    re_embedder = _WrongDimensionEmbedder()
+    service = EmbeddingMigrationService(
+        store=store, re_embedder=re_embedder, now=lambda: fixed_now
+    )
+    job = service.start("emb-1")
+    final = service.run(job.id)
+
+    assert final.status == "failed"
+    assert "768" in (final.error_message or "")
+    assert "1024" in (final.error_message or "")
+    assert re_embedder.run_called is False, "kein Batch-Lauf, kein Vektor-Write nach Fail-Fast"
+
+    v1 = store.get_index_version(1)
+    assert v1 is not None and v1.status == "rolled_back"
+    config = store.get_configuration("emb-1")
+    assert config is not None
+    assert config.status == "probed", "Quellversion/Konfiguration bleiben unveraendert"
+
+
+def test_run_fails_fast_when_probe_embed_raises(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    """Ein Probe-Embed-Fehler (z. B. Provider nicht erreichbar) ist
+    ebenfalls ein Abbruchgrund vor dem ersten Batch — kein Vektor wird
+    geschrieben."""
+    _seed_probed_configuration(store)
+
+    class _ExplodingProbe:
+        def probe_dimensions(self, configuration: EmbeddingConfiguration) -> int:
+            raise RuntimeError("provider nicht erreichbar")
+
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            raise AssertionError("run() darf nach einem Probe-Fehler nie aufgerufen werden")
+
+    service = EmbeddingMigrationService(
+        store=store, re_embedder=_ExplodingProbe(), now=lambda: fixed_now
+    )
+    job = service.start("emb-1")
+    final = service.run(job.id)
+
+    assert final.status == "failed"
+    assert "provider nicht erreichbar" in (final.error_message or "")
+    v1 = store.get_index_version(1)
+    assert v1 is not None and v1.status == "rolled_back"
+
+
+def test_run_without_probe_dimensions_falls_back_to_per_batch_check(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    """Ein Re-Embedder ohne ``probe_dimensions`` (aeltere Test-Stubs,
+    ``_NoopReEmbedder``) ueberspringt den Vorab-Check unauffaellig — das
+    bestehende Verhalten bleibt fuer solche Stubs unveraendert."""
+    _seed_probed_configuration(store)
+    service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
+    job = service.start("emb-1")
+
+    completed = service.run(job.id)
+
+    assert completed.status == "completed"
+
+
 def test_run_propagates_re_embedder_exception_as_failed(
     store: EmbeddingConfigurationStore, fixed_now: datetime
 ) -> None:
@@ -332,6 +415,64 @@ def test_get_job_returns_none_for_unknown(
 ) -> None:
     service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
     assert service.get_job("job-bogus") is None
+
+
+# ----------------------------------------------------------------------
+# Path-Injection-Boundary (#1417, CodeQL py/path-injection Alerts 357/358):
+# ``job_id`` kommt bei GET/POST /embedding/migrations/<job_id>... unmittelbar
+# aus der URL. ``get_job``/``run``/``cancel`` duerfen einen manipulierten
+# Wert nie in eine Dateisystem-Operation ausserhalb des Data-Dir durchreichen.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "malicious_job_id",
+    [
+        "../secrets",
+        "../../etc/passwd",
+        "/etc/passwd",
+        "..",
+        "a/b",
+        "a\\b",
+        "",
+    ],
+)
+def test_get_job_rejects_path_traversal_attempts_as_not_found(
+    store: EmbeddingConfigurationStore, fixed_now: datetime, malicious_job_id: str
+) -> None:
+    service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
+    assert service.get_job(malicious_job_id) is None
+
+
+def test_run_rejects_path_traversal_job_id_as_unknown_job(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
+    with pytest.raises(KeyError):
+        service.run("../../etc/passwd")
+
+
+def test_cancel_rejects_path_traversal_job_id_as_unknown_job(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
+    with pytest.raises(KeyError):
+        service.cancel("../../etc/passwd")
+
+
+def test_job_path_traversal_cannot_escape_the_data_dir(
+    store: EmbeddingConfigurationStore, fixed_now: datetime, tmp_path: Path
+) -> None:
+    """Legt eine Datei ausserhalb des Data-Dir an einer Stelle an, die ein
+    naiver String-Join treffen wuerde, und belegt, dass sie nie gelesen
+    wird."""
+    outside = tmp_path.parent / "outside-secret.json"
+    outside.write_text('{"leaked": true}', encoding="utf-8")
+    try:
+        service = EmbeddingMigrationService(store=store, now=lambda: fixed_now)
+        assert service.get_job("../outside-secret") is None
+    finally:
+        outside.unlink(missing_ok=True)
 
 
 # ----------------------------------------------------------------------

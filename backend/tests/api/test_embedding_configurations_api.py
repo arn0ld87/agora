@@ -473,6 +473,7 @@ def test_sync_legacy_creates_proposed_configuration(
     )
     assert response.status_code == 200
     body = response.get_json()
+    assert body["data"]["outcome"] == "created"
     assert body["data"]["configuration"]["status"] == "proposed"
     assert body["data"]["configuration"]["model_id"] == "nomic-embed-text"
 
@@ -526,12 +527,13 @@ def test_sync_legacy_without_legacy_config_returns_409(
     assert body["code"] == "no_legacy_config"
 
 
-def test_sync_legacy_with_existing_active_configuration_returns_409(
+def test_sync_legacy_with_identical_active_configuration_returns_noop(
     client: object,
     fake_store: _FakeConfigurationStore,
     fake_connection_store: _FakeConnectionStore,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Identisch (Provider, Modell, Dimension) -> noop, 200, kein Write (#1417)."""
     fake_connection_store.connections.append(
         _make_test_connection("conn-1", kind="ollama")
     )
@@ -556,9 +558,56 @@ def test_sync_legacy_with_existing_active_configuration_returns_409(
         "/api/llm/embedding/configurations/sync-legacy",
         json={"provider_connection_id": "conn-1"},
     )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["data"]["outcome"] == "noop"
+    assert body["data"]["configuration"]["id"] == "emb-active"
+
+
+def test_sync_legacy_with_diverging_active_configuration_returns_409(
+    client: object,
+    fake_store: _FakeConfigurationStore,
+    fake_connection_store: _FakeConnectionStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Abweichend (Modell/Dimension) -> conflict, 409, kein Write (#1417).
+
+    Maintainer-Entscheidung (2026-09): der Konflikt wird gemeldet, nicht
+    automatisch aufgeloest — der Store bleibt die Wahrheit.
+    """
+    fake_connection_store.connections.append(
+        _make_test_connection("conn-1", kind="ollama")
+    )
+    fake_store.upsert_configuration(
+        configuration_id="emb-active",
+        provider_connection_id="conn-1",
+        provider_kind="ollama",
+        model_id="nomic-embed-text",
+        dimensions=768,
+        scope="global",
+        project_id=None,
+        status="active",
+    )
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "mxbai-embed-large")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://localhost:11434")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", None)
+    monkeypatch.setattr(Config, "VECTOR_DIM", 1024)
+
+    response = client.post(  # type: ignore[attr-defined]
+        "/api/llm/embedding/configurations/sync-legacy",
+        json={"provider_connection_id": "conn-1"},
+    )
     assert response.status_code == 409
     body = response.get_json()
-    assert body["code"] == "active_configuration_exists"
+    assert body["code"] == "embedding_legacy_conflict"
+    assert body["details"]["active_configuration"]["id"] == "emb-active"
+    assert body["details"]["legacy"]["model_id"] == "mxbai-embed-large"
+    assert body["details"]["legacy"]["dimensions"] == 1024
+    # Kein Write: der Store enthaelt weiterhin nur die aktive Konfiguration.
+    list_response = client.get("/api/llm/embedding/configurations")  # type: ignore[attr-defined]
+    assert len(list_response.get_json()["data"]["configurations"]) == 1
 
 
 def test_activate_endpoint_invokes_service(

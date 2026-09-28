@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   EmbeddingConfigurationSchema,
   EmbeddingConfigurationStatusSchema,
+  EmbeddingLegacyDivergenceSchema,
+  EmbeddingLegacySyncResultSchema,
   EmbeddingMigrationJobSchema,
   EmbeddingMigrationProgressSchema,
   EmbeddingMigrationStatusSchema,
@@ -12,6 +14,8 @@ import {
   EmbeddingConfigurationScopeSchema,
 } from '../embeddingContract'
 import embeddingIndexVersionListResponseSchemaJson from '../../../../schemas/embedding-index-version-list-response.schema.json'
+import embeddingLegacyDivergenceSchemaJson from '../../../../schemas/embedding-legacy-divergence.schema.json'
+import embeddingLegacySyncResultSchemaJson from '../../../../schemas/embedding-legacy-sync-result.schema.json'
 
 function propertyKeys(schema: { properties?: Record<string, unknown> }) {
   return Object.keys(schema.properties ?? {}).sort()
@@ -308,5 +312,101 @@ describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
 
   it('EmbeddingConfigurationScope akzeptiert nur global oder project', () => {
     expect(() => EmbeddingConfigurationScopeSchema.parse('team')).toThrow()
+  })
+
+  // ----------------------------------------------------------------------
+  // EmbeddingLegacyDivergence / EmbeddingLegacySyncResult (#1417)
+  // ----------------------------------------------------------------------
+
+  it('EmbeddingLegacyDivergence spiegelt die Backend-Property-Keys', () => {
+    expect(shapeKeys(EmbeddingLegacyDivergenceSchema)).toEqual(
+      propertyKeys(embeddingLegacyDivergenceSchemaJson),
+    )
+  })
+
+  it('EmbeddingLegacySyncResult spiegelt die Backend-Property-Keys', () => {
+    expect(shapeKeys(EmbeddingLegacySyncResultSchema)).toEqual(
+      propertyKeys(embeddingLegacySyncResultSchemaJson),
+    )
+  })
+
+  it('EmbeddingLegacySyncResult: outcome=created verlangt configuration', () => {
+    const base = {
+      id: 'emb-1',
+      provider_connection_id: 'conn-1',
+      provider_kind: 'ollama' as const,
+      model_id: 'nomic-embed-text',
+      dimensions: 768,
+      scope: 'global' as const,
+      project_id: null,
+      index_version: 1,
+      status: 'proposed' as const,
+      created_at: '2026-09-28T12:00:00+00:00',
+      updated_at: '2026-09-28T12:00:00+00:00',
+    }
+    expect(() =>
+      EmbeddingLegacySyncResultSchema.parse({ outcome: 'created', configuration: base }),
+    ).not.toThrow()
+    expect(() =>
+      EmbeddingLegacySyncResultSchema.parse({ outcome: 'created', configuration: null }),
+    ).toThrow(/configuration/)
+  })
+
+  it('EmbeddingLegacySyncResult: outcome=noop erlaubt keine active_configuration/legacy', () => {
+    const base = {
+      id: 'emb-active',
+      provider_connection_id: 'conn-1',
+      provider_kind: 'ollama' as const,
+      model_id: 'nomic-embed-text',
+      dimensions: 768,
+      scope: 'global' as const,
+      project_id: null,
+      index_version: 1,
+      status: 'active' as const,
+      created_at: '2026-09-28T12:00:00+00:00',
+      updated_at: '2026-09-28T12:00:00+00:00',
+    }
+    expect(() =>
+      EmbeddingLegacySyncResultSchema.parse({
+        outcome: 'noop',
+        configuration: base,
+        legacy: { provider_kind: 'ollama', model_id: 'nomic-embed-text', dimensions: 768 },
+      }),
+    ).toThrow(/active_configuration/)
+  })
+
+  it('EmbeddingLegacySyncResult: outcome=conflict verlangt active_configuration und legacy, verbietet configuration', () => {
+    const active = {
+      id: 'emb-active',
+      provider_connection_id: 'conn-1',
+      provider_kind: 'ollama' as const,
+      model_id: 'nomic-embed-text',
+      dimensions: 768,
+      scope: 'global' as const,
+      project_id: null,
+      index_version: 1,
+      status: 'active' as const,
+      created_at: '2026-09-28T12:00:00+00:00',
+      updated_at: '2026-09-28T12:00:00+00:00',
+    }
+    const legacy = { provider_kind: 'ollama' as const, model_id: 'mxbai-embed-large', dimensions: 1024 }
+    expect(() =>
+      EmbeddingLegacySyncResultSchema.parse({
+        outcome: 'conflict',
+        active_configuration: active,
+        legacy,
+      }),
+    ).not.toThrow()
+    expect(() =>
+      EmbeddingLegacySyncResultSchema.parse({ outcome: 'conflict', active_configuration: active }),
+    ).toThrow(/active_configuration/)
+    expect(() =>
+      EmbeddingLegacySyncResultSchema.parse({
+        outcome: 'conflict',
+        configuration: active,
+        active_configuration: active,
+        legacy,
+      }),
+    ).toThrow(/configuration/)
   })
 })

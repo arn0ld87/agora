@@ -32,6 +32,8 @@ from app.contracts.ai_provider_contract import ProviderConnection
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationStatus,
+    EmbeddingLegacyDivergence,
+    EmbeddingLegacySyncResult,
     EmbeddingProviderKind,
 )
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore
@@ -227,29 +229,53 @@ class EmbeddingConfigurationService:
         provider_kind: EmbeddingProviderKind,
         model_id: str,
         dimensions: int,
-    ) -> EmbeddingConfiguration | None:
+    ) -> EmbeddingLegacySyncResult:
         """Liest die Legacy-``Config.EMBEDDING_*``-Werte in eine kanonische
-        Konfiguration. Tut nichts, wenn bereits eine aktive globale
-        Konfiguration existiert.
+        Konfiguration.
 
-        Gibt die synchronisierte Konfiguration zurueck, oder ``None``,
-        wenn der Sync uebersprungen wurde (weil schon eine andere
-        aktive Konfiguration existiert).
+        Drei Faelle (#1417, siehe ``EmbeddingLegacySyncResult``):
+
+        * Keine aktive globale Konfiguration existiert -> ``created``, die
+          Legacy-Sicht wird persistiert.
+        * Eine aktive globale Konfiguration existiert und ist identisch
+          (Provider, Modell, Dimension) -> ``noop``, nichts wird
+          geschrieben.
+        * Eine aktive globale Konfiguration existiert und weicht ab ->
+          ``conflict``, nichts wird geschrieben. Maintainer-Entscheidung
+          (2026-09): der Konflikt wird gemeldet, nicht automatisch
+          aufgeloest — der Store bleibt die Wahrheit.
         """
-        if self._store.get_active_global_configuration() is not None:
-            return None
-        config = self._store.upsert_configuration(
-            configuration_id=None,
-            provider_connection_id=provider_connection_id,
-            provider_kind=provider_kind,
-            model_id=model_id,
-            dimensions=dimensions,
-            scope="global",
-            project_id=None,
-            status="proposed",
-            status_message="aus Config.EMBEDDING_* uebernommen",
+        active = self._store.get_active_global_configuration()
+        if active is None:
+            config = self._store.upsert_configuration(
+                configuration_id=None,
+                provider_connection_id=provider_connection_id,
+                provider_kind=provider_kind,
+                model_id=model_id,
+                dimensions=dimensions,
+                scope="global",
+                project_id=None,
+                status="proposed",
+                status_message="aus Config.EMBEDDING_* uebernommen",
+            )
+            return EmbeddingLegacySyncResult(outcome="created", configuration=config)
+
+        if (
+            active.provider_kind == provider_kind
+            and active.model_id == model_id
+            and active.dimensions == dimensions
+        ):
+            return EmbeddingLegacySyncResult(outcome="noop", configuration=active)
+
+        return EmbeddingLegacySyncResult(
+            outcome="conflict",
+            active_configuration=active,
+            legacy=EmbeddingLegacyDivergence(
+                provider_kind=provider_kind,
+                model_id=model_id,
+                dimensions=dimensions,
+            ),
         )
-        return config
 
     # ------------------------------------------------------------------
     # Helpers
