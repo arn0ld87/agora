@@ -11,7 +11,9 @@ und für jeden Registry-Push eine kryptographische Build-Provenance-Attestation.
 |---|---|---|---|
 | `build-only` | `agora-image-sbom-spdx` | SPDX-JSON | SBOM des lokal gebauten Images (vor Smoke-Gate) |
 | `publish` | `agora-ghcr-sbom-spdx` | SPDX-JSON | SBOM des tatsächlich gepushten GHCR-Images |
-| `publish` | GHCR-Attestation | Sigstore/Rekor | Build-Provenance (in-registry, via `actions/attest-build-provenance`) |
+| `publish` | GHCR-Attestation | Sigstore/Rekor | Build-Provenance (in-registry, via `actions/attest-build-provenance`) für `agora` und `agora-proxy` |
+
+Seit #1708 publiziert `publish` auch auf jedem grünen `main`-Push (Tags `sha-<7>`, `edge`), nicht mehr nur auf Release-Pfaden. `latest` zeigt auf das letzte Release mit grünem Smoke. Für Prüfungen einen festen Tag (`sha-<7>` oder `vX.Y.Z`) verwenden — `edge` und `latest` bewegen sich.
 
 Aufbewahrung: SBOM-Workflow-Artefakte 90 Tage. Attestations sind dauerhaft im GHCR-Repository gespeichert.
 
