@@ -4,7 +4,7 @@ description: MUST BE USED for Python refactors in backend/app/services and backe
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 effort: high
-maxTurns: 60
+maxTurns: 150
 background: true
 isolation: worktree
 ---
