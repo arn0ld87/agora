@@ -28,6 +28,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Protocol, runtime_checkable
 
 from ..utils.logger import get_logger
+from ..utils.path_safety import validate_path_id
 from .artifact_store import SimulationArtifactStore, resolve_default_store
 
 logger = get_logger("agora.event_bus")
@@ -549,6 +550,9 @@ def _simulation_abs_dir(simulation_id: str) -> Optional[str]:
     """Return the on-disk simulation directory if the local adapter is active."""
     from ..utils.artifact_locator import ArtifactLocator
 
+    # SEC-1 (CodeQL py/path-injection #354, #355): simulation_id speist
+    # os.path.join gegen den Simulationen-Root. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     path = os.path.join(ArtifactLocator.simulations_dir(), simulation_id)
     return path if os.path.isdir(path) else None
 

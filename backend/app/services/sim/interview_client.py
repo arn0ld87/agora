@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
 
 from ...utils.logger import get_logger
+from ...utils.path_safety import validate_path_id
 from ..artifact_store import resolve_default_store
 from ..simulation_ipc import SimulationIPCClient
 from .interview_direct import (
@@ -128,6 +129,9 @@ def _run_is_finished(simulation_id: str, *, run_state_dir: str) -> bool:
 
 def check_env_alive(simulation_id: str, *, run_state_dir: str) -> bool:
     """Return ``True`` if the simulation environment is alive (accepts Interview commands)."""
+    # SEC-1 (CodeQL py/path-injection #375): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         return False
@@ -204,6 +208,9 @@ def interview_agent(
             personas are available.
         TimeoutError: IPC response timed out.
     """
+    # SEC-1 (CodeQL py/path-injection #376): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
@@ -304,6 +311,9 @@ def interview_agents_batch(
             personas are available.
         TimeoutError: IPC response timed out.
     """
+    # SEC-1 (CodeQL py/path-injection #377): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
@@ -381,6 +391,9 @@ def interview_all_agents(
     Raises:
         ValueError: Simulation / config missing, or no agents in config.
     """
+    # SEC-1 (CodeQL py/path-injection #85): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
@@ -426,6 +439,9 @@ def close_simulation_env(
     Raises:
         ValueError: Simulation directory does not exist.
     """
+    # SEC-1 (CodeQL py/path-injection #83): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
@@ -530,6 +546,9 @@ def get_interview_history(
     ``platform`` may be ``"reddit"``, ``"twitter"``, or ``None`` (both).
     When both platforms are queried, the combined result is capped at *limit*.
     """
+    # SEC-1 (CodeQL py/path-injection #87): simulation_id speist unten die
+    # SQLite-DB-Pfade. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     sim_dir = os.path.join(run_state_dir, simulation_id)
 
     platforms = [platform] if platform in ("reddit", "twitter") else ["twitter", "reddit"]
