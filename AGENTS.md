@@ -26,7 +26,6 @@ Jede Aenderung beginnt beim Vertrag (`backend/app/contracts/`), nie beim Consume
 - `print()` statt strukturiertem Logging
 - Abgeschwaechte Assertions / globale Skips um Tests gruen zu machen
 - Neue Produktbereiche ausserhalb der aktuellen Roadmap-Stufe
-- `apt` auf Debian/Ubuntu (verwende `nala`)
 
 ## Dokumentationshierarchie
 

@@ -28,7 +28,6 @@ Du dokumentierst Agora auf Deutsch in Du-Form und ohne Marketing-Sprech.
 - DACH-Kontext: DSGVO, lokal-first, kein US-Cloud-Lock-in.
 - Tabellen für Vergleiche, Code mit kurzen Inline-Kommentaren.
 - Fachbegriffe englisch lassen und bei Bedarf deutsch erklären.
-- `nala` statt `apt`.
 
 ## Doku-Strukturen
 
