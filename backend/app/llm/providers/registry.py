@@ -131,6 +131,18 @@ def _parse_host_port(base: str) -> tuple[Optional[str], Optional[int]]:
     return parsed.hostname, port
 
 
+def _host_is(host: Optional[str], domain: str) -> bool:
+    """``True``, wenn ``host`` exakt ``domain`` oder eine Subdomain davon ist.
+
+    Hostname-Suffix-Vergleich statt URL-Substring (Issue #1669, CodeQL
+    ``py/incomplete-url-substring-sanitization``): ``api.openai.com.attacker
+    .test`` oder ``evil-openai.com`` matchen ``openai.com`` NICHT.
+    """
+    if not host:
+        return False
+    return host == domain or host.endswith(f".{domain}")
+
+
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
     """
     Detect the provider used by the backend HTTP client.
@@ -157,17 +169,17 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     # ``api.openai.com.attacker.test`` oder ein Pfad/Query mit dem Text darf
     # NICHT matchen. ``_parse_host_port`` wird fuer ALLE Zweige (auch
     # MiniMax/Bedrock/Anthropic) wiederverwendet statt dreifachem urlparse.
-    if host == "ollama.com" or (host and host.endswith(".ollama.com")):
+    if _host_is(host, "ollama.com"):
         return "cloud"
     if _is_ollama_cloud_tag(model_name):
         return "cloud"
-    if host == "api.minimax.io" or (host and host.endswith(".api.minimax.io")):
+    if _host_is(host, "api.minimax.io"):
         return "minimax"
     if port == 11434:
         return "ollama"
-    if host == "openai.com" or (host and host.endswith(".openai.com")):
+    if _host_is(host, "openai.com"):
         return "openai"
-    if host == "googleapis.com" or (host and host.endswith(".googleapis.com")):
+    if _host_is(host, "googleapis.com"):
         return "google"
     # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
     # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
@@ -219,14 +231,11 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
     # Issue #1669) — hostname-/port-basiert statt roher URL-Substring-
     # Pruefung, identisch zu :func:`_detect_http`. Ein Drittanbieter-Host wie
     # ``generativelanguage.googleapis.com.attacker.test`` darf nicht matchen.
-    if (host == "googleapis.com" or (host and host.endswith(".googleapis.com"))) or m.startswith(
-        "gemini-"
-    ):
+    if _host_is(host, "googleapis.com") or m.startswith("gemini-"):
         return "google"
 
     if (
-        host == "ollama.com"
-        or (host and host.endswith(".ollama.com"))
+        _host_is(host, "ollama.com")
         or port == 11434
         or _is_ollama_cloud_tag(m)
         or m.endswith(":latest")
