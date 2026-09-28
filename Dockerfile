@@ -134,26 +134,17 @@ RUN set -eux; \
 # Eigene Stage aus demselben Grund wie codex-cli: ``prod`` erbt nicht von
 # ``base``, der Download passiert im Build genau einmal.
 #
-# Anders als codex (gepinntes GitHub-Release-Tarball + hier hartkodiertem
-# SHA256) hat Claude Code keinen vergleichbaren "Tarball + Digest"-Vertrag an
-# einer stabilen URL. Der offizielle Installer (curl https://claude.ai/
-# install.sh) laedt pro Release ein Manifest mit SHA256-Pruefsummen je
-# Plattform und prueft intern dagegen (verifiziert im Script: Checksum-Format-
-# Validierung + Vergleich vor dem Entpacken) — die Integritaetspruefung liegt
-# damit bei Anthropics eigener Release-Infrastruktur statt bei einem hier
-# gepflegten Hash. Bewusster, dokumentierter Trade-off, kein Uebersehen.
+# Bezug wie bei codex: Version UND SHA256 je Architektur gepinnt, das Binary
+# kommt direkt von der Release-URL, die auch der offizielle Installer nutzt
+# (``https://downloads.claude.ai/claude-code-releases/<version>/<platform>/claude``).
+# Frueher lief ``curl https://claude.ai/install.sh | bash`` — ein ungepruefter
+# downloadThenRun (Scorecard PinnedDependencies, #1670). Die Hashes stammen aus
+# ``.../<version>/manifest.json`` (Feld ``platforms[linux-x64|linux-arm64]
+# .checksum``) und muessen bei einem Versionsbump beide mitgezogen werden.
+# ``base`` ist Debian/glibc, daher die Nicht-musl-Plattformen.
 #
-# Version PINNED (kein "stable"/"latest") aus demselben Grund wie bei codex:
-# ein Image-Build soll reproduzierbar sein, nicht vom Tagesstand von
-# downloads.claude.ai abhaengen. Beim Versionsbump: ``claude --version`` auf
-# einer vertrauenswuerdigen Installation pruefen und ``CLAUDE_CODE_VERSION``
-# hier nachziehen.
-#
-# Plattform-Erkennung bleibt dem Installer selbst ueberlassen (``uname``-
-# basiert, kein eigenes TARGETARCH-Mapping wie bei codex noetig) — verifiziert
-# funktionierend unter dem Zielarchitektur-``uname`` auch bei QEMU-Emulation
-# (dieselbe Eigenschaft, die die codex-Stage fuer ihr eigenes ``uname -m``
-# nutzt).
+# Architektur-Erkennung identisch zur codex-Stage (TARGETARCH-Override,
+# sonst ``uname -m``) — siehe Begruendung dort.
 #
 # Groesse ehrlich benannt: das Binary ist ein selbstenthaltenes,
 # kompiliertes ~224 MB ELF-Executable (kein Node/keine Laufzeitabhaengigkeiten,
@@ -162,14 +153,29 @@ RUN set -eux; \
 FROM base AS claude-cli
 
 ARG CLAUDE_CODE_VERSION=2.1.278
+ARG CLAUDE_CODE_SHA256_AMD64=5c4735937844e84f8a93306e841a5b0e12252909b07870f789b190468da147ab
+ARG CLAUDE_CODE_SHA256_ARM64=7de6cab134e48321148e30182c98614118e8f4666819412bead45865190b34ed
+ARG TARGETARCH
 
 RUN set -eux; \
-    export HOME=/root; \
-    curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"; \
-    _bin="$(readlink -f "${HOME}/.local/bin/claude")"; \
-    test -n "${_bin}" && test -x "${_bin}"; \
-    install -m 0755 "${_bin}" /usr/local/bin/claude; \
-    rm -rf "${HOME}/.local/share/claude" "${HOME}/.local/bin/claude" "${HOME}/.claude"; \
+    case "${TARGETARCH:-}" in \
+      amd64) _plat=linux-x64 ;; \
+      arm64) _plat=linux-arm64 ;; \
+      *) case "$(uname -m)" in \
+           x86_64)        _plat=linux-x64 ;; \
+           aarch64|arm64) _plat=linux-arm64 ;; \
+           *) echo "claude: nicht unterstuetzte Architektur '$(uname -m)'" >&2; exit 1 ;; \
+         esac ;; \
+    esac; \
+    case "${_plat}" in \
+      linux-x64)   _sha="${CLAUDE_CODE_SHA256_AMD64}" ;; \
+      linux-arm64) _sha="${CLAUDE_CODE_SHA256_ARM64}" ;; \
+    esac; \
+    _url="https://downloads.claude.ai/claude-code-releases/${CLAUDE_CODE_VERSION}/${_plat}/claude"; \
+    curl -fsSL --retry 3 --retry-delay 2 -o /tmp/claude "${_url}"; \
+    echo "${_sha}  /tmp/claude" | sha256sum -c -; \
+    install -m 0755 /tmp/claude /usr/local/bin/claude; \
+    rm -f /tmp/claude; \
     claude --version
 
 # ---------- dev (default) ----------
