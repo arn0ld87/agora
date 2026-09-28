@@ -416,6 +416,11 @@ def get_all_actions(
     Returns:
         Complete action list sorted by timestamp, newest first.
     """
+    # SEC-1 (CodeQL py/path-injection #80, #81): simulation_id speist unten
+    # die Log-Pfade (twitter/reddit/legacy actions.jsonl) und die
+    # role_leakage-Profil-Ladepfade. safe_join_within_root loest den
+    # kanonischen Pfad auf statt nur die ID vor einem rohen os.path.join
+    # zu validieren.
     sim_dir = safe_join_within_root(
         str(base_dir), validate_path_id(simulation_id, field_name="simulation_id")
     )

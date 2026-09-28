@@ -192,6 +192,10 @@ class SimulationManager:
     
     def _get_simulation_dir(self, simulation_id: str) -> str:
         """Get simulation data directory"""
+        # SEC-1 (CodeQL py/path-injection #29): simulation_id speist
+        # os.path.join + os.makedirs. safe_join_within_root loest den
+        # kanonischen Pfad auf und stellt das Containment sicher, statt nur
+        # die ID an der Funktionsgrenze zu validieren.
         sim_dir = safe_join_within_root(
             self.SIMULATION_DATA_DIR, validate_path_id(simulation_id, field_name="simulation_id")
         )

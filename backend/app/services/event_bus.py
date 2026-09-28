@@ -550,6 +550,10 @@ def _simulation_abs_dir(simulation_id: str) -> Optional[str]:
     from ..utils.artifact_locator import ArtifactLocator
     from ..utils.path_safety import PathTraversalError
 
+    # SEC-1 (CodeQL py/path-injection #354, #355): simulation_id speist den
+    # Pfad gegen den Simulationen-Root. ArtifactLocator.simulation_dir()
+    # validiert die ID und loest den kanonischen Pfad per safe_join_within_root
+    # auf, statt nur eine Guard-Pruefung vor einem rohen os.path.join zu setzen.
     try:
         path = ArtifactLocator.simulation_dir(simulation_id)
     except PathTraversalError:

@@ -270,12 +270,20 @@ def _enforce_demo_mode_guard(logger) -> None:
             )
 
 
-def _resolve_spa_static_target(frontend_dist, path: str):
-    """Loese ``path`` (aus der ``<path:path>``-Route) sicher unter ``frontend_dist``
-    auf (#1669). ``path`` ist vollstaendig URL-kontrolliert und kann ``../``-Segmente
-    enthalten; ``Path.__truediv__`` normalisiert diese nicht. Gibt den kanonischen
-    Ziel-Pfad zurueck, wenn er tatsaechlich unter ``frontend_dist`` bleibt und dort
-    eine Datei ist — sonst ``None`` (Fallback auf ``index.html``, wie zuvor)."""
+def _resolve_spa_static_file(frontend_dist: "os.PathLike[str] | str", path: str) -> "str | None":
+    """Loese ``path`` sicher unterhalb von ``frontend_dist`` auf.
+
+    CodeQL py/path-injection (#1669 Slice B): der rohe ``frontend_dist / path``
+    + ``.is_file()`` vor ``send_from_directory`` liest den Dateisystem-Zustand
+    ausserhalb von ``frontend_dist``, bevor Werkzeugs eigene
+    Containment-Pruefung greift — ein Existenz-Orakel fuer beliebige Pfade.
+    ``safe_join_within_root`` prueft die Containment vorher; ein
+    Escape-Versuch liefert ``None`` wie ein fehlendes Dateisystem-Objekt,
+    sodass der Aufrufer unveraendert auf die SPA-``index.html`` zurueckfaellt.
+
+    Gibt den kanonischen Pfad zurueck, wenn er innerhalb von ``frontend_dist``
+    liegt und eine Datei ist — sonst ``None``.
+    """
     from .utils.path_safety import PathTraversalError, safe_join_within_root
 
     if not path:
@@ -636,7 +644,7 @@ def create_app(config_class=Config):
                     "error": "Not Found",
                     "code": "not_found",
                 }, 404
-            if _resolve_spa_static_target(frontend_dist, path):
+            if _resolve_spa_static_file(frontend_dist, path) is not None:
                 return send_from_directory(frontend_dist, path)
             return send_from_directory(frontend_dist, 'index.html')
 

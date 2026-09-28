@@ -221,27 +221,29 @@ def test_detect_default_provider_id_gemini_model_without_google_base_url_converg
 
 
 def test_detect_default_provider_id_delegates_ssot_hostname_semantics():
-    """Issue #1669 (CodeQL py/incomplete-url-substring-sanitization #367/#389/
-    #390): the SSoT now compares hostnames/ports exactly instead of matching a
-    raw substring anywhere in the base URL. ``_detect_default_provider_id``
-    inherits this hardened SSoT behavior verbatim: a look-alike host
-    (``evil-openai.com``) or a path-embedded occurrence of the real hostname
-    on a foreign host (``proxy.example/generativelanguage.googleapis.com``) no
-    longer misroutes to the real provider — both fall back to
-    ``openai_compatible``, same as any other unrecognized endpoint. Legitimate
-    subdomains still resolve correctly (see
-    ``test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix``
-    below)."""
-    assert (
-        _detect_default_provider_id("https://evil-openai.com/v1", "custom-model")
-        == "openai_compatible"
-    )
-    assert (
-        _detect_default_provider_id(
-            "https://proxy.example/generativelanguage.googleapis.com", "custom-model"
-        )
-        == "openai_compatible"
-    )
+    """``_detect_default_provider_id`` erbt die SSoT-Erkennung unverändert.
+
+    Seit #1669 (CodeQL ``py/incomplete-url-substring-sanitization``) prüft die
+    SSoT bei OpenAI, Google und Ollama Cloud den Hostnamen statt eines
+    Substrings: Ein Lookalike-Host oder ein Pfad, der den Anbieter nur
+    enthält, fällt auf ``openai_compatible``, damit ein fremder Host keinen
+    Anbieter-Key bekommt. Echte Hosts und ihre Subdomains bleiben erkannt
+    (siehe ``test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix``)."""
+    assert _detect_default_provider_id(
+        "https://evil-openai.com/v1", "custom-model"
+    ) == "openai_compatible"
+    assert _detect_default_provider_id(
+        "https://proxy.example/api.openai.com/v1", "custom-model"
+    ) == "openai_compatible"
+    assert _detect_default_provider_id(
+        "https://api.openai.com/v1", "custom-model"
+    ) == "openai"
+    assert _detect_default_provider_id(
+        "https://proxy.example/generativelanguage.googleapis.com", "custom-model"
+    ) == "openai_compatible"
+    assert _detect_default_provider_id(
+        "https://generativelanguage.googleapis.com/v1beta/openai", "custom-model"
+    ) == "google"
 
 
 def test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix():

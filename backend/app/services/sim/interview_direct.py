@@ -64,6 +64,9 @@ def _load_personas(
     CSV neben den Simulationsdaten. Fehler werden geloggt und als leere Liste
     behandelt — der Aufrufer entscheidet, ob das ein harter Fehler ist.
     """
+    # SEC-1 (CodeQL py/path-injection #372, #373): simulation_id speist unten
+    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
+    validate_path_id(simulation_id, field_name="simulation_id")
     if platform == "twitter":
         profiles_path = safe_join_within_root(
             run_state_dir,
@@ -296,7 +299,14 @@ def _persist_interview(
     werden geloggt und niemals an den Aufrufer weitergereicht — eine bereits
     erzeugte Antwort darf an der Persistenz nicht scheitern.
     """
-    db_path = os.path.join(run_state_dir, simulation_id, f"{platform}_simulation.db")
+    # SEC-1 (CodeQL py/path-injection): simulation_id speist die Trace-DB.
+    # safe_join_within_root loest den kanonischen Pfad auf statt nur die ID
+    # zu validieren.
+    db_path = safe_join_within_root(
+        run_state_dir,
+        validate_path_id(simulation_id, field_name="simulation_id"),
+        f"{platform}_simulation.db",
+    )
     info = json.dumps(
         {"prompt": prompt, "response": response, "source": "direct"},
         ensure_ascii=False,
@@ -572,6 +582,9 @@ def interview_agents_batch_direct(
         ValueError: Simulation existiert nicht oder es sind für keine Plattform
             Personas persistiert.
     """
+    # SEC-1 (CodeQL py/path-injection #374): simulation_id speist unten
+    # os.path.join gegen run_state_dir. safe_join_within_root loest den
+    # kanonischen Pfad auf statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )

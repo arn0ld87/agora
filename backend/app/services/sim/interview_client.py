@@ -129,6 +129,8 @@ def _run_is_finished(simulation_id: str, *, run_state_dir: str) -> bool:
 
 def check_env_alive(simulation_id: str, *, run_state_dir: str) -> bool:
     """Return ``True`` if the simulation environment is alive (accepts Interview commands)."""
+    # SEC-1 (CodeQL py/path-injection #375): simulation_id speist unten os.path.join gegen run_state_dir. safe_join_within_root
+    # loest den kanonischen Pfad auf statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )
@@ -207,6 +209,8 @@ def interview_agent(
             personas are available.
         TimeoutError: IPC response timed out.
     """
+    # SEC-1 (CodeQL py/path-injection #376): simulation_id speist unten os.path.join gegen run_state_dir. safe_join_within_root
+    # loest den kanonischen Pfad auf statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )
@@ -309,6 +313,8 @@ def interview_agents_batch(
             personas are available.
         TimeoutError: IPC response timed out.
     """
+    # SEC-1 (CodeQL py/path-injection #377): simulation_id speist unten os.path.join gegen run_state_dir. safe_join_within_root
+    # loest den kanonischen Pfad auf statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )
@@ -388,6 +394,8 @@ def interview_all_agents(
     Raises:
         ValueError: Simulation / config missing, or no agents in config.
     """
+    # SEC-1 (CodeQL py/path-injection #85): simulation_id speist unten os.path.join gegen run_state_dir. safe_join_within_root
+    # loest den kanonischen Pfad auf statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )
@@ -435,6 +443,8 @@ def close_simulation_env(
     Raises:
         ValueError: Simulation directory does not exist.
     """
+    # SEC-1 (CodeQL py/path-injection #83): simulation_id speist unten os.path.join gegen run_state_dir. safe_join_within_root
+    # loest den kanonischen Pfad auf statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )
@@ -541,6 +551,9 @@ def get_interview_history(
     ``platform`` may be ``"reddit"``, ``"twitter"``, or ``None`` (both).
     When both platforms are queried, the combined result is capped at *limit*.
     """
+    # SEC-1 (CodeQL py/path-injection #87): simulation_id speist unten die
+    # SQLite-DB-Pfade. safe_join_within_root loest den kanonischen Pfad auf
+    # statt nur die ID zu validieren.
     sim_dir = safe_join_within_root(
         run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
     )

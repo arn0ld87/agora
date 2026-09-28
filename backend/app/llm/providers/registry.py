@@ -64,18 +64,13 @@ DetectionMode = Literal["http", "oasis"]
 # eng, damit ``<name>:<wort>-cloud`` (ohne Groessenpraefix) auf einem
 # Nicht-Ollama-Gateway KEIN False-Positive ausloest.
 #
-# CodeQL py/polynomial-redos (#1669) — possessive Quantifiers (``++``/``*+``,
-# Python >=3.11) verbieten Backtracking zwischen ``\d`` und ``[a-z]``
-# entlang eines langen Adversarial-Inputs; die Laengenkappung in
-# :func:`_is_ollama_cloud_tag` sichert zusaetzlich eine O(1)-Ablehnung
-# unabhaengig von Regex-Engine-Details. Docstring-Beispiele behalten ihr
-# Ergebnis unveraendert.
-_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d++[a-z]*+-cloud")
-
-# Maximale Tag-Laenge fuer die Cloud-Size-Pruefung (Issue #1669, ReDoS-Cap).
-# Reale Tags (``20b-cloud`` … ``480b-cloud``) sind zweistellig; 64 laesst
-# grosszuegigen Headroom und verwirft adversarial lange Tags vor dem Regex.
-_OLLAMA_CLOUD_SIZE_TAG_MAX_LEN = 64
+# CodeQL #1669 (py/polynomial-redos): ``\d+`` und ``[a-z]*`` stehen auf
+# disjunkten Zeichenklassen, Backtracking zwischen beiden aendert nie das
+# Match-Ergebnis (ein zurueckgegebenes Digit kann ``[a-z]*`` nie aufnehmen,
+# ein zurueckgegebener Buchstabe nie das literale ``-`` in ``-cloud``).
+# Atomic Groups (Python 3.11+) unterbinden das Backtracking, ohne die
+# Match-Semantik zu aendern — nur die Worst-Case-Laufzeit sinkt.
+_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"(?>\d+)(?>[a-z]*)-cloud")
 
 
 def _is_ollama_cloud_tag(model: str) -> bool:
@@ -96,11 +91,7 @@ def _is_ollama_cloud_tag(model: str) -> bool:
     if ":" not in model:
         return False
     tag = model.rsplit(":", 1)[-1]
-    if tag == "cloud":
-        return True
-    if len(tag) > _OLLAMA_CLOUD_SIZE_TAG_MAX_LEN:
-        return False
-    return _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
+    return tag == "cloud" or _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
 
 
 def _parse_host_port(base: str) -> tuple[Optional[str], Optional[int]]:
@@ -131,18 +122,6 @@ def _parse_host_port(base: str) -> tuple[Optional[str], Optional[int]]:
     return parsed.hostname, port
 
 
-def _host_is(host: Optional[str], domain: str) -> bool:
-    """``True``, wenn ``host`` exakt ``domain`` oder eine Subdomain davon ist.
-
-    Hostname-Suffix-Vergleich statt URL-Substring (Issue #1669, CodeQL
-    ``py/incomplete-url-substring-sanitization``): ``api.openai.com.attacker
-    .test`` oder ``evil-openai.com`` matchen ``openai.com`` NICHT.
-    """
-    if not host:
-        return False
-    return host == domain or host.endswith(f".{domain}")
-
-
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
     """
     Detect the provider used by the backend HTTP client.
@@ -169,9 +148,7 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     # ``api.openai.com.attacker.test`` oder ein Pfad/Query mit dem Text darf
     # NICHT matchen. ``_parse_host_port`` wird fuer ALLE Zweige (auch
     # MiniMax/Bedrock/Anthropic) wiederverwendet statt dreifachem urlparse.
-    if _host_is(host, "ollama.com"):
-        return "cloud"
-    if _is_ollama_cloud_tag(model_name):
+    if _host_is(host, "ollama.com") or _is_ollama_cloud_tag(model_name):
         return "cloud"
     if _host_is(host, "api.minimax.io"):
         return "minimax"
@@ -181,24 +158,17 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "openai"
     if _host_is(host, "googleapis.com"):
         return "google"
-    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
-    # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
-    # Drittanbieter-Host mit „bedrock“ im Pfad darf NICHT matchen. Erkennt
-    # bedrock-mantle.<region>.api.aws (empfohlener mantle-Endpunkt) und
-    # bedrock-runtime.<region>.amazonaws.com (Fallback, falls jemand den
-    # Runtime-Host einträgt — ebenfalls OpenAI-Compat via mantle). Beide
-    # sprechen OpenAI-Chat-Completions + Bearer-API-Key. Die Suffix-Pruefung
-    # (``.api.aws``/``.amazonaws.com``) schliesst Praefix-False-Positives wie
-    # ``bedrock-mantle.attacker.example`` aus (siehe :func:`_is_bedrock_host`).
+    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad
+    # (bedrock-mantle.<region>.api.aws, Fallback bedrock-runtime.<region>.
+    # amazonaws.com); Suffix-Pruefung gegen Praefix-False-Positives wie
+    # ``bedrock-mantle.attacker.example``, siehe :func:`_is_bedrock_host`.
     if host and _is_bedrock_host(host):
         return "bedrock"
-    # Issue #1284 — api.anthropic.com trägt keinen nativen Chat-Adapter.
-    # Hostname-basiert wie Minimax/Bedrock (CodeQL #750): ein Drittanbieter-
-    # Host mit „anthropic“ im Namen darf nicht matchen. Erkannt wird
-    # ausschließlich, damit ``LLMClient``/``get_adapter`` laut scheitern
-    # können statt den OpenAI-kompatiblen Client stillschweigend gegen eine
-    # Route ohne "/v1" und ohne Anthropic-Messages-Format laufen zu lassen —
-    # siehe :func:`_is_anthropic_host`.
+    # Issue #1284 — api.anthropic.com traegt keinen nativen Chat-Adapter.
+    # Erkannt wird ausschliesslich, damit ``LLMClient``/``get_adapter`` laut
+    # scheitern koennen statt den OpenAI-kompatiblen Client stillschweigend
+    # gegen eine Route ohne "/v1" laufen zu lassen, siehe
+    # :func:`_is_anthropic_host`.
     if host and _is_anthropic_host(host):
         return "anthropic"
     return "unknown"
@@ -508,6 +478,11 @@ def _has_ollama_url_signal(base_url: Optional[str]) -> bool:
         # Unparsbarer Port — kein Signal, lieber nicht anfassen.
         return False
 
+
+
+def _host_is(host: str, domain: str) -> bool:
+    """``host`` ist ``domain`` selbst oder eine Subdomain davon (CodeQL #1669)."""
+    return host == domain or host.endswith("." + domain)
 
 def _is_bedrock_host(host: str) -> bool:
     """Praezise Bedrock-Host-Erkennung, Spiegel des MiniMax-Zweigs.

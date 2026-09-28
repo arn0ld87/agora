@@ -4,10 +4,13 @@ on:
   # Build+Trivy (build-only) läuft auf jedem relevanten Push (main,
   # release/**, rc/**, tags) und auf PRs mit pfadgefilterten Änderungen
   # (Dockerfile, Compose, deploy/, backend/, frontend/, dieser Workflow).
-  # Smoke (prod-proxy-smoke) und Registry-Push (publish) laufen NICHT auf
-  # main-Pushes oder PRs — nur auf Release-/RC-Branches, Tags und
-  # manuellem Dispatch (siehe if:-Guards weiter unten). Vor einem Release
-  # manuell anstoßen oder Release-Branch pushen.
+  # build-only baut BEIDE ausgelieferten Images: agora (target prod) und
+  # agora-proxy (target proxy, nginx + Frontend-Bundle, Default-Build-Args).
+  # Smoke (prod-proxy-smoke) laeuft nur auf Release-/RC-Branches, Tags und
+  # manuellem Dispatch. Registry-Push (publish) laeuft dort nach gruenem
+  # Smoke (vX.Y.Z, latest) und zusaetzlich auf jedem main-Push nach gruenem
+  # build-only (sha-<7>, edge) — ohne Smoke, Gate ist Build + Trivy (#1708).
+  # PRs publizieren nie.
   push:
     branches: [main, "release/**", "rc/**"]
     tags: ["v*"]
@@ -78,7 +81,8 @@ jobs:
     #
     # amd64 ist auch die Architektur, die tatsächlich ausgeliefert wird:
     # `publish` baut auf `ubuntu-latest`, das Image in GHCR war also immer
-    # amd64. Die Deployments auf armserver bauen lokal statt aus der Registry.
+    # amd64; armserver ist ein amd64-Host und zieht es seit #1708 per
+    # deploy/compose/docker-compose.ghcr.yml, statt lokal zu bauen.
     # Für die Kette build → smoke → publish gibt es damit keinen belegten
     # arm64-Bedarf. Werden echte arm64-Images gebraucht, gehört das als
     # Multi-Platform-Build (`platforms: linux/amd64,linux/arm64`) in den
@@ -211,9 +215,34 @@ jobs:
           # Build brach im Cache-Export ohne Fehlermeldung ab.
           # mode=min exportiert nur die Layer des finalen Images; der
           # Cache-Nutzen für den publish-Build bleibt erhalten.
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          #
+          # scope=prod: Das Proxy-Image unten schreibt in denselben GHA-Cache.
+          # Ohne getrennte Scopes ueberschreibt der zweite Export den ersten,
+          # und publish baut das Prod-Image ohne Cache-Treffer neu.
+          cache-from: type=gha,scope=prod
+          cache-to: type=gha,mode=min,scope=prod
           outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Build proxy image (kein Push)
+        # Das nginx-Sidecar mit eingebackenem Frontend-Bundle ist das zweite
+        # ausgelieferte Image (ghcr.io/<owner>/agora-proxy, #1708). Es wird
+        # hier gebaut, nicht erst im Smoke-Job: dort sperrt die Egress-
+        # Allowlist dl-cdn.alpinelinux.org, deb.debian.org und
+        # registry.npmjs.org, und der Compose-Build hing bis zum Job-Timeout
+        # (v0.9.6, Run 35517075897 — publish wurde deshalb nie erreicht).
+        # Build-Args bleiben auf den Dockerfile-Defaults: kein Build-Time-
+        # Token im Bundle, weil dieses Image oeffentlich publiziert wird.
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          target: proxy
+          push: false
+          # Compose-Default-Name fuer Service "nginx" im Projekt "agora".
+          tags: agora-nginx:ci-${{ github.sha }}
+          cache-from: type=gha,scope=proxy
+          cache-to: type=gha,mode=min,scope=proxy
+          outputs: type=docker,dest=/tmp/proxy-image.tar
 
       - name: Trivy container scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -240,6 +269,26 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
+
+      - name: Trivy proxy image scan
+        # Gleiche Policy wie das Prod-Image: das Proxy-Image wird ebenfalls
+        # publiziert und muss dasselbe Gate passieren.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          input: /tmp/proxy-image.tar
+          format: sarif
+          output: trivy-proxy.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy proxy SARIF
+        if: always() && hashFiles('trivy-proxy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: trivy-proxy.sarif
+          category: trivy-proxy
 
       - name: Trivy config scan (Dockerfile, Compose)
         # Prüft Dockerfile- und Compose-Fehlkonfigurationen (root-User,
@@ -276,8 +325,8 @@ jobs:
         run: |
           docker load -i /tmp/image.tar
           if [ "${IMAGE_ARTIFACT_NEEDED}" != "true" ]; then
-            echo "Kein Konsument fuer /tmp/image.tar in diesem Lauf — Datei freigegeben."
-            rm -f /tmp/image.tar
+            echo "Kein Konsument fuer die Image-Tars in diesem Lauf — Dateien freigegeben."
+            rm -f /tmp/image.tar /tmp/proxy-image.tar
             df -h / | tail -1
           fi
 
@@ -306,7 +355,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-image
-          path: /tmp/image.tar
+          path: |
+            /tmp/image.tar
+            /tmp/proxy-image.tar
           # Artefakt wird nur für den Workflow-Run benötigt; 1 Tag reicht.
           retention-days: 1
 
@@ -326,16 +377,17 @@ jobs:
       contents: read
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
     # Keine echten Secrets nötig: NEO4J_PASSWORD muss nur nicht leer sein
-    # (Compose-Gate), AGORA_AUTH_TOKEN/VITE_AGORA_TOKEN sind Smoke-Dummies.
+    # (Compose-Gate), AGORA_AUTH_TOKEN ist ein Smoke-Dummy. Ein Build-Time-
+    # Token fuers Frontend gibt es hier nicht mehr: der Smoke startet das
+    # Proxy-Image aus build-only, also genau das Bundle, das publiziert wird
+    # (Default-Args, Runtime-Login). verify-deploy.sh authentisiert per Header.
     env:
       NEO4J_PASSWORD: ci_smoke_neo4j
       AGORA_AUTH_TOKEN: ci_smoke_token
-      VITE_AGORA_TOKEN: ci_smoke_vite_token
       # SECRET_KEY/LLM_API_KEY werden von Config.validate() in non-debug erzwungen.
       # Werte sind CI-Smoke-Dummies, kein Produktions-Geheimnis.
       SECRET_KEY: ci_smoke_secret_key_for_prod_proxy_smoke_only_not_a_real_secret
       LLM_API_KEY: ollama
-      ALLOW_BUILD_TIME_TOKEN: "true"
       AGORA_BIND_HOST: "0.0.0.0"
       # Ollama ist im CI-Runner nicht verfügbar. Skip-Flag verhindert den
       # Live-HTTP-Probe-Call beim Container-Startup (Issue #276). Die statische
@@ -373,23 +425,23 @@ jobs:
           name: docker-image
           path: /tmp
 
-      - name: Image laden und für Compose umtaggen
-        # Das geladene Image hat den CI-Tag "agora-agora:ci-<sha>".
-        # Compose erwartet das Image unter "agora-agora:latest" (Projektname
-        # "agora" + Service "agora" → Default-Image-Name ohne --build).
-        # Mit "docker tag" machen wir das Image für Compose sichtbar, ohne
-        # dass Compose selbst baut (kein --build im up-Aufruf).
+      - name: Images laden und für Compose umtaggen
+        # Die geladenen Images tragen die CI-Tags "agora-agora:ci-<sha>" und
+        # "agora-nginx:ci-<sha>". Compose erwartet sie unter den Default-
+        # Namen (Projekt "agora" + Service "agora"/"nginx") mit :latest.
         run: |
           docker load -i /tmp/image.tar
+          docker load -i /tmp/proxy-image.tar
           docker tag agora-agora:ci-${{ github.sha }} agora-agora:latest
+          docker tag agora-nginx:ci-${{ github.sha }} agora-nginx:latest
 
       - name: CI-Umgebungsdatei generieren
         # AGORA_PROXY_PORT=80: Der Proxy bindet seit dem Loopback-Default auf
         # 127.0.0.1:8080; die Health-Waits unten und verify-deploy.sh curlen
         # aber http://localhost (Port 80). Im CI-Smoke explizit 80 setzen.
         run: |
-          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\nAGORA_PROXY_PORT=80\nAGORA_SKIP_EMBEDDING_PROBE=%s\n' \
-            "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" "$AGORA_SKIP_EMBEDDING_PROBE" > .env
+          printf 'AGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\nAGORA_PROXY_PORT=80\nAGORA_SKIP_EMBEDDING_PROBE=%s\n' \
+            "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" "$AGORA_SKIP_EMBEDDING_PROBE" > .env
 
       - name: Bind-Mount-Verzeichnisse fuer Container-UID vorbereiten
         # GitHub-Runner-Workspace gehoert uid 1001, der Prod-Container laeuft als
@@ -402,13 +454,10 @@ jobs:
           setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
 
       - name: Compose-Stack starten
-        # Kein --build noetig: das agora-Image ist bereits geladen (docker
-        # load oben) und unter agora-agora:latest getaggt. Der nginx/proxy-
-        # Service hat noch kein Image auf dem Runner — Compose baut ihn
-        # automatisch aus dem Repo-Dockerfile (Stage "proxy", enthaelt das
-        # Frontend-Bundle bereits eingebacken).
-        # ALLOW_BUILD_TIME_TOKEN=true: CI ist Single-User-Tailnet-Variante,
-        # Token-Bundle-Einbrennen ist in diesem Kontext zulässig (N6/F2.1).
+        # --no-build: Beide Images kommen aus build-only (docker load oben).
+        # Fehlt eines, bricht Compose sofort ab, statt still einen Build zu
+        # starten, den die Egress-Allowlist dieses Jobs nicht durchlaesst
+        # (genau das liess den Smoke bei v0.9.6 in den Timeout laufen, #1708).
         # AGORA_BIND_HOST=0.0.0.0: Backend muss auf allen Interfaces erreichbar
         # sein, damit der nginx-Sidecar agora:5001 im Compose-Netz erreicht.
         run: |
@@ -416,7 +465,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.prod.yml \
             -f deploy/compose/docker-compose.prod-with-proxy.yml \
-            up -d
+            up -d --no-build
 
       - name: Auf Proxy-Health warten
         run: |
@@ -478,10 +527,21 @@ jobs:
     # Tags haben keinen Bypass mehr. Nur ein manueller workflow_dispatch mit
     # force_publish=true darf als Break-glass-Pfad publishen, wenn der Smoke rot
     # war; normale Releases bleiben strikt smoke-gated.
+    #
+    # main-Pushes (#1708): Dort laeuft kein Smoke (result == 'skipped'). Sie
+    # publizieren trotzdem, aber nur unter sha-<7> und edge — nie unter einem
+    # Versions-Tag oder latest. Gate ist der gruene build-only-Job (Build,
+    # Trivy fuer beide Images, SBOM). Damit kann armserver jeden main-Stand
+    # ziehen, statt ihn unter Last selbst zu bauen.
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [prod-proxy-smoke]
-    if: ${{ always() && (needs.prod-proxy-smoke.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.force_publish == true)) }}
+    needs: [build-only, prod-proxy-smoke]
+    if: >-
+      ${{ always() && needs.build-only.result == 'success' && (
+        needs.prod-proxy-smoke.result == 'success' ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prod-proxy-smoke.result == 'skipped') ||
+        (github.event_name == 'workflow_dispatch' && inputs.force_publish == true)
+      ) }}
     permissions:
       contents: read
       packages: write
@@ -549,11 +609,18 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/agora
+          # Tag-Schema (#1708), fuer agora und agora-proxy identisch:
+          #   sha-<7>  jeder Publish, unveraenderlich — Deploy- und Rollback-Pin
+          #   edge     letzter gruener main-Stand (ohne Smoke)
+          #   vX.Y.Z   Release-Tag, nur nach gruenem Smoke
+          #   latest   letzter Release-Tag, nur nach gruenem Smoke
+          #   <branch> release/**, rc/** (main heisst edge)
           tags: |
             type=ref,event=tag
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=ref,event=branch,enable=${{ github.ref != 'refs/heads/main' }}
 
       - name: Build und Push zu GHCR (required)
         id: build_ghcr
@@ -573,8 +640,9 @@ jobs:
           tags: ${{ steps.meta_ghcr.outputs.tags }}
           labels: ${{ steps.meta_ghcr.outputs.labels }}
           # mode=min — siehe Begründung im build-only-Job weiter oben (#994).
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          # scope=prod — getrennt vom Proxy-Cache, siehe build-only.
+          cache-from: type=gha,scope=prod
+          cache-to: type=gha,mode=min,scope=prod
 
       - name: Generate GHCR build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -600,19 +668,60 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Extract GHCR proxy metadata
+        id: meta_proxy
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/agora-proxy
+          # Identisch zum agora-Tag-Schema oben: ein Deploy pinnt beide Images
+          # auf denselben sha-<7>-Tag (deploy/compose/docker-compose.ghcr.yml).
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=ref,event=branch,enable=${{ github.ref != 'refs/heads/main' }}
+
+      - name: Build und Push Proxy zu GHCR (required)
+        id: build_proxy
+        # Default-Build-Args: kein Token im Bundle (ALLOW_BUILD_TIME_TOKEN
+        # bleibt false), das Image ist oeffentlich. Cache-Treffer aus build-only.
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          target: proxy
+          push: true
+          tags: ${{ steps.meta_proxy.outputs.tags }}
+          labels: ${{ steps.meta_proxy.outputs.labels }}
+          cache-from: type=gha,scope=proxy
+          cache-to: type=gha,mode=min,scope=proxy
+
+      - name: Generate GHCR proxy build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/agora-proxy
+          subject-digest: ${{ steps.build_proxy.outputs.digest }}
+          push-to-registry: true
+
       - name: Extract Docker Hub metadata (optional mirror)
         id: meta_dockerhub
+        # Der Mirror laeuft nur auf Release-Pfaden. Auf jedem main-Push die
+        # Prod-Layer zusaetzlich zu Docker Hub zu schieben, kostet Minuten und
+        # scheitert dort erfahrungsgemaess mit HTTP 400 (siehe Job-Kopf).
+        if: github.ref != 'refs/heads/main'
         continue-on-error: true
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/agora-agora
           tags: |
             type=ref,event=tag
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=ref,event=branch
 
       - name: Build und Push zu Docker Hub (optional mirror)
+        if: github.ref != 'refs/heads/main'
         continue-on-error: true
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -624,5 +733,5 @@ jobs:
           tags: ${{ steps.meta_dockerhub.outputs.tags }}
           labels: ${{ steps.meta_dockerhub.outputs.labels }}
           # mode=min — siehe Begründung im build-only-Job weiter oben (#994).
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-from: type=gha,scope=prod
+          cache-to: type=gha,mode=min,scope=prod

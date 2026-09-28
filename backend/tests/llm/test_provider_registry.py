@@ -98,18 +98,34 @@ HTTP_CASES = [
     # Namen ist nicht der echte Anthropic-Host — CodeQL #750-Stil.
     ("https://api.anthropic.com.attacker.test/v1", "claude-sonnet-5", "unknown"),
     ("https://example.com/api.anthropic.com/v1", "claude-sonnet-5", "unknown"),
-    # Issue #1669 (CodeQL #367/#389/#390) — hostname-basierte Erkennung statt
-    # URL-Substring fuer ollama.com/openai.com/googleapis.com/Port. Positiv:
-    # schemalose Base-URLs muessen ueber _parse_host_port trotzdem greifen.
+    # Issue #1669 (CodeQL #367/#389/#390) — schemalose Base-URLs muessen ueber
+    # _parse_host_port trotzdem greifen (kein "://" noetig).
     ("api.openai.com/v1", "gpt-4", "openai"),  # schemalos
     ("localhost:11434", "qwen3:8b", "ollama"),  # schemalos
-    # Negativ: Drittanbieter-Hosts mit dem Text im Namen/Pfad/Query duerfen
-    # NICHT matchen (das war exakt der CodeQL-Alert).
-    ("https://api.openai.com.attacker.test/v1", "gpt-4", "unknown"),
-    ("https://evil.test/?u=openai.com", "gpt-4", "unknown"),
-    ("https://evil.test/ollama.com", "qwen3:8b", "unknown"),
-    ("https://googleapis.com.evil.test", "gemini-3", "unknown"),
+    # Issue #1669 — exakter Port-Vergleich statt Substring: ein Pfad/Text mit
+    # "11434" ohne echten Port-11434-Netloc darf NICHT als Ollama matchen.
     ("http://evil.test/11434", "qwen3:8b", "unknown"),
+    # CodeQL #1669 (py/incomplete-url-substring-sanitization) — Ollama-Cloud:
+    # Lookalike-Hosts und Path-False-Positives duerfen NICHT als "cloud"
+    # durchgehen. Echter Host bleibt erkannt (siehe HTTP_CASES oben).
+    ("https://ollama.com.attacker.test/v1", "some-model", "unknown"),
+    ("https://example.com/ollama.com/v1", "some-model", "unknown"),
+    ("https://foo.ollama.com/v1", "some-model", "cloud"),  # Subdomain bleibt erkannt
+    # CodeQL #1669 — Google/Gemini: Lookalike-Hosts und Path-False-Positives
+    # duerfen NICHT als "google" durchgehen.
+    ("https://googleapis.com.attacker.test/v1", "some-model", "unknown"),
+    (
+        "https://example.com/generativelanguage.googleapis.com/v1",
+        "some-model",
+        "unknown",
+    ),
+    # CodeQL #1669 — OpenAI: gleiche Hostnamen-Regel. Lookalike-Hosts und
+    # Path-False-Positives fallen auf "unknown", Subdomains bleiben "openai".
+    ("https://evil-openai.com/v1", "some-model", "unknown"),
+    ("https://api.openai.com.attacker.test/v1", "some-model", "unknown"),
+    ("https://example.com/api.openai.com/v1", "some-model", "unknown"),
+    ("https://eu.api.openai.com/v1", "some-model", "openai"),
+    ("https://openai.com/v1", "some-model", "openai"),
 ]
 
 
@@ -120,6 +136,26 @@ def test_detect_provider_http(base_url, model, expected):
 
 def test_http_is_default_mode():
     assert detect_provider("http://localhost:11434/v1", "qwen2.5:32b") == "ollama"
+
+
+def test_ollama_cloud_tag_regex_no_catastrophic_backtracking():
+    """CodeQL #1669 (py/polynomial-redos) — Regression fuer die
+    Atomic-Group-Haertung von ``_OLLAMA_CLOUD_SIZE_TAG_RE``.
+
+    Ein langer, nicht matchender Digit-/Letter-Praefix ohne ``-cloud``-Suffix
+    darf den Match-Versuch nicht in katastrophales Backtracking treiben.
+    """
+    import time
+
+    from app.llm.providers.registry import _is_ollama_cloud_tag
+
+    adversarial_tag = "9" * 20_000 + "a" * 20_000  # kein "-cloud"-Suffix
+    model = f"some-model:{adversarial_tag}"
+    start = time.monotonic()
+    result = _is_ollama_cloud_tag(model)
+    elapsed = time.monotonic() - start
+    assert result is False
+    assert elapsed < 1.0, f"Matching dauerte {elapsed:.2f}s — Redos-Verdacht"
 
 
 # ---------------------------------------------------------------------------

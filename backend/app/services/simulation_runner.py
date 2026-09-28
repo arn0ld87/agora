@@ -132,6 +132,9 @@ class SimulationRunner:
     @classmethod
     def get_console_log(cls, simulation_id: str, from_line: int = 0) -> Dict[str, Any]:
         """Return incremental slice of simulation.log for client-side polling."""
+        # SEC-1 (CodeQL py/path-injection #79): simulation_id speist unten
+        # os.path.join gegen RUN_STATE_DIR. Guard vor der Pfad-Konstruktion.
+        validate_path_id(simulation_id, field_name="simulation_id")
         all_lines = read_console_log(simulation_id, cls.RUN_STATE_DIR)
 
         if not all_lines and not os.path.exists(
@@ -205,8 +208,16 @@ class SimulationRunner:
                     message=f"Runner status: {state.runner_status.value}",
                     message_key=_runner_status_message_key(state.runner_status),
                     artifacts={"simulation": {
-                        "run_state": os.path.join(cls.RUN_STATE_DIR, simulation_id, "run_state.json"),
-                        "simulation_log": os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log"),
+                        "run_state": safe_join_within_root(
+                            cls.RUN_STATE_DIR,
+                            validate_path_id(simulation_id, field_name="simulation_id"),
+                            "run_state.json",
+                        ),
+                        "simulation_log": safe_join_within_root(
+                            cls.RUN_STATE_DIR,
+                            validate_path_id(simulation_id, field_name="simulation_id"),
+                            "simulation.log",
+                        ),
                     }},
                 )
 
@@ -440,7 +451,11 @@ class SimulationRunner:
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:
         """Delegate to action_log_reader.check_all_platforms_completed (PR 2, Monkeypatch-compat)."""
         return _check_all_platforms_completed_fn(
-            state, base_dir=os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
+            state,
+            base_dir=safe_join_within_root(
+                cls.RUN_STATE_DIR,
+                validate_path_id(state.simulation_id, field_name="simulation_id"),
+            ),
         )
 
     @classmethod
