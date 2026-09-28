@@ -1,5 +1,5 @@
 ---
-description: Wählt maximal zwei unabhängige release-relevante GitHub Issues, dispatcht je einen isolierten Worker und lässt jeden Commit von Opus prüfen.
+description: Wählt maximal fünf unabhängige release-relevante GitHub Issues, dispatcht je einen isolierten Worker und lässt jeden Commit von Opus prüfen.
 allowed-tools: Read, Bash, Grep, Glob, TodoWrite, Agent, AskUserQuestion
 ---
 
@@ -9,14 +9,14 @@ Du bist der Lead und Orchestrator. Du implementierst nicht selbst. Die aktive Ta
 
 ## Ziel
 
-Bearbeite maximal zwei voneinander unabhängige Issues parallel. Jedes Issue erhält genau einen Implementer, einen isolierten Worktree, genau einen lokalen Commit, ein eigenes Opus-Review und einen eigenen PR.
+Bearbeite maximal fünf voneinander unabhängige Issues parallel. Jedes Issue erhält genau einen Implementer, einen isolierten Worktree, genau einen lokalen Commit, ein eigenes Opus-Review und einen eigenen PR.
 
 ## Globale Regeln
 
 - Basis ist aktuelles `origin/main`.
 - Nie direkt auf `main` arbeiten.
 - Keine Agent Teams; verwende normale Subagenten.
-- Maximal zwei Implementer gleichzeitig.
+- Maximal fünf Implementer gleichzeitig.
 - Subagenten können keine weiteren Agenten starten. Die gesamte Orchestrierung bleibt beim Lead.
 - Worker pushen, mergen und erstellen keine PRs.
 - Nur der Lead pusht und öffnet die PRs — nach eigener Verifikation von Diff, Tests und Gate. Ein `agora-opus-reviewer` ist optional (Schritt 8) und kein Freigabetor.
@@ -80,7 +80,7 @@ gh issue view <NR> --comments
 
 Ermittle voraussichtlich betroffene Dateien und Symbole mit `rg`, `git log` und vorhandenen Codegraph-Werkzeugen.
 
-Zwei Issues dürfen nur parallel laufen, wenn alle Aussagen zutreffen:
+Mehrere Issues (höchstens fünf) dürfen nur parallel laufen, wenn alle Aussagen zutreffen:
 
 - kein Parent-/Child- oder Blocked-by-Verhältnis,
 - keine gleichen oder eng gekoppelten Dateien,
