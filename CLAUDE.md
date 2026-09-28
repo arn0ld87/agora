@@ -15,7 +15,7 @@
 ## Issue-Orchestrierung
 
 - `/agora-next-task`: ein Issue, ein Worker (`isolation: worktree`), ein lokaler Commit, dann PR.
-- `/agora-batch-issues`: maximal zwei unabhaengige Issues parallel, je eigener Worktree und PR.
+- `/agora-batch-issues`: maximal fuenf unabhaengige Issues parallel, je eigener Worktree und PR.
 - Worker pushen nicht. Der Lead verifiziert Diff, Tests und Gate selbst.
 - **Review-Gate:** Regressionstest + gruenes `pre-push-gate.sh` genuegen fuer die lokale Schnellpruefung. CI-Smoke-Gates bleiben erforderlich; fuer lokale Vollverifikation `GATE_FULL=1` setzen. Kein RED/GREEN-Protokoll, keine Mutationstests.
 - **Review-Kommentare, auch von Bots (Codex, CodeRabbit):** Jeder Kommentar MUSS einzeln im Thread beantwortet werden: behoben (mit Commit-Hash) oder begründet zurückgewiesen. Danach den Thread auflösen ([`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md) §9). Stilles Übergehen ist nicht zulässig.
@@ -38,7 +38,7 @@ Lead-Trigger: Layer 0, Cross-Layer, Prompt-Semantik, Security, Auth, Secrets, Da
 
 ## Parallelitaet
 
-Zwei Issues parallel nur wenn: keine Abhaengigkeit, keine geteilten Dateien/Contracts, unabhaengig testbar. Bei Unsicherheit: eins nach dem anderen. Max zwei schreibende Worker gleichzeitig.
+Bis zu fuenf Issues parallel nur wenn: keine Abhaengigkeit, keine geteilten Dateien/Contracts, unabhaengig testbar. Bei Unsicherheit: eins nach dem anderen. Max fuenf schreibende Worker gleichzeitig.
 
 ## Pre-Commit-Gate
 

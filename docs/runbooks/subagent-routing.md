@@ -15,7 +15,7 @@ Schreibende Worker laufen in isolierten Worktrees, bearbeiten genau ein Issue un
 | Befehl | Zweck |
 |---|---|
 | `/agora-next-task` | genau ein Issue vollständig bearbeiten und reviewen |
-| `/agora-batch-issues` | maximal zwei nachweislich unabhängige Issues parallel bearbeiten |
+| `/agora-batch-issues` | maximal fünf nachweislich unabhängige Issues parallel bearbeiten |
 
 ## Routing-Matrix
 
@@ -51,7 +51,7 @@ Der Lead präzisiert Scope, Tests, Migration, Rollback und Stop-Bedingungen vor 
 
 ## Parallelitäts-Gate
 
-Maximal zwei schreibende Worker dürfen gleichzeitig laufen. Zwei Issues sind nur parallel sicher, wenn:
+Maximal fünf schreibende Worker dürfen gleichzeitig laufen. Mehrere Issues sind nur parallel sicher, wenn:
 
 - keine Parent-/Child- oder Blocked-by-Beziehung besteht,
 - keine gleichen oder eng gekoppelten Dateien betroffen sind,
