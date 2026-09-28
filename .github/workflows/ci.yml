@@ -631,11 +631,30 @@ jobs:
             pypi.org:443
             results-receiver.actions.githubusercontent.com:443
             *.blob.core.windows.net:443
+            apt.postgresql.org:443
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      # Issue #1660: Das Runner-Image bringt pg_dump 16 mit, der Service laeuft
+      # auf PostgreSQL 17. pg_dump bricht bei neuerer Server-Hauptversion ab
+      # ("server version mismatch"), die Backup/Restore-Integrationstests
+      # scheiterten daran. Client-Hauptversion = Service-Hauptversion.
+      # apt-get update liest nur die PGDG-Quelle, damit die Egress-Sperre
+      # keine weiteren Spiegel freigeben muss.
+      - name: Install PostgreSQL 17 client
+        run: |
+          set -euo pipefail
+          key=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          test -s "$key"
+          list=/etc/apt/sources.list.d/agora-pgdg.list
+          echo "deb [signed-by=$key] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee "$list"
+          sudo apt-get update -o Dir::Etc::sourcelist="$list" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep -E ' 17\.'
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -651,6 +670,9 @@ jobs:
       - name: Sync backend dependencies
         working-directory: backend
         run: uv sync --group dev
+
+      - name: Check pg_dump major version
+        run: pg_dump --version | grep -E ' 17\.'
 
       - name: Run integration tests
         working-directory: backend

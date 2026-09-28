@@ -87,7 +87,6 @@ Dein Turn-Budget ist begrenzt. Reihenfolge: Tests grün → Pflichtprüfungen �
 - Kein neuer `from dataclasses import dataclass` in `app/api/` oder `app/contracts/`.
 - Keine inline JSON-Schemas, immer via `Model.model_json_schema()`.
 - Strukturierte LLM-Outputs nur über `LLMClient.chat_json` mit Pydantic-Schema.
-- `nala` statt `apt`.
 
 ## NEIN
 
