@@ -65,7 +65,14 @@ _OASIS_OLLAMA_PORT_RE = re.compile(r":11434(?:/|$)")
 # von ``-cloud`` — z. B. ``20b-cloud``, ``120b-cloud``, ``1t-cloud``. Bewusst
 # eng, damit ``<name>:<wort>-cloud`` (ohne Groessenpraefix) auf einem
 # Nicht-Ollama-Gateway KEIN False-Positive ausloest.
-_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d+[a-z]*-cloud")
+#
+# CodeQL #1669 (py/polynomial-redos): ``\d+`` und ``[a-z]*`` stehen auf
+# disjunkten Zeichenklassen, Backtracking zwischen beiden aendert nie das
+# Match-Ergebnis (ein zurueckgegebenes Digit kann ``[a-z]*`` nie aufnehmen,
+# ein zurueckgegebener Buchstabe nie das literale ``-`` in ``-cloud``).
+# Atomic Groups (Python 3.11+) unterbinden das Backtracking, ohne die
+# Match-Semantik zu aendern — nur die Worst-Case-Laufzeit sinkt.
+_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"(?>\d+)(?>[a-z]*)-cloud")
 
 
 def _is_ollama_cloud_tag(model: str) -> bool:
@@ -106,49 +113,36 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     """
     model_name = model or ""
     base = (base_url or "").lower()
-    if "ollama.com" in base:
+    # Hostname statt Raw-Substring (CodeQL #750 fuer MiniMax, #1669 fuer
+    # ollama.com, openai.com und googleapis.com): Lookalike-Hosts wie
+    # ``api.openai.com.attacker.test``, ``evil-openai.com`` oder ein Pfad, der
+    # den Anbieter-Host nur enthaelt, duerfen keinen Anbieter treffen und damit
+    # keinen Anbieter-Key an einen fremden Host binden. Subdomains echter Hosts
+    # bleiben erkannt. Das fruehere ``"generativelanguage"``-Substring-Signal
+    # entfaellt, weil der echte Google-Host immer auf ``.googleapis.com`` endet.
+    host = urlparse(base).hostname or ""
+    if _host_is(host, "ollama.com") or _is_ollama_cloud_tag(model_name):
         return "cloud"
-    if _is_ollama_cloud_tag(model_name):
-        return "cloud"
-    # CodeQL #750 — match the URL hostname exactly (suffix) instead of a raw
-    # substring, which would also match `api.minimax.io.attacker.test` or
-    # paths/query containing the text and misroute requests through
-    # PROVIDER_MINIMAX. Consistent hostname-based detection for all providers
-    # (ollama.com, openai.com, googleapis.com) is tracked in Phase F (#671)
-    # / #750 — this PR only fixes the NEW minimax branch.
-    _minimax_host = urlparse(base).hostname
-    if _minimax_host and (
-        _minimax_host == "api.minimax.io"
-        or _minimax_host.endswith(".api.minimax.io")
-    ):
+    if _host_is(host, "api.minimax.io"):
         return "minimax"
     if "11434" in base:
         return "ollama"
-    if "openai.com" in base or "api.openai" in base:
+    if _host_is(host, "openai.com"):
         return "openai"
-    if "googleapis.com" in base or "generativelanguage" in base:
+    if _host_is(host, "googleapis.com"):
         return "google"
-    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
-    # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
-    # Drittanbieter-Host mit „bedrock“ im Pfad darf NICHT matchen. Erkennt
-    # bedrock-mantle.<region>.api.aws (empfohlener mantle-Endpunkt) und
-    # bedrock-runtime.<region>.amazonaws.com (Fallback, falls jemand den
-    # Runtime-Host einträgt — ebenfalls OpenAI-Compat via mantle). Beide
-    # sprechen OpenAI-Chat-Completions + Bearer-API-Key. Die Suffix-Pruefung
-    # (``.api.aws``/``.amazonaws.com``) schliesst Praefix-False-Positives wie
-    # ``bedrock-mantle.attacker.example`` aus (siehe :func:`_is_bedrock_host`).
-    _bedrock_host = urlparse(base).hostname
-    if _bedrock_host and _is_bedrock_host(_bedrock_host):
+    # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad
+    # (bedrock-mantle.<region>.api.aws, Fallback bedrock-runtime.<region>.
+    # amazonaws.com); Suffix-Pruefung gegen Praefix-False-Positives wie
+    # ``bedrock-mantle.attacker.example``, siehe :func:`_is_bedrock_host`.
+    if host and _is_bedrock_host(host):
         return "bedrock"
-    # Issue #1284 — api.anthropic.com trägt keinen nativen Chat-Adapter.
-    # Hostname-basiert wie Minimax/Bedrock (CodeQL #750): ein Drittanbieter-
-    # Host mit „anthropic“ im Namen darf nicht matchen. Erkannt wird
-    # ausschließlich, damit ``LLMClient``/``get_adapter`` laut scheitern
-    # können statt den OpenAI-kompatiblen Client stillschweigend gegen eine
-    # Route ohne "/v1" und ohne Anthropic-Messages-Format laufen zu lassen —
-    # siehe :func:`_is_anthropic_host`.
-    _anthropic_host = urlparse(base).hostname
-    if _anthropic_host and _is_anthropic_host(_anthropic_host):
+    # Issue #1284 — api.anthropic.com traegt keinen nativen Chat-Adapter.
+    # Erkannt wird ausschliesslich, damit ``LLMClient``/``get_adapter`` laut
+    # scheitern koennen statt den OpenAI-kompatiblen Client stillschweigend
+    # gegen eine Route ohne "/v1" laufen zu lassen, siehe
+    # :func:`_is_anthropic_host`.
+    if host and _is_anthropic_host(host):
         return "anthropic"
     return "unknown"
 
@@ -451,6 +445,11 @@ def _has_ollama_url_signal(base_url: Optional[str]) -> bool:
         # Unparsbarer Port — kein Signal, lieber nicht anfassen.
         return False
 
+
+
+def _host_is(host: str, domain: str) -> bool:
+    """``host`` ist ``domain`` selbst oder eine Subdomain davon (CodeQL #1669)."""
+    return host == domain or host.endswith("." + domain)
 
 def _is_bedrock_host(host: str) -> bool:
     """Praezise Bedrock-Host-Erkennung, Spiegel des MiniMax-Zweigs.

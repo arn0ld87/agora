@@ -18,6 +18,7 @@ from ..contracts.ai_provider_contract import AiModelRef
 from ..repositories.report_repository import get_report_repository
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from ..utils.path_safety import validate_path_id
 from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 
@@ -101,6 +102,11 @@ def create_branch(
     # Lazy-Import zur Vermeidung des Circular-Imports
     # (simulation_manager importiert dieses Modul für Delegationen).
     from .simulation_manager import SimulationStatus
+
+    # SEC-1 (CodeQL py/path-injection #10, #11): simulation_id speist unten
+    # os.path.join(source_dir, ...) für den Twitter-Profil-Kopiervorgang.
+    # Guard an der Funktionsgrenze, bevor der Wert das Dateisystem erreicht.
+    validate_path_id(simulation_id, field_name="simulation_id")
 
     allowed_override_keys = {
         "llm_model",

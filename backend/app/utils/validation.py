@@ -41,8 +41,11 @@ def join_within(root: str, segment: str) -> str:
     ``ProjectManager.save_file_to_project``.
     """
     candidate = os.path.join(root, segment)
-    resolved_root = os.path.abspath(root)
-    resolved_candidate = os.path.abspath(candidate)
+    # realpath statt abspath (#1669): abspath löst Symlinks nicht auf, ein
+    # Symlink unter ``root`` hätte die Prüfung bestanden und trotzdem nach
+    # außen gezeigt. Gleiche Semantik wie ``path_safety.safe_join_within_root``.
+    resolved_root = os.path.realpath(root)
+    resolved_candidate = os.path.realpath(candidate)
 
     if not resolved_candidate.startswith(resolved_root + os.sep):
         raise ValueError(

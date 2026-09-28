@@ -147,3 +147,17 @@ def test_artifact_store_normal_id_ipc_subdir(fs_store):
     fs_store.write_json("sim_test_001", "ipc_command/cmd1", {"ping": 1})
     assert fs_store.read_json("sim_test_001", "ipc_command/cmd1") == {"ping": 1}
     assert "ipc_command/cmd1" in fs_store.list_artifacts("sim_test_001")
+
+def test_join_within_rejects_symlink_escape(tmp_path):
+    """#1669: ``join_within`` löst Symlinks auf wie ``safe_join_within_root``."""
+    from app.utils.validation import join_within
+
+    root = tmp_path / "projects"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (root / "proj_link").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError):
+        join_within(str(root), "proj_link")
+    assert join_within(str(root), "proj_abc") == os.path.join(str(root), "proj_abc")
