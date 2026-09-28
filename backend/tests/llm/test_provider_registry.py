@@ -90,6 +90,20 @@ HTTP_CASES = [
     # Namen ist nicht der echte Anthropic-Host — CodeQL #750-Stil.
     ("https://api.anthropic.com.attacker.test/v1", "claude-sonnet-5", "unknown"),
     ("https://example.com/api.anthropic.com/v1", "claude-sonnet-5", "unknown"),
+    # CodeQL #1669 (py/incomplete-url-substring-sanitization) — Ollama-Cloud:
+    # Lookalike-Hosts und Path-False-Positives duerfen NICHT als "cloud"
+    # durchgehen. Echter Host bleibt erkannt (siehe HTTP_CASES oben).
+    ("https://ollama.com.attacker.test/v1", "some-model", "unknown"),
+    ("https://example.com/ollama.com/v1", "some-model", "unknown"),
+    ("https://foo.ollama.com/v1", "some-model", "cloud"),  # Subdomain bleibt erkannt
+    # CodeQL #1669 — Google/Gemini: Lookalike-Hosts und Path-False-Positives
+    # duerfen NICHT als "google" durchgehen.
+    ("https://googleapis.com.attacker.test/v1", "some-model", "unknown"),
+    (
+        "https://example.com/generativelanguage.googleapis.com/v1",
+        "some-model",
+        "unknown",
+    ),
 ]
 
 
@@ -100,6 +114,26 @@ def test_detect_provider_http(base_url, model, expected):
 
 def test_http_is_default_mode():
     assert detect_provider("http://localhost:11434/v1", "qwen2.5:32b") == "ollama"
+
+
+def test_ollama_cloud_tag_regex_no_catastrophic_backtracking():
+    """CodeQL #1669 (py/polynomial-redos) — Regression fuer die
+    Atomic-Group-Haertung von ``_OLLAMA_CLOUD_SIZE_TAG_RE``.
+
+    Ein langer, nicht matchender Digit-/Letter-Praefix ohne ``-cloud``-Suffix
+    darf den Match-Versuch nicht in katastrophales Backtracking treiben.
+    """
+    import time
+
+    from app.llm.providers.registry import _is_ollama_cloud_tag
+
+    adversarial_tag = "9" * 20_000 + "a" * 20_000  # kein "-cloud"-Suffix
+    model = f"some-model:{adversarial_tag}"
+    start = time.monotonic()
+    result = _is_ollama_cloud_tag(model)
+    elapsed = time.monotonic() - start
+    assert result is False
+    assert elapsed < 1.0, f"Matching dauerte {elapsed:.2f}s — Redos-Verdacht"
 
 
 # ---------------------------------------------------------------------------

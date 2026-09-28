@@ -65,7 +65,14 @@ _OASIS_OLLAMA_PORT_RE = re.compile(r":11434(?:/|$)")
 # von ``-cloud`` — z. B. ``20b-cloud``, ``120b-cloud``, ``1t-cloud``. Bewusst
 # eng, damit ``<name>:<wort>-cloud`` (ohne Groessenpraefix) auf einem
 # Nicht-Ollama-Gateway KEIN False-Positive ausloest.
-_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d+[a-z]*-cloud")
+#
+# CodeQL #1669 (py/polynomial-redos): ``\d+`` und ``[a-z]*`` stehen auf
+# disjunkten Zeichenklassen, Backtracking zwischen beiden aendert nie das
+# Match-Ergebnis (ein zurueckgegebenes Digit kann ``[a-z]*`` nie aufnehmen,
+# ein zurueckgegebener Buchstabe nie das literale ``-`` in ``-cloud``).
+# Atomic Groups (Python 3.11+) unterbinden das Backtracking, ohne die
+# Match-Semantik zu aendern — nur die Worst-Case-Laufzeit sinkt.
+_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"(?>\d+)(?>[a-z]*)-cloud")
 
 
 def _is_ollama_cloud_tag(model: str) -> bool:
@@ -106,7 +113,14 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     """
     model_name = model or ""
     base = (base_url or "").lower()
-    if "ollama.com" in base:
+    # CodeQL #1669 — Hostname statt Raw-Substring (wie der MiniMax-Zweig,
+    # CodeQL #750 unten): ``https://ollama.com.attacker.test`` oder
+    # ``https://example.com/ollama.com`` enthalten den Text, sind aber nicht
+    # der echte Ollama-Cloud-Host und duerfen nicht als ``"cloud"`` durchgehen.
+    _ollama_com_host = urlparse(base).hostname
+    if _ollama_com_host and (
+        _ollama_com_host == "ollama.com" or _ollama_com_host.endswith(".ollama.com")
+    ):
         return "cloud"
     if _is_ollama_cloud_tag(model_name):
         return "cloud"
@@ -126,7 +140,17 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "ollama"
     if "openai.com" in base or "api.openai" in base:
         return "openai"
-    if "googleapis.com" in base or "generativelanguage" in base:
+    # CodeQL #1669 — Hostname statt Raw-Substring (Praezision wie der
+    # MiniMax-Zweig, CodeQL #750): ``https://googleapis.com.attacker.test``
+    # oder ``https://example.com/generativelanguage.googleapis.com`` duerfen
+    # nicht als ``"google"`` durchgehen. Der echte Host
+    # (``generativelanguage.googleapis.com``) endet immer auf
+    # ``.googleapis.com`` — das separate ``"generativelanguage"``-Substring-
+    # Signal war fuer keinen realen Host noetig und entfaellt.
+    _google_host = urlparse(base).hostname
+    if _google_host and (
+        _google_host == "googleapis.com" or _google_host.endswith(".googleapis.com")
+    ):
         return "google"
     # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
     # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
