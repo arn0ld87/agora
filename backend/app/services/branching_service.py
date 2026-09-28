@@ -18,7 +18,7 @@ from ..contracts.ai_provider_contract import AiModelRef
 from ..repositories.report_repository import get_report_repository
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
-from ..utils.path_safety import validate_path_id
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 
@@ -195,8 +195,8 @@ def create_branch(
             manager._store.write_json(branch.simulation_id, "reddit_profiles", reddit_data)
 
         # Twitter profiles are currently outside the store
-        twitter_src = os.path.join(source_dir, "twitter_profiles.csv")
-        twitter_dst = os.path.join(branch_dir, "twitter_profiles.csv")
+        twitter_src = safe_join_within_root(source_dir, "twitter_profiles.csv")
+        twitter_dst = safe_join_within_root(branch_dir, "twitter_profiles.csv")
         if os.path.exists(twitter_src):
             shutil.copy2(twitter_src, twitter_dst)
 

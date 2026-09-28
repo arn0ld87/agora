@@ -9,11 +9,20 @@ Covers:
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 from unittest.mock import MagicMock, patch
 
-from app.services.event_bus import FilePollingEventBus, resolve_default_event_bus
+import pytest
+
+from app.config import Config
+from app.utils.path_safety import PathTraversalError
+from app.services.event_bus import (
+    FilePollingEventBus,
+    _simulation_abs_dir,
+    resolve_default_event_bus,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -120,3 +129,28 @@ class TestResolveDefaultEventBusUnexpectedError:
 
         result = resolve_default_event_bus()
         assert result is fake_container.event_bus
+
+
+# ---------------------------------------------------------------------------
+# Issue #1669: _simulation_abs_dir must reject path-injection attempts
+# ---------------------------------------------------------------------------
+
+
+class TestSimulationAbsDirPathInjection1669:
+    """``simulation_id`` mit Pfadseparatoren darf keinen Pfad ausserhalb von
+    ``ArtifactLocator.simulations_dir()`` liefern — ``PathTraversalError``
+    statt Escape (gleiche Semantik wie ``test_path_guards_1669_slice_c``)."""
+
+    def test_traversal_id_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
+        with pytest.raises(PathTraversalError):
+            _simulation_abs_dir("../escape")
+
+    def test_normal_id_resolves_existing_dir(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
+        sim_dir = tmp_path / "simulations" / "sim_abc123"
+        sim_dir.mkdir(parents=True)
+
+        result = _simulation_abs_dir("sim_abc123")
+
+        assert result == os.path.realpath(str(sim_dir))

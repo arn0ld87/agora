@@ -7,9 +7,15 @@ divergieren.
 """
 from __future__ import annotations
 
+import time
+
 import pytest
 
-from app.llm.providers.registry import detect_embedding_provider, detect_provider
+from app.llm.providers.registry import (
+    _is_ollama_cloud_tag,
+    detect_embedding_provider,
+    detect_provider,
+)
 
 # ---------------------------------------------------------------------------
 # mode="http" — Verhalten von LLMClient._detect_provider (testfixiert in
@@ -34,7 +40,9 @@ HTTP_CASES = [
     ("http://some-other-host:8080/v1", "some-model", "unknown"),
     ("", "", "unknown"),
     (None, None, "unknown"),
-    ("http://host:114340/v1", "foo", "ollama"),  # Substring-Match (dokumentierte Eigenheit)
+    # Issue #1669 (CodeQL #390) — vorher Substring-Match ("11434" in base),
+    # jetzt exakter Port-Vergleich: Port 114340 != 11434, kein Ollama-Signal.
+    ("http://host:114340/v1", "foo", "unknown"),
     # Issue #670 — Ollama-Cloud-Prod-Tag `name:<size>-cloud` @ Nicht-Standard-Port.
     # Live-Evidenz: base_url=http://<host>:11435/v1, model=gpt-oss:20b-cloud.
     ("http://100.71.152.44:11435/v1", "gpt-oss:20b-cloud", "cloud"),
@@ -90,6 +98,13 @@ HTTP_CASES = [
     # Namen ist nicht der echte Anthropic-Host — CodeQL #750-Stil.
     ("https://api.anthropic.com.attacker.test/v1", "claude-sonnet-5", "unknown"),
     ("https://example.com/api.anthropic.com/v1", "claude-sonnet-5", "unknown"),
+    # Issue #1669 (CodeQL #367/#389/#390) — schemalose Base-URLs muessen ueber
+    # _parse_host_port trotzdem greifen (kein "://" noetig).
+    ("api.openai.com/v1", "gpt-4", "openai"),  # schemalos
+    ("localhost:11434", "qwen3:8b", "ollama"),  # schemalos
+    # Issue #1669 — exakter Port-Vergleich statt Substring: ein Pfad/Text mit
+    # "11434" ohne echten Port-11434-Netloc darf NICHT als Ollama matchen.
+    ("http://evil.test/11434", "qwen3:8b", "unknown"),
     # CodeQL #1669 (py/incomplete-url-substring-sanitization) — Ollama-Cloud:
     # Lookalike-Hosts und Path-False-Positives duerfen NICHT als "cloud"
     # durchgehen. Echter Host bleibt erkannt (siehe HTTP_CASES oben).
@@ -144,6 +159,39 @@ def test_ollama_cloud_tag_regex_no_catastrophic_backtracking():
 
 
 # ---------------------------------------------------------------------------
+# _is_ollama_cloud_tag — ReDoS-Cap (CodeQL py/polynomial-redos, Issue #1669).
+# Docstring-Beispiele muessen ihr Ergebnis exakt behalten; ein adversarial
+# langer Tag muss schnell (< 1s) False liefern statt in Backtracking zu
+# haengen.
+# ---------------------------------------------------------------------------
+
+_CLOUD_TAG_DOCSTRING_CASES = [
+    ("qwen3-coder-next:cloud", True),
+    ("gpt-oss:20b-cloud", True),
+    ("gpt-oss:120b-cloud", True),
+    ("gpt-oss:480b-cloud", True),
+    ("some-model:1t-cloud", True),
+    ("mistral-large-cloud", False),  # kein ":"-Tag
+    ("custom:experimental-cloud", False),  # kein Groessenpraefix
+]
+
+
+@pytest.mark.parametrize(("model", "expected"), _CLOUD_TAG_DOCSTRING_CASES)
+def test_is_ollama_cloud_tag_docstring_examples(model, expected):
+    assert _is_ollama_cloud_tag(model) is expected
+
+
+def test_is_ollama_cloud_tag_redos_cap_rejects_fast():
+    """Adversarial langer Tag darf keine polynomiale Laufzeit ausloesen."""
+    adversarial_model = "x:" + "1" * 50_000 + "a"
+    start = time.monotonic()
+    result = _is_ollama_cloud_tag(adversarial_model)
+    elapsed = time.monotonic() - start
+    assert result is False
+    assert elapsed < 1.0
+
+
+# ---------------------------------------------------------------------------
 # mode="oasis" — Verhalten von scripts/_sim_common.py::detect_oasis_platform
 # (testfixiert in tests/scripts/test_oasis_provider_dispatch.py)
 # ---------------------------------------------------------------------------
@@ -176,6 +224,10 @@ OASIS_CASES = [
     ("https://api.openai.com/v1", "mistral-large-cloud", "openai"),
     # Kein False Positive: `-cloud`-Tag ohne Groessenpraefix bleibt OpenAI-Compat.
     ("https://api.example.com/v1", "custom:experimental-cloud", "openai"),
+    # Issue #1669 (CodeQL #367/#389/#390) — hostname-/port-basiert statt
+    # URL-Substring, auch im OASIS-Pfad.
+    ("https://generativelanguage.googleapis.com.attacker.test", "gpt-4o-mini", "openai"),
+    ("https://evil.test/ollama.com", "gpt-4o-mini", "openai"),
 ]
 
 
@@ -197,7 +249,11 @@ DIVERGENT_CASES = [
     ("http://localhost:11434", "gemini-2.5-pro", "ollama", "google"),
     ("https://example.com/v1", "some-model", "unknown", "openai"),
     ("", "llama3:latest", "unknown", "ollama"),  # :latest nur im OASIS-Modus ein Signal
-    ("http://host:114340/v1", "foo", "ollama", "openai"),  # Substring vs. Port-Regex
+    # Issue #1669 — beide Modi vergleichen jetzt den exakten Port (114340 !=
+    # 11434); die Divergenz bleibt (http faellt auf "unknown", oasis hat
+    # keinen unknown-Zustand und faellt auf den generischen OpenAI-Compat-
+    # Fallback zurueck), aber nicht mehr wegen eines Substring-Matches.
+    ("http://host:114340/v1", "foo", "unknown", "openai"),
     # MiniMax: HTTP erkennt explizit ("minimax"); OASIS faellt auf
     # OpenAI-Compat-Fallback zurueck (CAMEL-Dispatcher kennt kein
     # "minimax"-PlatformType, OpenAI-Compat-Endpoint funktioniert).

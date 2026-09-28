@@ -31,7 +31,7 @@ from ...config import Config
 from ...contracts.role_leakage_contract import ConflictReason
 from ...contracts.sim_action_log_contract import RoundEndEvent
 from ...utils.logger import get_logger
-from ...utils.path_safety import validate_path_id
+from ...utils.path_safety import safe_join_within_root, validate_path_id
 from .role_leakage import detect_role_conflict, load_profiles
 from .run_state_store import AgentAction, RunnerStatus, SimulationRunState
 
@@ -418,9 +418,12 @@ def get_all_actions(
     """
     # SEC-1 (CodeQL py/path-injection #80, #81): simulation_id speist unten
     # die Log-Pfade (twitter/reddit/legacy actions.jsonl) und die
-    # role_leakage-Profil-Ladepfade. Guard vor der Pfad-Konstruktion.
-    validate_path_id(simulation_id, field_name="simulation_id")
-    sim_dir = os.path.join(str(base_dir), simulation_id)
+    # role_leakage-Profil-Ladepfade. safe_join_within_root loest den
+    # kanonischen Pfad auf statt nur die ID vor einem rohen os.path.join
+    # zu validieren.
+    sim_dir = safe_join_within_root(
+        str(base_dir), validate_path_id(simulation_id, field_name="simulation_id")
+    )
     actions: List[AgentAction] = []
 
     # Profile einmal laden, wenn Markierung aktiv

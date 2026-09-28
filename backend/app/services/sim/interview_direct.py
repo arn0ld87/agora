@@ -30,7 +30,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ...utils.logger import get_logger
-from ...utils.path_safety import validate_path_id
+from ...utils.path_safety import safe_join_within_root, validate_path_id
 from ..artifact_store import resolve_default_store
 
 logger = get_logger("agora.interview_direct")
@@ -68,7 +68,11 @@ def _load_personas(
     # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
     validate_path_id(simulation_id, field_name="simulation_id")
     if platform == "twitter":
-        profiles_path = os.path.join(run_state_dir, simulation_id, "twitter_profiles.csv")
+        profiles_path = safe_join_within_root(
+            run_state_dir,
+            validate_path_id(simulation_id, field_name="simulation_id"),
+            "twitter_profiles.csv",
+        )
         if not os.path.exists(profiles_path):
             return []
         try:
@@ -295,7 +299,14 @@ def _persist_interview(
     werden geloggt und niemals an den Aufrufer weitergereicht — eine bereits
     erzeugte Antwort darf an der Persistenz nicht scheitern.
     """
-    db_path = os.path.join(run_state_dir, simulation_id, f"{platform}_simulation.db")
+    # SEC-1 (CodeQL py/path-injection): simulation_id speist die Trace-DB.
+    # safe_join_within_root loest den kanonischen Pfad auf statt nur die ID
+    # zu validieren.
+    db_path = safe_join_within_root(
+        run_state_dir,
+        validate_path_id(simulation_id, field_name="simulation_id"),
+        f"{platform}_simulation.db",
+    )
     info = json.dumps(
         {"prompt": prompt, "response": response, "source": "direct"},
         ensure_ascii=False,
@@ -572,9 +583,11 @@ def interview_agents_batch_direct(
             Personas persistiert.
     """
     # SEC-1 (CodeQL py/path-injection #374): simulation_id speist unten
-    # os.path.join gegen run_state_dir. Guard vor der Pfad-Konstruktion.
-    validate_path_id(simulation_id, field_name="simulation_id")
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    # os.path.join gegen run_state_dir. safe_join_within_root loest den
+    # kanonischen Pfad auf statt nur die ID zu validieren.
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 

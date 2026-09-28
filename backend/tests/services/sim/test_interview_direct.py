@@ -24,6 +24,7 @@ from app.services.sim.interview_direct import (
     interview_agent_direct,
     interview_agents_batch_direct,
 )
+from app.utils.path_safety import PathTraversalError
 
 
 PROFILES: List[Dict[str, Any]] = [
@@ -277,6 +278,37 @@ class TestBatchDirect:
                     run_state_dir=str(tmp_path),
                     client_factory=lambda: _FakeLLMClient(),
                 )
+
+
+class TestPathInjectionRejected1669:
+    """Issue #1669: ``simulation_id`` mit Pfadseparatoren darf nie unvalidiert
+    in ``os.path``-Aufrufe fliessen — ``validate_path_id``/``safe_join_within_root``
+    schlagen vorher fehl statt aus ``run_state_dir`` auszubrechen."""
+
+    def test_load_personas_rejects_traversal_id(self, tmp_path) -> None:
+        with pytest.raises(PathTraversalError):
+            interview_direct._load_personas(
+                "../escape", "twitter", run_state_dir=str(tmp_path)
+            )
+
+    def test_interview_agents_batch_direct_rejects_traversal_id(self, tmp_path) -> None:
+        with pytest.raises(PathTraversalError):
+            interview_agents_batch_direct(
+                "../../etc/passwd",
+                [{"agent_id": 0, "prompt": "Frage"}],
+                run_state_dir=str(tmp_path),
+            )
+
+    def test_interview_agents_batch_direct_accepts_normal_id(self, tmp_path) -> None:
+        # Eine normale ID besteht die Validierung; der bestehende Fehler
+        # ("Simulation does not exist") zeigt, dass der reguläre Pfad erreicht
+        # wurde statt eines PathTraversalError.
+        with pytest.raises(ValueError, match="does not exist"):
+            interview_agents_batch_direct(
+                "sim_0123456789ab",
+                [{"agent_id": 0, "prompt": "Frage"}],
+                run_state_dir=str(tmp_path),
+            )
 
 
 # ---------------------------------------------------------------------------

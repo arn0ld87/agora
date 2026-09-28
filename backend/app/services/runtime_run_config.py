@@ -112,7 +112,10 @@ def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[st
        ``hostname in {"api.openai.com", "openai.com"}``) missed legitimate
        subdomains/variants (e.g. ``eu.api.openai.com``,
        ``some-region.generativelanguage.googleapis.com``); the SSoT's
-       substring matching on the base URL recognizes these.
+       hostname-suffix matching (``host == "openai.com" or
+       host.endswith(".openai.com")``, Issue #1669) recognizes these while
+       still rejecting look-alike hosts (``evil-openai.com``) and
+       path-embedded occurrences on a foreign host.
     2. Ollama Cloud tag detection only matched the bare ``:cloud`` suffix
        (``normalized_model.endswith(":cloud")``) and missed size-prefixed
        cloud tags (e.g. ``gpt-oss:20b-cloud``); the SSoT's

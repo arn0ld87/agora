@@ -24,6 +24,7 @@ from app.services.sim.interview_client import (
     interview_agent,
     interview_agents_batch,
 )
+from app.utils.path_safety import PathTraversalError
 
 
 class _FakeStatus:
@@ -330,3 +331,37 @@ class TestGetInterviewHistoryFromDb:
         assert platforms == {"twitter", "reddit"}
         # sorted descending by timestamp — reddit row is newer
         assert result[0]["platform"] == "reddit"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1669: simulation_id must be validated before path construction
+# ---------------------------------------------------------------------------
+
+
+class TestPathInjectionRejected1669:
+    """A ``simulation_id`` with path separators must never reach ``os.path``
+    unvalidated — ``validate_path_id``/``safe_join_within_root`` reject it
+    before any filesystem access, instead of silently escaping ``run_state_dir``.
+    """
+
+    def test_check_env_alive_rejects_traversal_id(self, tmp_path) -> None:
+        with pytest.raises(PathTraversalError):
+            check_env_alive("../escape", run_state_dir=str(tmp_path))
+
+    def test_check_env_alive_accepts_normal_id(self, tmp_path) -> None:
+        result = check_env_alive("sim_deadbeef01", run_state_dir=str(tmp_path))
+        assert result is False
+
+    def test_interview_agent_rejects_traversal_id(self, tmp_path) -> None:
+        with pytest.raises(PathTraversalError):
+            interview_agent(
+                "../../etc/passwd", 1, "prompt", run_state_dir=str(tmp_path)
+            )
+
+    def test_get_interview_history_rejects_traversal_id(self, tmp_path) -> None:
+        with pytest.raises(PathTraversalError):
+            get_interview_history("../escape", run_state_dir=str(tmp_path))
+
+    def test_get_interview_history_accepts_normal_id(self, tmp_path) -> None:
+        result = get_interview_history("sim_deadbeef01", run_state_dir=str(tmp_path))
+        assert result == []

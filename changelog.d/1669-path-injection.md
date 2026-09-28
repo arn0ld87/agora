@@ -1,0 +1,3 @@
+### Sicherheit
+
+- Sim-, Event-Bus-, Interview- und History-Pfade (`interview_client.py`, `interview_direct.py`, `action_log_reader.py`, `event_bus.py`, `simulation_runner.py`, `simulation_manager.py`) bauen `simulation_id`-Pfade jetzt ausschließlich über `validate_path_id`/`safe_join_within_root` statt per `os.path.join`; `GET /api/simulation/<id>/posts?platform=` validiert den Plattform-Parameter gegen die Allowlist `reddit`/`twitter` statt ihn ungeprüft in den Dateinamen zu übernehmen; die statische SPA-Route in `app/__init__.py` löst URL-Pfade nur noch innerhalb von `frontend/dist` auf (#1669).

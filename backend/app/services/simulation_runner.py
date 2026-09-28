@@ -13,7 +13,7 @@ from datetime import datetime
 from queue import Queue
 
 from ..utils.logger import get_logger
-from ..utils.path_safety import validate_path_id
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 from .artifact_store import resolve_default_store
 from .event_bus import CHANNEL_STATE, SimulationEvent, resolve_default_event_bus
 from .run_registry import RunRegistry
@@ -138,7 +138,11 @@ class SimulationRunner:
         all_lines = read_console_log(simulation_id, cls.RUN_STATE_DIR)
 
         if not all_lines and not os.path.exists(
-            os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log")
+            safe_join_within_root(
+                cls.RUN_STATE_DIR,
+                validate_path_id(simulation_id, field_name="simulation_id"),
+                "simulation.log",
+            )
         ):
             return {
                 "lines": [],
@@ -204,8 +208,16 @@ class SimulationRunner:
                     message=f"Runner status: {state.runner_status.value}",
                     message_key=_runner_status_message_key(state.runner_status),
                     artifacts={"simulation": {
-                        "run_state": os.path.join(cls.RUN_STATE_DIR, simulation_id, "run_state.json"),
-                        "simulation_log": os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log"),
+                        "run_state": safe_join_within_root(
+                            cls.RUN_STATE_DIR,
+                            validate_path_id(simulation_id, field_name="simulation_id"),
+                            "run_state.json",
+                        ),
+                        "simulation_log": safe_join_within_root(
+                            cls.RUN_STATE_DIR,
+                            validate_path_id(simulation_id, field_name="simulation_id"),
+                            "simulation.log",
+                        ),
                     }},
                 )
 
@@ -439,7 +451,11 @@ class SimulationRunner:
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:
         """Delegate to action_log_reader.check_all_platforms_completed (PR 2, Monkeypatch-compat)."""
         return _check_all_platforms_completed_fn(
-            state, base_dir=os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
+            state,
+            base_dir=safe_join_within_root(
+                cls.RUN_STATE_DIR,
+                validate_path_id(state.simulation_id, field_name="simulation_id"),
+            ),
         )
 
     @classmethod

@@ -18,7 +18,7 @@ from ..repositories.simulation_repository import (
     get_simulation_repository,
 )
 from ..utils.logger import get_logger
-from ..utils.path_safety import validate_path_id
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 from .artifact_store import SimulationArtifactStore, resolve_default_store
 from . import branching_service, prepare_service
 
@@ -193,9 +193,11 @@ class SimulationManager:
     def _get_simulation_dir(self, simulation_id: str) -> str:
         """Get simulation data directory"""
         # SEC-1 (CodeQL py/path-injection #29): simulation_id speist
-        # os.path.join + os.makedirs. Guard vor der Pfad-Konstruktion.
-        validate_path_id(simulation_id, field_name="simulation_id")
-        sim_dir = os.path.join(self.SIMULATION_DATA_DIR, simulation_id)
+        # os.path.join + os.makedirs. safe_join_within_root loest den
+        # kanonischen Pfad auf und stellt das Containment sicher, statt nur
+        # die ID an der Funktionsgrenze zu validieren.
+        safe_id = validate_path_id(simulation_id, field_name="simulation_id")
+        sim_dir = safe_join_within_root(self.SIMULATION_DATA_DIR, safe_id)
         os.makedirs(sim_dir, exist_ok=True)
         return sim_dir
     
