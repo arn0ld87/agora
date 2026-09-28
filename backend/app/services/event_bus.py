@@ -548,8 +548,12 @@ class FilePollingEventBus:
 def _simulation_abs_dir(simulation_id: str) -> Optional[str]:
     """Return the on-disk simulation directory if the local adapter is active."""
     from ..utils.artifact_locator import ArtifactLocator
+    from ..utils.path_safety import PathTraversalError
 
-    path = os.path.join(ArtifactLocator.simulations_dir(), simulation_id)
+    try:
+        path = ArtifactLocator.simulation_dir(simulation_id)
+    except PathTraversalError:
+        return None
     return path if os.path.isdir(path) else None
 
 

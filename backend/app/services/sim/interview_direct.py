@@ -30,6 +30,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ...utils.logger import get_logger
+from ...utils.path_safety import safe_join_within_root, validate_path_id
 from ..artifact_store import resolve_default_store
 
 logger = get_logger("agora.interview_direct")
@@ -64,7 +65,11 @@ def _load_personas(
     behandelt — der Aufrufer entscheidet, ob das ein harter Fehler ist.
     """
     if platform == "twitter":
-        profiles_path = os.path.join(run_state_dir, simulation_id, "twitter_profiles.csv")
+        profiles_path = safe_join_within_root(
+            run_state_dir,
+            validate_path_id(simulation_id, field_name="simulation_id"),
+            "twitter_profiles.csv",
+        )
         if not os.path.exists(profiles_path):
             return []
         try:
@@ -567,7 +572,9 @@ def interview_agents_batch_direct(
         ValueError: Simulation existiert nicht oder es sind für keine Plattform
             Personas persistiert.
     """
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 

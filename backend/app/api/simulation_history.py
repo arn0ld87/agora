@@ -305,6 +305,12 @@ def get_simulation_posts(simulation_id: str):
         )
 
     platform = request.args.get('platform', 'reddit')
+    if platform not in ("reddit", "twitter"):
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=f"platform muss 'reddit' oder 'twitter' sein, erhalten: {platform}",
+        )
     limit = request.args.get('limit', 50, type=int)
     offset = request.args.get('offset', 0, type=int)
 

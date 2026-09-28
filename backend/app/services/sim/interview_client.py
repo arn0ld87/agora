@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
 
 from ...utils.logger import get_logger
+from ...utils.path_safety import safe_join_within_root, validate_path_id
 from ..artifact_store import resolve_default_store
 from ..simulation_ipc import SimulationIPCClient
 from .interview_direct import (
@@ -128,7 +129,9 @@ def _run_is_finished(simulation_id: str, *, run_state_dir: str) -> bool:
 
 def check_env_alive(simulation_id: str, *, run_state_dir: str) -> bool:
     """Return ``True`` if the simulation environment is alive (accepts Interview commands)."""
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         return False
     if _run_is_finished(simulation_id, run_state_dir=run_state_dir):
@@ -204,7 +207,9 @@ def interview_agent(
             personas are available.
         TimeoutError: IPC response timed out.
     """
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
@@ -304,7 +309,9 @@ def interview_agents_batch(
             personas are available.
         TimeoutError: IPC response timed out.
     """
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
@@ -381,7 +388,9 @@ def interview_all_agents(
     Raises:
         ValueError: Simulation / config missing, or no agents in config.
     """
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
@@ -426,7 +435,9 @@ def close_simulation_env(
     Raises:
         ValueError: Simulation directory does not exist.
     """
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
     if not os.path.exists(sim_dir):
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
@@ -530,7 +541,9 @@ def get_interview_history(
     ``platform`` may be ``"reddit"``, ``"twitter"``, or ``None`` (both).
     When both platforms are queried, the combined result is capped at *limit*.
     """
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = safe_join_within_root(
+        run_state_dir, validate_path_id(simulation_id, field_name="simulation_id")
+    )
 
     platforms = [platform] if platform in ("reddit", "twitter") else ["twitter", "reddit"]
 

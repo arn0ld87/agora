@@ -31,6 +31,7 @@ from ...config import Config
 from ...contracts.role_leakage_contract import ConflictReason
 from ...contracts.sim_action_log_contract import RoundEndEvent
 from ...utils.logger import get_logger
+from ...utils.path_safety import safe_join_within_root, validate_path_id
 from .role_leakage import detect_role_conflict, load_profiles
 from .run_state_store import AgentAction, RunnerStatus, SimulationRunState
 
@@ -415,7 +416,9 @@ def get_all_actions(
     Returns:
         Complete action list sorted by timestamp, newest first.
     """
-    sim_dir = os.path.join(str(base_dir), simulation_id)
+    sim_dir = safe_join_within_root(
+        str(base_dir), validate_path_id(simulation_id, field_name="simulation_id")
+    )
     actions: List[AgentAction] = []
 
     # Profile einmal laden, wenn Markierung aktiv

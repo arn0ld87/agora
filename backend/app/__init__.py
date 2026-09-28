@@ -270,6 +270,23 @@ def _enforce_demo_mode_guard(logger) -> None:
             )
 
 
+def _resolve_spa_static_target(frontend_dist, path: str):
+    """Loese ``path`` (aus der ``<path:path>``-Route) sicher unter ``frontend_dist``
+    auf (#1669). ``path`` ist vollstaendig URL-kontrolliert und kann ``../``-Segmente
+    enthalten; ``Path.__truediv__`` normalisiert diese nicht. Gibt den kanonischen
+    Ziel-Pfad zurueck, wenn er tatsaechlich unter ``frontend_dist`` bleibt und dort
+    eine Datei ist — sonst ``None`` (Fallback auf ``index.html``, wie zuvor)."""
+    from .utils.path_safety import PathTraversalError, safe_join_within_root
+
+    if not path:
+        return None
+    try:
+        target = safe_join_within_root(str(frontend_dist), path)
+    except PathTraversalError:
+        return None
+    return target if os.path.isfile(target) else None
+
+
 def create_app(config_class=Config):
     """Flask application factory function"""
     # Observability: Tracing + Metrics vor Flask-Instanz initialisieren,
@@ -619,8 +636,7 @@ def create_app(config_class=Config):
                     "error": "Not Found",
                     "code": "not_found",
                 }, 404
-            target = frontend_dist / path
-            if path and target.is_file():
+            if _resolve_spa_static_target(frontend_dist, path):
                 return send_from_directory(frontend_dist, path)
             return send_from_directory(frontend_dist, 'index.html')
 

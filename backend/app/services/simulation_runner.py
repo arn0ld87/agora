@@ -13,6 +13,7 @@ from datetime import datetime
 from queue import Queue
 
 from ..utils.logger import get_logger
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 from .artifact_store import resolve_default_store
 from .event_bus import CHANNEL_STATE, SimulationEvent, resolve_default_event_bus
 from .run_registry import RunRegistry
@@ -134,7 +135,11 @@ class SimulationRunner:
         all_lines = read_console_log(simulation_id, cls.RUN_STATE_DIR)
 
         if not all_lines and not os.path.exists(
-            os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log")
+            safe_join_within_root(
+                cls.RUN_STATE_DIR,
+                validate_path_id(simulation_id, field_name="simulation_id"),
+                "simulation.log",
+            )
         ):
             return {
                 "lines": [],
