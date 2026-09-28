@@ -114,3 +114,16 @@ def test_prod_and_proxy_use_separate_cache_scopes() -> None:
         assert "cache-from: type=gha\n" not in text + "\n", f"{job}: GHA-Cache ohne scope"
         assert "scope=prod" in text
         assert "scope=proxy" in text
+
+
+def test_publish_egress_allows_sigstore_for_attestations() -> None:
+    """attest-build-provenance braucht die Public-Good-Sigstore-Endpunkte.
+
+    Fehlen sie in der Egress-Allowlist, bricht publish nach dem ersten Push
+    ab (Run 36426266682): agora liegt ohne Attestation in GHCR, agora-proxy
+    wird gar nicht publiziert.
+    """
+    step = _joined(_step_block(_job_block("publish"), "Harden Runner"))
+
+    for endpoint in ("fulcio.sigstore.dev:443", "rekor.sigstore.dev:443", "tuf-repo-cdn.sigstore.dev:443"):
+        assert endpoint in step, f"{endpoint} fehlt in der Egress-Allowlist von publish"

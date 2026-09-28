@@ -4,7 +4,7 @@ description: Schreibt pytest-Tests für Pydantic-Contracts, FSM-Übergänge, Per
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: claude-sonnet-4-6
 effort: medium
-maxTurns: 30
+maxTurns: 100
 background: true
 isolation: worktree
 ---
