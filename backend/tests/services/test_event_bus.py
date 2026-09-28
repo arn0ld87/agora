@@ -14,7 +14,10 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.config import Config
+from app.utils.path_safety import PathTraversalError
 from app.services.event_bus import (
     FilePollingEventBus,
     _simulation_abs_dir,
@@ -135,11 +138,13 @@ class TestResolveDefaultEventBusUnexpectedError:
 
 class TestSimulationAbsDirPathInjection1669:
     """``simulation_id`` mit Pfadseparatoren darf keinen Pfad ausserhalb von
-    ``ArtifactLocator.simulations_dir()`` liefern — ``None`` statt Escape."""
+    ``ArtifactLocator.simulations_dir()`` liefern — ``PathTraversalError``
+    statt Escape (gleiche Semantik wie ``test_path_guards_1669_slice_c``)."""
 
-    def test_traversal_id_returns_none_without_raising(self, monkeypatch, tmp_path):
+    def test_traversal_id_raises(self, monkeypatch, tmp_path):
         monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
-        assert _simulation_abs_dir("../escape") is None
+        with pytest.raises(PathTraversalError):
+            _simulation_abs_dir("../escape")
 
     def test_normal_id_resolves_existing_dir(self, monkeypatch, tmp_path):
         monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))

@@ -196,9 +196,8 @@ class SimulationManager:
         # os.path.join + os.makedirs. safe_join_within_root loest den
         # kanonischen Pfad auf und stellt das Containment sicher, statt nur
         # die ID an der Funktionsgrenze zu validieren.
-        sim_dir = safe_join_within_root(
-            self.SIMULATION_DATA_DIR, validate_path_id(simulation_id, field_name="simulation_id")
-        )
+        safe_id = validate_path_id(simulation_id, field_name="simulation_id")
+        sim_dir = safe_join_within_root(self.SIMULATION_DATA_DIR, safe_id)
         os.makedirs(sim_dir, exist_ok=True)
         return sim_dir
     
