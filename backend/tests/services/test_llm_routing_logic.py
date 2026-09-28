@@ -220,19 +220,28 @@ def test_detect_default_provider_id_gemini_model_without_google_base_url_converg
     )
 
 
-def test_detect_default_provider_id_delegates_ssot_substring_semantics():
-    """The SSoT uses substring matching on the base URL (same semantics already
-    shipped in production via ``LLMClient._detect_provider``), which is a
-    deliberate trade-off vs. the old, stricter exact-hostname comparison: it
-    trades resistance to look-alike/path-embedded strings for recognizing
-    legitimate variants (see
+def test_detect_default_provider_id_delegates_ssot_hostname_semantics():
+    """Issue #1669 (CodeQL py/incomplete-url-substring-sanitization #367/#389/
+    #390): the SSoT now compares hostnames/ports exactly instead of matching a
+    raw substring anywhere in the base URL. ``_detect_default_provider_id``
+    inherits this hardened SSoT behavior verbatim: a look-alike host
+    (``evil-openai.com``) or a path-embedded occurrence of the real hostname
+    on a foreign host (``proxy.example/generativelanguage.googleapis.com``) no
+    longer misroutes to the real provider — both fall back to
+    ``openai_compatible``, same as any other unrecognized endpoint. Legitimate
+    subdomains still resolve correctly (see
     ``test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix``
-    below). ``_detect_default_provider_id`` now inherits this SSoT behavior
-    verbatim rather than diverging from the single source of truth."""
-    assert _detect_default_provider_id("https://evil-openai.com/v1", "custom-model") == "openai"
-    assert _detect_default_provider_id(
-        "https://proxy.example/generativelanguage.googleapis.com", "custom-model"
-    ) == "google"
+    below)."""
+    assert (
+        _detect_default_provider_id("https://evil-openai.com/v1", "custom-model")
+        == "openai_compatible"
+    )
+    assert (
+        _detect_default_provider_id(
+            "https://proxy.example/generativelanguage.googleapis.com", "custom-model"
+        )
+        == "openai_compatible"
+    )
 
 
 def test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix():

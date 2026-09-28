@@ -25,8 +25,10 @@ Gemini-Erkennung  nur über Base-URL           Base-URL ODER Modell-Prefix
                   (googleapis/generativelang) ``gemini-`` (Gemini-3 braucht
                                               den lokalen
                                               ``thought_signature``-Adapter)
-Ollama-Port       Substring ``"11434"``       Regex ``:11434(?:/|$)``
-                  (matcht auch ``:114340``)   (nur exakter Port)
+Ollama-Port       exakter Port (``parsed.port == 11434``) — seit #1669 in
+                  BEIDEN Modi identisch, keine Divergenz mehr (vorher: http
+                  matchte per Substring auch ``:114340``, oasis per Regex
+                  bereits exakt).
 ``:latest``-Tag   kein Signal                 → ``"ollama"``
 Fallback          ``"unknown"``               ``"openai"`` (Compat-Gateways)
 Vokabular         ollama/cloud/openai/        google/ollama/openai
@@ -57,15 +59,23 @@ HttpDetectedProvider = Literal[
 OasisDetectedProvider = Literal["google", "ollama", "openai"]
 DetectionMode = Literal["http", "oasis"]
 
-# Exakter Ollama-Port (nur ":11434" gefolgt von "/" oder Stringende) —
-# Verhalten aus scripts/_sim_common.py uebernommen.
-_OASIS_OLLAMA_PORT_RE = re.compile(r":11434(?:/|$)")
-
 # Ollama-Cloud-Size-Tag: fuehrende Groesse (Zahl + optionale Einheit) gefolgt
 # von ``-cloud`` — z. B. ``20b-cloud``, ``120b-cloud``, ``1t-cloud``. Bewusst
 # eng, damit ``<name>:<wort>-cloud`` (ohne Groessenpraefix) auf einem
 # Nicht-Ollama-Gateway KEIN False-Positive ausloest.
-_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d+[a-z]*-cloud")
+#
+# CodeQL py/polynomial-redos (#1669) — possessive Quantifiers (``++``/``*+``,
+# Python >=3.11) verbieten Backtracking zwischen ``\d`` und ``[a-z]``
+# entlang eines langen Adversarial-Inputs; die Laengenkappung in
+# :func:`_is_ollama_cloud_tag` sichert zusaetzlich eine O(1)-Ablehnung
+# unabhaengig von Regex-Engine-Details. Docstring-Beispiele behalten ihr
+# Ergebnis unveraendert.
+_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d++[a-z]*+-cloud")
+
+# Maximale Tag-Laenge fuer die Cloud-Size-Pruefung (Issue #1669, ReDoS-Cap).
+# Reale Tags (``20b-cloud`` … ``480b-cloud``) sind zweistellig; 64 laesst
+# grosszuegigen Headroom und verwirft adversarial lange Tags vor dem Regex.
+_OLLAMA_CLOUD_SIZE_TAG_MAX_LEN = 64
 
 
 def _is_ollama_cloud_tag(model: str) -> bool:
@@ -86,7 +96,39 @@ def _is_ollama_cloud_tag(model: str) -> bool:
     if ":" not in model:
         return False
     tag = model.rsplit(":", 1)[-1]
-    return tag == "cloud" or _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
+    if tag == "cloud":
+        return True
+    if len(tag) > _OLLAMA_CLOUD_SIZE_TAG_MAX_LEN:
+        return False
+    return _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
+
+
+def _parse_host_port(base: str) -> tuple[Optional[str], Optional[int]]:
+    """Parst Hostname und Port aus einer (ggf. schemalosen) Base-URL.
+
+    ``urlparse`` liefert bei schemalosen URLs (``api.openai.com/v1``,
+    ``localhost:11434``) keinen Hostname — die gesamte Eingabe landet im
+    ``path``, ``hostname``/``port`` bleiben ``None``. Fehlt ``"://"``, wird
+    ``"//"`` vorangestellt, damit ``urlparse`` den Netloc-Teil erkennt (RFC
+    3986: ``authority`` beginnt hinter ``//``).
+
+    Zentraler Helper fuer ALLE Hostname-Vergleiche in :func:`_detect_http`
+    und :func:`_detect_oasis` (Issue #1669, CodeQL
+    ``py/incomplete-url-substring-sanitization`` #367/#389/#390) — ersetzt
+    rohe URL-Substring-Pruefungen (``"openai.com" in base``), die auch
+    ``https://api.openai.com.attacker.test`` oder einen Pfad/Query-String mit
+    dem Text matchen wuerden.
+
+    Ein unparsbarer Port (``ValueError``, z. B. nicht-numerisch) ergibt
+    ``None`` statt eines Crashs.
+    """
+    candidate = base if "://" in base else f"//{base}"
+    parsed = urlparse(candidate)
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    return parsed.hostname, port
 
 
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
@@ -106,27 +148,26 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     """
     model_name = model or ""
     base = (base_url or "").lower()
-    if "ollama.com" in base:
+    host, port = _parse_host_port(base)
+    # CodeQL py/incomplete-url-substring-sanitization (#367/#389/#390,
+    # Issue #1669) — hostname-basiert statt roher URL-Substring-Pruefung fuer
+    # ALLE Zweige (ollama.com, openai.com, googleapis.com, Port), analog zum
+    # bereits hostname-basierten MiniMax-/Bedrock-/Anthropic-Zweig
+    # (CodeQL #750). Ein Drittanbieter-Host wie
+    # ``api.openai.com.attacker.test`` oder ein Pfad/Query mit dem Text darf
+    # NICHT matchen. ``_parse_host_port`` wird fuer ALLE Zweige (auch
+    # MiniMax/Bedrock/Anthropic) wiederverwendet statt dreifachem urlparse.
+    if host == "ollama.com" or (host and host.endswith(".ollama.com")):
         return "cloud"
     if _is_ollama_cloud_tag(model_name):
         return "cloud"
-    # CodeQL #750 — match the URL hostname exactly (suffix) instead of a raw
-    # substring, which would also match `api.minimax.io.attacker.test` or
-    # paths/query containing the text and misroute requests through
-    # PROVIDER_MINIMAX. Consistent hostname-based detection for all providers
-    # (ollama.com, openai.com, googleapis.com) is tracked in Phase F (#671)
-    # / #750 — this PR only fixes the NEW minimax branch.
-    _minimax_host = urlparse(base).hostname
-    if _minimax_host and (
-        _minimax_host == "api.minimax.io"
-        or _minimax_host.endswith(".api.minimax.io")
-    ):
+    if host == "api.minimax.io" or (host and host.endswith(".api.minimax.io")):
         return "minimax"
-    if "11434" in base:
+    if port == 11434:
         return "ollama"
-    if "openai.com" in base or "api.openai" in base:
+    if host == "openai.com" or (host and host.endswith(".openai.com")):
         return "openai"
-    if "googleapis.com" in base or "generativelanguage" in base:
+    if host == "googleapis.com" or (host and host.endswith(".googleapis.com")):
         return "google"
     # Issue #1282 — Amazon Bedrock OpenAI-kompatibler mantle-Pfad. Hostname-
     # basiert (wie der MiniMax-Zweig, CodeQL #750), kein raw substring: ein
@@ -137,8 +178,7 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     # sprechen OpenAI-Chat-Completions + Bearer-API-Key. Die Suffix-Pruefung
     # (``.api.aws``/``.amazonaws.com``) schliesst Praefix-False-Positives wie
     # ``bedrock-mantle.attacker.example`` aus (siehe :func:`_is_bedrock_host`).
-    _bedrock_host = urlparse(base).hostname
-    if _bedrock_host and _is_bedrock_host(_bedrock_host):
+    if host and _is_bedrock_host(host):
         return "bedrock"
     # Issue #1284 — api.anthropic.com trägt keinen nativen Chat-Adapter.
     # Hostname-basiert wie Minimax/Bedrock (CodeQL #750): ein Drittanbieter-
@@ -147,8 +187,7 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     # können statt den OpenAI-kompatiblen Client stillschweigend gegen eine
     # Route ohne "/v1" und ohne Anthropic-Messages-Format laufen zu lassen —
     # siehe :func:`_is_anthropic_host`.
-    _anthropic_host = urlparse(base).hostname
-    if _anthropic_host and _is_anthropic_host(_anthropic_host):
+    if host and _is_anthropic_host(host):
         return "anthropic"
     return "unknown"
 
@@ -161,7 +200,8 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
        ODER Modell beginnt mit ``gemini-``. Gemini-3 verlangt ein
        ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der lokale
        CAMEL-Adapter ergänzt das Feld in der rekonstruierten Historie.
-    2. ``"ollama"`` — Base-URL enthält ``ollama.com`` oder Port ``:11434``
+    2. ``"ollama"`` — Base-URL enthält ``ollama.com`` oder Port ``11434``
+       (Hostname-/Port-basiert, Issue #1669 — nicht mehr URL-Substring)
        ODER Modell traegt ein Ollama-Cloud-Tag (``:cloud`` / ``:<size>-cloud``,
        Issue #670) ODER endet auf ``:latest``. Der CAMEL-Konsument dieses
        Zweigs spricht OpenAI-Compat und braucht ein ``/v1`` an der Base-URL —
@@ -171,15 +211,23 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
     3. ``"openai"`` — alles andere (echtes OpenAI, Compat-Gateways, Qwen
        Cloud über Nicht-Ollama-URLs, Mistral, DeepSeek, …).
     """
-    url = base_url or ""
+    url = (base_url or "").lower()
     m = model or ""
+    host, port = _parse_host_port(url)
 
-    if "generativelanguage.googleapis.com" in url or m.startswith("gemini-"):
+    # CodeQL py/incomplete-url-substring-sanitization (#367/#389/#390,
+    # Issue #1669) — hostname-/port-basiert statt roher URL-Substring-
+    # Pruefung, identisch zu :func:`_detect_http`. Ein Drittanbieter-Host wie
+    # ``generativelanguage.googleapis.com.attacker.test`` darf nicht matchen.
+    if (host == "googleapis.com" or (host and host.endswith(".googleapis.com"))) or m.startswith(
+        "gemini-"
+    ):
         return "google"
 
     if (
-        "ollama.com" in url
-        or _OASIS_OLLAMA_PORT_RE.search(url)
+        host == "ollama.com"
+        or (host and host.endswith(".ollama.com"))
+        or port == 11434
         or _is_ollama_cloud_tag(m)
         or m.endswith(":latest")
     ):
