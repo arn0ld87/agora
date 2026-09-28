@@ -16,10 +16,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
 from ..repositories.report_repository import get_report_repository
-from ..utils.path_safety import safe_join_within_root
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
-from ..utils.path_safety import validate_path_id
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 
