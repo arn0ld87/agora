@@ -4,7 +4,7 @@ description: Vue 3, TypeScript, Pinia, Zod und Accessibility. Use proactively f√
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: claude-sonnet-4-6
 effort: medium
-maxTurns: 30
+maxTurns: 100
 background: true
 isolation: worktree
 ---
