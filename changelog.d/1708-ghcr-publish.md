@@ -12,3 +12,4 @@
 ### Fixed
 
 - The release smoke no longer builds the proxy image inside a job whose egress allowlist blocks the Alpine, Debian and npm package sources. It starts both images from `build-only` with `--no-build`. Before, the build hung until the 30-minute timeout (v0.9.6), and `publish` never ran.
+- `publish` can reach Sigstore (`fulcio`, `rekor`, `tuf-repo-cdn` on `sigstore.dev`). The first real publish pushed `agora` and then failed at the provenance attestation with `ECONNREFUSED`, so `agora-proxy` was never published.
