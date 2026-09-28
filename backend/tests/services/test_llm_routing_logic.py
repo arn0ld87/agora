@@ -228,10 +228,18 @@ def test_detect_default_provider_id_delegates_ssot_substring_semantics():
     legitimate variants (see
     ``test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix``
     below). ``_detect_default_provider_id`` now inherits this SSoT behavior
-    verbatim rather than diverging from the single source of truth."""
+    verbatim rather than diverging from the single source of truth.
+
+    Seit #1669 (CodeQL ``py/incomplete-url-substring-sanitization``) prüft die
+    SSoT bei Google den Hostnamen: Ein Pfad, der ``googleapis.com`` nur
+    enthält, zählt nicht mehr als Google, damit ein fremder Host keinen
+    Google-Key bekommt. Echte ``*.googleapis.com``-Hosts bleiben Google."""
     assert _detect_default_provider_id("https://evil-openai.com/v1", "custom-model") == "openai"
     assert _detect_default_provider_id(
         "https://proxy.example/generativelanguage.googleapis.com", "custom-model"
+    ) == "openai_compatible"
+    assert _detect_default_provider_id(
+        "https://generativelanguage.googleapis.com/v1beta/openai", "custom-model"
     ) == "google"
 
 
