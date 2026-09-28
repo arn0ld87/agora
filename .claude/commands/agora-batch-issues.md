@@ -85,7 +85,7 @@ Mehrere Issues (höchstens fünf) dürfen nur parallel laufen, wenn alle Aussage
 - kein Parent-/Child- oder Blocked-by-Verhältnis,
 - keine gleichen oder eng gekoppelten Dateien,
 - keine gemeinsam geänderten Contracts oder Schemas,
-- keine Migration, auf der das zweite Issue aufbaut,
+- keine Migration, auf der ein anderes Issue des Batches aufbaut,
 - keine vermutlich gemeinsame Fehlerursache,
 - keine konkurrierenden Änderungen an Provider-Routing, Secrets oder Evidence-Hartankern,
 - jedes Issue ist unabhängig testbar und rückrollbar.
@@ -194,7 +194,7 @@ fi
 
 Ein nicht-leerer Status blockiert **dieses** Issue sofort: Tests, Gate und Opus-Review dürfen dafür nicht mehr laufen, und es wird weder gepusht noch ein PR geöffnet. Nur so ist garantiert, dass exakt der Inhalt von `<COMMIT_SHA>` geprüft und später gepusht wird. Der Blocker-Bericht nennt die ausgegebenen uncommitteten Pfade (uncommitted changes nach dem Worker-Commit).
 
-Da jedes Issue in seinem eigenen Worktree verifiziert wird, beendet der Blocker den Batch nicht. Das andere Issue läuft nur weiter, wenn die in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt; andernfalls stoppt auch dieses. Verwende hier kein `exit`, das die gemeinsame Orchestrierungs-Shell beenden würde. Das andere Issue muss danach erneut gemäß Schritt 3 auf Unabhängigkeit geprüft werden, bevor es weiterlaufen darf.
+Da jedes Issue in seinem eigenen Worktree verifiziert wird, beendet der Blocker den Batch nicht. Jedes übrige Issue läuft nur weiter, wenn seine in Schritt 3 nachgewiesene Unabhängigkeit von **allen** anderen Issues des Batches weiterhin gilt; andernfalls stoppt auch dieses. Verwende hier kein `exit`, das die gemeinsame Orchestrierungs-Shell beenden würde. Jedes übrige Issue muss danach erneut gemäß Schritt 3 paarweise gegen alle anderen noch laufenden Issues auf Unabhängigkeit geprüft werden, bevor es weiterlaufen darf.
 
 Alle weiteren Verifikationsschritte dieses Issues laufen **nur** bei `issue_blocked -eq 0`. Ist das Flag gesetzt, werden Test, Gate und Opus-Review dieses Issues übersprungen und es geht als gestoppt in die Abschlussausgabe.
 
@@ -249,7 +249,7 @@ if [ "$issue_blocked" -eq 0 ]; then
 fi
 ```
 
-`issue_blocked=1` bedeutet: dieses Issue ist gestoppt. Es geht nicht in Schritt 8 (Opus-Review), wird nicht gepusht und bekommt keinen PR. Der Batch selbst läuft weiter; das andere Issue wird nur fortgesetzt, wenn seine in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt.
+`issue_blocked=1` bedeutet: dieses Issue ist gestoppt. Es geht nicht in Schritt 8 (Opus-Review), wird nicht gepusht und bekommt keinen PR. Der Batch selbst läuft weiter; jedes übrige Issue wird nur fortgesetzt, wenn seine in Schritt 3 nachgewiesene Unabhängigkeit von allen anderen Issues weiterhin gilt.
 
 Prüfe außerdem:
 
@@ -258,9 +258,9 @@ Prüfe außerdem:
 - keine Secrets oder generierten Fremdartefakte,
 - Issue-Test und ausgewähltes Gate jeweils Exit 0,
 - vollständige Test- und Gate-Ausgaben liegen für Schritt 8 vor,
-- kein Konflikt mit dem anderen Issue-Commit.
+- kein Konflikt mit einem der anderen Issue-Commits des Batches (tatsächlich geänderte Pfade paarweise vergleichen).
 
-Bei einem Fehler stoppt ausschließlich das betroffene Issue. Das andere darf nur weiter geprüft werden, wenn die in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt. Ein Fehler darf weder das andere Issue automatisch stoppen noch durch dessen Erfolg verdeckt werden.
+Bei einem Fehler stoppt ausschließlich das betroffene Issue. Jedes übrige Issue darf nur weiter geprüft werden, wenn seine in Schritt 3 nachgewiesene Unabhängigkeit von allen anderen weiterhin gilt. Ein Fehler darf weder die übrigen Issues automatisch stoppen noch durch deren Erfolg verdeckt werden.
 
 ## Schritt 8: Opus-Review pro Commit (optional)
 
@@ -299,7 +299,7 @@ Prüfe für jedes erfolgreiche Issue vor Push und PR, ob im selben Slice sachlic
 
 Dokumentiere für jedes Artefakt `aktualisiert` oder `NICHT BETROFFEN` mit Begründung. Ist ein erforderliches Datei-Artefakt im Commit nicht enthalten, darf nicht gepusht werden. Gib das betroffene Issue einmalig an denselben Worker zurück, lasse den bestehenden lokalen Commit amendieren und wiederhole für den neuen Commit-SHA Schritt 7 und Schritt 8 vollständig. Dadurch bleibt es bei genau einem Issue-Commit.
 
-Erzeuge notwendige Folge-Issues vor dem PR und verlinke sie im PR-Body. Der Dokumentationssync eines Issues darf keine Dateien oder Planungen des anderen Issues übernehmen.
+Erzeuge notwendige Folge-Issues vor dem PR und verlinke sie im PR-Body. Der Dokumentationssync eines Issues darf keine Dateien oder Planungen anderer Issues des Batches übernehmen.
 
 ## Schritt 10: Push und PR
 
@@ -344,7 +344,7 @@ PR-Body:
 - `agora-opus-reviewer` — APPROVE _(Zeile nur aufnehmen, wenn Schritt 8 tatsächlich lief)_
 ```
 
-Keine beiden Issues in einen gemeinsamen PR quetschen. Git kann viel, aber es muss nicht jeden schlechten Gedanken konservieren.
+Keine zwei Issues in einen gemeinsamen PR quetschen. Git kann viel, aber es muss nicht jeden schlechten Gedanken konservieren.
 
 ## Schritt 11: Abschlussausgabe
 
