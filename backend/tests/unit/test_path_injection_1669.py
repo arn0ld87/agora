@@ -2,15 +2,16 @@
 
 Deckt die Module ab, für die es keine passende bestehende Testdatei gibt:
 ``action_log_reader.get_all_actions``, ``SimulationRunner.get_console_log``,
-``SimulationManager._get_simulation_dir``, ``get_simulation_posts`` (API) und
-``app._resolve_spa_static_target``. Jedes Modul bekommt mindestens einen
-Negativfall (``../``-haltige ID → ``PathTraversalError``/HTTP 400) und einen
-Positivfall mit einer normalen ID.
+``SimulationManager._get_simulation_dir`` und ``get_simulation_posts`` (API).
+Jedes Modul bekommt mindestens einen Negativfall (``../``-haltige ID →
+``PathTraversalError``/HTTP 400) und einen Positivfall mit einer normalen ID.
 
 Bereits durch bestehende Testdateien abgedeckt (nicht hier dupliziert):
 ``interview_client`` (``tests/services/sim/test_interview_client.py``),
 ``interview_direct`` (``tests/services/sim/test_interview_direct.py``),
-``event_bus._simulation_abs_dir`` (``tests/services/test_event_bus.py``).
+``event_bus._simulation_abs_dir`` (``tests/services/test_event_bus.py``),
+``app._resolve_spa_static_file`` (``tests/test_spa_path_traversal.py``, deckt
+mehr Faelle ab als der frühere ``_resolve_spa_static_target``-Testblock hier).
 ``branching_service.py`` braucht keinen eigenen Test: ``source_dir``/
 ``branch_dir`` stammen ausschließlich aus dem hier getesteten
 ``SimulationManager._get_simulation_dir``.
@@ -23,7 +24,6 @@ import os
 import pytest
 from flask import Flask
 
-from app import _resolve_spa_static_target
 from app.api import simulation_bp
 from app.services.simulation_manager import SimulationManager
 from app.services.simulation_runner import SimulationRunner
@@ -119,28 +119,3 @@ class TestSimulationPostsPlatformAllowlist:
         body = response.get_json()
         assert body["success"] is True
         assert body["data"]["posts"] == []
-
-
-# ---------------------------------------------------------------------------
-# app._resolve_spa_static_target (static SPA serving)
-# ---------------------------------------------------------------------------
-
-
-class TestResolveSpaStaticTargetPathInjection:
-    def test_rejects_traversal_path(self, tmp_path) -> None:
-        frontend_dist = tmp_path / "dist"
-        frontend_dist.mkdir()
-        (tmp_path / "secret.txt").write_text("top secret")
-
-        assert _resolve_spa_static_target(frontend_dist, "../secret.txt") is None
-
-    def test_accepts_existing_asset(self, tmp_path) -> None:
-        frontend_dist = tmp_path / "dist"
-        assets_dir = frontend_dist / "assets"
-        assets_dir.mkdir(parents=True)
-        asset = assets_dir / "app.js"
-        asset.write_text("console.log(1)")
-
-        result = _resolve_spa_static_target(frontend_dist, "assets/app.js")
-
-        assert result == os.path.realpath(str(asset))

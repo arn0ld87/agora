@@ -480,8 +480,16 @@ def _has_ollama_url_signal(base_url: Optional[str]) -> bool:
 
 
 
-def _host_is(host: str, domain: str) -> bool:
-    """``host`` ist ``domain`` selbst oder eine Subdomain davon (CodeQL #1669)."""
+def _host_is(host: Optional[str], domain: str) -> bool:
+    """``host`` ist ``domain`` selbst oder eine Subdomain davon (CodeQL #1669).
+
+    ``host`` akzeptiert ``Optional[str]``, weil :func:`_parse_host_port`
+    (Issue #1669) fuer unparsbare/schemalose URLs ``None`` liefern kann —
+    ``_detect_http``/``_detect_oasis`` reichen das Ergebnis direkt hier
+    hinein, ohne vorherigen Falsy-Guard.
+    """
+    if not host:
+        return False
     return host == domain or host.endswith("." + domain)
 
 def _is_bedrock_host(host: str) -> bool:
