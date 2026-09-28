@@ -1,0 +1,54 @@
+# Opt-in: agora und nginx aus GHCR ziehen statt lokal bauen (#1708).
+#
+# Warum ein eigenes Override:
+# Der Standard-Stack baut beide Images aus dem Repo-Dockerfile (agora mit
+# target prod, nginx mit target proxy inklusive Frontend-Bundle). Auf einem
+# ausgelasteten Host bricht dieser Build ab (BuildKit-Session stirbt am
+# Healthcheck). Die CI publiziert dieselben Images fertig gebaut, per Trivy
+# gescannt und mit Build-Provenance-Attestation:
+#
+#   ghcr.io/arn0ld87/agora:<tag>        target prod
+#   ghcr.io/arn0ld87/agora-proxy:<tag>  target proxy, Default-Build-Args
+#
+# Tags: sha-<7> (jeder gruene main-Push und jedes Release, unveraenderlich),
+# edge (letzter main-Stand), vX.Y.Z und latest (nur nach gruenem Smoke).
+# Fuer Deploy und Rollback immer sha-<7> oder vX.Y.Z pinnen, nie edge/latest:
+# nur ein fester Tag macht einen Rollback zu einem einzigen Befehl.
+#
+# `AGORA_IMAGE_TAG` ist Pflicht und hat absichtlich KEINEN Default — ohne
+# bewusste Wahl wuerde ein beweglicher Tag still eine andere Version starten.
+#
+# Grenzen:
+# - Das Proxy-Image traegt KEIN Build-Time-Token (ALLOW_BUILD_TIME_TOKEN=false).
+#   Wer das Token ins Bundle einbrennen will, baut weiter lokal, ohne dieses
+#   Override.
+# - Dieses Override definiert nginx nicht selbst. Es gehoert hinter ein
+#   Overlay, das den nginx-Service anlegt (prod-with-proxy.yml oder das
+#   Host-Overlay), und muss als LETZTES -f stehen, damit `build: !reset`
+#   die dort gesetzten build-Bloecke entfernt.
+# - Nur linux/amd64.
+#
+# Deploy (Beispiel mit Reverse-Proxy-Overlay):
+#
+#   export AGORA_IMAGE_TAG=sha-1a2b3c4
+#   gh attestation verify oci://ghcr.io/arn0ld87/agora:$AGORA_IMAGE_TAG --repo arn0ld87/agora
+#   gh attestation verify oci://ghcr.io/arn0ld87/agora-proxy:$AGORA_IMAGE_TAG --repo arn0ld87/agora
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     -f deploy/compose/docker-compose.prod-with-proxy.yml \
+#     -f deploy/compose/docker-compose.ghcr.yml \
+#     pull agora nginx
+#   docker compose ... up -d --no-build agora nginx
+#
+# Rollback: AGORA_IMAGE_TAG auf den vorherigen sha-<7>-Tag setzen, dann
+# dieselben zwei Befehle. Runbook: docs/runbooks/ghcr-deploy.md.
+
+services:
+  agora:
+    image: ${AGORA_IMAGE_REGISTRY:-ghcr.io/arn0ld87}/agora:${AGORA_IMAGE_TAG:?AGORA_IMAGE_TAG muss auf einen festen Tag zeigen (sha-<7> oder vX.Y.Z) — siehe deploy/compose/docker-compose.ghcr.yml}
+    build: !reset null
+
+  nginx:
+    image: ${AGORA_IMAGE_REGISTRY:-ghcr.io/arn0ld87}/agora-proxy:${AGORA_IMAGE_TAG:?AGORA_IMAGE_TAG muss auf einen festen Tag zeigen (sha-<7> oder vX.Y.Z) — siehe deploy/compose/docker-compose.ghcr.yml}
+    build: !reset null
