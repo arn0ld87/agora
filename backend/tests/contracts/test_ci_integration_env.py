@@ -98,6 +98,63 @@ def test_integration_job_starts_a_postgres_service() -> None:
     )
 
 
+def test_integration_job_installs_a_pg_client_matching_the_service_major() -> None:
+    """#1660: pg_dump bricht gegen eine neuere Server-Hauptversion ab.
+
+    Das Runner-Image liefert pg_dump 16, der Service laeuft auf 17. Ohne
+    passenden Client scheitern alle Backup/Restore-Integrationstests mit
+    ``server version mismatch``.
+    """
+    job_text = "\n".join(_job_block(CI_WORKFLOW.read_text(encoding="utf-8"), "integration"))
+    service = re.search(r"image:\s*postgres:(\d+)\b", job_text)
+    assert service, "PostgreSQL-Service im Job 'integration' fehlt"
+    major = service.group(1)
+
+    assert re.search(rf"apt-get install\b[^\n]*\bpostgresql-client-{major}\b", job_text), (
+        f"Job 'integration' muss postgresql-client-{major} installieren "
+        f"(Client-Hauptversion = Service-Hauptversion {major})"
+    )
+    assert f"/usr/lib/postgresql/{major}/bin" in job_text, (
+        f"pg_dump {major} muss vor dem Runner-pg_dump im PATH stehen"
+    )
+    assert re.search(r"^\s+apt\.postgresql\.org:443\s*$", job_text, re.MULTILINE), (
+        "Harden Runner blockiert sonst den Download aus dem PGDG-Repository"
+    )
+
+
+_DUMMY_NEO4J_PASSWORD = re.compile(r"setattr\([^)]*'NEO4J_PASSWORD',\s*'[^']+'\)")
+_NEO4J_STUB = "'app.storage.Neo4jStorage'"
+
+
+def test_integration_tests_with_dummy_neo4j_password_stub_the_storage() -> None:
+    """#1660: Ein Dummy-Passwort darf den echten Neo4j-Service nie erreichen.
+
+    Im CI-Job zeigt ``Config.NEO4J_URI`` auf den echten Service. ``create_app()``
+    meldet sich dort mit dem Dummy-Passwort an; nach drei Fehlversuchen sperrt
+    Neo4j per AuthenticationRateLimit, und der naechste echte Neo4j-Test scheitert.
+    """
+    offenders = sorted(
+        path.name
+        for path in INTEGRATION_DIR.glob("*.py")
+        if _DUMMY_NEO4J_PASSWORD.search(text := path.read_text(encoding="utf-8").replace('"', "'"))
+        and _NEO4J_STUB not in text
+    )
+    assert not offenders, (
+        f"{offenders} setzen ein Dummy-NEO4J_PASSWORD, ohne app.storage.Neo4jStorage "
+        "zu ersetzen. create_app() meldet sich sonst am echten Neo4j an."
+    )
+
+
+def test_the_neo4j_scan_sees_the_known_startup_helpers() -> None:
+    """Selbsttest: ohne Treffer liefe der Scan oben trivial gruen."""
+    hits = {
+        path.name
+        for path in INTEGRATION_DIR.glob("*.py")
+        if _DUMMY_NEO4J_PASSWORD.search(path.read_text(encoding="utf-8").replace('"', "'"))
+    }
+    assert {"test_alembic_head_startup_gate.py", "test_metadata_migration_rollback.py"} <= hits
+
+
 def test_the_parser_sees_the_known_variables() -> None:
     """Selbsttest: ein leerer Parser liesse den ersten Test trivial gruen werden."""
     required = _names_read_by_integration_tests()

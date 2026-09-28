@@ -157,6 +157,10 @@ def _reset_run_registry(tmp_path, monkeypatch) -> Iterator[None]:
     RunRegistry._instance = None
 
 
+def _neo4j_unavailable(*_args, **_kwargs):
+    raise RuntimeError('Neo4j ist im Startup-Test absichtlich abgeschaltet (#1660)')
+
+
 def _prepare_startup_env(monkeypatch) -> None:
     """Bringt ``create_app()`` bis zum Gate durch, ohne echte Neo4j/Redis-Infra.
 
@@ -171,6 +175,10 @@ def _prepare_startup_env(monkeypatch) -> None:
     monkeypatch.setattr(_Config, 'DEBUG', False)
     monkeypatch.setattr(_Config, 'SECRET_KEY', 'test-secret-key-not-a-placeholder')
     monkeypatch.setattr(_Config, 'NEO4J_PASSWORD', 'test-neo4j-password')
+    # #1660: Ohne Stub meldet sich create_app() mit dem Dummy-Passwort am echten
+    # Neo4j-Service des CI-Jobs an. Drei Fehlversuche lösen dort das
+    # AuthenticationRateLimit aus, und der nächste Neo4j-Test scheitert.
+    monkeypatch.setattr('app.storage.Neo4jStorage', _neo4j_unavailable)
 
     monkeypatch.setattr(
         'app.storage.embedding_service.validate_embedding_configuration',
