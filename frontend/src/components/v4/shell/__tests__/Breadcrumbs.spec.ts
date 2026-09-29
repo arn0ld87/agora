@@ -54,6 +54,25 @@ describe('Breadcrumbs', () => {
     expect(crumbs[crumbs.length - 1].attributes('aria-current')).toBe('page')
   })
 
+  // Fix #1713 (Befund 1): crumb.to wurde berechnet, aber nie gerendert —
+  // Breadcrumbs waren reiner Text ohne Navigation.
+  it('nicht-letzte Crumbs sind klickbare RouterLinks, der letzte bleibt Text', async () => {
+    const { router, i18n } = build('/settings/llm-routing')
+    await router.isReady()
+    const w = mount(Breadcrumbs, { global: { plugins: [router, i18n] } })
+    await w.vm.$nextTick()
+
+    const crumbs = w.findAll('[data-crumb]')
+    const firstLink = crumbs[0].find('a')
+    expect(firstLink.exists()).toBe(true)
+    expect(firstLink.text()).toBe('Einstellungen')
+    expect(firstLink.attributes('href')).toBe('/settings')
+
+    const lastLink = crumbs[crumbs.length - 1].find('a')
+    expect(lastLink.exists()).toBe(false)
+    expect(crumbs[crumbs.length - 1].text()).toBe('LLM-Routing')
+  })
+
   it('Props-Fallback: explizite items überschreiben Auto-Derive', async () => {
     const { router, i18n } = build('/')
     await router.isReady()

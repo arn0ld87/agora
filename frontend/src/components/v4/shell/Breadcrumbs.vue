@@ -12,7 +12,11 @@
           :class="{ 'breadcrumbs__item--last': idx === resolvedCrumbs.length - 1 }"
           data-crumb
           :aria-current="idx === resolvedCrumbs.length - 1 ? 'page' : undefined"
-        >{{ crumb.label }}</li>
+        ><RouterLink
+          v-if="idx !== resolvedCrumbs.length - 1 && crumb.to"
+          :to="crumb.to"
+          class="breadcrumbs__link"
+        >{{ crumb.label }}</RouterLink><template v-else>{{ crumb.label }}</template></li>
       </template>
     </ol>
   </nav>
@@ -98,5 +102,20 @@ const resolvedCrumbs = computed<InternalCrumb[]>(() => {
 .breadcrumbs__item--last {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.breadcrumbs__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.breadcrumbs__link:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbs__link:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 </style>
