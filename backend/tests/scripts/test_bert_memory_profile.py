@@ -74,7 +74,15 @@ def _stub_twhin_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     import _sim_common as sc
 
-    monkeypatch.setattr(sc, "ensure_twhin_cache", lambda *_a, **_k: True)
+    stub = lambda *_a, **_k: True  # noqa: E731
+    monkeypatch.setattr(sc, "ensure_twhin_cache", stub)
+    # Andere Tests laden ``_sim_common`` teils neu (sys.modules-Austausch).
+    # Die oben importierte Funktion haengt dann an den Globals der ALTEN
+    # Modulinstanz; der Patch auf ``sc`` allein erreicht sie nicht mehr
+    # (CI-Befund in #1717). Deshalb zusaetzlich direkt in deren Globals.
+    monkeypatch.setitem(
+        install_bert_memory_profile.__globals__, "ensure_twhin_cache", stub
+    )
 
 
 @pytest.fixture
