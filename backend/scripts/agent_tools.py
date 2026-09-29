@@ -707,6 +707,176 @@ def _describe_posting_tendency(
     return "Du beteiligst dich etwa gleich häufig mit eigenen Beiträgen wie mit Reaktionen."
 
 
+def build_stance_section(
+    stance: Optional[str],
+    sentiment_bias: Optional[float],
+    agent_role: str,
+    posts_per_hour: Optional[float] = None,
+    comments_per_hour: Optional[float] = None,
+) -> str:
+    """Baut den Abschnitt "Deine Haltung" — gemeinsame Quelle für beide Pfade,
+    die einen Agenten-Prompt/System-Prompt bauen (#1713 Slice S6):
+
+    - den ReAct-Tool-Prompt (``build_agent_prompt_with_tools``, erreichbar im
+      Single-Platform-Runner über ``ToolAwareActionLoop.decide_action``)
+    - den Profiltext, den OASIS beim Aufbau des Agent-Graphs in den
+      nativen CAMEL-System-Prompt übernimmt (Parallel-Runner,
+      ``augment_profile_with_stance``), weil dort ``tool_loop`` seit #1215
+      fest auf ``None`` steht und der ReAct-Prompt nie gebaut wird.
+
+    Eine Formulierung statt zweier Kopien — Disposition, keine
+    Verhaltensvorhersage, an die eigene Rolle gebunden (Role-Leakage-Schutz,
+    #1323). Leerstring, wenn ``stance`` fehlt (Altkonfig): der Aufrufer lässt
+    den Abschnitt dann komplett weg statt ihn mit leeren Werten zu füllen.
+    """
+    if not stance:
+        return ""
+    stance_sentence = _describe_stance(stance, sentiment_bias, agent_role)
+    posting_sentence = _describe_posting_tendency(posts_per_hour, comments_per_hour)
+    return (
+        "## Deine Haltung\n"
+        f"{stance_sentence}"
+        + (f" {posting_sentence}" if posting_sentence else "")
+        + "\nReaktionen dürfen zustimmen oder widersprechen, je nachdem was zu "
+        "deiner Haltung passt. Wiederhole keine Formulierungen aus deiner Bio "
+        "oder der Beobachtung wörtlich — ordne Zahlen und Fakten aus deinen "
+        "Quellen mit deiner eigenen Einschätzung ein.\n"
+    )
+
+
+def _augment_twitter_csv_with_stance(
+    profile_path: str, cfg_by_id: Dict[Any, Dict[str, Any]]
+) -> str:
+    """Hängt ``build_stance_section`` an die ``user_char``-Spalte einer Kopie
+    von ``twitter_profiles.csv`` an — genau das Feld, das
+    ``oasis/social_platform/config/user.py::UserInfo.to_twitter_system_message``
+    wörtlich in den System-Prompt jedes Agenten übernimmt."""
+    import csv
+
+    with open(profile_path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+
+    if not fieldnames or "user_char" not in fieldnames:
+        return profile_path
+
+    changed = False
+    for idx, row in enumerate(rows):
+        cfg = cfg_by_id.get(idx, {})
+        section = build_stance_section(
+            stance=cfg.get("stance"),
+            sentiment_bias=cfg.get("sentiment_bias"),
+            # Twitter-CSV führt keine Profession-Spalte (nur user_id/name/
+            # username/user_char/description, siehe _save_twitter_csv) — der
+            # ReAct-Prompt fällt an derselben Stelle (agent.profession fehlt
+            # auf SocialAgent/UserInfo) ebenfalls auf "Unknown" zurück.
+            agent_role="Unknown",
+            posts_per_hour=cfg.get("posts_per_hour"),
+            comments_per_hour=cfg.get("comments_per_hour"),
+        )
+        if section:
+            row["user_char"] = f"{row.get('user_char', '')}\n{section}".strip()
+            changed = True
+
+    if not changed:
+        return profile_path
+
+    out_path = (
+        profile_path[: -len(".csv")] + "_with_stance.csv"
+        if profile_path.endswith(".csv")
+        else profile_path + "_with_stance"
+    )
+    with open(out_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return out_path
+
+
+def _augment_reddit_json_with_stance(
+    profile_path: str, cfg_by_id: Dict[Any, Dict[str, Any]]
+) -> str:
+    """Hängt ``build_stance_section`` an das ``persona``-Feld einer Kopie von
+    ``reddit_profiles.json`` an — genau das Feld, das
+    ``oasis/social_platform/config/user.py::UserInfo.to_reddit_system_message``
+    wörtlich in den System-Prompt jedes Agenten übernimmt
+    (``agents_generator.py::generate_reddit_agent_graph`` liest
+    ``agent_info[i]["persona"]``)."""
+    with open(profile_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    changed = False
+    for item in data:
+        cfg = cfg_by_id.get(item.get("user_id"), {})
+        section = build_stance_section(
+            stance=cfg.get("stance"),
+            sentiment_bias=cfg.get("sentiment_bias"),
+            agent_role=item.get("profession") or "Unknown",
+            posts_per_hour=cfg.get("posts_per_hour"),
+            comments_per_hour=cfg.get("comments_per_hour"),
+        )
+        if section:
+            item["persona"] = f"{item.get('persona', '')}\n{section}".strip()
+            changed = True
+
+    if not changed:
+        return profile_path
+
+    out_path = (
+        profile_path[: -len(".json")] + "_with_stance.json"
+        if profile_path.endswith(".json")
+        else profile_path + "_with_stance"
+    )
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return out_path
+
+
+def augment_profile_with_stance(
+    profile_path: str,
+    agent_configs: List[Dict[str, Any]],
+    platform: str,
+) -> str:
+    """Trägt die Haltung aus ``agent_configs`` in eine EIGENE Kopie der
+    Profildatei ein, die OASIS beim Aufbau des Agent-Graphs
+    (``generate_twitter_agent_graph``/``generate_reddit_agent_graph``) liest.
+
+    Hintergrund (#1713 Slice S6, Teil 2 — Rest von #1323): Der Parallel-
+    Runner (``run_parallel_simulation.py``, Standardpfad für Twitter+Reddit)
+    setzt ``tool_loop`` seit #1215 fest auf ``None`` — der ReAct-Prompt
+    (``build_agent_prompt_with_tools``) wird dort nie gebaut, nur im
+    Single-Platform-Runner erreicht. OASIS baut den System-Prompt jedes
+    Agenten stattdessen einmalig beim Graph-Aufbau aus dem Profiltext
+    (``UserInfo.to_*_system_message()`` übernimmt ``user_char``/``persona``
+    wörtlich, vendored in ``oasis/social_platform/config/user.py`` — dort
+    wird bewusst nicht gepatcht). Diese Funktion ist der einzige Einhänge-
+    punkt ohne Patch am vendored Paket.
+
+    Schreibt eine eigene Kopie (Suffix ``_with_stance``) statt die
+    Quelldatei zu überschreiben: ``twitter_profiles.csv``/
+    ``reddit_profiles.json`` werden auch von Persona-Galerie, Interviews und
+    Report gelesen, die die unveränderte Persona zeigen sollen.
+
+    Nur für den Parallel-Runner gedacht. Der Single-Platform-Runner bekommt
+    die Haltung bereits über ``build_agent_prompt_with_tools`` je Runde —
+    diese Funktion wird dort bewusst nicht aufgerufen, sonst stünde die
+    Haltung zweimal im Kontext des Agenten.
+
+    Ohne ``agent_configs`` (leer/fehlend) oder ohne eine einzige Config mit
+    gesetztem ``stance`` gibt die Funktion den unveränderten ``profile_path``
+    zurück — kein Seiteneffekt, kein Fehler.
+    """
+    if not agent_configs:
+        return profile_path
+
+    cfg_by_id = {cfg.get("agent_id"): cfg for cfg in agent_configs}
+
+    if platform == "twitter":
+        return _augment_twitter_csv_with_stance(profile_path, cfg_by_id)
+    return _augment_reddit_json_with_stance(profile_path, cfg_by_id)
+
+
 def build_agent_prompt_with_tools(
     agent_name: str,
     agent_role: str,
@@ -746,19 +916,10 @@ def build_agent_prompt_with_tools(
 
     lang_instruction = "German" if language == "de" else "English"
 
-    stance_block = ""
-    if stance:
-        stance_sentence = _describe_stance(stance, sentiment_bias, agent_role)
-        posting_sentence = _describe_posting_tendency(posts_per_hour, comments_per_hour)
-        stance_block = (
-            "\n## Deine Haltung\n"
-            f"{stance_sentence}"
-            + (f" {posting_sentence}" if posting_sentence else "")
-            + "\nReaktionen dürfen zustimmen oder widersprechen, je nachdem was zu "
-            "deiner Haltung passt. Wiederhole keine Formulierungen aus deiner Bio "
-            "oder der Beobachtung wörtlich — ordne Zahlen und Fakten aus deinen "
-            "Quellen mit deiner eigenen Einschätzung ein.\n"
-        )
+    stance_section = build_stance_section(
+        stance, sentiment_bias, agent_role, posts_per_hour, comments_per_hour
+    )
+    stance_block = f"\n{stance_section}" if stance_section else ""
 
     prompt = f"""You are {agent_name}, a {agent_role}.
 

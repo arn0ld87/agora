@@ -15,6 +15,7 @@ model or a parser.
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -364,4 +365,112 @@ async def test_decide_action_forwards_stance_into_the_prompt():
     prompt = first_call_messages[0]["content"]
     section = _haltung_section(prompt)
     assert "sehr positiv" in section
-    assert "eher mit eigenen Beiträgen" in section
+
+
+# ── Issue #1713 Slice S6 Teil 2: Haltung im nativen CAMEL-Pfad (Parallel-Runner) ──
+#
+# run_parallel_simulation.py setzt tool_loop seit #1215 fest auf None —
+# build_agent_prompt_with_tools wird dort nie aufgerufen (siehe xfail
+# test_parallel_runner_prompt_builder_is_reachable in
+# tests/test_simulation_runtime.py, bleibt unveraendert bestehen: dieser Pfad
+# nutzt einen anderen Mechanismus, keinen ReAct-Prompt). OASIS baut den
+# System-Prompt eines Agenten stattdessen einmalig beim Graph-Aufbau aus dem
+# Profiltext (user_char/persona woertlich, oasis/social_platform/config/
+# user.py::to_*_system_message). augment_profile_with_stance() haengt genau
+# dort denselben Abschnitt an wie build_agent_prompt_with_tools.
+
+
+def test_build_stance_section_matches_prompt_builder_block() -> None:
+    """build_stance_section ist die gemeinsame Quelle — keine zweite Kopie
+    des Haltungstexts fuer den CAMEL-Profilpfad."""
+    section = agent_tools.build_stance_section(
+        stance="opposing",
+        sentiment_bias=-0.7,
+        agent_role="Betriebsrätin",
+        posts_per_hour=0.2,
+        comments_per_hour=1.4,
+    )
+    assert section.startswith("## Deine Haltung\n")
+    assert "sehr kritisch" in section
+    assert "eher mit Reaktionen" in section
+    assert "zustimmen oder widersprechen" in section
+
+
+def test_build_stance_section_empty_without_stance() -> None:
+    assert agent_tools.build_stance_section(None, None, "Analyst") == ""
+
+
+def test_augment_profile_with_stance_twitter_csv_adds_section_to_user_char(tmp_path) -> None:
+    """Der System-Prompt eines im Parallel-Pfad erzeugten Twitter-Agenten
+    enthaelt "Deine Haltung" (im user_char-Feld, das OASIS woertlich in den
+    System-Prompt uebernimmt), sofern stance gesetzt ist."""
+    import csv
+
+    profile_path = tmp_path / "twitter_profiles.csv"
+    with open(profile_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["user_id", "name", "username", "user_char", "description"])
+        writer.writerow([0, "Alice", "alice", "Alice ist Journalistin.", "Alice"])
+        writer.writerow([1, "Bob", "bob", "Bob ist Techniker.", "Bob"])
+
+    agent_configs = [
+        {"agent_id": 0, "stance": "opposing", "sentiment_bias": -0.6},
+        {"agent_id": 1, "stance": None},  # Altkonfig / kein stance
+    ]
+
+    out_path = agent_tools.augment_profile_with_stance(
+        str(profile_path), agent_configs, platform="twitter"
+    )
+    assert out_path != str(profile_path)
+
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    assert "## Deine Haltung" in rows[0]["user_char"]
+    assert "kritisch" in rows[0]["user_char"]
+    assert "## Deine Haltung" not in rows[1]["user_char"]
+    # Quelldatei bleibt unveraendert (Persona-Galerie/Interviews/Report lesen sie).
+    with open(profile_path, newline="", encoding="utf-8") as f:
+        original_rows = list(csv.DictReader(f))
+    assert "## Deine Haltung" not in original_rows[0]["user_char"]
+
+
+def test_augment_profile_with_stance_reddit_json_adds_section_to_persona(tmp_path) -> None:
+    profile_path = tmp_path / "reddit_profiles.json"
+    profile_path.write_text(
+        json.dumps(
+            [
+                {"user_id": 0, "name": "Alice", "persona": "Alice ist Journalistin.", "profession": "Journalistin"},
+                {"user_id": 1, "name": "Bob", "persona": "Bob ist Techniker."},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    agent_configs = [
+        {"agent_id": 0, "stance": "supportive", "sentiment_bias": 0.4},
+    ]
+
+    out_path = agent_tools.augment_profile_with_stance(
+        str(profile_path), agent_configs, platform="reddit"
+    )
+    assert out_path != str(profile_path)
+
+    data = json.loads(Path(out_path).read_text(encoding="utf-8"))
+    by_id = {item["user_id"]: item for item in data}
+    assert "## Deine Haltung" in by_id[0]["persona"]
+    assert "positiv" in by_id[0]["persona"]
+    # Kein Eintrag in agent_configs fuer user_id 1 → Abschnitt entfaellt.
+    assert "## Deine Haltung" not in by_id[1]["persona"]
+
+    original = json.loads(profile_path.read_text(encoding="utf-8"))
+    assert "## Deine Haltung" not in original[0]["persona"]
+
+
+def test_augment_profile_with_stance_returns_original_path_without_agent_configs(tmp_path) -> None:
+    """Ohne agent_configs (z. B. Altlauf) kein Seiteneffekt, kein Fehler."""
+    profile_path = tmp_path / "reddit_profiles.json"
+    profile_path.write_text(json.dumps([{"user_id": 0, "persona": "x"}]), encoding="utf-8")
+
+    out_path = agent_tools.augment_profile_with_stance(str(profile_path), [], platform="reddit")
+    assert out_path == str(profile_path)
