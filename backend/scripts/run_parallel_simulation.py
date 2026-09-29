@@ -1567,6 +1567,12 @@ async def run_twitter_simulation(
     )
 
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
+    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+    agent_configs_by_id = {
+        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
+    }
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
@@ -1614,6 +1620,7 @@ async def run_twitter_simulation(
                     agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                     agent_role = getattr(agent, 'profession', 'Unknown')
                     agent_bio = getattr(agent, 'bio', '')
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                     action = await tool_loop.decide_action(
                         agent=agent,
@@ -1622,7 +1629,11 @@ async def run_twitter_simulation(
                         agent_name=agent_name,
                         agent_role=agent_role,
                         agent_bio=agent_bio,
-                        language=config.get("language", "de")
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
                     )
                     actions[agent] = action
                 except Exception as e:
@@ -1865,6 +1876,12 @@ async def run_reddit_simulation(
     )
 
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
+    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+    agent_configs_by_id = {
+        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
+    }
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
@@ -1912,6 +1929,7 @@ async def run_reddit_simulation(
                     agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                     agent_role = getattr(agent, 'profession', 'Unknown')
                     agent_bio = getattr(agent, 'bio', '')
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                     action = await tool_loop.decide_action(
                         agent=agent,
@@ -1920,7 +1938,11 @@ async def run_reddit_simulation(
                         agent_name=agent_name,
                         agent_role=agent_role,
                         agent_bio=agent_bio,
-                        language=config.get("language", "de")
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
                     )
                     actions[agent] = action
                 except Exception as e:

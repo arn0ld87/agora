@@ -219,3 +219,149 @@ async def test_decide_action_wraps_tool_results_before_second_model_call():
     # A parser run over the tool-result message content finds nothing either.
     assert agent_tools.parse_action(content) is None
     assert agent_tools.parse_tool_calls(content) == []
+
+
+# ── Issue #1713 Slice S6 (Befund 7): Haltung/Beitragsneigung im Prompt ──
+
+
+def _haltung_section(prompt: str) -> str:
+    assert "## Deine Haltung" in prompt
+    return prompt.split("## Deine Haltung", 1)[1].split("## Current Situation", 1)[0]
+
+
+def test_build_agent_prompt_omits_stance_section_for_legacy_configs():
+    """Altkonfigs ohne stance (``None``) duerfen den Prompt nicht kaputt
+    machen — der Abschnitt entfaellt komplett statt mit leeren Werten."""
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Journalist",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+    )
+    assert "## Deine Haltung" not in prompt
+
+
+def test_build_agent_prompt_stance_section_describes_attitude_not_forecast():
+    """Haltung wird als Disposition formuliert (#1713 Befund 7), nicht als
+    Vorhersage des Agentenverhaltens."""
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Betriebsrätin",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["CREATE_POST", "DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+        stance="opposing",
+        sentiment_bias=-0.7,
+        posts_per_hour=0.2,
+        comments_per_hour=1.4,
+    )
+    section = _haltung_section(prompt)
+    assert "Betriebsrätin" in section
+    assert "sehr kritisch" in section
+    assert "eher mit Reaktionen" in section
+    assert "zustimmen oder widersprechen" in section
+    # Keine Verhaltensvorhersage ("du wirst ...").
+    assert "du wirst" not in section.lower()
+
+
+@pytest.mark.parametrize(
+    "stance,sentiment_bias,expected",
+    [
+        ("supportive", 0.6, "sehr positiv"),
+        ("supportive", 0.2, " positiv"),
+        ("opposing", -0.2, " kritisch"),
+        ("neutral", 0.0, "unentschieden"),
+        ("observer", 0.0, "ohne aktiv Position zu beziehen"),
+        ("unknown-legacy-value", 0.0, "unentschieden"),
+    ],
+)
+def test_build_agent_prompt_stance_sentence_covers_all_stance_values(
+    stance, sentiment_bias, expected
+):
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Pflegekraft",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+        stance=stance,
+        sentiment_bias=sentiment_bias,
+    )
+    section = _haltung_section(prompt)
+    assert expected in section
+    # Role-Leakage-Schutz (#1323): der Abschnitt bindet die Haltung exakt
+    # einmal an die eigene Rolle, keine zweite Rolle taucht auf.
+    assert section.count("Pflegekraft") == 1
+
+
+@pytest.mark.parametrize(
+    "posts_per_hour,comments_per_hour,expected",
+    [
+        (1.0, 0.2, "eher mit eigenen Beiträgen"),
+        (0.2, 1.0, "eher mit Reaktionen"),
+        (0.5, 0.5, "etwa gleich häufig"),
+    ],
+)
+def test_build_agent_prompt_posting_tendency_is_relative(
+    posts_per_hour, comments_per_hour, expected
+):
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Journalist",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+        stance="neutral",
+        posts_per_hour=posts_per_hour,
+        comments_per_hour=comments_per_hour,
+    )
+    assert expected in _haltung_section(prompt)
+
+
+def test_build_agent_prompt_tool_rule_allows_opinion_only_posts_without_tool_call():
+    """CREATE_POST braucht nur dann einen Tool-Call, wenn der Beitrag neue
+    Faktenbehauptungen enthaelt — reine Meinungsbeitraege nicht (#1713)."""
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Journalist",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["CREATE_POST", "DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+    )
+    assert "does not require a tool call" in prompt
+    assert "opinion" in prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_decide_action_forwards_stance_into_the_prompt():
+    """Die Agenten-Config (stance/sentiment_bias/posts_per_hour/
+    comments_per_hour) muss dort ankommen, wo build_agent_prompt_with_tools
+    aufgerufen wird — sonst bleibt Befund 7 (Konsens/Echo) unveraendert."""
+    final_response = _FakeResponse('<action>\n{"action": "DO_NOTHING"}\n</action>')
+    model = _FakeModel([final_response])
+    loop = agent_tools.ToolAwareActionLoop(model=model, tools=_FakeToolRegistry(), max_tool_calls=2)
+
+    await loop.decide_action(
+        agent=object(),
+        observation="Someone posted about the weather.",
+        available_actions=["DO_NOTHING"],
+        agent_name="Bob",
+        agent_role="Analyst",
+        agent_bio="bio",
+        stance="supportive",
+        sentiment_bias=0.8,
+        posts_per_hour=1.0,
+        comments_per_hour=0.1,
+    )
+
+    first_call_messages = model.calls[0]
+    prompt = first_call_messages[0]["content"]
+    section = _haltung_section(prompt)
+    assert "sehr positiv" in section
+    assert "eher mit eigenen Beiträgen" in section
