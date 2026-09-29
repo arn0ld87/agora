@@ -115,6 +115,12 @@ dependencies = [
     # Observability: Logs-Korrelation (Slice 3a, 2026-05-15)
     # Patcht den Root-Logger um OTel-Trace-IDs in LogRecords zu injizieren.
     "opentelemetry-instrumentation-logging>=0.45b0",
+
+    # TypeSafe Jev (f005, ADR-0016/0017): System-One-Modell fuer typisierte
+    # Choice/Score/Noul-Entscheidungen im Decision Layer. Verifiziert gegen
+    # Python 3.14 (PyPI-Classifier) vor Aufnahme, siehe
+    # docs/research/f005/jev-provider-evidence.md.
+    "typesafe-sdk>=0.7.0",
 ]
 
 [project.optional-dependencies]

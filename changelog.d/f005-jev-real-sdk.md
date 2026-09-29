@@ -1,0 +1,3 @@
+### Changed (Jev-Adapter auf die echte typesafe-sdk-API umgestellt — 2026-09-21)
+
+- **`JevDecisionProvider` ruft jetzt `typesafe-sdk` 0.7.0 direkt auf:** die zuvor geratene Wire-Form (Fragenliste mit `id`, flaches `confidence`-Feld für jeden Typ) war in mehreren Punkten falsch — gegen drei echte API-Aufrufe verifiziert und korrigiert (Fragen sind ein Dict von Namen auf `Choice`/`Score`/`Noul`-Objekten, `Score.criteria` ist eine geordnete Liste statt eines Stufen-Dicts, `Noul` hat kein eigenes `confidence`-Feld). `typesafe-sdk>=0.7.0` ist jetzt eine echte Abhängigkeit (Python-3.14-Kompatibilität laut PyPI-Classifier verifiziert). `resolve_jev_api_key()`/`build_jev_client()` verdrahten den bestehenden Secret-Store mit einem echten Client. (f005, ADR-0016/0017)
