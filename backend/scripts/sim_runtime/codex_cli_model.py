@@ -71,6 +71,78 @@ from app.llm.providers.codex_cli import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Issue #1713 Slice S3 — Retry + Concurrency-Limit fuer die CLI-Bruecke
+# ---------------------------------------------------------------------------
+# Ohne Grenze startet eine Runde mit z. B. 30 aktiven Agenten ebenso viele
+# ``codex exec``-Subprozesse gleichzeitig — CPU-Kontention macht jeden
+# einzelnen Aufruf langsamer und laesst ihn eher in den 180s-Timeout laufen,
+# statt schlicht seriell etwas laenger zu brauchen. Ein Timeout unter Last ist
+# ausserdem oft transient (kein Konfigurationsfehler), ein einzelner Retry mit
+# kurzem Backoff faengt genau diesen Fall ab, ohne einen echten
+# Konfigurationsfehler (fehlendes Binary, abgelaufene Session) endlos zu
+# wiederholen.
+
+CLI_MAX_CONCURRENCY_ENV = "AGORA_CLI_MAX_CONCURRENCY"
+DEFAULT_CLI_MAX_CONCURRENCY = 4
+
+CLI_RETRY_ATTEMPTS_ENV = "AGORA_CLI_RETRY_ATTEMPTS"
+DEFAULT_CLI_RETRY_ATTEMPTS = 1
+"""Zusaetzliche Versuche nach dem ersten fehlgeschlagenen Aufruf. 1 = ein
+Retry, danach ein harter Fehler wie vor diesem Slice."""
+
+CLI_RETRY_BACKOFF_SECONDS_ENV = "AGORA_CLI_RETRY_BACKOFF_SECONDS"
+DEFAULT_CLI_RETRY_BACKOFF_SECONDS = 2.0
+
+
+def cli_max_concurrency() -> int:
+    """Obergrenze gleichzeitiger ``codex exec``-Subprozesse in diesem Prozess."""
+    raw = os.environ.get(CLI_MAX_CONCURRENCY_ENV)
+    if not raw:
+        return DEFAULT_CLI_MAX_CONCURRENCY
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_CLI_MAX_CONCURRENCY
+    return value if value > 0 else DEFAULT_CLI_MAX_CONCURRENCY
+
+
+def cli_retry_attempts() -> int:
+    """Anzahl zusaetzlicher Versuche nach einem transienten Fehlschlag."""
+    raw = os.environ.get(CLI_RETRY_ATTEMPTS_ENV)
+    if not raw:
+        return DEFAULT_CLI_RETRY_ATTEMPTS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_CLI_RETRY_ATTEMPTS
+    return value if value >= 0 else DEFAULT_CLI_RETRY_ATTEMPTS
+
+
+def cli_retry_backoff_seconds() -> float:
+    """Wartezeit vor einem Retry-Versuch."""
+    raw = os.environ.get(CLI_RETRY_BACKOFF_SECONDS_ENV)
+    if not raw:
+        return DEFAULT_CLI_RETRY_BACKOFF_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_CLI_RETRY_BACKOFF_SECONDS
+    return value if value >= 0 else DEFAULT_CLI_RETRY_BACKOFF_SECONDS
+
+
+_cli_semaphore: "asyncio.Semaphore | None" = None
+
+
+def _get_cli_semaphore() -> "asyncio.Semaphore":
+    """Prozessweite Semaphore — lazy erzeugt, damit ``AGORA_CLI_MAX_CONCURRENCY``
+    zur Zeit des ersten tatsaechlichen Aufrufs gelesen wird (nach Subprozess-
+    Env-Setup), nicht beim Modul-Import."""
+    global _cli_semaphore
+    if _cli_semaphore is None:
+        _cli_semaphore = asyncio.Semaphore(cli_max_concurrency())
+    return _cli_semaphore
+
 
 async def _terminate(proc: "asyncio.subprocess.Process") -> None:
     """Kindprozess beenden und einsammeln, ohne den Abbruchpfad zu stoeren.
@@ -234,8 +306,8 @@ class CodexCliModel(BaseModelBackend):
         prompt = self._build_prompt(messages, tools, response_format)
         return self._to_completion(self._invoke(prompt))
 
-    async def _ainvoke(self, prompt: str) -> str:
-        """``codex exec`` als nativer async-Subprozess — abbrechbar.
+    async def _ainvoke_once(self, prompt: str) -> str:
+        """Ein einzelner ``codex exec``-Subprozess-Versuch — kein Retry.
 
         Bewusst ``create_subprocess_exec`` statt ``asyncio.to_thread``: ein
         Thread laesst sich nicht abbrechen. Wird ein Agent-Task gecancelt
@@ -289,6 +361,41 @@ class CodexCliModel(BaseModelBackend):
             stdout.decode("utf-8", errors="replace"),
             stderr.decode("utf-8", errors="replace"),
         )
+
+    async def _ainvoke(self, prompt: str) -> str:
+        """``codex exec`` mit Concurrency-Limit und Retry (Issue #1713 S3).
+
+        Begrenzt gleichzeitige Subprozesse ueber die prozessweite Semaphore
+        (``AGORA_CLI_MAX_CONCURRENCY``) und wiederholt einen transienten
+        Fehlschlag (Timeout, Startfehler — beide als
+        ``CodexCliUnavailableError``) bis zu ``AGORA_CLI_RETRY_ATTEMPTS``-mal
+        mit festem Backoff. Andere Ausnahmen (z. B. ``BudgetExceededError``
+        aus der Budget-Proxy-Schicht) werden bewusst NICHT gefangen — sie
+        sind kein transienter Fehler, sondern ein harter Laufzustand, der
+        sofort durchgereicht werden muss.
+        """
+        max_attempts = cli_retry_attempts() + 1
+        backoff = cli_retry_backoff_seconds()
+        last_exc: CodexCliUnavailableError | None = None
+        async with _get_cli_semaphore():
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return await self._ainvoke_once(prompt)
+                except CodexCliUnavailableError as exc:
+                    last_exc = exc
+                    if attempt >= max_attempts:
+                        break
+                    logger.warning(
+                        "codex_cli: Versuch %s/%s fehlgeschlagen (%s) — Retry in %.1fs",
+                        attempt,
+                        max_attempts,
+                        exc,
+                        backoff,
+                    )
+                    await asyncio.sleep(backoff)
+        if last_exc is None:  # pragma: no cover — max_attempts >= 1, Schleife setzt last_exc immer
+            raise CodexCliUnavailableError("codex_cli: kein Versuch ausgefuehrt")
+        raise last_exc
 
     async def _arun(
         self,

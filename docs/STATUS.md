@@ -133,6 +133,8 @@ gerouteten/wiederaufgenommene Stage — scheitert absichtlich mit einem
 klaren Fehler statt still über `custom_openai` zu misrouten. Claude läuft
 für Chat stattdessen über die Bedrock-Connection (#1282).
 
+**CLI-Bruecke mit Retry und Concurrency-Limit (#1713 S3).** `CodexCliModel`/`ClaudeCliModel` (`backend/scripts/sim_runtime/{codex_cli_model,claude_cli_model}.py`) begrenzen gleichzeitige `codex exec`/`claude -p`-Subprozesse über eine prozessweite `asyncio.Semaphore` (`AGORA_CLI_MAX_CONCURRENCY`, Default 4) und wiederholen einen transienten Fehlschlag (Timeout, Startfehler) einmal mit festem Backoff (`AGORA_CLI_RETRY_ATTEMPTS`/`AGORA_CLI_RETRY_BACKOFF_SECONDS`, Default 1 Retry/2s), bevor der Fehler wie bisher als `RuntimeError` an OASIS geht. `BudgetExceededError` aus der Budget-Proxy-Schicht (`scripts/sim_runtime/budget_guard.py`) wird nie retried — die Retry-Schleife fängt ausschließlich die CLI-eigene `*CliUnavailableError`.
+
 **Bedrock-Legacy-Config lädt (#1567).** Eine Server-Config mit Bedrock-
 `LLM_BASE_URL` und ohne persistiertes `runtime_llm_routing.json` wird beim
 Laden auf die Bedrock-Provider-ID gemappt statt mit `KeyError('bedrock')`
