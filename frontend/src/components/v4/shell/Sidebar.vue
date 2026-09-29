@@ -145,7 +145,11 @@ const navWorkspace = [
 
 /** IA-Matrix: nur wire-Settings-Sub-Items.
  *  Besucher ohne Betreiber-Zugang sehen zusaetzlich vorne "Provider-Keys" —
- *  die einzige Unterseite, die sie tatsaechlich bearbeiten duerfen. */
+ *  die einzige Unterseite, die sie tatsaechlich bearbeiten duerfen.
+ *
+ *  Fix #1713 (Befund 7): LLM-Routing und Audit-Logs hatten in der Sidebar
+ *  keinen Eintrag, obwohl SettingsOverlay sie zeigte (Doppelnavigation).
+ *  Beide Routen sind jetzt Teil dieser einen Navigationsebene. */
 const navSettingsOperator: NavSettingsItem[] = [
   { id: 'general',       label: t('sidebar.settings.general'),       to: { name: 'SettingsGeneral' } },
   { id: 'integrations',  label: t('sidebar.settings.integrations'),  to: { name: 'SettingsIntegrations' } },
@@ -153,6 +157,8 @@ const navSettingsOperator: NavSettingsItem[] = [
   { id: 'api-keys',      label: t('sidebar.settings.apiKeys'),       to: { name: 'SettingsApiKeys' } },
   { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },
   { id: 'embedding',     label: t('sidebar.settings.embedding'),     to: { name: 'SettingsEmbedding' } },
+  { id: 'llm-routing',   label: t('sidebar.settings.llmRouting'),    to: { name: 'SettingsLlmRouting' } },
+  { id: 'audit-logs',    label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
 ]
 
 const navSettings = computed<NavSettingsItem[]>(() =>

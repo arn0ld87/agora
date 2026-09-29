@@ -93,11 +93,11 @@ export const ShelfTestId = {
  * Sektionsliste; `LlmProviderList*` ersetzt die Card-pro-Provider-Grid aus
  * `LlmProvidersView` durch Liste + Detail-Formular.
  */
+// Fix #1713: SettingsOverlay ist ein reiner Layout-Wrapper ohne eigene Nav
+// (die Sidebar-Gruppe „Einstellungen” ist die einzige Navigationsebene) —
+// nur noch der Root-Marker bleibt.
 export const SettingsOverlayTestId = {
   root: 'settings-overlay',
-  nav: 'settings-overlay-nav',
-  navItem: 'settings-overlay-nav-item',
-  back: 'settings-overlay-back',
 } as const
 
 export type SettingsOverlayTestId = (typeof SettingsOverlayTestId)[keyof typeof SettingsOverlayTestId]

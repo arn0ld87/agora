@@ -202,26 +202,42 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/steps/StepEnvSetupView.vue'),
     props: true,
   },
+  // Fix #1713 (Befund 2): Pipeline und Feed sind echte Kind-Routen eines
+  // gemeinsamen Layouts (Kopf, Breadcrumbs, Tabs) statt eines internen
+  // `v-if`, das den Feed-Tab nie navigierbar machte. Die Routennamen
+  // StepSimulation/StepSimulationFeed bleiben erhalten — jeder bestehende
+  // Link (useShelf.ts, reportRoute.ts, Deep-Links) funktioniert unveraendert.
   {
     path: '/v4/simulation/:simulationId',
-    name: 'StepSimulation',
-    component: () => import('../views/v4/steps/StepSimulationView.vue'),
+    component: () => import('../views/v4/steps/SimulationLayout.vue'),
     props: true,
+    children: [
+      {
+        path: '',
+        name: 'StepSimulation',
+        component: () => import('../views/v4/steps/StepSimulationView.vue'),
+        props: true,
+      },
+      {
+        path: 'feed',
+        name: 'StepSimulationFeed',
+        component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
+        props: true,
+      },
+    ],
   },
-  {
-    path: '/v4/simulation/:simulationId/feed',
-    name: 'StepSimulationFeed',
-    component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
-    props: true,
-  },
-  // Redesign PR 7 (Audit §5 "Simulation live"): Vollbild-Instrument einer
-  // laufenden Simulation — Kopfzeile, Rundenachse, vier Bahnen. Ergaenzt,
-  // ersetzt aber (noch) nicht StepSimulationFeed.
+  // Redesign PR 7 (Audit §5 "Simulation live") legte ein eigenstaendiges
+  // Vollbild-Instrument an, das nie an die Tab-Navigation angeschlossen
+  // wurde (Befund 6, verwaiste Route). Bis der Runden-Tab kommt, leitet der
+  // Deep-Link auf den bestehenden Feed-Tab um; SimulationLiveView.vue bleibt
+  // als Komponente erhalten.
   {
     path: '/v4/simulation/:simulationId/live',
-    name: 'SimulationLive',
-    component: () => import('../views/shell/SimulationLiveView.vue'),
-    props: true,
+    redirect: (to) => ({
+      name: 'StepSimulationFeed',
+      params: { simulationId: String(to.params.simulationId) },
+      query: to.query,
+    }),
   },
   {
     path: '/v4/report/:reportId',

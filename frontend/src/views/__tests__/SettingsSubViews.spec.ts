@@ -163,11 +163,13 @@ describe('SettingsGeneralView (Slice G1, real)', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('markiert "Allgemein" als aktiven Eintrag der Sektionsliste (SettingsOverlay)', async () => {
+  // Fix #1713: SettingsOverlay ist ein reiner Layout-Wrapper ohne eigene
+  // Sektionsliste — die Sidebar-Gruppe „Einstellungen” ist die einzige
+  // Navigationsebene (siehe Sidebar.spec.ts).
+  it('bettet SettingsOverlay ein, ohne eigene Nav zu rendern', async () => {
     const w = await mountView(SettingsGeneralView, '/settings/general')
-    const active = w.find('a[aria-current="page"]')
-    expect(active.exists()).toBe(true)
-    expect(active.text()).toBe('Allgemein')
+    expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-overlay"] nav').exists()).toBe(false)
   })
 
   it('rendert PageHeader mit lokalisiertem Titel', async () => {
@@ -197,13 +199,10 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('markiert "Integrationen" als aktiven Eintrag der Sektionsliste (SettingsOverlay)', async () => {
+  it('bettet SettingsOverlay ein, ohne eigene Nav zu rendern', async () => {
     const w = await mountView(SettingsIntegrationsView, '/settings/integrations')
-    const active = w.find('a[aria-current="page"]')
-    expect(active.exists()).toBe(true)
-    // Locale-agnostisch: deutscher "Integrationen"-String und englischer
-    // "Integrations"-String sind beide gueltige Lokalisierungen.
-    expect(/^Integration(en|s)?$/.test(active.text())).toBe(true)
+    expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-overlay"] nav').exists()).toBe(false)
   })
 
   it('reicht Integrations-Sektionen an SettingsSectionPanel', async () => {
@@ -220,11 +219,10 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
 describe('SettingsApiKeysView (Slice G2, real)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('markiert "API-Schlüssel" als aktiven Eintrag der Sektionsliste (SettingsOverlay)', async () => {
+  it('bettet SettingsOverlay ein, ohne eigene Nav zu rendern', async () => {
     const w = await mountView(SettingsApiKeysView, '/settings/api-keys')
-    const active = w.find('a[aria-current="page"]')
-    expect(active.exists()).toBe(true)
-    expect(active.text()).toBe('API-Schlüssel')
+    expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-overlay"] nav').exists()).toBe(false)
   })
 
   it('rendert keine ComingSoonCard mehr (View ist real)', async () => {

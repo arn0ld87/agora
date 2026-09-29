@@ -51,6 +51,7 @@ vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepGraphBuildView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/SimulationLayout.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepSimulationView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepReportView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepInteractionView.vue', () => VIEW_STUB)
@@ -248,11 +249,31 @@ describe('Router – Redirects', () => {
     expect(router.currentRoute.value.name).toBe('StepReport')
     expect(router.currentRoute.value.query.tab).toBe('evidence')
   })
+
+  // Fix #1713 (Befund 6): /live war eine verwaiste Route ohne Anschluss an
+  // die Tab-Navigation. Bis der Runden-Tab existiert, leitet sie auf den
+  // bestehenden Feed-Tab um und behält Parameter + Query.
+  it('/v4/simulation/:id/live → StepSimulationFeed, Query bleibt erhalten', async () => {
+    await pushAndSettle('/v4/simulation/sim_live_1/live?projectId=project_1')
+
+    expect(router.currentRoute.value.name).toBe('StepSimulationFeed')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_live_1')
+    expect(router.currentRoute.value.query.projectId).toBe('project_1')
+  })
 })
 
 describe('Router – Struktur-Integrität', () => {
   it('kein Pfad ist doppelt registriert', () => {
-    const paths = router.getRoutes().map((route) => route.path)
+    // Fix #1713: SimulationLayout ist ein Layout-Parent mit einer Kind-Route
+    // auf leerem Pfad (StepSimulation) — vue-router registriert dafuer
+    // zwei Eintraege mit demselben resolvierten Pfad (Standardmuster fuer
+    // "Layout mit Default-Kind"). Nur navigierbare Blatt-Routen (ohne
+    // eigene Kinder) zaehlen fuer die Duplikatspruefung; der Layout-Parent
+    // selbst ist nie direkt das Navigationsziel.
+    const paths = router
+      .getRoutes()
+      .filter((route) => !route.children || route.children.length === 0)
+      .map((route) => route.path)
     const duplicates = paths.filter((path, index) => paths.indexOf(path) !== index)
     expect(duplicates, `doppelte Pfade: ${duplicates.join(', ')}`).toEqual([])
   })
@@ -290,14 +311,12 @@ describe('Router – Struktur-Integrität', () => {
   // AppShellDemoView.vue, Agora2026View.vue, ActiveModelBadge.vue,
   // Workspace*-Familie — alle laut Filesystem-Check nicht mehr vorhanden).
   // Eigenes Timeout: dieser Test loest die Routen-Komponenten ECHT auf, statt
-  // nur den Router zu befragen. Die einzige nicht per `vi.mock` gestubbte View
-  // (`views/shell/SimulationLiveView.vue`) wird dabei samt Abhaengigkeiten
-  // frisch transformiert und braucht dafuer gemessene ~2 s, je nach Maschine
-  // auch mehr — der Test lag damit schon unter vitest 4 knapp unter dem
-  // 5-s-Default und kippte je nach Auslastung darueber (auf `main` lokal
-  // reproduzierbar, im CI nur sporadisch). Das ist kein Grund, die Aufloesung
-  // zu stubben: genau sie ist der Zweck des Tests. Also bekommt er die Zeit,
-  // die echte Transforms nun einmal kosten.
+  // nur den Router zu befragen. Fix #1713: `/live` ist jetzt ein reiner
+  // Redirect (kein `component` mehr), `views/shell/SimulationLiveView.vue`
+  // wird darum von diesem Test nicht mehr transformiert — die vormals nicht
+  // gestubbte View trug hier den groessten Anteil der gemessenen Laufzeit.
+  // Das erweiterte Timeout bleibt als Sicherheitsmarge fuer die verbleibenden
+  // echten Transforms.
   it('jede nicht-redirect Route liefert eine auflösbare Komponente (keine toten Legacy-Referenzen)', { timeout: 30_000 }, async () => {
     for (const route of router.getRoutes()) {
       if (route.redirect !== undefined) continue
@@ -337,8 +356,8 @@ describe('Router – Struktur-Integrität', () => {
       'StepEnvSetup',
       'StepSimulation',
       'StepSimulationFeed',
-      // Redesign PR 7 (Audit §5 "Simulation live"): Vollbild-Instrument.
-      'SimulationLive',
+      // Fix #1713 (Befund 6): /live ist jetzt ein Redirect auf den Feed-Tab,
+      // keine eigene produktive Route mehr (siehe Redirects-Suite oben).
       'StepReport',
       'StepInteraction',
       'CompareV4',
@@ -357,7 +376,10 @@ describe('Router – Struktur-Integrität', () => {
 
     const istProduktiveRouten = router
       .getRoutes()
-      .filter((route) => route.redirect === undefined)
+      // Fix #1713: der SimulationLayout-Parent traegt selbst keinen Namen
+      // (nur seine Kind-Routen StepSimulation/StepSimulationFeed sind
+      // navigierbare Ziele) — er ist kein eigener Eintrag der SOLL-Liste.
+      .filter((route) => route.redirect === undefined && route.name !== undefined)
       .map((route) => String(route.name))
       .sort()
 

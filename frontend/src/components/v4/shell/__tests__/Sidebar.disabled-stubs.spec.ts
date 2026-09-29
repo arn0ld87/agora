@@ -1,11 +1,12 @@
 /**
- * Sidebar — IA-Matrix (Slice 7.3).
+ * Sidebar — IA-Matrix (Slice 7.3), aktualisiert durch Fix #1713 (Befund 7).
  *
  * Prueft:
  * 1. Keine disabled Stub-Items mehr (Projekte/Datensätze/Vorlagen/Monitoring).
- * 2. Audit Logs nicht in der Sidebar.
- * 3. LLM-Routing nicht in der Sidebar (run-spezifischer Zugang bleibt im Run-Detail).
- * 4. Sidebar rendert weiterhin nur wire-Ziele laut Matrix.
+ * 2. Audit-Logs/LLM-Routing sind Teil der Einstellungen-Sub-Items, sobald
+ *    die Gruppe geoeffnet ist — SettingsOverlay hatte dafuer vorher eine
+ *    zweite, parallele Navigation (Doppelnavigation, jetzt aufgeloest).
+ * 3. Sidebar rendert weiterhin nur wire-Ziele laut Matrix.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -14,6 +15,7 @@ import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import { makeTestRouter } from './testRouter'
+import { useSidebarState } from '@/composables/useSidebarState'
 import Sidebar from '../Sidebar.vue'
 
 const lsMock = (() => {
@@ -31,7 +33,6 @@ const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', mes
 const router = makeTestRouter()
 
 const HIDDEN_NAV_IDS = ['projects', 'datasets', 'templates', 'monitoring']
-const HIDDEN_SETTINGS_IDS = ['auditLogs', 'llmRouting']
 
 describe('Sidebar IA matrix (slice 7.3)', () => {
   beforeEach(() => {
@@ -59,17 +60,18 @@ describe('Sidebar IA matrix (slice 7.3)', () => {
     expect(text).not.toContain('Datensätze')
     expect(text).not.toContain('Vorlagen')
     expect(text).not.toContain('Monitoring')
-    // Datenquelle mit hid = 'auditLogs' / 'llm-routing' darf nicht da sein
     for (const id of HIDDEN_NAV_IDS) expect(text).not.toContain(id)
   })
 
-  it('rendert keine Audit-Logs- oder LLM-Routing-Settings-Sub-Items', async () => {
+  // Fix #1713 (Befund 7): Audit-Logs/LLM-Routing sind jetzt Teil der einen
+  // Einstellungen-Navigationsebene — sichtbar, sobald die Gruppe offen ist.
+  it('zeigt Audit-Logs und LLM-Routing als Settings-Sub-Items, wenn die Gruppe offen ist', async () => {
+    lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
+    useSidebarState._resetForTesting()
     const wrapper = await mountSidebar()
-    // Settings-Group standardmaessig geschlossen — Inhalt pruefen via localStorage-Hook
     const text = wrapper.text()
-    expect(text).not.toContain('Audit-Logs')
-    expect(text).not.toContain('LLM-Routing')
-    for (const id of HIDDEN_SETTINGS_IDS) expect(text).not.toContain(id)
+    expect(text).toContain('Audit-Logs')
+    expect(text).toContain('LLM-Routing')
   })
 
   it('behaelt wire-Ziele: Dashboard + Runs sichtbar', async () => {
