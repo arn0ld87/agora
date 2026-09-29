@@ -1,0 +1,8 @@
+{
+  "simulation_id": "sim_liveness_clean",
+  "runner_status": "completed",
+  "current_round": 3,
+  "total_rounds": 4,
+  "started_at": "2026-09-29T09:00:00",
+  "completed_at": "2026-09-29T09:30:00"
+}

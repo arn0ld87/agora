@@ -14,6 +14,7 @@ import type {
   ModelPreset as ModelPresetContract,
 } from '../contracts/modelPresetContract'
 import type { PrepareMessageKey } from '../contracts/prepareStatusContract'
+import type { RunnerStatus } from '../contracts/simulationStatusContract'
 
 // --- Local types --------------------------------------------------------
 
@@ -103,6 +104,10 @@ export interface SimulationRecord {
   project_id: string
   status: string
   platform?: SimulationPlatform
+  /** Seit #1713: terminaler Runner-Zustand aus run_state.json (nur `GET /<id>`). */
+  runner_status?: RunnerStatus | null
+  /** Seit #1713: Env läuft noch für Interviews, auch wenn `status` terminal ist. */
+  interview_env_alive?: boolean
   [key: string]: unknown
 }
 

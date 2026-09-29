@@ -20,6 +20,7 @@ from ..repositories.simulation_repository import (
 from ..utils.logger import get_logger
 from ..utils.path_safety import safe_join_within_root, validate_path_id
 from .artifact_store import SimulationArtifactStore, resolve_default_store
+from .sim.run_state_store import RunnerStatus
 from . import branching_service, prepare_service
 
 if TYPE_CHECKING:
@@ -47,6 +48,37 @@ class SimulationStatus(str, Enum):
     # (Checkpoint mit mindestens einem generierten Profil) — kein endgültiges
     # FAILED, sondern ein Resume-Angebot analog CANCELLED_PARTIAL.
     INTERRUPTED = "interrupted"
+
+
+def derive_effective_status(
+    status: SimulationStatus, runner_status: Optional[RunnerStatus]
+) -> SimulationStatus:
+    """Projiziert den Lesezeit-Status aus persistiertem Status + Runner-Status.
+
+    Issue #1713 Slice S2: ``SimulationState.status`` bleibt in ``state.json``
+    unveraendert ``RUNNING``, bis ein expliziter Schreibpfad
+    (``POST /close-env``) ``COMPLETED`` persistiert. Der Monitor
+    (``app.services.sim.monitor``) terminalisiert dagegen ausschliesslich
+    ``run_state.json``'s ``runner_status`` — ohne diese Projektion meldet
+    ``GET /api/simulation/<id>`` nach Simulationsende weiter ``"running"``.
+
+    Reine Read-Time-Projektion: der persistierte Zustand wird hier nicht
+    geschrieben. Projiziert wird ausschliesslich, wenn der persistierte
+    Status ``RUNNING`` ist UND der Runner einen terminalen Zustand erreicht
+    hat (``completed``/``failed``/``stopped``). Ein bereits ``FAILED``- oder
+    sonstiger nicht-``RUNNING``-Status bleibt unveraendert — ``failed``
+    bleibt ``failed``, auch wenn der Runner nachtraeglich ``completed``
+    meldet.
+    """
+    if status != SimulationStatus.RUNNING or runner_status is None:
+        return status
+    if runner_status is RunnerStatus.COMPLETED:
+        return SimulationStatus.COMPLETED
+    if runner_status is RunnerStatus.FAILED:
+        return SimulationStatus.FAILED
+    if runner_status is RunnerStatus.STOPPED:
+        return SimulationStatus.STOPPED
+    return status
 
 
 class PlatformType(str, Enum):

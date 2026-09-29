@@ -27,6 +27,7 @@ from app.contracts.readiness_contract import (
     PostgresReadinessCheck,
 )
 from app.contracts.report_status_contract import ReportStatusResponse
+from app.contracts.simulation_status_contract import SimulationStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
@@ -119,6 +120,12 @@ from app.contracts.embedding_contract import (
     EmbeddingModelMetadata,
 )
 from app.contracts.interview_envelope_contract import InterviewEnvelope
+# Kennzahlen "Simulation lebt" (Issue #1713 Slice S0) — kein API-Endpoint,
+# kein Zod-Spiegel, siehe Docstring in simulation_liveness_contract.py.
+from app.contracts.simulation_liveness_contract import (
+    PlatformLiveness,
+    SimulationLivenessReport,
+)
 from app.contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
 from app.contracts.run_manifest_contract import (
     ManifestInputs,
@@ -163,6 +170,8 @@ CONTRACTS: dict[str, type] = {
     # /readyz-Embedding-Config-Check mit Env/Store-Divergenz (Issue #1417)
     "readiness-embedding-config-check.schema.json": EmbeddingConfigReadinessCheck,
     "report-status-response.schema.json": ReportStatusResponse,
+    # Statusantwort fuer GET /api/simulation/<id> (Issue #1713)
+    "simulation-status-response.schema.json": SimulationStatusResponse,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
@@ -256,6 +265,9 @@ CONTRACTS: dict[str, type] = {
     "replay-request.schema.json": ReplayRequest,
     "replay-overrides.schema.json": ReplayOverrides,
     "replay-response.schema.json": ReplayResponse,
+    # Kennzahlen "Simulation lebt" (Issue #1713 Slice S0)
+    "platform-liveness.schema.json": PlatformLiveness,
+    "simulation-liveness-report.schema.json": SimulationLivenessReport,
 }
 
 

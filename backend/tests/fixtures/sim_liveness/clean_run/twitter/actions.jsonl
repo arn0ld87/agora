@@ -1,0 +1,19 @@
+{"round": 0, "timestamp": "2026-09-29T09:00:00", "event_type": "round_start", "simulated_hour": 0}
+{"round": 0, "timestamp": "2026-09-29T09:00:01", "agent_id": 0, "agent_name": "Mara Lindner", "action_type": "CREATE_POST", "action_args": {"content": "Start."}, "result": null, "success": true}
+{"round": 0, "timestamp": "2026-09-29T09:00:02", "event_type": "round_end", "actions_count": 1, "simulated_minutes": 0}
+{"round": 1, "timestamp": "2026-09-29T09:05:00", "event_type": "round_start", "simulated_hour": 9}
+{"round": 1, "timestamp": "2026-09-29T09:05:01", "agent_id": 1, "agent_name": "Jonas Berg", "action_type": "CREATE_POST", "action_args": {"content": "Wir brauchen 42 neue Stellen.", "post_id": 2}, "result": null, "success": true}
+{"round": 1, "timestamp": "2026-09-29T09:05:02", "agent_id": 2, "agent_name": "Petra Voss", "action_type": "LIKE_POST", "action_args": {"post_id": 1, "post_content": "Start.", "post_author_name": "Mara Lindner"}, "result": null, "success": true}
+{"round": 1, "timestamp": "2026-09-29T09:05:03", "agent_id": 0, "agent_name": "Mara Lindner", "action_type": "DO_NOTHING", "action_args": {}, "result": null, "success": true}
+{"round": 1, "timestamp": "2026-09-29T09:05:04", "event_type": "round_end", "actions_count": 3, "simulated_minutes": 30}
+{"round": 2, "timestamp": "2026-09-29T09:10:00", "event_type": "round_start", "simulated_hour": 9}
+{"round": 2, "timestamp": "2026-09-29T09:10:01", "agent_id": 0, "agent_name": "Mara Lindner", "action_type": "LIKE_POST", "action_args": {"post_id": 2, "post_content": "Wir brauchen 42 neue Stellen.", "post_author_name": "Jonas Berg"}, "result": null, "success": true}
+{"round": 2, "timestamp": "2026-09-29T09:10:02", "agent_id": 1, "agent_name": "Jonas Berg", "action_type": "DISLIKE_POST", "action_args": {"post_id": 1, "post_content": "Start.", "post_author_name": "Mara Lindner"}, "result": null, "success": true}
+{"round": 2, "timestamp": "2026-09-29T09:10:03", "agent_id": 3, "agent_name": "Karl Nemeth", "action_type": "CREATE_COMMENT", "action_args": {"content": "Interessanter Punkt.", "comment_id": 10, "post_id": 2, "post_content": "Wir brauchen 42 neue Stellen.", "post_author_name": "Jonas Berg"}, "result": null, "success": true}
+{"round": 2, "timestamp": "2026-09-29T09:10:04", "event_type": "round_end", "actions_count": 3, "simulated_minutes": 60}
+{"round": 3, "timestamp": "2026-09-29T09:15:00", "event_type": "round_start", "simulated_hour": 10}
+{"round": 3, "timestamp": "2026-09-29T09:15:01", "agent_id": 2, "agent_name": "Petra Voss", "action_type": "REPOST", "action_args": {"reposted_id": 2, "new_post_id": 5, "original_post_id": 2, "original_content": "Wir brauchen 42 neue Stellen.", "original_author_name": "Jonas Berg"}, "result": null, "success": true}
+{"round": 3, "timestamp": "2026-09-29T09:15:02", "agent_id": 3, "agent_name": "Karl Nemeth", "action_type": "QUOTE_POST", "action_args": {"content": "Sehe ich anders.", "quote_content": "Sehe ich anders.", "quoted_id": 1, "new_post_id": 6, "original_content": "Start.", "original_author_name": "Mara Lindner"}, "result": null, "success": true}
+{"round": 3, "timestamp": "2026-09-29T09:15:03", "agent_id": 0, "agent_name": "Mara Lindner", "action_type": "DO_NOTHING", "action_args": {}, "result": null, "success": true}
+{"round": 3, "timestamp": "2026-09-29T09:15:04", "event_type": "round_end", "actions_count": 3, "simulated_minutes": 90}
+{"timestamp": "2026-09-29T09:15:05", "event_type": "simulation_end", "platform": "twitter", "total_rounds": 4, "total_actions": 10}
