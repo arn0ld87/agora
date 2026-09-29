@@ -1,0 +1,10 @@
+{
+  "simulation_id": "sim_liveness_legacy",
+  "platform": "twitter",
+  "agent_configs": [
+    {"agent_id": 0, "entity_name": "Mara Lindner"},
+    {"agent_id": 1, "entity_name": "Jonas Berg"}
+  ],
+  "time_config": {"total_simulation_hours": 1, "minutes_per_round": 30},
+  "event_config": {"initial_posts": [{"poster_agent_id": 0, "content": "Start."}]}
+}
