@@ -26,9 +26,27 @@ nicht in ``dump_schemas`` aufgenommen und hat kein ``schemas/``-Gegenstueck.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Kanonische Statuswerte, gespiegelt aus ``SimulationStatus``
+# (``app.services.simulation_manager``). Als Literal statt Import: dieser
+# Vertrag traegt bewusst keine Laufzeit-Abhaengigkeit auf den Service (siehe
+# Modul-Docstring). ``backend/tests/contracts/test_simulation_status_values.py``
+# haelt beide Wertemengen deckungsgleich.
+SimulationStatusValue = Literal[
+    "created",
+    "preparing",
+    "ready",
+    "running",
+    "paused",
+    "stopped",
+    "cancelled_partial",
+    "completed",
+    "failed",
+    "interrupted",
+]
 
 
 class SimulationRecord(BaseModel):

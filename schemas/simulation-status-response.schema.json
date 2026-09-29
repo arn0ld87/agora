@@ -1,0 +1,213 @@
+{
+  "$id": "https://alexle135.de/schemas/simulation-status-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort-Schema fuer ``GET /api/simulation/<id>``.\n\nFelder bis ``persona_floor`` entsprechen 1:1\n``SimulationState.to_dict()``. ``run_instructions`` bleibt optional und\nwird nur bei ``status == \"ready\"`` gefuellt (unveraendertes Verhalten).",
+  "properties": {
+    "branch_depth": {
+      "title": "Branch Depth",
+      "type": "integer"
+    },
+    "branch_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Branch Name"
+    },
+    "config_generated": {
+      "title": "Config Generated",
+      "type": "boolean"
+    },
+    "config_reasoning": {
+      "title": "Config Reasoning",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "current_round": {
+      "title": "Current Round",
+      "type": "integer"
+    },
+    "enable_reddit": {
+      "title": "Enable Reddit",
+      "type": "boolean"
+    },
+    "enable_twitter": {
+      "title": "Enable Twitter",
+      "type": "boolean"
+    },
+    "entities_count": {
+      "title": "Entities Count",
+      "type": "integer"
+    },
+    "entity_types": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Entity Types",
+      "type": "array"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "graph_id": {
+      "title": "Graph Id",
+      "type": "string"
+    },
+    "interview_env_alive": {
+      "title": "Interview Env Alive",
+      "type": "boolean"
+    },
+    "persona_floor": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona Floor"
+    },
+    "profiles_count": {
+      "title": "Profiles Count",
+      "type": "integer"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "reddit_status": {
+      "title": "Reddit Status",
+      "type": "string"
+    },
+    "root_simulation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Root Simulation Id"
+    },
+    "run_instructions": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Instructions"
+    },
+    "runner_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "idle",
+            "starting",
+            "running",
+            "paused",
+            "stopping",
+            "stopped",
+            "completed",
+            "failed",
+            "ready"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runner Status"
+    },
+    "simulation_id": {
+      "title": "Simulation Id",
+      "type": "string"
+    },
+    "source_simulation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Simulation Id"
+    },
+    "status": {
+      "enum": [
+        "created",
+        "preparing",
+        "ready",
+        "running",
+        "paused",
+        "stopped",
+        "cancelled_partial",
+        "completed",
+        "failed",
+        "interrupted"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "twitter_status": {
+      "title": "Twitter Status",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "simulation_id",
+    "project_id",
+    "graph_id",
+    "enable_twitter",
+    "enable_reddit",
+    "status",
+    "entities_count",
+    "profiles_count",
+    "entity_types",
+    "config_generated",
+    "config_reasoning",
+    "current_round",
+    "twitter_status",
+    "reddit_status",
+    "created_at",
+    "updated_at",
+    "branch_depth",
+    "interview_env_alive"
+  ],
+  "title": "SimulationStatusResponse",
+  "type": "object"
+}
