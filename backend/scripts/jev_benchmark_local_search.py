@@ -120,7 +120,7 @@ _CASES: list[BenchmarkCase] = [
         "abbreviation-mismatch",
         "BMF",
         "Das Bundesministerium der Finanzen veroeffentlichte den Bericht.",
-        False,  # Abkuerzung "BMF" matcht keinen der Klartext-Keywords.
+        True,  # BMF bezeichnet das Bundesministerium der Finanzen; die Keyword-Regel erkennt das nicht.
     ),
     BenchmarkCase(
         "negation-in-fact",

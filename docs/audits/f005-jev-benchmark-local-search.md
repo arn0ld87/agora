@@ -14,11 +14,13 @@ Stand: 21.09.2026. Feature f005, Slice `jev-benchmark`. Repository-Basis: `feat/
 
 | Metrik | Rule-Baseline | Jev |
 |---|---|---|
-| Accuracy (12 Fälle) | 75 % (9/12) | 92 % (11/12) |
+| Accuracy (12 Fälle, nach Korrektur des BMF-Labels) | 67 % (8/12) | 100 % (12/12)¹ |
 | Fehler (API/Schema) | — | 0 |
 | Latenz median | ~0 ms (reiner Python-Code) | 288 ms |
 | Latenz max | ~0 ms | 793 ms |
 | Kosten gesamt | 0 | 159 Mikro-USD (12 Aufrufe, ~13 µ$/Aufruf) |
+
+¹ Rückwirkend aus der dokumentierten Zuordnung des einzigen Jev-Fehlers zum BMF-Fall berechnet. Das ursprüngliche Label war semantisch falsch (`BMF` bezeichnet das Bundesministerium der Finanzen) und hatte Rule 9/12 sowie Jev 11/12 ausgewiesen. Rohantworten je Fall wurden nicht archiviert; diese korrigierte Zahl ist daher eine Rekonstruktion, kein neuer Live-Lauf und kein unabhängig auditierbarer Qualitätsnachweis.
 
 Volle Falltabelle im Skript-Output, reproduzierbar mit einem gebundenen Jev-Key:
 
@@ -28,8 +30,7 @@ cd backend && uv run python scripts/jev_benchmark_local_search.py
 
 ## Beobachtungen
 
-- **Jev schlägt die Keyword-Regel genau dort, wo Semantik zählt.** Drei der vier Rule-Fehler sind klassische Keyword-Matching-Fallstricke: `coincidental-substring` ("Rat" matcht zufällig in "Vorrat"), `single-keyword-weak-match` (ein einzelnes schwaches Keyword-Match ohne thematischen Bezug) und `different-topic-shared-word` (gemeinsames Wort, anderes Thema). Jev hat alle drei korrekt als irrelevant bzw. relevant eingeordnet — das ist genau die Fehlerklasse, die eine reine Keyword-Regel strukturell nicht lösen kann.
-- **Jevs einziger Fehler (`abbreviation-mismatch`, BMF ↔ "Bundesministerium der Finanzen") hat keine gesicherte Ursache.** Der `DecisionState` für diesen Piloten trägt nur `{"query": ..., "fact": ...}` mit einer generischen Anweisung ("Beantworte mit der Wahrscheinlichkeit, dass die Aussage im State zutrifft") — keine Aufgabenbeschreibung, die "Anfrage" und "Kandidatentext" als solche benennt. Ob eine präzisere Anweisung diesen Fall behebt, muss separat gemessen werden.
+- **Die vier Rule-Fehler nach Label-Korrektur sind Keyword-Matching-Fallstricke:** `coincidental-substring` ("Rat" matcht zufällig in "Vorrat"), `single-keyword-weak-match` (ein einzelnes schwaches Keyword-Match ohne thematischen Bezug), `different-topic-shared-word` (gemeinsames Wort, anderes Thema) und `abbreviation-mismatch` (BMF ↔ "Bundesministerium der Finanzen"). Der BMF-Fall war im ursprünglichen Datensatz fälschlich als irrelevant markiert. Die dokumentierte Jev-Antwort war hier semantisch richtig; dieser Fehler lag im Benchmark-Label.
 - **Kosten in dieser Stichprobe:** rund 13 Mikro-USD pro Entscheidung. Die Kosten pro Lauf hängen von der tatsächlichen Zahl der Suchaufrufe ab; diese wurde in diesem Benchmark nicht gemessen.
 - **Latenz ist der eigentliche Kompromiss.** ~290 ms median gegen ~0 ms für die reine Python-Regel ist auf einem synchronen Retrieval-Pfad spürbar, besonders wenn `local_search` mehrfach pro Report-Abschnitt aufgerufen wird. Das produktive Shadow-Wiring (`local_search_shadow.py`) ruft ohnehin nur RuleProvider auf — dieser Befund ist relevant für eine spätere `authoritative`-Aktivierung, nicht für den heutigen Zustand.
 - **State-Form-Unterschied zum produktiven Pfad:** Der produktive Shadow-Aufruf in `local_search_shadow.py` sendet bewusst nur `{"top_score": ...}` (kein Klartext), weil er nur RuleProvider anspricht. Dieses Benchmark-Skript sendet für den Jev-Arm zusätzlich Query und Fakt im Klartext — notwendig, damit Jev überhaupt etwas zu bewerten hat, aber eine andere (größere) Datenexposition als der heutige Produktivpfad. Vor einer echten `shadow`- oder `authoritative`-Aktivierung mit Jev müsste `local_search_shadow.py` entsprechend erweitert und die Datenschutzfrage (Klartext-Fakten an einen externen Dienst) explizit vom Maintainer freigegeben werden — offen, siehe `jev-provider-evidence.md`, Abschnitt Datenschutz.
@@ -59,4 +60,4 @@ Festgenagelt in `backend/tests/scripts/test_jev_benchmark_report.py` (vier Fäll
 
 ## Integration auf aktuellem `main` (30.09.2026)
 
-Die fünf Benchmark-Commits wurden auf `origin/main` (`bc47d27fb`) in `feat/f005-jev-benchmark-landing` übernommen. Gezielt liefen 35 Tests grün (vier Live-API-Tests mangels explizitem `TYPESAFE_API_KEY` deselected), dazu 1.011 Contract-Tests, Schema-Drift-Check, Ruff und mypy. Ein erneuter Aufruf des Runners ergab Rule 9/12 und meldete den Jev-Arm mangels gebundenem Provider-Key ausdrücklich als übersprungen. Die oben genannten Jev-Messwerte stammen weiterhin ausschließlich aus dem Lauf vom 21.09.2026; sie sind kein neuer Live-Nachweis für diesen Branch.
+Die fünf Benchmark-Commits wurden auf `origin/main` (`bc47d27fb`) in `feat/f005-jev-benchmark-landing` übernommen. Gezielt liefen nach dem Review 36 Tests grün (vier Live-API-Tests mangels explizitem `TYPESAFE_API_KEY` deselected), dazu 1.011 Contract-Tests, Schema-Drift-Check, Ruff und mypy. Ein erneuter Aufruf des Runners ergab Rule 8/12 und meldete den Jev-Arm mangels gebundenem Provider-Key ausdrücklich als übersprungen. Die oben genannten Jev-Werte sind eine nachträgliche Korrektur des am 21.09.2026 berichteten Laufs; sie sind kein neuer Live-Nachweis für diesen Branch.

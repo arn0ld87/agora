@@ -73,6 +73,19 @@ def _outcome(
 
 
 class TestBenchmarkReportUsability:
+    def test_abbreviation_expansion_is_relevant_despite_rule_miss(self) -> None:
+        case = next(c for c in _BENCH._CASES if c.case_id == "abbreviation-mismatch")
+        score = _BENCH._match_score(case.query, case.fact)
+        state = _BENCH.DecisionState(
+            use_case_id=_BENCH._USE_CASE_ID,
+            state={"top_score": score},
+            context_hash="bench-abbreviation-mismatch",
+        )
+
+        assert case.expected_relevant is True
+        assert score == 0
+        assert _BENCH._rule_fn(state, _BENCH.NoulQuestion()).probability_yes == 0.0
+
     def test_skipped_jev_arm_is_a_usable_run(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Kein gebundener Key ist der dokumentierte Normalfall ohne Zugang,
         kein Fehlschlag — der Lauf liefert dann nur die Rule-Baseline."""
