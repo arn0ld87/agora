@@ -117,6 +117,14 @@ services:
       # Downloads unauthenticated und werden rate-limited → erster Sim-Round
       # blockiert minutenlang beim Cold-Cache-Download. Wert liegt in .env.
       - HF_TOKEN=${HF_TOKEN:-}
+      # Issue #1713 S3: HF_HOME explizit statt von $HOME abgeleitet — der
+      # OASIS-Subprozess läuft mit isoliertem HOME (siehe
+      # app/llm/providers/claude_cli.py), und `huggingface_hub` würde sonst
+      # dessen Default-Cache (`~/.cache/huggingface`) statt des persistenten
+      # Bind-Mounts unten verwenden. `ensure_twhin_cache`
+      # (backend/scripts/_sim_common.py) prüft/befüllt genau diesen Pfad und
+      # schaltet den Prozess danach in den HF-Offline-Modus.
+      - HF_HOME=/home/agora/.cache/huggingface
       # Read-only rootfs: don't try to write __pycache__ next to source.
       - PYTHONDONTWRITEBYTECODE=1
       # .venv wurde beim Image-Build via `uv sync --frozen` vollständig

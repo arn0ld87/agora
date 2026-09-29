@@ -91,7 +91,10 @@ def _install_runtime_profile() -> None:
     Siehe HANDOVER-2026-07-25 Aufgabe 3.
     """
     global _memory_stop
-    _bert_profile = install_bert_memory_profile()
+    # needs_twhin_bert=False (#1713 S3): rec_sys_reddit nutzt kein BERT — ein
+    # reiner Reddit-Lauf soll keinen TWHIN-BERT-Cache-Warmup/-Download
+    # ausloesen, den er nie braucht.
+    _bert_profile = install_bert_memory_profile(needs_twhin_bert=False)
     _memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
     logging.getLogger("agora.run_reddit_simulation").info("bert-memory profile = %s", _bert_profile)
     _mean_pooling_patched = install_recsys_mean_pooling_patch()

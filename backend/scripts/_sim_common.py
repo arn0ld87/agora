@@ -862,7 +862,179 @@ _BERT_PROFILE_DEFAULT = "auto"
 _BERT_FP32_MIN_AVAIL_MB = 4096
 
 
-def install_bert_memory_profile(profile: str | None = None) -> str:
+# ---------------------------------------------------------------------------
+# Issue #1713 Slice S3 — TWHIN-BERT-Cache offline nach Warmup
+# ---------------------------------------------------------------------------
+# OASIS laedt ``Twitter/twhin-bert-base`` ueber
+# ``AutoModel``/``AutoTokenizer.from_pretrained`` OHNE ``cache_dir`` oder
+# ``local_files_only`` (oasis/social_platform/recsys.py) — jeder Prozessstart
+# spricht damit den Hub fuer eine Revisions-/Vollstaendigkeitspruefung an,
+# selbst wenn der 1,1-GB-Checkpoint laengst im persistenten Cache liegt
+# (Bind-Mount ``./backend/.cache/huggingface``, siehe docker-compose.yml).
+# Das ist ein unnoetiger Netzwerk-Soft-Point: Hub nicht erreichbar oder
+# langsam -> die erste Twitter-Runde haengt oder scheitert, obwohl das Modell
+# lokal vollstaendig vorliegt.
+#
+# ``ensure_twhin_cache`` prueft/befuellt den Cache EINMAL, bevor irgendein
+# ``from_pretrained``-Aufruf passiert (aufgerufen aus
+# ``install_bert_memory_profile``, das alle drei Runner-Skripte ohnehin vor
+# dem ``oasis``-Import ausfuehren — kein zusaetzlicher Call-Site noetig), und
+# schaltet den Prozess danach per ``HF_HUB_OFFLINE``/``TRANSFORMERS_OFFLINE``
+# auf Offline-Betrieb um: "Warmup" (Cache pruefen, bei Bedarf einmal laden),
+# dann offline fuer den Rest des Prozesses.
+
+
+class TwhinCacheError(RuntimeError):
+    """TWHIN-BERT-Cache weder lokal vollstaendig noch aus dem Hub ladbar.
+
+    Bewusst kein stiller Fallback auf ein halb geladenes Modell — der Lauf
+    muss sichtbar abbrechen, bevor der Twitter-Recommender mit fehlenden
+    Gewichten weiterlaeuft.
+    """
+
+
+_TWHIN_BERT_REPO_ID = "Twitter/twhin-bert-base"
+
+
+def ensure_twhin_cache(repo_id: str = _TWHIN_BERT_REPO_ID) -> bool:
+    """Stellt sicher, dass ``repo_id`` vollstaendig im lokalen HF-Cache liegt,
+    und schaltet den Prozess danach auf Offline-Betrieb um.
+
+    ``snapshot_download(..., local_files_only=True)`` ist die von
+    ``huggingface_hub`` selbst vorgesehene Vollstaendigkeitspruefung — sie
+    loest den Repo-Baum ueber die zuletzt bekannte Revision auf und prueft
+    JEDE dort referenzierte Datei gegen den lokalen Cache, statt eine feste
+    Dateiliste (config.json, Gewichte, Tokenizer-Dateien, ...) hier zu
+    pflegen, die bei einem Formatwechsel des Checkpoints veraltet waere.
+    Fehlt etwas, wirft sie ``LocalEntryNotFoundError`` (``OSError``); dann
+    genau ein Online-Download, danach ebenfalls Cache-vollstaendig.
+
+    Args:
+        repo_id: HF-Repo, Default ``Twitter/twhin-bert-base``.
+
+    Returns:
+        ``True`` wenn der Cache bereits vollstaendig war (kein Download
+        noetig — der haeufige Fall nach dem ersten Lauf), ``False`` wenn ein
+        Warmup-Download stattgefunden hat.
+
+    Raises:
+        TwhinCacheError: wenn weder der lokale Cache vollstaendig ist noch
+            ein Download aus dem Hub gelingt.
+    """
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        # huggingface_hub fehlt: das eigentliche transformers-Laden schlaegt
+        # gleich danach ohnehin fehl — hier nichts zu pruefen oder zu setzen.
+        return True
+
+    try:
+        snapshot_download(repo_id=repo_id, local_files_only=True)
+        cache_was_complete = True
+    except OSError:
+        try:
+            snapshot_download(repo_id=repo_id, local_files_only=False)
+        except Exception as exc:  # noqa: BLE001 — Netzwerk-/Hub-Fehler sind vielfältig
+            raise TwhinCacheError(
+                f"TWHIN-BERT-Cache ({repo_id}) ist weder lokal vollstaendig "
+                f"noch aus dem Hub ladbar: {exc}"
+            ) from exc
+        cache_was_complete = False
+
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    logging.getLogger("agora._sim_common").info(
+        "TWHIN-BERT-Cache (%s) %s — Prozess laeuft ab jetzt im HF-Offline-Modus.",
+        repo_id,
+        "bereits vollstaendig" if cache_was_complete else "per Warmup-Download befuellt",
+    )
+    return cache_was_complete
+
+
+# ---------------------------------------------------------------------------
+# Issue #1713 Slice S3 — TWHIN-BERT-Ladereport uebersetzen
+# ---------------------------------------------------------------------------
+# ``Twitter/twhin-bert-base`` ist ein Masked-LM-Checkpoint ohne
+# Pooler-Gewichte (#1236, siehe install_recsys_mean_pooling_patch oben).
+# Transformers meldet das beim Laden als WARNING — ``pooler.dense.*``
+# MISSING (neu initialisiert) und ``cls.predictions.*`` UNEXPECTED (im
+# Checkpoint vorhanden, aber verworfen). Beides ist fuer diesen Checkpoint
+# seit dem Mean-Pooling-Fix erwartet und kein Betriebsproblem — als WARNING
+# sieht es aber wie eins aus. Andere/zusaetzliche MISSING-Gewichte (z. B. bei
+# einem zukuenftigen Checkpoint-Wechsel) bleiben als WARNING sichtbar, damit
+# ein echtes Problem nicht im Rauschen untergeht.
+
+_TWHIN_BERT_REPORT_LOGGER_NAMES = frozenset({"transformers.modeling_utils"})
+_TWHIN_BERT_EXPECTED_MISSING = frozenset({"pooler.dense.bias", "pooler.dense.weight"})
+_TWHIN_BERT_EXPECTED_UNEXPECTED_PREFIX = "cls.predictions"
+_WEIGHT_LIST_RE = re.compile(r"\[([^\]]*)\]")
+
+
+def _extract_weight_names(message: str) -> list[str]:
+    match = _WEIGHT_LIST_RE.search(message)
+    if not match:
+        return []
+    return [name.strip().strip("'\"") for name in match.group(1).split(",") if name.strip()]
+
+
+class TwhinBertLoadReportFilter(logging.Filter):
+    """Downgraded den erwarteten TWHIN-BERT-Ladereport auf INFO.
+
+    Andere Logger/Checkpoints und andere/zusaetzliche fehlende Gewichte
+    bleiben unveraendert als WARNING sichtbar (``return True`` laesst den
+    Record unangetastet durch).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name not in _TWHIN_BERT_REPORT_LOGGER_NAMES:
+            return True
+        message = record.getMessage()
+        if _TWHIN_BERT_REPO_ID not in message:
+            return True
+
+        names = _extract_weight_names(message)
+        if not names:
+            return True
+
+        if "newly initialized" in message and set(names) <= _TWHIN_BERT_EXPECTED_MISSING:
+            record.msg = (
+                f"TWHIN-BERT ({_TWHIN_BERT_REPO_ID}): Pooler-Gewichte fehlen im "
+                "Checkpoint und werden neu initialisiert (erwartet — der "
+                "Recommender nutzt Mean-Pooling statt pooler_output, siehe "
+                "install_recsys_mean_pooling_patch, #1236)."
+            )
+            record.args = ()
+            record.levelno = logging.INFO
+            record.levelname = "INFO"
+            return True
+
+        if "were not used when initializing" in message and all(
+            name.startswith(_TWHIN_BERT_EXPECTED_UNEXPECTED_PREFIX) for name in names
+        ):
+            record.msg = (
+                f"TWHIN-BERT ({_TWHIN_BERT_REPO_ID}): MLM-Kopf (cls.predictions.*) "
+                "wird beim Laden verworfen (erwartet — nur der Encoder wird fuer "
+                "Embeddings gebraucht)."
+            )
+            record.args = ()
+            record.levelno = logging.INFO
+            record.levelname = "INFO"
+            return True
+
+        return True
+
+
+def install_twhin_bert_load_report_filter() -> None:
+    root_logger = logging.getLogger()
+    if not any(isinstance(f, TwhinBertLoadReportFilter) for f in root_logger.filters):
+        root_logger.addFilter(TwhinBertLoadReportFilter())
+
+
+def install_bert_memory_profile(
+    profile: str | None = None,
+    *,
+    needs_twhin_bert: bool = True,
+) -> str:
     """
     Aktiviert ein speicherschonendes Ladeprofil für TWHIN-BERT.
 
@@ -887,10 +1059,22 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
         profile: Zu verwendendes Speicherprofil (``"off"``, ``"low"`` oder
             ``"auto"``). Ohne Angabe greift ``AGORA_BERT_MEMORY_PROFILE`` bzw.
             der Default.
+        needs_twhin_bert: Ob dieser Prozess TWHIN-BERT ueberhaupt laden wird
+            (#1713 S3). Nur ``run_twitter_simulation.py`` und
+            ``run_parallel_simulation.py`` brauchen den Recommender —
+            ``run_reddit_simulation.py`` ruft diese Funktion aus historischen
+            Gruenden defensiv mit auf (``rec_sys_reddit`` nutzt kein BERT),
+            uebergibt aber ``False``, damit ein reiner Reddit-Lauf keinen
+            Cache-Warmup/-Download fuer ein Modell ausloest, das er nie
+            benutzt. Default ``True`` haelt bestehende Aufrufer unveraendert.
 
     Returns:
         Der effektive Profilname.
     """
+    if needs_twhin_bert:
+        ensure_twhin_cache()
+    install_twhin_bert_load_report_filter()
+
     effective = (profile or os.environ.get("AGORA_BERT_MEMORY_PROFILE") or _BERT_PROFILE_DEFAULT).lower()
     if effective == "off":
         return "off"

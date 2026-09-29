@@ -74,6 +74,11 @@ services:
       # Verbindung kaputt machen.
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      # HF-Cache-Pfad des OASIS-Subprozesses (Issue #1713 S3) — siehe
+      # docker-compose.yml. Bleibt hier redundant gesetzt, weil dieser
+      # Environment-Block ebenfalls dokumentierend gepflegt wird (siehe
+      # LLM_BASE_URL/EMBEDDING_BASE_URL oben).
+      - HF_HOME=/home/agora/.cache/huggingface
       # Container-Zeitzone (siehe docker-compose.yml).
       - TZ=Europe/Berlin
       # LLM-Default für Sim-Runner — siehe docker-compose.yml.
