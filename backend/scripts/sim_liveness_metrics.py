@@ -47,7 +47,9 @@ _CREATIVE_TYPES = {"CREATE_POST", "CREATE_COMMENT", "QUOTE_POST", "REPOST"}
 _REACTION_TYPES = {"LIKE_POST", "DISLIKE_POST", "LIKE_COMMENT", "DISLIKE_COMMENT"}
 _DISLIKE_TYPES = {"DISLIKE_POST", "DISLIKE_COMMENT"}
 # Aktionstyp -> Feld in action_args, das die Ziel-Entity referenziert
-# (#1713 Slice S1: reposted_id ist seitdem Teil der Whitelist).
+# (#1713 Slice S1: reposted_id ist seitdem Teil der Whitelist). Nur fuer den
+# Akteur-Reaktionsgraphen (mutual_pair_share) — max_chain_length nutzt seit
+# Slice S2 die eigenen _CHAIN_*-Felder unten (Beitrags-, nicht Agentenebene).
 _TARGET_FIELD_BY_TYPE = {
     "LIKE_POST": "post_id",
     "DISLIKE_POST": "post_id",
@@ -56,10 +58,31 @@ _TARGET_FIELD_BY_TYPE = {
     "QUOTE_POST": "quoted_id",
     "REPOST": "reposted_id",
 }
-# Maximale Kantenzahl fuer die (exponentielle) laengste-Pfad-Suche in L4 —
-# operative Simulationen haben Dutzende, keine Tausende Agenten; darueber
-# lieber sauber abbrechen als den Prozess haengen zu lassen.
-_MAX_CHAIN_SEARCH_EDGES = 400
+# L4 max_chain_length: laengste Beitrags-Antwortkette (#1713 Slice S2).
+# Jeder inhaltliche Beitrag referenziert hoechstens einen frueheren Beitrag
+# ueber genau eines dieser Felder -> Wald/DAG in Zeitordnung statt Pfadsuche
+# im (potenziell zyklischen) Agentengraphen.
+_CHAIN_OWN_ID_FIELDS: dict[str, tuple[str, ...]] = {
+    "CREATE_POST": ("post_id", "new_post_id", "id"),
+    "CREATE_COMMENT": ("comment_id", "id"),
+    "QUOTE_POST": ("new_post_id", "id"),
+    "REPOST": ("new_post_id", "id"),
+}
+_CHAIN_PARENT_ID_FIELDS: dict[str, tuple[str, ...]] = {
+    "CREATE_COMMENT": ("post_id", "new_post_id"),
+    "QUOTE_POST": ("quoted_id",),
+    "REPOST": ("reposted_id", "original_post_id"),
+}
+# CREATE_POST/-COMMENT/QUOTE_POST/REPOST erzeugen jeweils einen Post ausser
+# CREATE_COMMENT (eigener Namensraum) — Kommentare werden nie als Eltern
+# referenziert, nur Posts, daher genuegt ein einziger Eltern-Namensraum.
+_CHAIN_OWN_NAMESPACE_BY_TYPE = {
+    "CREATE_POST": "post",
+    "CREATE_COMMENT": "comment",
+    "QUOTE_POST": "post",
+    "REPOST": "post",
+}
+_CHAIN_PARENT_NAMESPACE = "post"
 
 _WORD_RE = re.compile(r"\S+")
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
@@ -250,38 +273,77 @@ def _build_edges(real_actions: list[dict[str, Any]], name_to_id: dict[str, int])
     return edges
 
 
-def _l4(edges: set[tuple[Any, Any]]) -> tuple[float | None, int | None, list[str]]:
-    notes: list[str] = []
+def _mutual_pair_share(edges: set[tuple[Any, Any]]) -> float | None:
     if not edges:
-        return None, None, notes
-
+        return None
     pairs: dict[frozenset, set[tuple[Any, Any]]] = defaultdict(set)
     for src, dst in edges:
         pairs[frozenset((src, dst))].add((src, dst))
     mutual = sum(1 for directions in pairs.values() if len(directions) == 2)
-    mutual_share = mutual / len(pairs)
+    return mutual / len(pairs)
 
-    if len(edges) > _MAX_CHAIN_SEARCH_EDGES:
-        notes.append(
-            f"max_chain_length nicht berechnet: {len(edges)} Kanten ueberschreiten "
-            f"das Limit ({_MAX_CHAIN_SEARCH_EDGES}) fuer die Pfadsuche"
-        )
-        return mutual_share, None, notes
 
-    adjacency: dict[Any, set[Any]] = defaultdict(set)
-    for src, dst in edges:
-        adjacency[src].add(dst)
+def _chain_own_id(action: dict[str, Any]) -> Any | None:
+    fields = _CHAIN_OWN_ID_FIELDS.get(action.get("action_type"))
+    if not fields:
+        return None
+    args = action.get("action_args") or {}
+    for field in fields:
+        value = args.get(field)
+        if value is not None:
+            return value
+    return None
 
-    def _longest_path(node: Any, visited: frozenset) -> int:
-        best = 0
-        for nxt in adjacency.get(node, ()):
-            if nxt in visited:
-                continue
-            best = max(best, 1 + _longest_path(nxt, visited | {nxt}))
-        return best
 
-    max_chain = max((_longest_path(n, frozenset({n})) for n in adjacency), default=0)
-    return mutual_share, max_chain, notes
+def _chain_parent_id(action: dict[str, Any]) -> Any | None:
+    fields = _CHAIN_PARENT_ID_FIELDS.get(action.get("action_type"))
+    if not fields:
+        return None
+    args = action.get("action_args") or {}
+    for field in fields:
+        value = args.get(field)
+        if value is not None:
+            return value
+    return None
+
+
+def _max_chain_length(real_actions: list[dict[str, Any]], key_prefix: str) -> int | None:
+    """Laengste Beitrags-Antwortkette (#1713 Slice S2, ersetzt die Pfadsuche
+    im Agentengraphen aus Slice S0/S1).
+
+    Jeder inhaltliche Beitrag (``CREATE_POST``/``CREATE_COMMENT``/
+    ``QUOTE_POST``/``REPOST``) referenziert hoechstens einen frueheren
+    Beitrag. Da ``real_actions`` bereits in Dateireihenfolge (= Erstell-
+    reihenfolge) vorliegt, ist die Elterntiefe beim Erreichen eines Knotens
+    stets schon bekannt -> ein Durchlauf, O(n), ohne Rekursion.
+
+    Referenziert ein Beitrag eine Eltern-ID, die (noch) kein bekannter Knoten
+    ist — fehlender Startpost ohne ``post_id``, kaputte Referenz, oder eine
+    Vorwaertsreferenz auf einen erst spaeter geloggten Beitrag — wird der
+    Kindknoten zur Wurzel statt die Berechnung zu blockieren. Dadurch kann
+    aus (fehlerhaften) Logs keine echte Zyklusreferenz entstehen: nur
+    bereits gesehene, also zeitlich fruehere Beitraege zaehlen als Eltern.
+    """
+    depth_by_key: dict[tuple[str, str, Any], int] = {}
+    max_depth = 0
+    found_any = False
+    for action in real_actions:
+        action_type = action.get("action_type")
+        own_namespace = _CHAIN_OWN_NAMESPACE_BY_TYPE.get(action_type)
+        if own_namespace is None:
+            continue
+        own_id = _chain_own_id(action)
+        if own_id is None:
+            continue
+        found_any = True
+        own_key = (key_prefix, own_namespace, own_id)
+        parent_id = _chain_parent_id(action)
+        parent_key = (key_prefix, _CHAIN_PARENT_NAMESPACE, parent_id) if parent_id is not None else None
+        node_depth = depth_by_key[parent_key] + 1 if parent_key in depth_by_key else 0
+        depth_by_key[own_key] = node_depth
+        if node_depth > max_depth:
+            max_depth = node_depth
+    return max_depth if found_any else None
 
 
 def _l5(real_actions: list[dict[str, Any]]) -> float | None:
@@ -338,11 +400,12 @@ def _compute_platform(
     duplicates = _startpost_duplicates(actions)
     round_shares = _round_shares(actions, agent_count)
     edges = _build_edges(real_actions, name_to_id)
-    mutual_share, max_chain, l4_notes = _l4(edges)
+    mutual_share = _mutual_pair_share(edges)
+    max_chain = _max_chain_length(real_actions, platform)
     seed_echo_share, l7_notes = _l7(real_actions, seed_text)
     action_type_counts = Counter(a.get("action_type", "UNKNOWN") for a in actions)
 
-    notes = [*round_notes, *fill_notes, *l4_notes, *l7_notes]
+    notes = [*round_notes, *fill_notes, *l7_notes]
     if duplicates:
         notes.append(f"{duplicates} doppelt geloggte(r) Startpost(s) gefunden (Altlauf-Signatur #1713)")
 
@@ -370,6 +433,7 @@ def _compute_platform(
         "complete_rounds": complete_rounds,
         "max_round": max_round,
         "action_type_counts": action_type_counts,
+        "max_chain": max_chain,
         "notes": notes,
     }
     return liveness, intermediate
@@ -386,6 +450,7 @@ def _combine_overall(
     duplicates_total = 0
     complete_rounds_total = 0
     max_round_total = 0
+    max_chain_per_platform: list[int] = []
 
     for data in intermediates.values():
         real_actions_all.extend(data["real_actions"])
@@ -396,8 +461,15 @@ def _combine_overall(
         duplicates_total += data["duplicates"]
         complete_rounds_total += data["complete_rounds"]
         max_round_total += data["max_round"]
+        if data["max_chain"] is not None:
+            max_chain_per_platform.append(data["max_chain"])
 
-    mutual_share, max_chain, l4_notes = _l4(edges_all)
+    mutual_share = _mutual_pair_share(edges_all)
+    # Post-/Kommentar-IDs sind pro Plattform namensraumgebunden (der
+    # Ketten-Schluessel traegt das Plattformpraefix) -> die Ketten zweier
+    # Plattformen koennen sich nie ueberschneiden, "gesamt" ist schlicht das
+    # Maximum der bereits pro Plattform berechneten Kettenlaengen.
+    max_chain = max(max_chain_per_platform) if max_chain_per_platform else None
     seed_echo_share, l7_notes = _l7(real_actions_all, seed_text)
     round_fill_share = (complete_rounds_total / max_round_total) if max_round_total else None
 
@@ -414,7 +486,7 @@ def _combine_overall(
         duplicate_log_lines=duplicates_total,
         round_fill_share=round_fill_share,
         action_type_counts=dict(action_type_counts_total),
-        data_quality_notes=[*dict.fromkeys(notes_all), *l4_notes, *l7_notes],
+        data_quality_notes=[*dict.fromkeys(notes_all), *l7_notes],
     )
 
 

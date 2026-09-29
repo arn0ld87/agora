@@ -12,7 +12,9 @@ Fixtures unter ``backend/tests/fixtures/sim_liveness/``:
 
 from __future__ import annotations
 
+import json
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -59,11 +61,21 @@ class TestCleanRunMetrics:
 
     def test_l4_mutual_pair_share_and_chain(self, report) -> None:
         tw = report.per_platform["twitter"]
-        # Kanten: Petra->Mara (Like), Mara->Jonas (Like), Jonas->Mara (Dislike),
-        # Petra->Jonas (Repost), Karl->Mara (Quote). Paare: {Mara,Jonas} mutual,
+        # mutual_pair_share (Akteur-Reaktionsgraph, unveraendert): Petra->Mara
+        # (Like), Mara->Jonas (Like), Jonas->Mara (Dislike), Petra->Jonas
+        # (Repost), Karl->Mara (Quote). Paare: {Mara,Jonas} mutual,
         # {Mara,Petra} einseitig, {Jonas,Petra} einseitig, {Mara,Karl} einseitig.
         assert tw.mutual_pair_share == pytest.approx(1 / 4)
-        assert tw.max_chain_length == 2
+        # max_chain_length (#1713 Slice S2: Beitrags-Antwortkette statt
+        # Pfadsuche im Agentengraph). Jonas' Post (post_id=2) ist Wurzel;
+        # Karls Kommentar (post_id=2) und Petras Repost (reposted_id=2)
+        # haengen direkt darunter -> Tiefe 1. Karls Quote referenziert
+        # quoted_id=1 (Maras Startpost aus Runde 0, der nie ein post_id-Feld
+        # traegt, siehe _log_initial_post) und wird mangels bekanntem
+        # Elternknoten selbst zur Wurzel -> Tiefe 0. Laengste Kette = 1
+        # Kante (vorher 2, weil die alte Implementierung ueber den
+        # Agentengraphen lief statt ueber Beitragsreferenzen).
+        assert tw.max_chain_length == 1
 
     def test_l5_rejection_share(self, report) -> None:
         tw = report.per_platform["twitter"]
@@ -139,3 +151,140 @@ class TestLegacyRunAltlaufSignatur:
         assert report.rounds_completed == 1
         tw = report.per_platform["twitter"]
         assert tw.actions_per_agent_round == pytest.approx(2 / (2 * 1))
+
+
+class TestChainCycleTermination:
+    """#1713 Slice S2: eine lange Folge wechselseitiger A<->B-Interaktionen
+    sah im alten Agentengraph-Modell wie ein Zyklus aus (Kante A->B *und*
+    B->A) und war Teil der exponentiellen Pfadsuche. Im Beitragsketten-
+    Modell ist das schlicht eine korrekte, lange Kette -- jeder Beitrag hat
+    hoechstens einen Elternbeitrag, ein echter Zyklus kann aus den Feldern
+    strukturell nicht entstehen."""
+
+    def test_alternating_agents_long_chain_terminates_and_is_correct(self) -> None:
+        hops = 120
+        actions: list[dict] = [
+            {
+                "round": 1,
+                "agent_id": 0,
+                "agent_name": "A",
+                "action_type": "CREATE_POST",
+                "action_args": {"content": "root", "post_id": 1},
+            }
+        ]
+        for i in range(2, hops + 2):
+            actor = "A" if i % 2 == 0 else "B"
+            actions.append(
+                {
+                    "round": 1,
+                    "agent_id": 0 if actor == "A" else 1,
+                    "agent_name": actor,
+                    "action_type": "QUOTE_POST",
+                    "action_args": {
+                        "content": f"reply {i}",
+                        "quoted_id": i - 1,
+                        "new_post_id": i,
+                    },
+                }
+            )
+        start = time.perf_counter()
+        max_chain = metrics._max_chain_length(actions, "twitter")
+        elapsed = time.perf_counter() - start
+        assert elapsed < 1.0, f"_max_chain_length took {elapsed:.3f}s for {hops} hops"
+        assert max_chain == hops
+
+    def test_malformed_forward_reference_does_not_create_cycle(self) -> None:
+        # post 1 referenziert (fehlerhaft) post 2, der erst danach im Log
+        # auftaucht; post 2 referenziert echt post 1. Eine Elternreferenz
+        # zaehlt nur, wenn der Zielknoten beim Verarbeiten bereits bekannt
+        # ist -- die Vorwaertsreferenz wird ignoriert statt einen echten
+        # Zyklus zu bilden (und die Berechnung zu haengen).
+        actions = [
+            {
+                "agent_id": 0,
+                "action_type": "QUOTE_POST",
+                "action_args": {"content": "a", "quoted_id": 2, "new_post_id": 1},
+            },
+            {
+                "agent_id": 1,
+                "action_type": "QUOTE_POST",
+                "action_args": {"content": "b", "quoted_id": 1, "new_post_id": 2},
+            },
+        ]
+        max_chain = metrics._max_chain_length(actions, "twitter")
+        assert max_chain == 1
+
+
+def _build_large_run(base_dir: Path, total_actions: int = 5000, agent_count: int = 60) -> Path:
+    """Synthetischer Lauf fuer den Performance-Regressionstest: 5000 Aktionen,
+    60 Agenten, ueberwiegend QUOTE_POST auf den jeweils juengsten Post einer
+    gleitenden Post-Auswahl, damit tief verschachtelte Ketten entstehen."""
+    run_dir = base_dir / "large_run"
+    (run_dir / "twitter").mkdir(parents=True)
+    agent_configs = [{"agent_id": i, "entity_name": f"Agent{i}"} for i in range(agent_count)]
+    (run_dir / "simulation_config.json").write_text(
+        json.dumps({"simulation_id": "sim_liveness_perf", "agent_configs": agent_configs})
+    )
+    (run_dir / "run_state.json").write_text(json.dumps({"runner_status": "completed"}))
+
+    lines: list[str] = []
+    recent_posts: list[int] = []
+    next_id = 1
+    round_num = 0
+    actions_per_round = 50
+    for i in range(total_actions):
+        if i % actions_per_round == 0:
+            round_num += 1
+            lines.append(json.dumps({"round": round_num, "event_type": "round_start"}))
+        agent_id = i % agent_count
+        own_id = next_id
+        next_id += 1
+        if not recent_posts or i % 4 == 0:
+            action = {
+                "round": round_num,
+                "agent_id": agent_id,
+                "agent_name": f"Agent{agent_id}",
+                "action_type": "CREATE_POST",
+                "action_args": {"content": f"post {own_id}", "post_id": own_id},
+                "success": True,
+            }
+        else:
+            parent_id = recent_posts[-1]
+            action = {
+                "round": round_num,
+                "agent_id": agent_id,
+                "agent_name": f"Agent{agent_id}",
+                "action_type": "QUOTE_POST",
+                "action_args": {
+                    "content": f"quote {own_id}",
+                    "quoted_id": parent_id,
+                    "new_post_id": own_id,
+                    "original_author_name": f"Agent{(agent_id - 1) % agent_count}",
+                },
+                "success": True,
+            }
+        recent_posts.append(own_id)
+        if len(recent_posts) > 25:
+            recent_posts.pop(0)
+        lines.append(json.dumps(action))
+        if (i + 1) % actions_per_round == 0:
+            lines.append(json.dumps({"round": round_num, "event_type": "round_end"}))
+    (run_dir / "twitter" / "actions.jsonl").write_text("\n".join(lines) + "\n")
+    return run_dir
+
+
+class TestPerformance:
+    """#1713: max_chain_length haengte echte Laeufe (sim_8fd9a6e4bc97) ueber
+    20 Minuten wegen der exponentiellen Pfadsuche im Agentengraph. Das
+    Beitragsketten-Modell muss dieselbe Groessenordnung in Sekunden statt
+    Minuten schaffen."""
+
+    def test_large_run_completes_within_two_seconds(self, tmp_path) -> None:
+        run_dir = _build_large_run(tmp_path)
+        start = time.perf_counter()
+        report = metrics.compute_report(run_dir)
+        elapsed = time.perf_counter() - start
+        assert elapsed < 2.0, f"compute_report took {elapsed:.2f}s for 5000 actions (limit 2.0s)"
+        tw = report.per_platform["twitter"]
+        assert tw.max_chain_length is not None
+        assert tw.max_chain_length > 0

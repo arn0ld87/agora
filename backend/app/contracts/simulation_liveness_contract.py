@@ -41,12 +41,17 @@ class PlatformLiveness(BaseModel):
     - L3 ``own_post_share``: (``CREATE_POST`` + ``QUOTE_POST``, ohne
       Startposts) / (``CREATE_POST`` + ``CREATE_COMMENT`` + ``QUOTE_POST`` +
       ``REPOST``, ohne Startposts).
-    - L4 ``mutual_pair_share`` / ``max_chain_length``: gerichteter
-      Reaktionsgraph (Kante Akteur -> Zielautor, Ziel ueber
+    - L4 ``mutual_pair_share``: gerichteter Akteur-Reaktionsgraph (Kante
+      Akteur -> Zielautor, Ziel ueber
       ``post_id``/``comment_id``/``quoted_id``/``reposted_id`` aufgeloest).
-      ``mutual_pair_share`` = Paare mit Kanten in beide Richtungen / Paare
-      mit mindestens einer Kante. ``max_chain_length`` = laengster simple
-      Pfad in diesem Graphen (Kantenzahl).
+      Paare mit Kanten in beide Richtungen / Paare mit mindestens einer
+      Kante. ``max_chain_length``: laengste Beitrags-Antwortkette (nicht der
+      Agentengraph) — jeder inhaltliche Beitrag (``CREATE_POST``/
+      ``CREATE_COMMENT``/``QUOTE_POST``/``REPOST``) referenziert hoechstens
+      einen frueheren Beitrag ueber
+      ``post_id``/``comment_id``/``quoted_id``/``reposted_id`` bzw.
+      ``original_post_id``; Kantenzahl der laengsten Kette in diesem
+      Wald/DAG.
     - L5 ``rejection_share``: ``DISLIKE_POST`` + ``DISLIKE_COMMENT`` /
       alle Like-/Dislike-Aktionen. ``contra_reply_share`` bleibt in diesem
       Slice ``None`` (braeuchte Stance-/Sentiment-Klassifikation, out of

@@ -58,7 +58,7 @@ stillschweigende 0. Der Grund landet in `data_quality_notes`.
 | L1 | `actions_per_agent_round` | reale Aktionen (ohne Startposts, `DO_NOTHING`, `REFRESH`, `SIGN_UP`) / (Agentenzahl × abgeschlossene Runden) | ≥ 0,6 |
 | L2 | `active_agent_share_median` | Median je Runde von (aktive Agenten / Agentenzahl); aktiv = mind. eine geloggte Aktion inkl. `DO_NOTHING` | ≥ 40 % |
 | L3 | `own_post_share` | (`CREATE_POST`+`QUOTE_POST`, ohne Startposts) / (`CREATE_POST`+`CREATE_COMMENT`+`QUOTE_POST`+`REPOST`) | ≥ 20 % |
-| L4 | `mutual_pair_share` / `max_chain_length` | Reaktionsgraph (Kante Akteur→Zielautor über `post_id`/`comment_id`/`quoted_id`/`reposted_id`); Paare mit Kanten in beide Richtungen / Paare mit ≥1 Kante; `max_chain_length` = längster simpler Pfad | ≥ 15 % Paare, Kette ≥ 3 |
+| L4 | `mutual_pair_share` / `max_chain_length` | `mutual_pair_share`: Reaktionsgraph (Kante Akteur→Zielautor über `post_id`/`comment_id`/`quoted_id`/`reposted_id`); Paare mit Kanten in beide Richtungen / Paare mit ≥1 Kante. `max_chain_length`: längste Beitrags-Antwortkette (`CREATE_POST`/`CREATE_COMMENT`/`QUOTE_POST`/`REPOST`, je höchstens ein referenzierter früherer Beitrag) | ≥ 15 % Paare, Kette ≥ 3 |
 | L5 | `rejection_share` / `contra_reply_share` | `DISLIKE_POST`+`DISLIKE_COMMENT` / alle Like-/Dislike-Reaktionen; `contra_reply_share` bleibt in diesem Slice `null` (bräuchte Stance-Klassifikation) | ≥ 10 % |
 | L6 | (Persona-Haltungsverteilung) | nicht in diesem Slice — keine Haltung dominiert mit > 70 % | — |
 | L7 | `seed_echo_share` | Anteil eigener Post-/Quote-Aktionen, deren Inhalt eine Zahl aus dem Seed wörtlich oder eine wörtliche Tokenfolge ≥ 8 Wörter enthält; nur mit `--seed` | ≤ 20 % |
@@ -74,10 +74,18 @@ manuelle Prüfung bzw. Folgearbeit.
 
 ## Interpretationsentscheidungen (dokumentiert, nicht selbstverständlich)
 
-- **L4 `max_chain_length`** ist der längste simple Pfad im gerichteten
-  Reaktionsgraphen (nicht die Repost-Kette allein) — Kanten sind dieselben
-  wie für `mutual_pair_share`. Bei mehr als 400 Kanten wird die Pfadsuche
-  übersprungen (`data_quality_notes`), weil sie exponentiell ist.
+- **L4 `max_chain_length`** ist die längste Beitrags-Antwortkette, nicht der
+  längste Pfad im Akteur-Reaktionsgraphen (der bleibt `mutual_pair_share`
+  vorbehalten). Jeder inhaltliche Beitrag (`CREATE_POST`, `CREATE_COMMENT`,
+  `QUOTE_POST`, `REPOST`) referenziert höchstens einen früheren Beitrag über
+  `post_id`/`comment_id`/`quoted_id`/`reposted_id` bzw. `original_post_id` —
+  daraus ergibt sich in Zeitordnung ein Wald/DAG, dessen Tiefe sich in einem
+  Durchlauf (O(n), Memoisierung über die bereits gesehenen Beiträge)
+  berechnen lässt. Likes und Follows zählen nicht als Kettenglied. Ein
+  Startpost ohne `post_id` (Runde 0, siehe `_log_initial_post`) kann nicht
+  als Elternteil identifiziert werden — ein späterer Beitrag, der ihn
+  referenziert, wird dadurch selbst zur Wurzel statt die Kette zu
+  verlängern.
 - **L7-Match** ist wörtlich (case-sensitive), nicht semantisch: eine Zahl aus
   dem Seed oder eine 8-Wort-Folge muss exakt im Post-Inhalt auftauchen.
 - **`duplicate_log_lines`** zählt gezielt die #1713-Altlauf-Signatur (ein
