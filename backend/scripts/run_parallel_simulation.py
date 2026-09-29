@@ -283,6 +283,7 @@ try:
         create_tool_aware_loop,
         build_camel_function_tools,
         attach_tools_to_agents,
+        augment_profile_with_stance,
     )
     AGENT_TOOLS_AVAILABLE = True
 except ImportError as _e:
@@ -1447,7 +1448,21 @@ async def run_twitter_simulation(
     if not os.path.exists(profile_path):
         log_info(f"Error: Profile file does not exist: {profile_path}")
         return result
-    
+
+    # Issue #1713 Slice S6 (Teil 2, Rest von #1323): tool_loop bleibt hier
+    # fest None (#1215) — build_agent_prompt_with_tools wird in diesem Pfad
+    # nie aufgerufen. Die Haltung muss stattdessen im Profiltext stehen, den
+    # OASIS beim Graph-Aufbau in den System-Prompt jedes Agenten übernimmt.
+    # augment_profile_with_stance schreibt eine eigene Kopie, twitter_profiles.csv
+    # bleibt für Persona-Galerie/Interviews/Report unverändert.
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            profile_path = augment_profile_with_stance(
+                profile_path, config.get("agent_configs", []), platform="twitter"
+            )
+        except Exception as e:
+            log_info(f"augment_profile_with_stance (twitter) failed, using unaugmented profile: {e}")
+
     result.agent_graph = await generate_twitter_agent_graph(
         profile_path=profile_path,
         model=model,
@@ -1567,6 +1582,12 @@ async def run_twitter_simulation(
     )
 
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
+    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+    agent_configs_by_id = {
+        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
+    }
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
@@ -1614,6 +1635,7 @@ async def run_twitter_simulation(
                     agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                     agent_role = getattr(agent, 'profession', 'Unknown')
                     agent_bio = getattr(agent, 'bio', '')
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                     action = await tool_loop.decide_action(
                         agent=agent,
@@ -1622,7 +1644,11 @@ async def run_twitter_simulation(
                         agent_name=agent_name,
                         agent_role=agent_role,
                         agent_bio=agent_bio,
-                        language=config.get("language", "de")
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
                     )
                     actions[agent] = action
                 except Exception as e:
@@ -1751,7 +1777,17 @@ async def run_reddit_simulation(
     if not os.path.exists(profile_path):
         log_info(f"Error: Profile file does not exist: {profile_path}")
         return result
-    
+
+    # Issue #1713 Slice S6 (Teil 2, Rest von #1323): siehe Kommentar im
+    # Twitter-Zweig oben — derselbe Grund, derselbe Mechanismus.
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            profile_path = augment_profile_with_stance(
+                profile_path, config.get("agent_configs", []), platform="reddit"
+            )
+        except Exception as e:
+            log_info(f"augment_profile_with_stance (reddit) failed, using unaugmented profile: {e}")
+
     result.agent_graph = await generate_reddit_agent_graph(
         profile_path=profile_path,
         model=model,
@@ -1865,6 +1901,12 @@ async def run_reddit_simulation(
     )
 
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
+    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+    agent_configs_by_id = {
+        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
+    }
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
@@ -1912,6 +1954,7 @@ async def run_reddit_simulation(
                     agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                     agent_role = getattr(agent, 'profession', 'Unknown')
                     agent_bio = getattr(agent, 'bio', '')
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                     action = await tool_loop.decide_action(
                         agent=agent,
@@ -1920,7 +1963,11 @@ async def run_reddit_simulation(
                         agent_name=agent_name,
                         agent_role=agent_role,
                         agent_bio=agent_bio,
-                        language=config.get("language", "de")
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
                     )
                     actions[agent] = action
                 except Exception as e:

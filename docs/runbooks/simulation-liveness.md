@@ -99,6 +99,60 @@ manuelle Prüfung bzw. Folgearbeit.
 
 ---
 
+## Hebel: Haltung im Agenten-Prompt gegen Konsens/Echo (S6)
+
+L5/L6 markieren einen bekannten blinden Fleck: `contra_reply_share` und die
+Persona-Haltungsverteilung wurden in diesem Skript bewusst nicht berechnet,
+weil dafür eine Stance-Klassifikation fehlte. Slice S6 aus
+[#1713](https://github.com/arn0ld87/agora/issues/1713) (Rest von
+[#1323](https://github.com/arn0ld87/agora/issues/1323)) adressiert die
+Ursache eine Ebene früher, nicht die Messung: `stance`/`sentiment_bias`/
+`posts_per_hour`/`comments_per_hour` aus `simulation_config_agents.py`
+erreichten den Agenten-Prompt bisher nie — jeder Agent bekam dieselbe neutrale
+Ausgangslage, was Konsens/Echo nach einer Runde begünstigt.
+`backend/scripts/agent_tools.py::build_stance_section` ist die eine
+gemeinsame Textquelle für den Abschnitt „Deine Haltung" (Disposition, keine
+Verhaltensvorhersage, an die eigene Rolle gebunden, keine wörtliche
+Übernahme aus Bio/Beobachtung). Eine erzwungene Konfliktquote gibt es
+bewusst nicht (Maintainer-Entscheidung) — der Hebel ist die sichtbare
+Haltung, kein Streitauftrag.
+
+**Reichweite — beide Simulationspfade, Haltung genau einmal je Agent:**
+
+- `SinglePlatformRunner` (`sim_runtime/platform_runner.py`) reicht die
+  Felder in den je Runde erreichbaren ReAct-Tool-Loop durch
+  (`build_agent_prompt_with_tools`).
+- `run_parallel_simulation.py` (Standardpfad für Twitter+Reddit, natives
+  CAMEL-Function-Calling statt ReAct) setzt `tool_loop` seit
+  [#1215](https://github.com/arn0ld87/agora/issues/1215) fest auf `None` —
+  `build_agent_prompt_with_tools` bleibt dort unerreichbar, siehe
+  `test_parallel_runner_prompt_builder_is_reachable` (`xfail`,
+  `backend/tests/test_simulation_runtime.py`, bewusst unverändert
+  gelassen: der Test prüft nur diesen einen Mechanismus, nicht den
+  zweiten unten). Stattdessen trägt
+  `agent_tools.py::augment_profile_with_stance` denselben Abschnitt **vor**
+  dem Graph-Aufbau in eine eigene Kopie von `twitter_profiles.csv`/
+  `reddit_profiles.json` ein (Suffix `_with_stance`) — genau die Felder
+  (`user_char`/`persona`), die OASIS beim Aufbau des Agent-Graphs
+  (`generate_twitter_agent_graph`/`generate_reddit_agent_graph`) wörtlich in
+  den System-Prompt jedes Agenten übernimmt
+  (`oasis/social_platform/config/user.py::UserInfo.to_*_system_message`,
+  vendored, nicht gepatcht). Die Originaldateien bleiben unverändert, damit
+  Persona-Galerie, Interviews und Report weiter die unveränderte Persona
+  sehen. Für `SinglePlatformRunner` wird nicht zusätzlich augmentiert — die
+  Haltung stünde sonst zweimal im Kontext desselben Agenten.
+- Twitter-Profildateien führen keine Profession-Spalte
+  (`_save_twitter_csv`); die Haltungssatz-Rolle fällt dort wie im
+  ReAct-Pfad auf „Unknown" zurück (`agent.profession` ist auf keinem der
+  beiden CAMEL-Agent-Objekte gesetzt) — eine bestehende Lücke in der
+  Rollen-Plumbing, kein neuer Defekt von S6 und nicht Teil dieses Slice.
+
+L5/L6 bleiben weiterhin `null`/nicht berechnet — S6 ändert den Prompt/das
+Profil, nicht dieses Messskript. Ob sich `contra_reply_share` danach messbar
+verschiebt, ist eine offene Folgefrage, keine Zusage.
+
+---
+
 ## Fixtures für Regressionstests
 
 `backend/tests/fixtures/sim_liveness/clean_run/` und `.../legacy_run/` sind
