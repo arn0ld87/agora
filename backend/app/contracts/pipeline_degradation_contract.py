@@ -49,6 +49,14 @@ class DegradationKind(str, Enum):
     PERSONA_RULE_BASED_FALLBACK = "persona_rule_based_fallback"
     """Persona regelbasiert erzeugt statt vom LLM (Issue #1029, B-02)."""
 
+    PERSON_REPRESENTS_ORGANIZATION_MERGED = "person_represents_organization_merged"
+    """Person und die von ihr laut Graph-Relation vertretene Organisation
+    wurden zu einem Agenten zusammengelegt, statt als zwei getrennte Agenten
+    zu laufen (Issue #1713, #1470). Kein Ausfall im engeren Sinn — die
+    Zusammenlegung ist gewollt —, aber ohne diesen Eintrag bliebe unsichtbar,
+    dass eine gezählte Entität den Persona-Pool nicht mehr als eigener Agent
+    erreicht."""
+
 
 class DegradationSeverity(str, Enum):
     """Wie schwer der Ausfall wiegt.
