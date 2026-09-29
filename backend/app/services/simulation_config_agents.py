@@ -13,6 +13,10 @@ from typing import Any, Dict, List
 
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
+from .simulation_activity_policy import (
+    enforce_active_hours_floor,
+    enforce_activity_level_floor,
+)
 from .simulation_config_models import (
     AgentActivityConfig,
 )
@@ -89,7 +93,7 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
     summary_len = self.AGENT_SUMMARY_LENGTH
     for i, e in enumerate(entities):
         entity_list.append({'agent_id': start_idx + i, 'entity_name': e.name, 'entity_type': e.get_entity_type() or 'Unknown', 'summary': e.summary[:summary_len] if e.summary else ''})
-    prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **Official institutions** (University/GovernmentAgency): Low activity (0.1-0.3), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium activity (0.4-0.6), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.6-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium activity (0.4-0.6), medium-high influence (1.5-2.0)\n\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.0-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>\n        }},\n        ...\n    ]\n}}'
+    prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **activity_level has a hard floor of 0.5** (values below 0.5 are raised automatically) — use it to differentiate degree of engagement above that floor, not to make an entity inactive\n- **Official institutions** (University/GovernmentAgency): Lower engagement within the floor (0.5-0.6), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium-high activity (0.6-0.8), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.7-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium-high activity (0.6-0.8), medium-high influence (1.5-2.0)\n- **active_hours must cover at least 06:00-23:59** (hours outside that range are added automatically) — narrow it only within that window, never to fewer hours overall\n\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.5-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, must include 6-23, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>\n        }},\n        ...\n    ]\n}}'
     system_prompt = 'You are a social media behavior analysis expert. Return pure JSON and use DACH / Europe-Berlin activity habits by default.'
     try:
         result = self._call_llm_with_retry(prompt, system_prompt, AgentConfigsResponse)
@@ -103,7 +107,15 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
         cfg = llm_configs.get(agent_id, {})
         if not cfg:
             cfg = self._generate_agent_config_by_rule(entity)
-        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=cfg.get('activity_level', 0.5), posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23))), response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=cfg.get('stance', 'neutral'), influence_weight=cfg.get('influence_weight', 1.0))
+        # Issue #1713 Slice S4: dieselbe Untergrenze fuer LLM-Output (cfg aus
+        # llm_configs) und Regel-Fallback (cfg aus _generate_agent_config_by_rule)
+        # — beide landen hier im selben cfg-Dict, bevor AgentActivityConfig
+        # gebaut wird.
+        activity_level = enforce_activity_level_floor(cfg.get('activity_level', 0.5))
+        active_hours = enforce_active_hours_floor(
+            self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23)))
+        )
+        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=cfg.get('stance', 'neutral'), influence_weight=cfg.get('influence_weight', 1.0))
         configs.append(config)
     return configs
 
@@ -179,7 +191,7 @@ def _ensure_skeptic_quota(personas: List[AgentActivityConfig], min_ratio: float=
     result = list(personas)
     base_agent_id = max((p.agent_id for p in personas), default=-1) + 1
     for i in range(to_add):
-        synthetic = AgentActivityConfig(agent_id=base_agent_id + i, entity_uuid=f'synthetic-skeptic-{base_agent_id + i}', entity_name=f'Skeptiker {base_agent_id + i}', entity_type='Person', activity_level=0.7, posts_per_hour=0.5, comments_per_hour=1.2, active_hours=list(range(18, 23)), response_delay_min=5, response_delay_max=30, sentiment_bias=-0.5, stance='opposing', influence_weight=1.0)
+        synthetic = AgentActivityConfig(agent_id=base_agent_id + i, entity_uuid=f'synthetic-skeptic-{base_agent_id + i}', entity_name=f'Skeptiker {base_agent_id + i}', entity_type='Person', activity_level=enforce_activity_level_floor(0.7), posts_per_hour=0.5, comments_per_hour=1.2, active_hours=enforce_active_hours_floor(range(18, 23)), response_delay_min=5, response_delay_max=30, sentiment_bias=-0.5, stance='opposing', influence_weight=1.0)
         result.append(synthetic)
         logger.info('_ensure_skeptic_quota: synthetischen Skeptiker hinzugefügt (agent_id=%d, gesamt-skeptisch=%d/%d)', synthetic.agent_id, skeptic_count + i + 1, total + i + 1)
     return result
