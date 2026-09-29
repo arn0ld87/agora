@@ -64,6 +64,19 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _stub_twhin_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``install_bert_memory_profile`` ruft seit #1713 S3 per Default
+    ``ensure_twhin_cache()`` auf — ein echter ``huggingface_hub``-Aufruf.
+    Diese Datei prueft ausschliesslich das Memory-Profil-Patching und darf
+    keinen Netzwerk-/Cache-Seiteneffekt haben; das Cache-/Offline-Verhalten
+    selbst ist in ``test_twhin_cache_offline.py`` verriegelt.
+    """
+    import _sim_common as sc
+
+    monkeypatch.setattr(sc, "ensure_twhin_cache", lambda *_a, **_k: True)
+
+
 @pytest.fixture
 def fake_torch() -> mock.Mock:
     """
