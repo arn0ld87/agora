@@ -15,13 +15,6 @@ vi.mock('vue-router', () => ({
   useRoute,
 }))
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string) => key, locale: { value: 'de' } }),
-  createI18n: () => ({ install: vi.fn() }),
-}))
-
-import StepSimulationView from '../StepSimulationView.vue'
-
 describe('StepSimulationView — Navigation', () => {
   beforeEach(() => {
     routerPush.mockClear()
@@ -34,21 +27,10 @@ describe('StepSimulationView — Navigation', () => {
   })
 
   it('leitet go-back mit projectId aus route.query an StepEnvSetup weiter', async () => {
-    const wrapper = mount(StepSimulationView, {
+    const wrapper = mount((await import('../StepSimulationView.vue')).default, {
       props: { simulationId: 'sim_x' },
       global: {
-        mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
-          PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
-          PipelineStepper: true,
-          StepModelOverrideChip: true,
-          Tabs: {
-            name: 'Tabs',
-            props: ['modelValue', 'tabs', 'urlSync'],
-            emits: ['update:modelValue'],
-            template: '<section />',
-          },
           Step3Simulation: {
             name: 'Step3Simulation',
             props: ['simulationId'],
@@ -79,21 +61,10 @@ describe('StepSimulationView — Navigation', () => {
       query: {},
     } as never)
 
-    const wrapper = mount(StepSimulationView, {
+    const wrapper = mount((await import('../StepSimulationView.vue')).default, {
       props: { simulationId: 'sim_x' },
       global: {
-        mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
-          PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
-          PipelineStepper: true,
-          StepModelOverrideChip: true,
-          Tabs: {
-            name: 'Tabs',
-            props: ['modelValue', 'tabs', 'urlSync'],
-            emits: ['update:modelValue'],
-            template: '<section />',
-          },
           Step3Simulation: {
             name: 'Step3Simulation',
             props: ['simulationId'],

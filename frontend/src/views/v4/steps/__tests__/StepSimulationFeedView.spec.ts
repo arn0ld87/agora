@@ -11,7 +11,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { createRouter, createMemoryHistory } from 'vue-router'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 
@@ -97,13 +96,9 @@ vi.mock('@/components/v4/sim-feed/TwitterPost.vue', () => ({
 }))
 
 // useRoute mocken
-vi.mock('vue-router', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('vue-router')>()
-  return {
-    ...actual,
-    useRoute: () => ({ params: { simulationId: 'test-sim-1' } }),
-  }
-})
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: { simulationId: 'test-sim-1' } }),
+}))
 
 // useSimFeed batcht eingehende Posts pro Animation Frame (#1007). jsdoms
 // requestAnimationFrame loest erst nach ~16ms Realzeit aus; die Tests unten
@@ -143,37 +138,12 @@ const i18n = createI18n({
   },
 })
 
-// ---- Router ----
-// Redesign PR 2: die View aufloest jetzt intern router.resolve({ name:
-// 'StepSimulation', ... }) fuer den Rueckweg-Breadcrumb — die Route muss
-// im Test-Router existieren, auch wenn sie hier nicht besucht wird.
-const router = createRouter({
-  history: createMemoryHistory(),
-  routes: [
-    {
-      path: '/v4/simulation/:simulationId/feed',
-      name: 'StepSimulationFeed',
-      component: StepSimulationFeedView,
-    },
-    {
-      path: '/v4/simulation/:simulationId',
-      name: 'StepSimulation',
-      component: { template: '<div />' },
-    },
-  ],
-})
-
-// AppShell/PageHeader gestubbt (Redesign PR 2: View ist jetzt AppShell-
-// gewrappt, analog StepEnvSetupView.spec.ts) — Fokus dieser Suite bleibt
-// der Feed/Stream-Datenfluss, nicht die Shell selbst.
-const SHELL_STUBS = {
-  AppShell: { template: '<main><slot /></main>' },
-  PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
-}
-
+// Fix #1713: Kopf/Breadcrumbs/Tabs sitzen in SimulationLayout.vue (der
+// Elternroute); diese View ist nur noch der Feed-Inhalt und braucht darum
+// keinen Router mehr.
 function mountFeed() {
   return mount(StepSimulationFeedView, {
-    global: { plugins: [i18n, router], stubs: SHELL_STUBS },
+    global: { plugins: [i18n] },
   })
 }
 

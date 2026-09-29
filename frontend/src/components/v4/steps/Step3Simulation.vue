@@ -528,10 +528,13 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleToolPanelHotkey)
   stopPolling()
-  if (props.simulationId) {
-    clearSimFeed(props.simulationId)
-    clearSimClock(props.simulationId)
-  }
+  // Fix #1713 (Regression von #1007): clearSimFeed/clearSimClock liefen
+  // hier bislang beim Unmount — das feuert bei JEDEM Wechsel vom Pipeline-
+  // zum Feed-Tab, weil dieser Tab (v-if in der alten StepSimulationView)
+  // die Komponente unmountet. Der Feed-Bestand ging dabei verloren, obwohl
+  // die Feed-Ansicht direkt danach denselben Store weiterliest. Das Leeren
+  // gehoert an das Verlassen der GESAMTEN Simulation und liegt jetzt in
+  // SimulationLayout.vue (onBeforeUnmount).
 })
 
 watch(() => props.simulationId, (newId, oldId) => {
