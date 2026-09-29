@@ -267,10 +267,15 @@ def _role_matches(stem: str, identity_text: str) -> bool:
 
 
 def _identity_text(persona: Optional[dict], agent_name: str = "") -> str:
-    """Normalisierter Identitätstext: Name, Beruf, Typ, Anfang der Selbstbeschreibung."""
+    """Normalisierter Identitätstext: Name, Beruf, Typ, Affiliation, Anfang der Selbstbeschreibung."""
     parts: list[str] = [agent_name]
     if persona:
-        for key in ("name", "profession", "source_entity_type"):
+        # Issue #1713/#1470: Eine Person, die laut Graph-Relation eine
+        # Organisation vertritt, traegt ``affiliation``. Eine Selbst-
+        # referenz wie "wir, <Organisation>" ist dann die eigene Rolle,
+        # keine fremde — sonst waere jede vertretene Person eine
+        # ``unmatched_self_reference``-Meldung.
+        for key in ("name", "profession", "source_entity_type", "affiliation"):
             parts.append(str(persona.get(key) or ""))
         for key in ("user_char", "description", "bio", "persona"):
             parts.append(str(persona.get(key) or "")[:150])

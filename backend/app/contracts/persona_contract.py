@@ -53,6 +53,15 @@ class PersonaModel(BaseModel):
     source_entity_uuid: Optional[str] = None
     source_entity_type: Optional[str] = None
 
+    # Issue #1713/#1470: Eine Person, die laut Graph-Relation (z. B.
+    # WORKS_FOR/REPRESENTS, Vertreter/Sprecher/Leitung/Vorsitz) eine
+    # Organisation vertritt, bleibt der Agent — die Organisation wird nicht
+    # zusätzlich als eigener Agent geführt. ``affiliation`` traegt den
+    # Organisationsnamen als Kontext, damit die Person nicht als "die
+    # Organisation" spricht und Selbstreferenzen wie "wir, <Organisation>"
+    # nicht als Rollenvertauschung (Role-Leakage) fehlklassifiziert werden.
+    affiliation: Optional[str] = None
+
     # Issue #1246: "individual" oder "collective". Das Modell ist ein 1:1-
     # Spiegel von ``OasisAgentProfile`` und ``extra="forbid"`` — ohne dieses
     # Feld wuerde jedes serialisierte Profil, das ``persona_kind`` traegt, von

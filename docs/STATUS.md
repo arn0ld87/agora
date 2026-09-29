@@ -200,6 +200,8 @@ Report-Generierungen sind seit Slice 1.2 (#1265) je Simulation **serialisiert**:
 
 Offen bleibt LLM-gestützte Koreferenz (#1470, laut Plan außerhalb des Scopes). Die Persona-Art folgt weiterhin dem Typ; die semantische Klasse ergäbe dieselbe Entscheidung.
 
+- Repräsentiert eine Person laut belegter Graph-Relation (`WORKS_FOR`, `REPRESENTS`, `AFFILIATED_WITH`) eine Organisation, legt `_merge_persons_with_organizations()` (`backend/app/services/prepare_entities.py`) beide vor Dedupe/Cap zu einem Agenten zusammen — die Person bleibt der Agent, die Organisation trägt sie fortan als `affiliation` (`PersonaModel.affiliation`/`OasisAgentProfile.affiliation`). Vertreten mehrere Personen dieselbe Organisation (kollektiver Akteur) oder keine, bleibt die Organisation ein eigener Agent; im Mehrfach-Fall tragen alle Repräsentanten zusätzlich die Affiliation. Jede Zusammenlegung ist über `DegradationKind.PERSON_REPRESENTS_ORGANIZATION_MERGED` sichtbar protokolliert. Die Role-Leakage-Erkennung (`backend/app/services/sim/role_leakage.py`) zählt eine Selbstreferenz wie „wir, <Organisation>" seither als eigene Rolle statt als `unmatched_self_reference` ([#1713](https://github.com/arn0ld87/agora/issues/1713), [#1470](https://github.com/arn0ld87/agora/issues/1470)).
+
 ## Persona-Erzeugung
 
 - Der geroutete Provider erreicht die Persona-Generierung; CLI-Transporte fallen bei fehlender Base-URL nicht mehr auf fremde `.env`-HTTP-Werte zurück (#1418/#1422).

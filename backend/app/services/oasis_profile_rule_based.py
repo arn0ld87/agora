@@ -82,6 +82,7 @@ entity_summary :str ,
 entity_attributes :Dict [str ,Any ],
 generation_error :Optional [str ]=None ,
 demographic_slot :Optional [PersonaDemographicSlot ]=None ,
+affiliation :Optional [str ]=None ,
 )->Dict [str ,Any ]:
     """Regelbasiertes Profil — immer als solches gekennzeichnet (Issue #1029).
 
@@ -94,6 +95,11 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     bewusste Wahl (``use_llm=False``, kein Fehler) von einem Ausfall
     nach drei gescheiterten LLM-Versuchen. Nur der zweite Fall ist
     eine Degradierung.
+
+    ``affiliation`` (Issue #1713/#1470): gesetzt, wenn diese Person beim
+    Prepare-Lesen mit der Organisation zusammengelegt wurde, die sie laut
+    Graph-Relation vertritt. Bio und Freitext benennen das deterministisch,
+    ohne ein LLM zu brauchen.
     """
     payload =self ._build_rule_based_payload (
     entity_name ,entity_type ,entity_summary ,entity_attributes ,demographic_slot
@@ -101,6 +107,12 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     payload ["generation_source"]="rule_based"
     if generation_error :
         payload ["generation_error"]=generation_error
+    if affiliation :
+        bio =(payload .get ("bio")or "").strip ()
+        payload ["bio"]=f"{bio } | Spricht für {affiliation }"if bio else f"Spricht für {affiliation }"
+        persona_text =(payload .get ("persona")or "").strip ()
+        suffix =f"Spricht für {affiliation }."
+        payload ["persona"]=f"{persona_text } {suffix }"if persona_text else suffix
     return payload
 
 

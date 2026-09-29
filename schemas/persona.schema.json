@@ -4,6 +4,18 @@
   "additionalProperties": false,
   "description": "1:1-Spiegel von OasisAgentProfile, aber typsicher.",
   "properties": {
+    "affiliation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Affiliation"
+    },
     "age": {
       "anyOf": [
         {

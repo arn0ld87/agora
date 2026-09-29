@@ -5,7 +5,8 @@
       "enum": [
         "embedding_unavailable",
         "graph_below_threshold",
-        "persona_rule_based_fallback"
+        "persona_rule_based_fallback",
+        "person_represents_organization_merged"
       ],
       "title": "DegradationKind",
       "type": "string"
