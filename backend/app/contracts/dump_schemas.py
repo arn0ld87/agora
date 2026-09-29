@@ -119,6 +119,12 @@ from app.contracts.embedding_contract import (
     EmbeddingModelMetadata,
 )
 from app.contracts.interview_envelope_contract import InterviewEnvelope
+# Kennzahlen "Simulation lebt" (Issue #1713 Slice S0) — kein API-Endpoint,
+# kein Zod-Spiegel, siehe Docstring in simulation_liveness_contract.py.
+from app.contracts.simulation_liveness_contract import (
+    PlatformLiveness,
+    SimulationLivenessReport,
+)
 from app.contracts.document_manifest_contract import DocumentManifest, DocumentManifestEntry
 from app.contracts.run_manifest_contract import (
     ManifestInputs,
@@ -256,6 +262,9 @@ CONTRACTS: dict[str, type] = {
     "replay-request.schema.json": ReplayRequest,
     "replay-overrides.schema.json": ReplayOverrides,
     "replay-response.schema.json": ReplayResponse,
+    # Kennzahlen "Simulation lebt" (Issue #1713 Slice S0)
+    "platform-liveness.schema.json": PlatformLiveness,
+    "simulation-liveness-report.schema.json": SimulationLivenessReport,
 }
 
 

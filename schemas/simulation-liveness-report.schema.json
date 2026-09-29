@@ -1,0 +1,214 @@
+{
+  "$defs": {
+    "PlatformLiveness": {
+      "additionalProperties": false,
+      "description": "Kennzahlen fuer eine einzelne Plattform (``twitter``/``reddit``) oder\ndie ueber alle Plattformen aggregierte Sicht (``platform=\"gesamt\"``).\n\nDefinitionen (siehe ``docs/runbooks/simulation-liveness.md`` fuer\nZielwerte und Herleitung):\n\n- L1 ``actions_per_agent_round``: reale Aktionen (ohne Startposts aus\n  Runde 0, ``DO_NOTHING``, ``REFRESH``, ``SIGN_UP``) geteilt durch\n  (Agentenzahl * abgeschlossene Runden).\n- L2 ``active_agent_share_median``: Median je Runde von\n  (aktive Agenten in dieser Runde / Agentenzahl). \"Aktiv\" = mindestens\n  eine geloggte Aktion (inkl. ``DO_NOTHING``) in dieser Runde.\n- L3 ``own_post_share``: (``CREATE_POST`` + ``QUOTE_POST``, ohne\n  Startposts) / (``CREATE_POST`` + ``CREATE_COMMENT`` + ``QUOTE_POST`` +\n  ``REPOST``, ohne Startposts).\n- L4 ``mutual_pair_share``: gerichteter Akteur-Reaktionsgraph (Kante\n  Akteur -> Zielautor, Ziel ueber\n  ``post_id``/``comment_id``/``quoted_id``/``reposted_id`` aufgeloest).\n  Paare mit Kanten in beide Richtungen / Paare mit mindestens einer\n  Kante. ``max_chain_length``: laengste Beitrags-Antwortkette (nicht der\n  Agentengraph) \u2014 jeder inhaltliche Beitrag (``CREATE_POST``/\n  ``CREATE_COMMENT``/``QUOTE_POST``/``REPOST``) referenziert hoechstens\n  einen frueheren Beitrag ueber\n  ``post_id``/``comment_id``/``quoted_id``/``reposted_id`` bzw.\n  ``original_post_id``; Kantenzahl der laengsten Kette in diesem\n  Wald/DAG.\n- L5 ``rejection_share``: ``DISLIKE_POST`` + ``DISLIKE_COMMENT`` /\n  alle Like-/Dislike-Aktionen. ``contra_reply_share`` bleibt in diesem\n  Slice ``None`` (braeuchte Stance-/Sentiment-Klassifikation, out of\n  scope) \u2014 immer mit Note.\n- L7 ``seed_echo_share``: Anteil eigener Post-/Quote-Aktionen (ohne\n  Startposts), deren Inhalt eine Zahl aus dem Seed-Dokument woertlich\n  oder eine woertliche Tokenfolge von mindestens 8 Woertern aus dem Seed\n  enthaelt. Nur mit ``--seed``, sonst ``None``.\n- L8 ``duplicate_log_lines`` / ``round_fill_share``: Byte-identische\n  Log-Zeilen (Altlauf-Indikator, siehe #1713 Slice S1) bzw. Anteil der\n  Runden 1..max mit vollstaendigem ``round_start``/``round_end``-Paar.",
+      "properties": {
+        "action_type_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Action Type Counts",
+          "type": "object"
+        },
+        "actions_per_agent_round": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actions Per Agent Round"
+        },
+        "active_agent_share_median": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Agent Share Median"
+        },
+        "contra_reply_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contra Reply Share"
+        },
+        "data_quality_notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Data Quality Notes",
+          "type": "array"
+        },
+        "duplicate_log_lines": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duplicate Log Lines"
+        },
+        "max_chain_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Chain Length"
+        },
+        "mutual_pair_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mutual Pair Share"
+        },
+        "own_post_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Own Post Share"
+        },
+        "platform": {
+          "title": "Platform",
+          "type": "string"
+        },
+        "rejection_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rejection Share"
+        },
+        "round_fill_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Round Fill Share"
+        },
+        "seed_echo_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed Echo Share"
+        }
+      },
+      "required": [
+        "platform"
+      ],
+      "title": "PlatformLiveness",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/simulation-liveness-report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ergebnis von ``sim_liveness_metrics.py <run_dir>``.",
+  "properties": {
+    "agent_count": {
+      "title": "Agent Count",
+      "type": "integer"
+    },
+    "overall": {
+      "$ref": "#/$defs/PlatformLiveness"
+    },
+    "per_platform": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PlatformLiveness"
+      },
+      "title": "Per Platform",
+      "type": "object"
+    },
+    "platforms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Platforms",
+      "type": "array"
+    },
+    "rounds_completed": {
+      "title": "Rounds Completed",
+      "type": "integer"
+    },
+    "runner_status": {
+      "title": "Runner Status",
+      "type": "string"
+    },
+    "sim_id": {
+      "title": "Sim Id",
+      "type": "string"
+    },
+    "wall_clock_seconds": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wall Clock Seconds"
+    }
+  },
+  "required": [
+    "sim_id",
+    "platforms",
+    "agent_count",
+    "rounds_completed",
+    "runner_status",
+    "overall"
+  ],
+  "title": "SimulationLivenessReport",
+  "type": "object"
+}
