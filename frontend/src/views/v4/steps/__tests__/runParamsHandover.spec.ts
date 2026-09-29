@@ -70,21 +70,11 @@ function mountSimulation() {
     global: {
       mocks: i18nMock,
       stubs: {
-        // Slot-tragende Huellen muessen ihre Slots rendern, sonst sieht der
-        // Test die zu pruefenden Kinder nicht.
-        AppShell: { template: '<main><slot /></main>' },
-        PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
         Step3Simulation: {
           name: 'Step3Simulation',
           props: ['simulationId', 'maxRounds', 'simulationDays', 'budget'],
           emits: ['go-back'],
           template: '<section />',
-        },
-        Tabs: {
-          name: 'Tabs',
-          props: ['modelValue', 'tabs', 'urlSync'],
-          emits: ['update:modelValue'],
-          template: '<nav />',
         },
       },
     },
@@ -201,17 +191,7 @@ describe('Schritt 3: Uebernahme der Run-Parameter', () => {
 
     expect(step3.props('budget')).toEqual(DASHBOARD_BUDGET)
   })
-
-  it('nimmt die Query beim Tab-Wechsel mit', async () => {
-    route.query = { projectId: 'project_42', maxRounds: '7' }
-
-    await mountSimulation().getComponent({ name: 'Tabs' }).vm.$emit('update:modelValue', 'feed')
-
-    // Der Tab-Wechsel verlor vorher projectId und Run-Parameter.
-    expect(routerPush).toHaveBeenCalledWith({
-      name: 'StepSimulationFeed',
-      params: { simulationId: 'sim_x' },
-      query: { projectId: 'project_42', maxRounds: '7' },
-    })
-  })
+  // Fix #1713: der Tab-Wechsel (Pipeline<->Feed) sitzt jetzt in
+  // SimulationLayout.vue, nicht mehr in dieser View — siehe
+  // SimulationLayout.spec.ts ("nimmt die Query beim Tab-Wechsel mit").
 })

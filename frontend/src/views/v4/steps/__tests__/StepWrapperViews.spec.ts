@@ -214,7 +214,6 @@ async function mountView<T extends object>(
 // ── Imports nach Mocks ────────────────────────────────────────────────────────
 import StepGraphBuildView from '../StepGraphBuildView.vue'
 import StepEnvSetupView from '../StepEnvSetupView.vue'
-import StepSimulationView from '../StepSimulationView.vue'
 import StepReportView from '../StepReportView.vue'
 import StepInteractionView from '../StepInteractionView.vue'
 
@@ -265,30 +264,10 @@ describe('StepEnvSetupView', () => {
   })
 })
 
-describe('StepSimulationView', () => {
-  beforeEach(() => { lsMock.clear(); setActivePinia(createPinia()) })
-
-  it('mountet ohne Crash', async () => {
-    const w = await mountView(StepSimulationView, { simulationId: 'sim-99' }, '/v4/simulation/sim-99')
-    expect(w.exists()).toBe(true)
-  })
-
-  it('rendert AppShell', async () => {
-    const w = await mountView(StepSimulationView, { simulationId: 'sim-99' }, '/v4/simulation/sim-99')
-    expect(w.find('.app-shell').exists()).toBe(true)
-  })
-
-  it('rendert PipelineStepper mit currentStep=3', async () => {
-    const w = await mountView(StepSimulationView, { simulationId: 'sim-99' }, '/v4/simulation/sim-99')
-    const stepper = w.findComponent({ name: 'PipelineStepper' })
-    expect(stepper.props('currentStep')).toBe(3)
-  })
-
-  it('Breadcrumb enthaelt simulationId', async () => {
-    const w = await mountView(StepSimulationView, { simulationId: 'sim-99' }, '/v4/simulation/sim-99')
-    expect(w.text()).toContain('sim-99')
-  })
-})
+// Fix #1713: AppShell/PipelineStepper/Breadcrumbs sind aus StepSimulationView
+// in SimulationLayout.vue gewandert (gemeinsame Huelle fuer Pipeline- und
+// Feed-Tab) — die aequivalente Abdeckung liegt jetzt in
+// SimulationLayout.spec.ts.
 
 describe('StepReportView', () => {
   beforeEach(() => { lsMock.clear(); setActivePinia(createPinia()) })

@@ -95,15 +95,16 @@ describe('locale-coverage', () => {
   })
 
   it('sidebar.settings.* Keys existieren in beiden Locales (nur wire-Ziele)', () => {
-    const settingsIds = ['label', 'general', 'integrations', 'apiKeys', 'llmProviders', 'embedding', 'profile']
+    // Fix #1713 (Befund 7): auditLogs/llmRouting sind jetzt Teil der einen
+    // Einstellungen-Navigationsebene (Sidebar-Gruppe) — die vorherige
+    // IA-Matrix-Regel "hide" ist damit aufgehoben.
+    const settingsIds = [
+      'label', 'general', 'integrations', 'apiKeys', 'llmProviders',
+      'embedding', 'profile', 'auditLogs', 'llmRouting',
+    ]
     for (const id of settingsIds) {
       expect(deKeys).toContain(`sidebar.settings.${id}`)
       expect(enKeys).toContain(`sidebar.settings.${id}`)
-    }
-    // Hide-Ziele sind aus den Locales entfernt
-    for (const id of ['auditLogs', 'llmRouting']) {
-      expect(deKeys).not.toContain(`sidebar.settings.${id}`)
-      expect(enKeys).not.toContain(`sidebar.settings.${id}`)
     }
     // usersTeams bleibt als i18n-Schluessel erhalten, wird aber nicht in der Sidebar gerendert
     expect(deKeys).toContain('sidebar.settings.usersTeams')
