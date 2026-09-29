@@ -203,9 +203,11 @@ describe('Sidebar', () => {
     const text = wrapper.text()
     // DE-Locale: general="Allgemein" — wire-Ziel laut IA-Matrix
     expect(text).toContain('Allgemein')
-    // IA-Matrix: Audit Logs und LLM-Routing sind NICHT in der Sidebar
-    expect(text).not.toContain('Audit-Logs')
-    expect(text).not.toContain('LLM-Routing')
+    // Fix #1713 (Befund 7): LLM-Routing und Audit-Logs sind jetzt Teil der
+    // einen Einstellungen-Navigationsebene (vorher nur in SettingsOverlay,
+    // eine zweite, parallele Navigation).
+    expect(text).toContain('Audit-Logs')
+    expect(text).toContain('LLM-Routing')
   })
 
   // Slice 7.3.2: Breakpoint-Vereinheitlichung — Mobile = "< 768px" (SSoT:

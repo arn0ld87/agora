@@ -890,6 +890,8 @@
       "apiKeys": "API Keys",
       "llmProviders": "LLM Providers",
       "embedding": "Embedding configuration",
+      "llmRouting": "LLM Routing",
+      "auditLogs": "Audit logs",
       "profile": "Profile",
       "providerKeys": "Provider keys",
       "previewBadge": "Preview"

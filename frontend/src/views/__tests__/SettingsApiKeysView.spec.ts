@@ -4,7 +4,9 @@
  * Prüft:
  *  1. View mountet ohne Crash.
  *  2. PageHeader erhält lokalisierten Titel.
- *  3. Sektionsliste (SettingsOverlay) markiert "API-Schlüssel" als aktiv.
+ *  3. SettingsOverlay bettet den Inhalt ein (Fix #1713: reiner Layout-
+ *     Wrapper, keine eigene Sektionsliste mehr — die Sidebar-Gruppe
+ *     „Einstellungen” ist die einzige Navigationsebene, siehe Sidebar.spec.ts).
  *  4. "Schlüssel anlegen"-Button ist sichtbar.
  *  5. i18n-Keys lösen auf (kein "settings.v4.apiKeys.*"-Rohdot im DOM).
  */
@@ -92,11 +94,10 @@ describe('SettingsApiKeysView (Slice G2)', () => {
     expect(header.props('title')).toBe('API-Schlüssel')
   })
 
-  it('Test 3: Sektionsliste (SettingsOverlay) markiert "API-Schlüssel" als aktiv', async () => {
+  it('Test 3: SettingsOverlay bettet den Inhalt ein, ohne eigene Nav zu rendern', async () => {
     const w = await mountView()
-    const active = w.find('a[aria-current="page"]')
-    expect(active.exists()).toBe(true)
-    expect(active.text()).toBe('API-Schlüssel')
+    expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-overlay"] nav').exists()).toBe(false)
   })
 
   it('Test 4: "Schlüssel anlegen"-Button ist sichtbar', async () => {
