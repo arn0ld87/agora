@@ -27,6 +27,7 @@ from app.contracts.readiness_contract import (
     PostgresReadinessCheck,
 )
 from app.contracts.report_status_contract import ReportStatusResponse
+from app.contracts.simulation_status_contract import SimulationStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
     PipelineDegradationReport,
@@ -169,6 +170,8 @@ CONTRACTS: dict[str, type] = {
     # /readyz-Embedding-Config-Check mit Env/Store-Divergenz (Issue #1417)
     "readiness-embedding-config-check.schema.json": EmbeddingConfigReadinessCheck,
     "report-status-response.schema.json": ReportStatusResponse,
+    # Statusantwort fuer GET /api/simulation/<id> (Issue #1713)
+    "simulation-status-response.schema.json": SimulationStatusResponse,
     "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,

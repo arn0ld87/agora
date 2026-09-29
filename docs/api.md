@@ -91,6 +91,8 @@ Wichtige Konfliktcodes:
 
 Nutzer-Stop und Infrastrukturabbruch sind unterschiedliche Zustände: ein expliziter Stop wird als `stopped` mit `termination_reason="user_stop"` geführt; stale Prozesse nach Worker-/Container-Restart können durch Startup-Reconciliation als `failed/process_restart` markiert werden.
 
+`GET /api/simulation/<id>` projiziert seit #1713 seinen `status` zur Lesezeit: `run_state.json`'s `runner_status` (terminalisiert vom Monitor als `completed`/`failed`/`stopped`) wird nur angewendet, wenn der persistierte `SimulationState.status` noch `running` ist — vorher blieb die Antwort dauerhaft `running`, obwohl die Simulation längst beendet war. Der persistierte Zustand in `state.json` bleibt unverändert; ein bereits `failed` persistierter Status wird nicht überschrieben. Die Antwort trägt zusätzlich den Rohwert `runner_status` (`null` ohne Run-State) und `interview_env_alive` (`SimulationRunner.check_env_alive`). Vertrag: `backend/app/contracts/simulation_status_contract.py::SimulationStatusResponse`.
+
 `POST /api/simulation/<id>/branch` akzeptiert seit #886 eine kanonische `ai_model_ref` (Provider-Connection + Modell, `BranchOverrides`-Contract, `backend/app/contracts/branch_request_contract.py`) statt nur des Legacy-Strings `llm_model`; eine unbekannte oder deaktivierte Connection antwortet mit HTTP 400, die Kombination beider Felder ebenso. `llm_model` bleibt als deprecated Key erhalten. `POST /api/runs/<id>/replay` reicht seither die volle `AiModelRef` an `create_branch` durch statt nur die `model_id`.
 
 ### Report — `/api/report`

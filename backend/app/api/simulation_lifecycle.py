@@ -10,11 +10,17 @@ from opentelemetry import trace
 from . import simulation_bp
 from ..config import Config
 from ..contracts.model_preset_contract import AvailableModelsResponse, ModelPreset
+from ..contracts.simulation_status_contract import SimulationStatusResponse
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
 from ..services.persona_library import PersonaLibrary
 from ..services.persona_prepare_service import prepare_from_personas
-from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..services.simulation_manager import (
+    SimulationManager,
+    SimulationStatus,
+    derive_effective_status,
+)
+from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_graph_id, validate_project_id, validate_simulation_id
@@ -214,10 +220,24 @@ def get_simulation(simulation_id: str):
             message=f"Simulation does not exist: {simulation_id}",
         )
 
+    # Issue #1713 Slice S2: ``state.status`` bleibt in ``state.json``
+    # unveraendert RUNNING, bis ``POST /close-env`` COMPLETED persistiert.
+    # Der Monitor terminalisiert nur ``run_state.json``'s ``runner_status`` —
+    # ohne diese Projektion meldet die Route nach Simulationsende weiter
+    # "running". Reine Lesezeit-Projektion, kein Schreibpfad.
+    run_state = SimulationRunner.get_run_state(simulation_id)
+    runner_status = run_state.runner_status if run_state else None
+    effective_status = derive_effective_status(state.status, runner_status)
+
     result = state.to_dict()
-    if state.status == SimulationStatus.READY:
+    result["status"] = effective_status.value
+    result["runner_status"] = runner_status.value if runner_status else None
+    result["interview_env_alive"] = SimulationRunner.check_env_alive(simulation_id)
+    if effective_status == SimulationStatus.READY:
         result["run_instructions"] = manager.get_run_instructions(simulation_id)
-    return json_success(result)
+
+    validated = SimulationStatusResponse.model_validate(result)
+    return json_success(validated.model_dump(mode="json"))
 
 
 @simulation_bp.route('/list', methods=['GET'])
