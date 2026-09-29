@@ -1,7 +1,7 @@
 """Issue #1713/#1470 — Person und ihre Organisation werden zu einem Agenten.
 
 Bisher liefen eine Person und die Organisation, die sie laut Graph-Relation
-vertritt (z. B. ``WORKS_FOR``, ``REPRESENTS``), als zwei getrennte Agenten.
+vertritt (``REPRESENTS``), als zwei getrennte Agenten.
 Das erzeugte in der Role-Leakage-Erkennung die Folgemeldung
 ``unmatched_self_reference``, sobald die Person-Persona im Simulationstext
 „wir, <Organisation>" schrieb, ohne dass irgendeine Persona diese
@@ -45,7 +45,7 @@ def _entity(
     )
 
 
-def _represents_edge(target_uuid: str, edge_name: str = "WORKS_FOR") -> dict:
+def _represents_edge(target_uuid: str, edge_name: str = "REPRESENTS") -> dict:
     return {
         "direction": "outgoing",
         "edge_name": edge_name,
@@ -99,6 +99,24 @@ class TestOrganisationOhneVertreterinBleibtEigenerAgent:
         Zusammenlegung darf sich nicht auf eine Namensheuristik stützen."""
         org = _entity("Berufsförderungswerk Leipzig", "Organization")
         person = _entity("Berufsförderungswerk Leipzig e.V.", "Official", related_edges=[])
+
+        result = _merge_persons_with_organizations([person, org])
+
+        assert {e.uuid for e in result} == {person.uuid, org.uuid}
+        assert person.affiliation is None
+
+
+class TestZugehoerigkeitIstKeineVertretung:
+    @pytest.mark.parametrize("edge_name", ["WORKS_FOR", "AFFILIATED_WITH", "works_for"])
+    def test_arbeitet_fuer_ersetzt_die_organisation_nicht(self, edge_name: str) -> None:
+        """Eine Betriebsrätin, die für die Klinik arbeitet, spricht nicht für
+        die Klinik. Nur REPRESENTS belegt Vertretung."""
+        org = _entity("Kliniken Hollerau gGmbH", "Organization")
+        person = _entity(
+            "Anke Wübbena",
+            "Person",
+            related_edges=[_represents_edge(org.uuid, edge_name)],
+        )
 
         result = _merge_persons_with_organizations([person, org])
 

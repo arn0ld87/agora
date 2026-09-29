@@ -17,15 +17,18 @@ if TYPE_CHECKING:
     from .simulation_manager import SimulationState
 
 
-# Issue #1713/#1470: Relationstypen, die der system-eigene Ontologie-
+# Issue #1713/#1470: Relationstyp, den der system-eigene Ontologie-
 # Generator fuer "Person vertritt Organisation" vorsieht (siehe
-# ontology_generator.py, Abschnitt "Relationship Type Reference": WORKS_FOR,
-# REPRESENTS, AFFILIATED_WITH). Bewusst eine feste Liste bestehender, vom
+# ontology_generator.py, Abschnitt "Relationship Type Reference": REPRESENTS).
+# Bewusst eine feste Liste bestehender, vom
 # System selbst erzeugbarer Relationstypen — keine Namensheuristik auf
 # Personen- oder Organisationsnamen. Vergleich case-insensitiv, weil
 # projektspezifische Ontologien den Relationsnamen leicht abweichend
 # schreiben koennen (z. B. "works_for").
-_REPRESENTATION_RELATION_TYPES = frozenset({"WORKS_FOR", "REPRESENTS", "AFFILIATED_WITH"})
+# Nur REPRESENTS: WORKS_FOR/AFFILIATED_WITH belegen Zugehoerigkeit, keine
+# Vertretung. Sonst wuerde z. B. eine Betriebsraetin, die fuer die Klinik
+# arbeitet, die Klinik als Akteur ersetzen und "fuer sie sprechen".
+_REPRESENTATION_RELATION_TYPES = frozenset({"REPRESENTS"})
 
 def _strip_leading_article (tokens :list [str ])->list [str ]:
     """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""

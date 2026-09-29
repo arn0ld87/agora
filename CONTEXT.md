@@ -99,7 +99,7 @@ Aus Graph-Entitäten werden Persona-Kandidaten gebildet. Der aktuelle Pfad kombi
 5. Unterscheidung zwischen Individual- und Kollektiv-Personas,
 6. Identitäts-/Namensangleichung,
 7. Reserve-/Backfill-Logik,
-8. Person-Organisation-Zusammenlegung: vertritt eine Person laut belegter Graph-Relation (`WORKS_FOR`/`REPRESENTS`/`AFFILIATED_WITH`) eine Organisation, bleibt sie der einzige Agent und trägt die Organisation als `affiliation`; vertreten mehrere Personen dieselbe Organisation oder keine, bleibt die Organisation ein eigener Agent (#1713/#1470).
+8. Person-Organisation-Zusammenlegung: vertritt eine Person laut belegter Graph-Relation (`REPRESENTS`; `WORKS_FOR`/`AFFILIATED_WITH` gelten bewusst nicht als Vertretung) eine Organisation, bleibt sie der einzige Agent und trägt die Organisation als `affiliation`; vertreten mehrere Personen dieselbe Organisation oder keine, bleibt die Organisation ein eigener Agent (#1713/#1470).
 
 Der geroutete Provider ist für die Persona-Generierung kanonisch. Eine aufgelöste `cli`-Route darf nicht mit `.env`-HTTP-Endpoint oder fremdem API-Key vermischt werden (#1418/#1422).
 
