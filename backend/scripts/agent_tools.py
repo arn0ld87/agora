@@ -655,6 +655,58 @@ def wrap_untrusted(label: str, text: str, limit: int) -> str:
 
 # ── Prompt Builder ──
 
+# Issue #1713 Slice S6 (Befund 7): stance/sentiment_bias werden pro Agent in
+# simulation_config_agents.py erzeugt, erreichten den Agenten-Prompt bisher
+# aber nie — Konsens/Echo nach einer Runde. `_describe_stance` formuliert die
+# Haltung als Disposition ("du siehst ... kritisch"), nie als Verhaltens-
+# vorhersage ("du wirst ... widersprechen").
+_STANCE_ATTITUDE = {
+    "supportive": "positiv",
+    "opposing": "kritisch",
+    "neutral": "abwägend",
+    "observer": "beobachtend",
+}
+
+
+def _describe_stance(stance: str, sentiment_bias: Optional[float], agent_role: str) -> str:
+    """Haltungssatz aus stance/sentiment_bias, gebunden an die eigene Rolle.
+
+    Bewusst ohne fremde Namen/Rollen (Role-Leakage, #1323) und ohne
+    Verhaltensvorhersage — beschreibt eine Disposition, kein Ergebnis.
+    """
+    bias = sentiment_bias if sentiment_bias is not None else 0.0
+    intensity = "sehr " if abs(bias) >= 0.5 else ""
+    if stance == "observer":
+        return (
+            f"Du beobachtest das Geschehen aus deiner Rolle als {agent_role} eher, "
+            "ohne aktiv Position zu beziehen."
+        )
+    if stance == "neutral" or stance not in _STANCE_ATTITUDE:
+        return (
+            f"Du bist in dieser Frage aus deiner Rolle als {agent_role} noch "
+            "unentschieden und wägst ab."
+        )
+    attitude = _STANCE_ATTITUDE[stance]
+    return f"Du siehst das Vorhaben aus deiner Rolle als {agent_role} {intensity}{attitude}."
+
+
+def _describe_posting_tendency(
+    posts_per_hour: Optional[float], comments_per_hour: Optional[float]
+) -> str:
+    """Beitragsneigung relativ aus posts_per_hour/comments_per_hour, ohne die
+    Rohzahlen aus dem Material wörtlich zu übernehmen."""
+    if posts_per_hour is None or comments_per_hour is None:
+        return ""
+    if posts_per_hour <= 0 and comments_per_hour <= 0:
+        return ""
+    ratio_threshold = 1.3
+    if posts_per_hour > comments_per_hour * ratio_threshold:
+        return "Du meldest dich eher mit eigenen Beiträgen zu Wort als mit Reaktionen."
+    if comments_per_hour > posts_per_hour * ratio_threshold:
+        return "Du meldest dich eher mit Reaktionen auf andere zu Wort als mit eigenen Beiträgen."
+    return "Du beteiligst dich etwa gleich häufig mit eigenen Beiträgen wie mit Reaktionen."
+
+
 def build_agent_prompt_with_tools(
     agent_name: str,
     agent_role: str,
@@ -662,7 +714,11 @@ def build_agent_prompt_with_tools(
     observation: str,
     available_actions: List[str],
     tools: AgentToolRegistry,
-    language: str = "de"
+    language: str = "de",
+    stance: Optional[str] = None,
+    sentiment_bias: Optional[float] = None,
+    posts_per_hour: Optional[float] = None,
+    comments_per_hour: Optional[float] = None,
 ) -> str:
     """
     Build a prompt that instructs the agent to use tools before acting.
@@ -675,6 +731,13 @@ def build_agent_prompt_with_tools(
         available_actions: List of action types the agent can take
         tools: Tool registry (for descriptions)
         language: Response language ('de' or 'en')
+        stance: Persona attitude ("supportive"/"opposing"/"neutral"/"observer")
+            from AgentActivityConfig. ``None`` for legacy configs without it —
+            the "Deine Haltung" section is then omitted, not defaulted.
+        sentiment_bias: -1.0..1.0 intensity of ``stance``.
+        posts_per_hour: Expected own-post frequency, used relative to
+            ``comments_per_hour`` to describe posting tendency.
+        comments_per_hour: Expected reaction frequency.
 
     Returns:
         Prompt string ready for LLM
@@ -683,10 +746,24 @@ def build_agent_prompt_with_tools(
 
     lang_instruction = "German" if language == "de" else "English"
 
+    stance_block = ""
+    if stance:
+        stance_sentence = _describe_stance(stance, sentiment_bias, agent_role)
+        posting_sentence = _describe_posting_tendency(posts_per_hour, comments_per_hour)
+        stance_block = (
+            "\n## Deine Haltung\n"
+            f"{stance_sentence}"
+            + (f" {posting_sentence}" if posting_sentence else "")
+            + "\nReaktionen dürfen zustimmen oder widersprechen, je nachdem was zu "
+            "deiner Haltung passt. Wiederhole keine Formulierungen aus deiner Bio "
+            "oder der Beobachtung wörtlich — ordne Zahlen und Fakten aus deinen "
+            "Quellen mit deiner eigenen Einschätzung ein.\n"
+        )
+
     prompt = f"""You are {agent_name}, a {agent_role}.
 
 Bio: {agent_bio[:300]}
-
+{stance_block}
 ## Current Situation
 {UNTRUSTED_DATA_INSTRUCTION}
 {wrap_untrusted("timeline", observation, 1500)}
@@ -697,10 +774,13 @@ You can perform one of these actions: {action_names}
 {tools.tools_description_text}
 
 ## Tool Usage Rules (IMPORTANT)
-1. You SHOULD call a tool FIRST to gather real information before posting (CREATE_POST).
-   Especially use `web_search` or `web_fetch` when the topic mentions
-   a specific website, blog, company, or person — never invent facts.
-   Call a tool only when the action needs facts you do not already have.
+1. Call a tool FIRST only when your action will assert a new fact you do not
+   already have (a name, number, date, or claim not already visible in your
+   timeline) — especially when the topic mentions a specific website, blog,
+   company, or person. Never invent facts; use `web_search` or `web_fetch`
+   to verify them instead. An opinion-only contribution (your own
+   assessment, agreement, or disagreement, without a new factual claim)
+   does not require a tool call.
    For trivial reactions where the observation already shows the target
    (LIKE_POST, DISLIKE_POST, DISLIKE_COMMENT, LIKE_COMMENT, FOLLOW, MUTE,
    REPOST, QUOTE_POST, DO_NOTHING), skip tools and output the action directly.
@@ -819,7 +899,11 @@ class ToolAwareActionLoop:
         agent_name: str = "",
         agent_role: str = "",
         agent_bio: str = "",
-        language: str = "de"
+        language: str = "de",
+        stance: Optional[str] = None,
+        sentiment_bias: Optional[float] = None,
+        posts_per_hour: Optional[float] = None,
+        comments_per_hour: Optional[float] = None,
     ) -> Any:
         """
         Decide agent action with optional tool use.
@@ -836,7 +920,11 @@ class ToolAwareActionLoop:
             observation=observation,
             available_actions=available_actions,
             tools=self.tools,
-            language=language
+            language=language,
+            stance=stance,
+            sentiment_bias=sentiment_bias,
+            posts_per_hour=posts_per_hour,
+            comments_per_hour=comments_per_hour,
         )
 
         messages = [{"role": "user", "content": prompt}]

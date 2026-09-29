@@ -99,6 +99,38 @@ manuelle Prüfung bzw. Folgearbeit.
 
 ---
 
+## Hebel: Haltung im Agenten-Prompt gegen Konsens/Echo (S6)
+
+L5/L6 markieren einen bekannten blinden Fleck: `contra_reply_share` und die
+Persona-Haltungsverteilung wurden in diesem Skript bewusst nicht berechnet,
+weil dafür eine Stance-Klassifikation fehlte. Slice S6 aus
+[#1713](https://github.com/arn0ld87/agora/issues/1713) (Rest von
+[#1323](https://github.com/arn0ld87/agora/issues/1323)) adressiert die
+Ursache eine Ebene früher, nicht die Messung: `stance`/`sentiment_bias`/
+`posts_per_hour`/`comments_per_hour` aus `simulation_config_agents.py`
+erreichten den Agenten-Prompt bisher nie — jeder Agent bekam dieselbe neutrale
+Ausgangslage, was Konsens/Echo nach einer Runde begünstigt.
+`backend/scripts/agent_tools.py::build_agent_prompt_with_tools` rendert seit
+S6 einen Abschnitt „Deine Haltung" (Disposition, keine
+Verhaltensvorhersage, an die eigene Rolle gebunden, keine wörtliche
+Übernahme aus Bio/Beobachtung). Eine erzwungene Konfliktquote gibt es
+bewusst nicht (Maintainer-Entscheidung) — der Hebel ist die sichtbare
+Haltung, kein Streitauftrag.
+
+Reichweite: `SinglePlatformRunner` (`sim_runtime/platform_runner.py`) reicht
+die Felder in den produktiv erreichbaren Tool-Loop durch.
+`run_parallel_simulation.py` reicht sie ebenfalls durch, bleibt dort aber
+wegen des seit [#1215](https://github.com/arn0ld87/agora/issues/1215) fest
+auf `None` gesetzten `tool_loop` unverändert unerreichbar — dieser Pfad ist
+kein Regressionsziel von S6, siehe `test_parallel_runner_prompt_builder_is_reachable`
+(`xfail`, `backend/tests/test_simulation_runtime.py`).
+
+L5/L6 bleiben nach S6 weiterhin `null`/nicht berechnet — S6 ändert den
+Prompt, nicht dieses Messskript. Ob sich `contra_reply_share` danach messbar
+verschiebt, ist eine offene Folgefrage, keine Zusage.
+
+---
+
 ## Fixtures für Regressionstests
 
 `backend/tests/fixtures/sim_liveness/clean_run/` und `.../legacy_run/` sind
