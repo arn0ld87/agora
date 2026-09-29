@@ -97,6 +97,16 @@ except ImportError:
     create_tool_aware_loop = None  # type: ignore[assignment]
     AGENT_TOOLS_AVAILABLE = False
 
+# Action-Log (#1713): der Single-Platform-Pfad schrieb bisher nie
+# ``actions.jsonl`` — ``action_logger``/``oasis_action_ingest`` liegen wie
+# ``agent_tools`` auf Ebene ``scripts/`` und sind dort bare-importierbar.
+from action_logger import PlatformActionLogger
+from oasis_action_ingest import (
+    fetch_new_actions_from_db,
+    get_agent_names_from_config,
+    get_max_trace_rowid,
+)
+
 # Global variables: for signal handling (von den Entry-Point-``main``
 # Funktionen gesetzt; ``run`` liest ``_shutdown_event``).
 _shutdown_event = None
@@ -193,6 +203,7 @@ class SinglePlatformRunner:
         self.ipc_handler = None
         self.tool_loop = None
         self.redis_bridge = None  # Issue #17: optional Redis Pub/Sub listener
+        self.action_logger = None  # Issue #1713: gesetzt in run()
 
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration file"""
@@ -407,6 +418,40 @@ class SinglePlatformRunner:
         else:
             initial_actions[agent] = [existing, action]
 
+    def _log_round_actions(
+        self,
+        db_path: str,
+        round_num: int,
+        agent_names: Dict[int, str],
+        last_rowid: int,
+        simulated_minutes_after: int,
+    ) -> tuple[int, int]:
+        """Liest die seit ``last_rowid`` neuen Trace-Zeilen, loggt sie mit
+        ``round_num`` und schliesst die Runde ab (#1713).
+
+        Extrahiert aus ``run()`` als eigene Methode, damit sich der
+        Single-Platform-Action-Log-Pfad ohne vollen OASIS-Env-Aufbau testen
+        laesst — vorher schrieb dieser Runner nie ``actions.jsonl``.
+
+        Returns:
+            (actions_logged, new_last_rowid)
+        """
+        actual_actions, new_last_rowid = fetch_new_actions_from_db(
+            db_path, last_rowid, agent_names
+        )
+        for action_data in actual_actions:
+            self.action_logger.log_action(
+                round_num=round_num,
+                agent_id=action_data['agent_id'],
+                agent_name=action_data['agent_name'],
+                action_type=action_data['action_type'],
+                action_args=action_data['action_args'],
+            )
+        self.action_logger.log_round_end(
+            round_num, len(actual_actions), simulated_minutes=simulated_minutes_after
+        )
+        return len(actual_actions), new_last_rowid
+
     async def run(self, max_rounds: int = None):
         """Run single-platform simulation
 
@@ -510,6 +555,13 @@ class SinglePlatformRunner:
         await self.env.reset()
         print("Environment initialization complete\n")
 
+        # Action-Log (#1713): ein Logger je Plattform, wie im Parallel-Runner.
+        self.action_logger = PlatformActionLogger(self.PLATFORM_SLUG, self.simulation_dir)
+        self.action_logger.log_simulation_start(self.config)
+        agent_names = get_agent_names_from_config(self.config)
+        total_actions = 0
+        last_rowid = 0  # Track last processed row in Database (siehe run_parallel_simulation.py)
+
         # Initialize IPC handler
         self.ipc_handler = IPCHandler(
             self.simulation_dir,
@@ -553,6 +605,11 @@ class SinglePlatformRunner:
         event_config = self.config.get("event_config", {})
         initial_posts = event_config.get("initial_posts", [])
 
+        # Log round 0 start (initial event phase) — regardless of whether
+        # there are initial posts, gleiches Muster wie run_parallel_simulation.py.
+        self.action_logger.log_round_start(0, 0)
+        initial_action_count = 0
+
         if initial_posts:
             print(f"Execute initial events ({len(initial_posts)}initial posts)...")
             initial_actions = {}
@@ -562,6 +619,15 @@ class SinglePlatformRunner:
                 try:
                     agent = self.env.agent_graph.get_agent(agent_id)
                     self._assign_initial_action(initial_actions, agent, content)
+                    self.action_logger.log_action(
+                        round_num=0,
+                        agent_id=agent_id,
+                        agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
+                        action_type="CREATE_POST",
+                        action_args={"content": content},
+                    )
+                    total_actions += 1
+                    initial_action_count += 1
                 except Exception as e:
                     print(f"  Warning: Unable to create for Agent {agent_id}Create initial posts: {e}")
 
@@ -580,6 +646,12 @@ class SinglePlatformRunner:
                     f"{'' if published == 1 else 's'} from {len(initial_actions)} "
                     f"distinct agent{'' if len(initial_actions) == 1 else 's'}"
                 )
+                # Initial-Posts sind bereits oben geloggt — last_rowid auf den
+                # aktuellen DB-Stand ziehen, sonst liest Runde 1 dieselben
+                # Trace-Zeilen erneut (#1713, wie run_parallel_simulation.py).
+                last_rowid = get_max_trace_rowid(db_path)
+
+        self.action_logger.log_round_end(0, initial_action_count)
 
         print("\nStart simulation loop...")
         start_time = datetime.now()
@@ -621,7 +693,13 @@ class SinglePlatformRunner:
                 self.env, simulated_hour, round_num
             )
 
+            # Log round start regardless of active agents (siehe Parallel-Runner)
+            self.action_logger.log_round_start(round_num + 1, simulated_hour)
+
             if not active_agents:
+                self.action_logger.log_round_end(
+                    round_num + 1, 0, simulated_minutes=simulated_minutes + minutes_per_round
+                )
                 continue
 
             # Build actions
@@ -660,6 +738,13 @@ class SinglePlatformRunner:
             # Execute action
             await self.env.step(actions)
 
+            # Get actual executed actions from Database and log (#1713)
+            round_actions, last_rowid = self._log_round_actions(
+                db_path, round_num + 1, agent_names, last_rowid,
+                simulated_minutes + minutes_per_round,
+            )
+            total_actions += round_actions
+
             # Print progress
             if (round_num + 1) % 10 == 0 or round_num == 0:
                 elapsed = (datetime.now() - start_time).total_seconds()
@@ -668,6 +753,8 @@ class SinglePlatformRunner:
                       f"Round {round_num + 1}/{total_rounds} ({progress:.1f}%) "
                       f"- {len(active_agents)} agents active "
                       f"- elapsed: {elapsed:.1f}s")
+
+        self.action_logger.log_simulation_end(total_rounds, total_actions)
 
         total_elapsed = (datetime.now() - start_time).total_seconds()
         print("\nSimulation loop completed!")
