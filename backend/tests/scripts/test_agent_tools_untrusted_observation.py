@@ -400,6 +400,16 @@ def test_build_stance_section_empty_without_stance() -> None:
     assert agent_tools.build_stance_section(None, None, "Analyst") == ""
 
 
+@pytest.mark.parametrize("role", ["", "Unknown", "unknown", "  "])
+def test_build_stance_section_without_known_role_has_no_placeholder(role: str) -> None:
+    """Ohne bekannte Rolle darf kein Platzhalter wie "als Unknown" im
+    System-Prompt landen (Twitter-CSV hat keine Profession-Spalte)."""
+    section = agent_tools.build_stance_section("opposing", -0.7, role)
+    assert "Unknown" not in section and "unknown" not in section
+    assert "aus deiner Rolle als" not in section
+    assert section.startswith("## Deine Haltung\nDu siehst das Vorhaben sehr ")
+
+
 def test_augment_profile_with_stance_twitter_csv_adds_section_to_user_char(tmp_path) -> None:
     """Der System-Prompt eines im Parallel-Pfad erzeugten Twitter-Agenten
     enthaelt "Deine Haltung" (im user_char-Feld, das OASIS woertlich in den

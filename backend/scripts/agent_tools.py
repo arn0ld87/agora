@@ -676,18 +676,25 @@ def _describe_stance(stance: str, sentiment_bias: Optional[float], agent_role: s
     """
     bias = sentiment_bias if sentiment_bias is not None else 0.0
     intensity = "sehr " if abs(bias) >= 0.5 else ""
+    # Ohne bekannte Rolle kein Platzhalter wie "als Unknown" im System-Prompt.
+    role = (agent_role or "").strip()
+    role_clause = (
+        f" aus deiner Rolle als {role}"
+        if role and role.lower() not in {"unknown", "none", "n/a"}
+        else ""
+    )
     if stance == "observer":
         return (
-            f"Du beobachtest das Geschehen aus deiner Rolle als {agent_role} eher, "
+            f"Du beobachtest das Geschehen{role_clause} eher, "
             "ohne aktiv Position zu beziehen."
         )
     if stance == "neutral" or stance not in _STANCE_ATTITUDE:
         return (
-            f"Du bist in dieser Frage aus deiner Rolle als {agent_role} noch "
+            f"Du bist in dieser Frage{role_clause} noch "
             "unentschieden und wägst ab."
         )
     attitude = _STANCE_ATTITUDE[stance]
-    return f"Du siehst das Vorhaben aus deiner Rolle als {agent_role} {intensity}{attitude}."
+    return f"Du siehst das Vorhaben{role_clause} {intensity}{attitude}."
 
 
 def _describe_posting_tendency(
@@ -767,11 +774,10 @@ def _augment_twitter_csv_with_stance(
         section = build_stance_section(
             stance=cfg.get("stance"),
             sentiment_bias=cfg.get("sentiment_bias"),
-            # Twitter-CSV führt keine Profession-Spalte (nur user_id/name/
-            # username/user_char/description, siehe _save_twitter_csv) — der
-            # ReAct-Prompt fällt an derselben Stelle (agent.profession fehlt
-            # auf SocialAgent/UserInfo) ebenfalls auf "Unknown" zurück.
-            agent_role="Unknown",
+            # Twitter-CSV führt keine Profession-Spalte (siehe
+            # _save_twitter_csv); die Rolle kommt deshalb aus der Agenten-
+            # Config. Fehlt sie, entfällt der Rollenbezug im Satz.
+            agent_role=str(cfg.get("entity_type") or ""),
             posts_per_hour=cfg.get("posts_per_hour"),
             comments_per_hour=cfg.get("comments_per_hour"),
         )
@@ -812,7 +818,7 @@ def _augment_reddit_json_with_stance(
         section = build_stance_section(
             stance=cfg.get("stance"),
             sentiment_bias=cfg.get("sentiment_bias"),
-            agent_role=item.get("profession") or "Unknown",
+            agent_role=str(item.get("profession") or cfg.get("entity_type") or ""),
             posts_per_hour=cfg.get("posts_per_hour"),
             comments_per_hour=cfg.get("comments_per_hour"),
         )
