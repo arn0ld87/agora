@@ -308,6 +308,7 @@ Offen bleibt weiterhin ein echter Modellwechsel-Lauf gegen das produktive Neo4j-
 
 ## Installation und Betrieb
 
+- Das Upgrade `0.9.x` → `0.10` (Supabase-Stack, Alembic, Migration Legacy → PostgreSQL, Verifikation, Rückweg je Schritt) steht in [`runbooks/upgrade.md`](runbooks/upgrade.md); der Abschnitt `0.10` → `1.0` ist ein Platzhalter bis zum Freeze ([#1673](https://github.com/arn0ld87/agora/issues/1673)).
 - `install.sh` erzeugt `.env` aus der Vorlage und ersetzt bekannte Platzhalter durch sichere Werte.
 - Host- und Docker-Modus erzeugen `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `AGORA_SECRET_KEY` und `AGORA_FERNET_KEY`; die Zufallsquelle fällt von `python3` auf `openssl` bzw. `/dev/urandom` zurück (#1483).
 - `NEO4J_PASSWORD` für eine externe/individuelle Neo4j-Instanz bleibt Operator-Konfiguration.

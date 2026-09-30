@@ -202,7 +202,7 @@ Default service endpoints:
 | `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, `VECTOR_DIM` | Embedding model and vector-index settings; keep the dimension consistent with the selected model. |
 | `AGORA_*_BACKEND`, `DATABASE_URL` | Optional PostgreSQL metadata adapters; run Alembic migrations before switching a store. |
 
-Provider setup and route persistence are described in [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md). For the optional PostgreSQL path, follow the [migration runbook](./docs/runbooks/llm-profile-postgres-umstellung.md); changing a backend setting alone does not migrate existing data.
+Provider setup and route persistence are described in [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md). For the optional PostgreSQL path, follow the [upgrade runbook](./docs/runbooks/upgrade.md) (steps, order and rollback per release jump) and the [LLM-profile migration runbook](./docs/runbooks/llm-profile-postgres-umstellung.md); changing a backend setting alone does not migrate existing data.
 
 ## Development and checks
 
