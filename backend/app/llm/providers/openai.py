@@ -233,18 +233,11 @@ def is_reasoning_effort_400(exc: Exception) -> bool:
     nicht durch Weglassen "repariert" werden. Jede Meldung, die Tools
     erwaehnt, matcht deshalb nicht.
     """
-    try:
-        from openai import APIStatusError
-    except ImportError:
-        APIStatusError = ()  # type: ignore[assignment]
-
-    if APIStatusError and isinstance(exc, APIStatusError):
-        status = getattr(exc, "status_code", None)
-        if status is None:
-            response = getattr(exc, "response", None)
-            status = getattr(response, "status_code", None)
-        if status != 400:
-            return False
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status is not None and status != 400:
+        return False
 
     msg = str(exc).lower()
     body = getattr(exc, "body", None)
