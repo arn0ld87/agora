@@ -68,7 +68,6 @@ import argparse
 import asyncio
 import json
 import logging
-import random
 import signal
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -188,6 +187,13 @@ if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     sys.exit(0)
 
 from app.config import Config
+# Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
+from app.services.simulation_activity_policy import (
+    TWITTER_FOLLOWING_POST_COUNT,
+    TWITTER_MAX_REC_POST_LEN,
+    TWITTER_REFRESH_REC_POST_COUNT,
+    select_active_agent_ids,
+)
 
 # Issue #1423: CLI-Transport (codex_cli). Erst hier importierbar — das Modul
 # zieht ``app.llm.providers.codex_cli``, und der ``app``-Pfad steht erst nach
@@ -283,6 +289,7 @@ try:
         create_tool_aware_loop,
         build_camel_function_tools,
         attach_tools_to_agents,
+        augment_profile_with_stance,
     )
     AGENT_TOOLS_AVAILABLE = True
 except ImportError as _e:
@@ -1335,39 +1342,10 @@ def get_active_agents_for_round(
     """Decide which Agents to activate this round based on time and configuration"""
     time_config = config.get("time_config", {})
     agent_configs = config.get("agent_configs", [])
-    
-    base_min = time_config.get("agents_per_hour_min", 5)
-    base_max = time_config.get("agents_per_hour_max", 20)
-    
-    peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
-    off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-    
-    if current_hour in peak_hours:
-        multiplier = time_config.get("peak_activity_multiplier", 1.5)
-    elif current_hour in off_peak_hours:
-        multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
-    else:
-        multiplier = 1.0
-    
-    target_count = int(random.uniform(base_min, base_max) * multiplier)
-    
-    candidates = []
-    for cfg in agent_configs:
-        agent_id = cfg.get("agent_id", 0)
-        active_hours = cfg.get("active_hours", list(range(8, 23)))
-        activity_level = cfg.get("activity_level", 0.5)
-        
-        if current_hour not in active_hours:
-            continue
-        
-        if random.random() < activity_level:
-            candidates.append(agent_id)
-    
-    selected_ids = random.sample(
-        candidates, 
-        min(target_count, len(candidates))
-    ) if candidates else []
-    
+
+    # Geteilte Auswahl-Logik mit platform_runner.py (#1713 Slice S4).
+    selected_ids = select_active_agent_ids(time_config, agent_configs, current_hour)
+
     active_agents = []
     for agent_id in selected_ids:
         try:
@@ -1447,7 +1425,21 @@ async def run_twitter_simulation(
     if not os.path.exists(profile_path):
         log_info(f"Error: Profile file does not exist: {profile_path}")
         return result
-    
+
+    # Issue #1713 Slice S6 (Teil 2, Rest von #1323): tool_loop bleibt hier
+    # fest None (#1215) — build_agent_prompt_with_tools wird in diesem Pfad
+    # nie aufgerufen. Die Haltung muss stattdessen im Profiltext stehen, den
+    # OASIS beim Graph-Aufbau in den System-Prompt jedes Agenten übernimmt.
+    # augment_profile_with_stance schreibt eine eigene Kopie, twitter_profiles.csv
+    # bleibt für Persona-Galerie/Interviews/Report unverändert.
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            profile_path = augment_profile_with_stance(
+                profile_path, config.get("agent_configs", []), platform="twitter"
+            )
+        except Exception as e:
+            log_info(f"augment_profile_with_stance (twitter) failed, using unaugmented profile: {e}")
+
     result.agent_graph = await generate_twitter_agent_graph(
         profile_path=profile_path,
         model=model,
@@ -1485,10 +1477,22 @@ async def run_twitter_simulation(
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
-    
+
+    # Issue #1713 Slice S4: OASIS-Default haelt den Twitter-Feed sehr eng
+    # (siehe simulation_activity_policy.py Docstring) — eigenes Platform-
+    # Objekt statt DefaultPlatformType.TWITTER, damit refresh_rec_post_count/
+    # max_rec_post_len/following_post_count ueber die im OASIS-Paket
+    # vorgesehenen Parameter greifen.
+    twitter_platform = oasis.Platform(
+        db_path=db_path,
+        recsys_type="twhin-bert",
+        refresh_rec_post_count=TWITTER_REFRESH_REC_POST_COUNT,
+        max_rec_post_len=TWITTER_MAX_REC_POST_LEN,
+        following_post_count=TWITTER_FOLLOWING_POST_COUNT,
+    )
     result.env = oasis.make(
         agent_graph=result.agent_graph,
-        platform=oasis.DefaultPlatformType.TWITTER,
+        platform=twitter_platform,
         database_path=db_path,
         semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
     )
@@ -1567,6 +1571,12 @@ async def run_twitter_simulation(
     )
 
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
+    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+    agent_configs_by_id = {
+        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
+    }
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
@@ -1614,6 +1624,7 @@ async def run_twitter_simulation(
                     agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                     agent_role = getattr(agent, 'profession', 'Unknown')
                     agent_bio = getattr(agent, 'bio', '')
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                     action = await tool_loop.decide_action(
                         agent=agent,
@@ -1622,7 +1633,11 @@ async def run_twitter_simulation(
                         agent_name=agent_name,
                         agent_role=agent_role,
                         agent_bio=agent_bio,
-                        language=config.get("language", "de")
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
                     )
                     actions[agent] = action
                 except Exception as e:
@@ -1751,7 +1766,17 @@ async def run_reddit_simulation(
     if not os.path.exists(profile_path):
         log_info(f"Error: Profile file does not exist: {profile_path}")
         return result
-    
+
+    # Issue #1713 Slice S6 (Teil 2, Rest von #1323): siehe Kommentar im
+    # Twitter-Zweig oben — derselbe Grund, derselbe Mechanismus.
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            profile_path = augment_profile_with_stance(
+                profile_path, config.get("agent_configs", []), platform="reddit"
+            )
+        except Exception as e:
+            log_info(f"augment_profile_with_stance (reddit) failed, using unaugmented profile: {e}")
+
     result.agent_graph = await generate_reddit_agent_graph(
         profile_path=profile_path,
         model=model,
@@ -1865,6 +1890,12 @@ async def run_reddit_simulation(
     )
 
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
+    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+    agent_configs_by_id = {
+        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
+    }
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
@@ -1912,6 +1943,7 @@ async def run_reddit_simulation(
                     agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                     agent_role = getattr(agent, 'profession', 'Unknown')
                     agent_bio = getattr(agent, 'bio', '')
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                     action = await tool_loop.decide_action(
                         agent=agent,
@@ -1920,7 +1952,11 @@ async def run_reddit_simulation(
                         agent_name=agent_name,
                         agent_role=agent_role,
                         agent_bio=agent_bio,
-                        language=config.get("language", "de")
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
                     )
                     actions[agent] = action
                 except Exception as e:

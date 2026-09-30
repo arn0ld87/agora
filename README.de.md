@@ -202,7 +202,7 @@ Standard-Endpunkte:
 | `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, `VECTOR_DIM` | Embedding-Modell und Vektorindex; Dimension und Modell müssen zusammenpassen. |
 | `AGORA_*_BACKEND`, `DATABASE_URL` | Optionale PostgreSQL-Metadatenadapter; vor dem Wechsel Alembic-Migrationen ausführen. |
 
-Provider-Setup und persistierte Routen beschreibt [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md). Für den optionalen PostgreSQL-Pfad gilt das [Migrations-Runbook](./docs/runbooks/llm-profile-postgres-umstellung.md); das Ändern einer Backend-Einstellung migriert bestehende Daten nicht.
+Provider-Setup und persistierte Routen beschreibt [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md). Für den optionalen PostgreSQL-Pfad gilt das [Upgrade-Runbook](./docs/runbooks/upgrade.md) (Schritte, Reihenfolge und Rückweg je Versionssprung) und das [Migrations-Runbook für LLM-Profile](./docs/runbooks/llm-profile-postgres-umstellung.md); das Ändern einer Backend-Einstellung migriert bestehende Daten nicht.
 
 ## Entwicklung und Prüfungen
 

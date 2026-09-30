@@ -1,0 +1,3 @@
+### Added (Minimaler Jev-Benchmark für local-search-relevance — 2026-09-21)
+
+- **Erster echter Jev-vs-Rule-Vergleich:** `backend/scripts/jev_benchmark_local_search.py` läuft eine kleine, handkonstruierte Fallmenge (12 Fälle, nicht maintainer-geprüft) gegen die Rule-Baseline und einen echten Jev-Aufruf. Ergebnis in `docs/audits/f005-jev-benchmark-local-search.md`: Jev 92 % Accuracy gegen 75 % für die Keyword-Regel, ~13 Mikro-USD/Aufruf, ~290 ms median-Latenz. Kein Freigabe-Ausgang — Empfehlung ist weitere, maintainer-verifizierte Datenerhebung. Bewusst kein vollständiger Benchmark nach `benchmark-design.md` (Scope-Reduktion, siehe Bericht). (f005)
