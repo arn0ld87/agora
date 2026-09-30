@@ -96,18 +96,16 @@ manuelle Prüfung bzw. Folgearbeit.
   Post. Fehlt `parent_comment_id` (Twitter, oder Reddit-Kommentare ohne
   erkannten Parent), bleibt das alte Verhalten erhalten: der Kommentar hängt
   direkt unter seinem Post.
-- **L3 `own_post_share` und Twitter-Kommentare (#1713 Slice S5):** Twitter
-  aktiviert seit S5 `CREATE_COMMENT`/`LIKE_COMMENT` als reguläre Aktionen
-  (vorher nur `CREATE_POST`/`QUOTE_POST`/`REPOST`/`LIKE_POST`/`FOLLOW`). Das
-  vergrößert mechanisch den Nenner von `own_post_share`
-  (`CREATE_POST`+`CREATE_COMMENT`+`QUOTE_POST`+`REPOST`), ohne dass sich am
-  eigentlichen Diskursverhalten etwas ändert — ein Twitter-Lauf nach S5 zeigt
-  also einen strukturell niedrigeren `own_post_share` als ein sonst
-  identischer Lauf vor S5. Das ist eine Baseline-Verschiebung, keine
-  Verhaltensänderung: **beim Vergleich von Läufen vor/nach S5 explizit
-  kennzeichnen**, dass die Nenner nicht deckungsgleich sind. Der Zielwert
-  (≥ 20 %) bleibt unverändert — er gilt weiterhin je Lauf, nicht als
-  Vergleichsgröße über die S5-Grenze hinweg.
+- **L3 `own_post_share` und Twitter-Kommentare (#1713 Slice S5):** Seit S5
+  kann Twitter `CREATE_COMMENT`/`LIKE_COMMENT` ausführen (vorher nur
+  `CREATE_POST`/`QUOTE_POST`/`REPOST`/`LIKE_POST`/`FOLLOW`). Kommentare zählen
+  in den Nenner von `own_post_share`
+  (`CREATE_POST`+`CREATE_COMMENT`+`QUOTE_POST`+`REPOST`), nicht in den Zähler.
+  Ein Twitter-Lauf nach S5 ist deshalb nicht direkt mit der Baseline vor S5
+  vergleichbar: ein niedrigerer Wert kann schlicht daher kommen, dass Agenten
+  jetzt antworten können, statt nur eigene Beiträge zu setzen. **Beim Vergleich
+  von Läufen vor/nach S5 die Aktionsraum-Änderung ausdrücklich kennzeichnen.**
+  Der Zielwert (≥ 20 %) bleibt unverändert und gilt je Lauf.
 - **L7-Match** ist wörtlich (case-sensitive), nicht semantisch: eine Zahl aus
   dem Seed oder eine 8-Wort-Folge muss exakt im Post-Inhalt auftauchen.
 - **`duplicate_log_lines`** zählt gezielt die #1713-Altlauf-Signatur (ein
