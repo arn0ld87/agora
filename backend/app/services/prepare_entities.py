@@ -202,7 +202,10 @@ def _representation_target(
     person: "EntityNode", edge: Dict[str, Any], by_uuid: Dict[str, "EntityNode"]
 ) -> Optional["EntityNode"]:
     """Liefert die Ziel-Organisation der Kante, falls sie eine ist."""
-    target = by_uuid.get(edge.get("target_node_uuid"))
+    target_uuid = edge.get("target_node_uuid")
+    if not isinstance(target_uuid, str):
+        return None
+    target = by_uuid.get(target_uuid)
     if target is None or target.uuid == person.uuid:
         return None
     return target if _is_organization_entity(target) else None
