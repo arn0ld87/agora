@@ -73,6 +73,17 @@ def _outcome(
     )
 
 
+@pytest.fixture(autouse=True)
+def _capture_bench_logger(caplog: pytest.LogCaptureFixture):
+    """``app.utils.logger`` setzt ``propagate = False`` auf ``agora`` —
+    ``agora.jev_benchmark`` erreicht den Root-Handler von ``caplog`` dann
+    nie. Den Handler deshalb direkt am Benchmark-Logger einhängen."""
+    bench_logger = logging.getLogger("agora.jev_benchmark")
+    bench_logger.addHandler(caplog.handler)
+    yield
+    bench_logger.removeHandler(caplog.handler)
+
+
 class TestBenchmarkReportUsability:
     def test_abbreviation_expansion_is_relevant_despite_rule_miss(self) -> None:
         case = next(c for c in _BENCH._CASES if c.case_id == "abbreviation-mismatch")
