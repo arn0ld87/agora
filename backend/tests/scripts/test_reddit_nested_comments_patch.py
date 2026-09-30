@@ -19,6 +19,7 @@ sie danach wieder her.
 from __future__ import annotations
 
 import importlib.metadata
+import logging
 import sqlite3
 import sys
 from pathlib import Path
@@ -85,11 +86,16 @@ class TestVersionGuard:
 
         monkeypatch.setattr(importlib.metadata, "version", _fake_version)
         # ``app.utils.logger.setup_logger`` konfiguriert den Parent-Logger
-        # "agora" mit ``propagate = False`` (Doppel-Ausgabe-Schutz), damit
-        # Records vom Root-Logger (an dem caplog per Default lauscht) nicht
-        # erreichbar sind. Handler direkt am emittierenden Logger andocken.
-        with caplog.at_level("WARNING", logger="agora._sim_common"):
-            result = sc.install_reddit_nested_comments_patch()
+        # "agora" mit ``propagate = False`` (Doppel-Ausgabe-Schutz). caplog
+        # haengt seinen Capture-Handler nur am Root-Logger ein; ``at_level``
+        # allein aendert nur den Level des benannten Loggers, nicht die
+        # Propagation. Ohne ``propagate = True`` erreicht der Record vom
+        # Kind-Logger "agora._sim_common" den Root-Handler nie und caplog
+        # bleibt leer (derselbe Kniff wie
+        # tests/api/test_graph_ontology_upload_atomicity.py::_capture_agora_logs).
+        caplog.set_level(logging.WARNING, logger="agora._sim_common")
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        result = sc.install_reddit_nested_comments_patch()
         assert result is False
         assert any(
             "erwartet camel-oasis==0.2.5" in record.getMessage()
