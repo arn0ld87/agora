@@ -52,6 +52,7 @@ from .providers.claude_cli import ClaudeCliClient
 from .providers.codex_cli import CodexCliClient
 from .providers.registry import openai_compat_base_url
 from .request_plan import (
+    REASONING_EFFORT_QUIRK,
     TEMPERATURE_QUIRK,
     TOKEN_KEY_QUIRK,
     build_request,
@@ -541,6 +542,22 @@ class LLMClient:
         if self._codex_cli_active or self._claude_cli_active:
             return False
         return _provider_base.is_ollama(self.base_url)
+
+    def _reasoning_effort_extra(
+        self, *, force_no_thinking: bool = False
+    ) -> Dict[str, Any]:
+        """Top-level ``reasoning_effort`` fuer OpenAI-Reasoning-Modelle (#1738).
+
+        Provider kommt aus der bestehenden Detection (``_detect_provider``),
+        die Modell-/Wert-Logik steht in
+        :func:`app.llm.providers.openai.reasoning_effort_kwargs`.
+        """
+        return _provider_openai.reasoning_effort_kwargs(
+            provider=self._detect_provider(),
+            model=self.model or "",
+            effort=getattr(self, "reasoning_effort", None),
+            force_no_thinking=force_no_thinking,
+        )
 
     def _is_minimax(self) -> bool:
         """Determine whether the configured endpoint is a MiniMax service.
@@ -1047,6 +1064,8 @@ class LLMClient:
                 think=False if force_no_thinking else self._think,
             ),
             stream=force_stream,
+            extra=self._reasoning_effort_extra(force_no_thinking=force_no_thinking)
+            or None,
         )
 
         def _create(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
@@ -1074,7 +1093,9 @@ class LLMClient:
             Providerattempt mit eigener Check/Event/Record-Triplet.
             """
             return execute(
-                plan, _create, quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK)
+                plan,
+                _create,
+                quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK, REASONING_EFFORT_QUIRK),
             )
 
         # Provider-Pfad: jeder physische Request (erster Call, jeder Retry,

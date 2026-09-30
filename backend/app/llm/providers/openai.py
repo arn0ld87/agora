@@ -189,6 +189,96 @@ def is_temperature_400(exc: Exception) -> bool:
     )
 
 
+def reasoning_effort_kwargs(
+    *,
+    provider: str,
+    model: str,
+    effort: Optional[str],
+    force_no_thinking: bool = False,
+) -> Dict[str, Any]:
+    """Top-level ``reasoning_effort`` fuer OpenAI-Reasoning-Modelle (#1738).
+
+    Die Route traegt ``reasoning_effort``, der Wert erreichte den Provider
+    bisher nie. Serverseitig hat die Reasoning-Familie dann einen Default
+    ungleich ``none`` und OpenAI sperrt Function-Tools auf
+    ``/v1/chat/completions`` mit 400 "Function tools with reasoning_effort
+    are not supported ... set reasoning_effort to 'none'".
+
+    Gesendet wird ausschliesslich, wenn die bestehende Detection
+    (``providers/registry.py::detect_provider``, hier als *provider*
+    hereingereicht — keine zweite Heuristik) ``"openai"`` liefert UND das
+    Modell zur Reasoning-Familie gehoert. Ollama, OpenRouter, openai-
+    kompatible Proxies und Nicht-Reasoning-Modelle (gpt-4.1, gpt-4o) bekommen
+    den Parameter nicht. ``force_no_thinking`` erzwingt ``"none"``.
+
+    Returns:
+        ``{"reasoning_effort": <wert>}`` oder ein leeres Dict.
+    """
+    if provider != "openai" or not _is_reasoning_family(model):
+        return {}
+    if force_no_thinking:
+        return {"reasoning_effort": "none"}
+    return {"reasoning_effort": effort or "none"}
+
+
+def is_reasoning_effort_400(exc: Exception) -> bool:
+    """True wenn ein 400 den ``reasoning_effort``-WERT/-Parameter ablehnt (#1738).
+
+    Aeltere Reasoning-Modelle (o1/o3/gpt-5) lehnen evtl. ``"none"`` ab
+    ("Unsupported value: 'none' ... Supported values are ..."). Dann ist
+    ein Retry ohne den Parameter richtig.
+
+    Bewusst eng: der 400 "Function tools with reasoning_effort are not
+    supported ..." entsteht genau OHNE bzw. mit falschem Parameter und darf
+    nicht durch Weglassen "repariert" werden. Jede Meldung, die Tools
+    erwaehnt, matcht deshalb nicht.
+    """
+    try:
+        from openai import APIStatusError
+    except ImportError:
+        APIStatusError = ()  # type: ignore[assignment]
+
+    if APIStatusError and isinstance(exc, APIStatusError):
+        status = getattr(exc, "status_code", None)
+        if status is None:
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", None)
+        if status != 400:
+            return False
+
+    msg = str(exc).lower()
+    body = getattr(exc, "body", None)
+    body_msg = ""
+    param = ""
+    code = ""
+    if isinstance(body, dict):
+        body_msg = str(body.get("message") or "").lower()
+        param = str(body.get("param") or "").lower()
+        code = str(body.get("code") or "").lower()
+
+    if "tool" in msg or "tool" in body_msg:
+        return False
+    if "reasoning_effort" not in msg and param != "reasoning_effort":
+        return False
+    return (
+        "unsupported value" in msg
+        or "unsupported_value" in msg
+        or "unsupported parameter" in msg
+        or "unsupported_parameter" in msg
+        or "unknown parameter" in msg
+        or code in {"unsupported_value", "unsupported_parameter"}
+    )
+
+
+def drop_reasoning_effort(kwargs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Kopie ohne ``reasoning_effort``, oder ``None`` wenn keins gesetzt war."""
+    if "reasoning_effort" not in kwargs:
+        return None
+    dropped = dict(kwargs)
+    dropped.pop("reasoning_effort", None)
+    return dropped
+
+
 # ----------------------------------------------------------------------
 # Rolle 2: Provider-Adapter (#590)
 # ----------------------------------------------------------------------
