@@ -26,6 +26,16 @@ export interface RedditNode extends PostCreatedEvent {
   children: RedditNode[]
 }
 
+/**
+ * Kante-Regel fuer Straenge (Slice UI-2b, §2.8): `parent_comment_id`, wenn
+ * gesetzt (Reddit-Baum), sonst `parent_post_id` (Twitter-Replies, flach, und
+ * Reddit-Wurzelantworten vor dem Slice-5-Backfill). Funktioniert mit und
+ * ohne `parent_comment_id` im Snapshot.
+ */
+export function parentIdOf(post: PostCreatedEvent): string | null {
+  return post.parent_comment_id ?? post.parent_post_id ?? null
+}
+
 const MAX_STORES = 10
 
 /**
@@ -163,6 +173,26 @@ function createStore(simulationId: string) {
    */
   const recentPosts = computed<PostCreatedEvent[]>(() => all.value.slice(-30))
 
+  /**
+   * Chronologisch aufsteigende Gesamtliste beider Plattformen — Datenquelle
+   * fuer `FeedTimeline` (Slice UI-2b, §2.5). Filter (Plattform/Runde/Persona/
+   * Freitext) liegen bei der aufrufenden View, nicht hier.
+   */
+  const flatTimeline = computed<PostCreatedEvent[]>(() =>
+    [...all.value].sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+  )
+
+  const byIdMap = computed<Map<string, PostCreatedEvent>>(() => {
+    const map = new Map<string, PostCreatedEvent>()
+    for (const p of all.value) map.set(p.post_id, p)
+    return map
+  })
+
+  /** Loest einen Post ueber seine post_id auf — z.B. fuer Repost-Referenzen. */
+  function byId(postId: string): PostCreatedEvent | undefined {
+    return byIdMap.value.get(postId)
+  }
+
   const activityRate = computed<number>(() => {
     const recent = all.value.slice(-30)
     if (recent.length < 2) return 0
@@ -178,6 +208,8 @@ function createStore(simulationId: string) {
     redditTree,
     recentPosts,
     activityRate,
+    flatTimeline,
+    byId,
     ingest,
     ingestMany,
     clear,

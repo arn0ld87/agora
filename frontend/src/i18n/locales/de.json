@@ -1693,6 +1693,16 @@
       "payload": "Inhalt",
       "loadMore": "Weitere laden",
       "empty": "Noch keine Aktionen protokolliert."
+    },
+    "header": {
+      "round": "Runde {current}/{total}",
+      "roundUnknown": "Runde —",
+      "posts": "{count} Beiträge",
+      "streamConnecting": "Verbinde…",
+      "streamOpen": "Live",
+      "streamReconnecting": "Verbindung wird wiederhergestellt…",
+      "streamClosed": "Verbindung geschlossen",
+      "streamEnded": "Lauf beendet"
     }
   },
   "observability": {

@@ -1,123 +1,210 @@
 <script setup lang="ts">
 /**
- * StepSimulationFeedView — Dual-Column Sim-Feed (Reddit threaded + Twitter flat).
+ * StepSimulationFeedView — kanonischer Feed als chronologische Timeline.
  *
- * Slice FE-Redesign-5 · 2026-05-15
+ * Slice UI-2b (#1713), Commit 3 (docs/design/simulation-feed.md §2.5, §5).
+ * Ersetzt die Dual-Column-Ansicht (Reddit-Baum + Twitter-Flow) durch eine
+ * gemeinsame virtualisierte Timeline mit Filterleiste und Statusstreifen.
  *
- * useEventStream-API: handlers werden im Constructor übergeben, nicht via .on().
- * post_created-Handler routet direkt in useSimFeed.ingest().
- *
- * Fix #1713: Kopfzeile, Breadcrumbs, Stepper und Tabs sind in
- * SimulationLayout.vue gewandert (Kind-Route dieses Layouts) — diese View
- * ist nur noch der Feed-Inhalt, analog zu StepSimulationView.vue.
+ * useEventStream-API: handlers werden im Constructor uebergeben, kein .on().
+ * post_created routet direkt in useSimFeed.ingest().
  */
-import { onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed } from '@/composables/useSimFeed'
-import { getSimulationFeedSnapshot } from '@/api/simulation'
-import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
-import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
-import TwitterPost from '@/components/v4/sim-feed/TwitterPost.vue'
-import SimulationPulseBar from '@/components/v4/sim-feed/SimulationPulseBar.vue'
+import { getSimulationFeedSnapshot, getSimulationRounds } from '@/api/simulation'
+import { unwrap } from '@/api/envelope'
+import type { Platform } from '@/contracts/postEventContract'
+import FeedTimeline from '@/components/v4/sim-feed/FeedTimeline.vue'
+import SimFilterBar from '@/components/v4/sim-feed/SimFilterBar.vue'
+import SimRunHeader, {
+  type SimRunHeaderDegradation,
+  type StreamState,
+} from '@/components/v4/sim-feed/SimRunHeader.vue'
 
 const route = useRoute()
+const router = useRouter()
 const simulationId = String(route.params.simulationId)
 const feed = useSimFeed(simulationId)
 
-// useEventStream nimmt handlers im Constructor — kein .on()-API.
-// post_created ist bereits Zod-geparst durch openSimulationStream (Slice 5-pre).
 const stream = useEventStream(simulationId, {
   post_created: (data) => feed.ingest(data),
 })
 
+const isSnapshotLoading = ref(true)
+const snapshotError = ref<{ code: string; message: string } | null>(null)
+const snapshotFailedBoth = ref(false)
+const totalRounds = ref<number | null>(null)
+const streamStarted = ref(false)
+
+// --- Query-Filter (persistiert via URL, §1) -------------------------------
+
+const platformFilter = computed<'all' | Platform>(
+  () => (route.query.platform as 'all' | Platform) ?? 'all',
+)
+const roundFilter = computed<number | null>(() =>
+  typeof route.query.round === 'string' && route.query.round !== ''
+    ? Number(route.query.round)
+    : null,
+)
+const personaFilter = computed<string | null>(
+  () => (typeof route.query.persona === 'string' ? route.query.persona : null) || null,
+)
+const qFilter = computed<string>(() => (typeof route.query.q === 'string' ? route.query.q : ''))
+
+function updateQuery(patch: Record<string, string | null>): void {
+  const next: Record<string, string> = {}
+  for (const [key, value] of Object.entries({ ...route.query, ...patch })) {
+    if (typeof value === 'string' && value.length > 0) next[key] = value
+  }
+  void router.replace({ query: next })
+}
+
+async function loadSnapshot(): Promise<void> {
+  isSnapshotLoading.value = true
+  snapshotError.value = null
+  const [reddit, twitter] = await Promise.all([
+    getSimulationFeedSnapshot(simulationId, 'reddit').catch(() => null),
+    getSimulationFeedSnapshot(simulationId, 'twitter').catch(() => null),
+  ])
+  snapshotFailedBoth.value = reddit === null && twitter === null
+  if (snapshotFailedBoth.value) {
+    snapshotError.value = { code: 'snapshot_failed', message: 'Snapshot-Ladefehler' }
+  } else {
+    feed.ingestMany([...(reddit ?? []), ...(twitter ?? [])])
+  }
+  isSnapshotLoading.value = false
+}
+
 onMounted(async () => {
-  // #1009 — Stream zuerst starten, danach den Snapshot mergen. Umgekehrte
-  // Reihenfolge ließe Posts verloren gehen, die zwischen Snapshot-Read und
-  // stream.start() geschrieben werden: post_created hat kein Replay und die
-  // EventSource existiert vor start() noch nicht. Die seen-Dedup per post_id
-  // fängt den Overlap ab — ein Post, der im Snapshot UND live ankommt, wird
-  // beim zweiten ingest übersprungen. Fehler beim Snapshot-Fetch brechen
-  // nichts: der Live-Pfad bleibt allein nutzbar.
+  // #1009 — Stream zuerst starten, danach den Snapshot mergen; seen-Dedup
+  // faengt den Overlap ab (siehe useSimFeed).
   await stream.start()
+  streamStarted.value = true
+  await loadSnapshot()
   try {
-    const [reddit, twitter] = await Promise.all([
-      getSimulationFeedSnapshot(simulationId, 'reddit').catch(() => []),
-      getSimulationFeedSnapshot(simulationId, 'twitter').catch(() => []),
-    ])
-    feed.ingestMany([...reddit, ...twitter])
+    const rounds = unwrap(await getSimulationRounds(simulationId))
+    const list = rounds.rounds ?? []
+    totalRounds.value = list.length > 0 ? Math.max(...list.map((r) => r.round_num)) + 1 : null
   } catch {
-    // Beide Catches oben schlucken schon den Einzelfehler; dieser Block ist
-    // nur die Defensive für den Fall, dass ingestMany selbst wirft.
+    totalRounds.value = null
   }
 })
 
 onBeforeUnmount(() => {
-  // Gepufferte, aber noch nicht in all.value geschriebene Posts (rAF-Batch
-  // in useSimFeed) vor dem Stream-Stop synchron uebernehmen, sonst gehen sie
-  // beim Verlassen der Route verloren.
   feed.flushPending()
   stream.stop()
-  // clearSimFeed(simulationId) bewusst NICHT mehr hier: eine normale
-  // Navigation weg von der Feed-Route (und zurueck) hat bislang den
-  // gesamten empfangenen Bestand vernichtet (#1007). "Stream schliessen"
-  // und "Daten verwerfen" sind getrennt.
-  //
-  // Beim Wechsel der simulationId wird hier bewusst NICHTS geleert. `feed`
-  // und `stream` sind an den Snapshot aus Z. 20 gebunden; die Component
-  // wird laut Router-Konfiguration ohne :key wiederverwendet, ein Re-Init
-  // faende also nicht statt. Wuerde man den Store der alten ID trotzdem
-  // leeren, zeigte der View danach eine leere Liste UND bekaeme mangels
-  // neuem Stream keine Daten mehr — schlechter als der Zustand vor diesem
-  // Slice. Der Simulationswechsel bleibt damit unveraendert unbehandelt
-  // (#1007 ist auf den Unmount-Datenverlust begrenzt); aufgeraeumt wird
-  // ueber die MAX_STORES-LRU in useSimFeed.
 })
+
+// --- Gefilterte, sortierte Liste ------------------------------------------
+
+const filteredItems = computed(() => {
+  const q = qFilter.value.trim().toLowerCase()
+  return feed.flatTimeline.value.filter((post) => {
+    if (platformFilter.value !== 'all' && post.platform !== platformFilter.value) return false
+    if (roundFilter.value !== null && post.round_num !== roundFilter.value) return false
+    if (personaFilter.value !== null && post.persona_id !== personaFilter.value) return false
+    if (q.length > 0 && !post.body.toLowerCase().includes(q)) return false
+    return true
+  })
+})
+
+const personaOptions = computed(() => {
+  const seen = new Map<string, string>()
+  for (const post of feed.flatTimeline.value) {
+    if (!seen.has(post.persona_id)) seen.set(post.persona_id, post.persona_name)
+  }
+  return [...seen.entries()].map(([id, name]) => ({ id, name }))
+})
+
+const roundOptions = computed(() => {
+  const rounds = new Set<number>()
+  for (const post of feed.flatTimeline.value) {
+    if (typeof post.round_num === 'number') rounds.add(post.round_num)
+  }
+  return [...rounds].sort((a, b) => a - b)
+})
+
+const currentRound = computed<number | null>(() => {
+  const rounds = roundOptions.value
+  return rounds.length > 0 ? rounds[rounds.length - 1] : null
+})
+
+const lastSimTime = computed<string | null>(() => {
+  const items = feed.flatTimeline.value
+  return items.length > 0 ? (items[items.length - 1].sim_time ?? items[items.length - 1].timestamp) : null
+})
+
+// --- Statusstreifen ---------------------------------------------------
+
+const streamState = computed<StreamState>(() => {
+  if (!streamStarted.value) return 'connecting'
+  if (stream.error.value) return 'reconnecting'
+  if (stream.isStreaming.value) return 'open'
+  return 'closed'
+})
+
+const isLegacyRun = computed(
+  () => feed.flatTimeline.value.length > 0 && feed.flatTimeline.value.every((p) => p.kind == null),
+)
+
+const degradation = computed<SimRunHeaderDegradation | null>(() => {
+  if (snapshotFailedBoth.value) {
+    return { kind: 'snapshot_missing', hint: 'Anfangsbestand konnte nicht geladen werden.' }
+  }
+  if (streamState.value === 'reconnecting') {
+    return { kind: 'stream_lost', hint: 'Live-Verbindung verloren.' }
+  }
+  if (isLegacyRun.value) {
+    return { kind: 'legacy_run', hint: 'Aelterer Lauf ohne vollstaendige Diskurs-Daten.' }
+  }
+  return null
+})
+
+function openThread(postId: string): void {
+  void router.push({
+    name: 'SimThreadFocus',
+    params: { simulationId, postId },
+    query: route.query,
+  })
+}
 </script>
 
 <template>
   <div class="sf-root">
-    <SimulationPulseBar
-      :activity-rate="feed.activityRate.value"
-      :reddit-count="feed.redditPosts.value.length"
-      :twitter-count="feed.twitterPosts.value.length"
-      :recent-posts="feed.recentPosts.value"
+    <SimRunHeader
+      :simulation-id="simulationId"
+      :current-round="currentRound"
+      :total-rounds="totalRounds"
+      :sim-time="lastSimTime"
+      :post-count="feed.flatTimeline.value.length"
+      :stream-state="streamState"
+      :degradation="degradation"
+      :loading="isSnapshotLoading"
     />
-    <div class="sf-columns">
-      <FeedColumn
-        :title="$t('feed.reddit')"
-        channel="reddit"
-        :has-items="feed.redditPosts.value.length > 0"
-      >
-        <TransitionGroup name="slide-in" tag="div" class="sf-thread-list">
-          <RedditThread
-            v-for="node in feed.redditTree.value"
-            :key="node.post_id"
-            :node="node"
-          />
-        </TransitionGroup>
-        <p v-if="feed.redditPosts.value.length === 0" class="sf-empty">
-          {{ $t('feed.empty') }}
-        </p>
-      </FeedColumn>
-
-      <FeedColumn
-        :title="$t('feed.twitter')"
-        channel="twitter"
-        :has-items="feed.twitterPosts.value.length > 0"
-      >
-        <TransitionGroup name="slide-in" tag="div" class="sf-post-list">
-          <TwitterPost
-            v-for="post in feed.twitterPosts.value"
-            :key="post.post_id"
-            :post="post"
-          />
-        </TransitionGroup>
-        <p v-if="feed.twitterPosts.value.length === 0" class="sf-empty">
-          {{ $t('feed.empty') }}
-        </p>
-      </FeedColumn>
-    </div>
+    <SimFilterBar
+      scope="feed"
+      :platform="platformFilter"
+      :round="roundFilter"
+      :persona="personaFilter"
+      :q="qFilter"
+      :personas="personaOptions"
+      :rounds="roundOptions"
+      :loading="isSnapshotLoading"
+      @update:platform="(v) => updateQuery({ platform: v === 'all' ? null : v })"
+      @update:round="(v) => updateQuery({ round: v === null ? null : String(v) })"
+      @update:persona="(v) => updateQuery({ persona: v })"
+      @update:q="(v) => updateQuery({ q: v.length > 0 ? v : null })"
+    />
+    <FeedTimeline
+      :items="filteredItems"
+      :stream-state="streamState === 'connecting' ? 'reconnecting' : streamState"
+      :is-snapshot-loading="isSnapshotLoading"
+      :error="snapshotError"
+      @open-thread="openThread"
+      @retry="loadSnapshot"
+    />
   </div>
 </template>
 
@@ -127,50 +214,5 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-}
-.sf-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
-  padding: 16px;
-}
-.sf-thread-list,
-.sf-post-list {
-  display: flex;
-  flex-direction: column;
-}
-.sf-empty {
-  padding: 24px 12px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-/* Slide-in Animation für neue Posts */
-.slide-in-enter-active {
-  transition: opacity 200ms ease, transform 200ms ease;
-}
-.slide-in-enter-from {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-.slide-in-leave-active {
-  display: none; /* Posts werden nicht entfernt */
-}
-@media (prefers-reduced-motion: reduce) {
-  .slide-in-enter-active {
-    transition: none;
-  }
-}
-
-/* Responsive: untereinander auf schmalen Screens */
-@media (max-width: 768px) {
-  .sf-columns {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-  }
 }
 </style>

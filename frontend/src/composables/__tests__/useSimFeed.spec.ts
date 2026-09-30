@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSimFeed, clearSimFeed, resetSimFeedStore, MAX_POSTS_PER_FEED } from '../useSimFeed'
+import {
+  useSimFeed,
+  clearSimFeed,
+  resetSimFeedStore,
+  MAX_POSTS_PER_FEED,
+  parentIdOf,
+} from '../useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 
 function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
@@ -235,5 +241,41 @@ describe('useSimFeed', () => {
     feed.flushPending()
 
     expect(feed.redditPosts.value.map((p) => p.post_id)).toEqual(['first', 'second'])
+  })
+
+  // Slice UI-2b (#1713) — flatTimeline, byId, parentIdOf
+
+  it('flatTimeline: sortiert beide Plattformen chronologisch aufsteigend', () => {
+    const feed = useSimFeed('sim-1')
+    feed.ingest(
+      mkPost({ platform: 'twitter', post_id: 't-new', timestamp: '2026-05-15T12:02:00Z' }),
+    )
+    feed.ingest(
+      mkPost({ platform: 'reddit', post_id: 'r-old', timestamp: '2026-05-15T12:00:00Z' }),
+    )
+    feed.flushPending()
+    expect(feed.flatTimeline.value.map((p) => p.post_id)).toEqual(['r-old', 't-new'])
+  })
+
+  it('byId: loest einen bekannten Post auf, liefert undefined fuer unbekannte post_id', () => {
+    const feed = useSimFeed('sim-1')
+    feed.ingest(mkPost({ post_id: 'p-known' }))
+    feed.flushPending()
+    expect(feed.byId('p-known')?.post_id).toBe('p-known')
+    expect(feed.byId('p-missing')).toBeUndefined()
+  })
+
+  it('parentIdOf: bevorzugt parent_comment_id vor parent_post_id', () => {
+    expect(
+      parentIdOf(mkPost({ parent_comment_id: 'c-1', parent_post_id: 'p-1' })),
+    ).toBe('c-1')
+  })
+
+  it('parentIdOf: faellt auf parent_post_id zurueck, wenn parent_comment_id fehlt', () => {
+    expect(parentIdOf(mkPost({ parent_comment_id: null, parent_post_id: 'p-1' }))).toBe('p-1')
+  })
+
+  it('parentIdOf: null, wenn beide Kanten fehlen (Strang-Wurzel)', () => {
+    expect(parentIdOf(mkPost({ parent_comment_id: null, parent_post_id: null }))).toBeNull()
   })
 })
