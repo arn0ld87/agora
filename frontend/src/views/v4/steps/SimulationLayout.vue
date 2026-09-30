@@ -1,7 +1,7 @@
 <!--
   SimulationLayout — gemeinsame Huelle fuer Schritt 3 (Simulation): Kopf,
-  Breadcrumbs, Tabs (Pipeline | Live-Feed) und der aktive Tab-Inhalt ueber
-  RouterView.
+  Breadcrumbs, Tabs (Pipeline | Feed | Diskurs | Runden | Protokoll) und der
+  aktive Tab-Inhalt ueber RouterView.
 
   Fix #1713 (Befund 2): der Feed-Tab war zuvor nur eine `activeTab`-Weiche in
   StepSimulationView, die Route selbst (StepSimulationFeed) blieb tot. Jetzt
@@ -17,6 +17,11 @@
   Fix #1713 (Befund 5, Regression von #1007): clearSimFeed/clearSimClock
   laufen nur noch hier, beim Verlassen der gesamten Simulation — nicht mehr
   bei jedem Tab-Wechsel (siehe Step3Simulation.vue).
+
+  Slice UI-2b (docs/design/simulation-feed.md §1): drei weitere Kind-Routen
+  (Diskurs/Strang, Runden, Protokoll) kommen dazu. SimTabsBar ersetzt die
+  bisherige `Tabs`-Instanz und navigiert selbststaendig; `activeTab` schaut
+  jetzt auf einen Namens-Prefix (SimThreads/SimThreadFocus → 'threads').
 -->
 <template>
   <AppShell :breadcrumbs="crumbs">
@@ -27,13 +32,7 @@
     </PageHeader>
     <PipelineStepper :current-step="3" />
 
-    <Tabs
-      :model-value="activeTab"
-      :tabs="tabItems"
-      :url-sync="false"
-      class="sim-view-tabs"
-      @update:model-value="onTabChange"
-    />
+    <SimTabsBar :active-tab="activeTab" :simulation-id="simulationId" />
 
     <div class="sim-view-content">
       <RouterView />
@@ -49,9 +48,8 @@ import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
-import Tabs from '@/components/v4/data/Tabs.vue'
+import SimTabsBar, { type SimTabKey } from '@/components/v4/sim-feed/SimTabsBar.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
-import type { TabItem } from '@/components/v4/data/Tabs.vue'
 import { getSimulation } from '@/api/simulation'
 import { unwrap } from '@/api/envelope'
 import { clearSimFeed } from '@/composables/useSimFeed'
@@ -65,32 +63,33 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const activeTab = computed<string>(() =>
-  route.name === 'StepSimulationFeed' ? 'feed' : 'pipeline',
-)
+const activeTab = computed<SimTabKey>(() => {
+  const name = String(route.name ?? '')
+  if (name === 'StepSimulationFeed') return 'feed'
+  // SimThreads und SimThreadFocus teilen sich den Diskurs-Tab.
+  if (name.startsWith('SimThread')) return 'threads'
+  if (name === 'SimRounds') return 'rounds'
+  if (name === 'SimActions') return 'actions'
+  return 'pipeline'
+})
 
-const headerTitle = computed(() =>
-  activeTab.value === 'feed'
-    ? t('views.stepSimulationFeed.title')
-    : t('views.stepSimulation.title'),
-)
-const headerSubtitle = computed(() =>
-  activeTab.value === 'feed'
-    ? t('views.stepSimulationFeed.subtitle')
-    : t('views.stepSimulation.subtitle'),
-)
+const TITLE_KEYS: Record<SimTabKey, string> = {
+  pipeline: 'views.stepSimulation',
+  feed: 'views.stepSimulationFeed',
+  threads: 'views.simThreads',
+  rounds: 'views.simRounds',
+  actions: 'views.simActions',
+}
 
-const tabItems = computed<TabItem[]>(() => [
-  { key: 'pipeline', label: t('feed.pipeline') },
-  { key: 'feed', label: t('feed.feedTab') },
-])
+const headerTitle = computed(() => t(`${TITLE_KEYS[activeTab.value]}.title`))
+const headerSubtitle = computed(() => t(`${TITLE_KEYS[activeTab.value]}.subtitle`))
 
-function onTabChange(tab: string): void {
-  // Query mitnehmen: sie traegt projectId (Voraussetzung fuer handleGoBack)
-  // und die Run-Parameter. Ohne sie verlor ein Tab-Wechsel beides.
-  const query = route.query
-  const name = tab === 'feed' ? 'StepSimulationFeed' : 'StepSimulation'
-  void router.push({ name, params: { simulationId: props.simulationId }, query })
+const TAB_LABEL_KEYS: Record<SimTabKey, string> = {
+  pipeline: 'views.stepSimulation.title',
+  feed: 'feed.feedTab',
+  threads: 'feed.threadsTab',
+  rounds: 'feed.roundsTab',
+  actions: 'feed.actionsTab',
 }
 
 // Fix #1713 (Befund 3/4): fehlt projectId in der Query, einmalig nachladen
@@ -135,7 +134,7 @@ const crumbs = computed<BreadcrumbItem[]>(() => {
   return [
     { label: 'Runs', path: '/runs' },
     { label: props.simulationId, path: withCurrentQuery(pipelinePath) },
-    { label: activeTab.value === 'feed' ? t('feed.feedTab') : t('views.stepSimulation.title') },
+    { label: t(TAB_LABEL_KEYS[activeTab.value]) },
   ]
 })
 
@@ -148,9 +147,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.sim-view-tabs {
-  margin-bottom: 0;
-}
 .sim-view-content {
   margin-top: 16px;
   min-height: 0;

@@ -68,6 +68,11 @@ vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsProfileView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/EmbeddingConfigurationsView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepSimulationFeedView.vue', () => VIEW_STUB)
+// Slice UI-2b (#1713): Diskurs/Strang/Runden/Protokoll-Kind-Routen.
+vi.mock('../../views/v4/steps/SimThreadsView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/SimThreadFocusView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/SimRoundsView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/SimActionsView.vue', () => VIEW_STUB)
 vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
 // Redesign PR 8: /runs und /v4/history sind reine Redirects auf die Ablage
 // (ShelfView); die abgeloesten RunsAppShellView.vue und HistoryView.vue sind
@@ -136,6 +141,32 @@ describe('Router – Routen-Resolution', () => {
   it('löst /v4/simulation/:simulationId/feed mit param auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/feed')
     expect(router.currentRoute.value.name).toBe('StepSimulationFeed')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+  })
+
+  // Slice UI-2b (#1713): Diskurs-, Strang-, Runden- und Protokoll-Kind-Routen.
+  it('löst /v4/simulation/:simulationId/threads mit param auf', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc/threads')
+    expect(router.currentRoute.value.name).toBe('SimThreads')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+  })
+
+  it('löst /v4/simulation/:simulationId/thread/:postId mit beiden Params auf', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc/thread/post_1')
+    expect(router.currentRoute.value.name).toBe('SimThreadFocus')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+    expect(router.currentRoute.value.params.postId).toBe('post_1')
+  })
+
+  it('löst /v4/simulation/:simulationId/rounds mit param auf', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc/rounds')
+    expect(router.currentRoute.value.name).toBe('SimRounds')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+  })
+
+  it('löst /v4/simulation/:simulationId/actions mit param auf', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc/actions')
+    expect(router.currentRoute.value.name).toBe('SimActions')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
@@ -251,12 +282,12 @@ describe('Router – Redirects', () => {
   })
 
   // Fix #1713 (Befund 6): /live war eine verwaiste Route ohne Anschluss an
-  // die Tab-Navigation. Bis der Runden-Tab existiert, leitet sie auf den
-  // bestehenden Feed-Tab um und behält Parameter + Query.
-  it('/v4/simulation/:id/live → StepSimulationFeed, Query bleibt erhalten', async () => {
+  // die Tab-Navigation. Slice UI-2b: Ziel ist jetzt die Runden-Ansicht (naeher
+  // am urspruenglichen Zweck als der Feed); Parameter + Query bleiben erhalten.
+  it('/v4/simulation/:id/live → SimRounds, Query bleibt erhalten', async () => {
     await pushAndSettle('/v4/simulation/sim_live_1/live?projectId=project_1')
 
-    expect(router.currentRoute.value.name).toBe('StepSimulationFeed')
+    expect(router.currentRoute.value.name).toBe('SimRounds')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_live_1')
     expect(router.currentRoute.value.query.projectId).toBe('project_1')
   })
@@ -356,7 +387,12 @@ describe('Router – Struktur-Integrität', () => {
       'StepEnvSetup',
       'StepSimulation',
       'StepSimulationFeed',
-      // Fix #1713 (Befund 6): /live ist jetzt ein Redirect auf den Feed-Tab,
+      // Slice UI-2b (#1713): Diskurs/Strang/Runden/Protokoll-Kind-Routen.
+      'SimThreads',
+      'SimThreadFocus',
+      'SimRounds',
+      'SimActions',
+      // Fix #1713 (Befund 6): /live ist jetzt ein Redirect (Ziel: SimRounds),
       // keine eigene produktive Route mehr (siehe Redirects-Suite oben).
       'StepReport',
       'StepInteraction',
