@@ -19,6 +19,7 @@ from typesafe_sdk import TypeSafeClient
 
 from app.contracts.decision_contract import DecisionState, NoulQuestion
 from app.services.decisions.jev_provider import JEV_PINNED_MODEL_VERSION, JevDecisionProvider
+from app.services.decisions.local_search_relevance import RELEVANCE_ASSERTION
 
 _USE_CASE_ID = "local-search-relevance"
 _MAX_CASES = 30
@@ -51,7 +52,7 @@ def probe(cases: list[dict[str, Any]], provider: JevDecisionProvider) -> dict[st
         state = DecisionState(
             use_case_id=_USE_CASE_ID,
             state={
-                "assertion": "Der Fakt ist für die Suchanfrage relevant.",
+                "assertion": RELEVANCE_ASSERTION,
                 "query": case["query"],
                 "fact": case["fact"],
             },

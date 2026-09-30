@@ -51,7 +51,7 @@ import hashlib
 import time
 from typing import Any, cast
 
-from typesafe_sdk import Choice, JSONContent, Noul, Score, TypeSafeClient
+from typesafe_sdk import Choice, JSONContent, Noul, RetryPolicy, Score, TypeSafeClient
 
 from ...contracts.decision_contract import (
     ChoiceQuestion,
@@ -96,24 +96,30 @@ def resolve_jev_api_key() -> str | None:
 
 
 def build_jev_client(
-    *, model_version: str = JEV_PINNED_MODEL_VERSION, timeout: float = 30.0
+    *,
+    model_version: str = JEV_PINNED_MODEL_VERSION,
+    timeout: float = 30.0,
+    retry: RetryPolicy | None = None,
 ) -> TypeSafeClient:
     """Baut den echten ``TypeSafeClient`` mit dem im Secret-Store
     hinterlegten Key. Wirft laut, wenn kein Key gebunden ist — ein
     Aufrufer, der einen Jev-Client anfordert, aber keinen Key hinterlegt
     hat, hat einen Konfigurationsfehler, keinen Laufzeitfall.
 
-    Retry bleibt beim SDK-Default (siehe Moduldocstring); dieser Adapter
-    konfiguriert hier keine eigene ``RetryPolicy``, weil "absolute
-    Minimal-Konfiguration" für den Benchmark-Piloten reicht — eine
-    use-case-spezifische Anpassung ist eine spätere, eigene Entscheidung.
+    Retry bleibt bei ``retry=None`` beim SDK-Default (siehe Moduldocstring)
+    — der Benchmark-Pilot (``scripts/jev_benchmark_local_search.py``) lässt
+    diesen Parameter unverändert weg und bekommt damit weiterhin exakt das
+    bisherige Verhalten. ``retry`` ist ausschließlich für Aufrufer gedacht,
+    die das Timeout-Budget eines Aufrufs explizit begrenzen müssen (f005,
+    Task `resolve-fn`: ``local_search_relevance.py::_jev_provider`` im
+    authoritative-Pfad, höchstens ein zusätzlicher Versuch).
     """
     api_key = resolve_jev_api_key()
     if not api_key:
         raise RuntimeError(
             f"Kein Jev-API-Key im Provider-Secret-Store unter '{_SECRET_REF}' gebunden."
         )
-    return TypeSafeClient(api_key=api_key, model=model_version, timeout=timeout)
+    return TypeSafeClient(api_key=api_key, model=model_version, timeout=timeout, retry=retry)
 
 
 class DecisionJevResponseError(RuntimeError):
