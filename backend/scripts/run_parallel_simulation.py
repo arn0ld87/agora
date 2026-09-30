@@ -95,6 +95,7 @@ try:
         install_max_tokens_warning_filter,
         install_memory_sampler,
         install_recsys_mean_pooling_patch,
+        install_reddit_nested_comments_patch,
         install_script_paths,
         is_workspace_credential_scope,
         load_project_env,
@@ -119,6 +120,7 @@ except ImportError:  # direct script execution
         install_max_tokens_warning_filter,
         install_memory_sampler,
         install_recsys_mean_pooling_patch,
+        install_reddit_nested_comments_patch,
         install_script_paths,
         is_workspace_credential_scope,
         load_project_env,
@@ -178,6 +180,10 @@ def _install_runtime_profile() -> None:
     _mean_pooling_patched = install_recsys_mean_pooling_patch()
     logging.getLogger("agora.run_parallel_simulation").info(
         "twhin-bert mean-pooling patch installed = %s (#1236)", _mean_pooling_patched
+    )
+    _nested_comments_patched = install_reddit_nested_comments_patch()
+    logging.getLogger("agora.run_parallel_simulation").info(
+        "reddit nested-comments patch installed = %s (#1713 S5)", _nested_comments_patched
     )
     _camel_context_floor = apply_camel_context_floor()
     logging.getLogger("agora.run_parallel_simulation").info("context-patch token_limit floor = %s", _camel_context_floor)
@@ -368,6 +374,7 @@ async def _emit_post_created_to_redis(
 
     # post_id / parent_post_id plattformpräfixen; Kommentare referenzieren
     # ihren Elternpost, Posts haben keinen Parent (top-level).
+    parent_comment_id_val: Optional[str] = None
     if action_type == "CREATE_COMMENT":
         body = action_args.get("content") or action_args.get("text") or ""
         raw_id = action_args.get("comment_id") or action_args.get("id")
@@ -380,6 +387,10 @@ async def _emit_post_created_to_redis(
         author_agent_id = action_args.get("post_author_agent_id")
         parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
         parent_persona_name = action_args.get("post_author_name") or None
+        # #1713 S5: parent_comment_id aus enriched action_args (oasis_action_ingest befuellt).
+        raw_pcid = action_args.get("parent_comment_id")
+        if raw_pcid is not None:
+            parent_comment_id_val = str(raw_pcid)
     elif action_type == "REPOST":
         # Ein reiner Repost hat keinen eigenen Text — der geteilte Beitrag
         # steht unter reposted_post_id (Contract-Ausnahme fuer body).
@@ -465,7 +476,8 @@ async def _emit_post_created_to_redis(
         # #1713 UI-2a — Thread-/Diskursfelder.
         "kind": kind,
         "round_num": round_num,
-        "parent_comment_id": None,
+        # #1713 S5: aus action_args befuellt wenn nested-comments-Patch aktiv (Reddit).
+        "parent_comment_id": parent_comment_id_val,
         "root_post_id": root_post_id,
         "quoted_post_id": quoted_post_id,
         "reposted_post_id": reposted_post_id,
@@ -492,6 +504,8 @@ async def _emit_post_created_to_redis(
 
 
 # Twitter available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
+# #1713 S5: CREATE_COMMENT (Replies) und LIKE_COMMENT generisch verfuegbar seit OASIS 0.2.5.
+# Kein DISLIKE_POST/DISLIKE_COMMENT auf Twitter — Twitter kennt dieses Konzept nicht.
 TWITTER_ACTIONS = [
     ActionType.CREATE_POST,
     ActionType.LIKE_POST,
@@ -499,6 +513,8 @@ TWITTER_ACTIONS = [
     ActionType.FOLLOW,
     ActionType.DO_NOTHING,
     ActionType.QUOTE_POST,
+    ActionType.CREATE_COMMENT,
+    ActionType.LIKE_COMMENT,
 ]
 
 # Reddit available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)

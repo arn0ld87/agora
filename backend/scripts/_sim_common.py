@@ -1445,3 +1445,223 @@ def install_memory_sampler(
 def _noop_stop() -> None:
     """Führt beim Beenden des Speichersamplers keine Aktion aus."""
     return None
+
+
+_REDDIT_NESTED_EXPECTED_VERSION = "0.2.5"
+
+
+def install_reddit_nested_comments_patch() -> bool:
+    """Ergaenzt OASIS 0.2.5 um Reddit-Kommentar-Verschachtelung.
+
+    Patches (alle idempotent):
+
+    (a) **Versions-Guard**: nur bei ``camel-oasis == 0.2.5`` aktiv.  Bei einer
+        anderen Version wird ``logger.warning`` mit der gefundenen Version
+        ausgegeben und ``False`` zurueckgegeben — sichtbare Degradation,
+        kein stilles Weiterlaufen mit falscher Annahme.
+
+    (b) **Schema**: ``oasis.social_platform.database.create_db`` und der
+        Referenz in ``Platform`` erhalten einen Wrapper, der nach der normalen
+        DB-Erstellung per ``PRAGMA table_info`` prueft ob die Spalte fehlt und
+        dann ``ALTER TABLE comment ADD COLUMN parent_comment_id INTEGER``
+        ausfuehrt.  Resume-sicher: existiert die Spalte bereits (laufende oder
+        wiederaufgenommene DB), laeuft das ALTER TABLE nicht erneut.
+
+    (c) **Platform.create_comment**: akzeptiert ``comment_message`` als
+        2-Tupel ``(post_id, content)`` *oder* 3-Tupel
+        ``(post_id, content, parent_comment_id)``.  Wenn
+        ``parent_comment_id`` uebergeben wird, muss der Elternkommentar
+        existieren und zum selben ``post_id`` gehoeren, sonst OASIS-Fehler-
+        Antwort ``{"success": False, "error": "..."}``.  Nach erfolgreichem
+        INSERT setzt der Wrapper ``UPDATE comment SET parent_comment_id = ?``.
+
+    (d) **SocialAction.create_comment**: erhaelt optionalen Parameter
+        ``parent_comment_id: int | None = None`` mit Docstring, der dem
+        Modell erklaert, dass damit auf einen Kommentar geantwortet wird.
+
+    (e) **PlatformUtils._add_comments_to_posts**: liefert
+        ``parent_comment_id`` je Kommentar mit (zusaetzlicher
+        ``SELECT``-Abfrage per Kommentar; akzeptabel bei kleinen
+        Kommentarmengen pro Post).
+
+    Returns:
+        ``True`` wenn der Patch installiert (oder bereits war),
+        ``False`` wenn ``camel-oasis`` nicht der erwarteten Version
+        entspricht oder nicht importierbar ist.
+    """
+    import importlib.metadata
+
+    try:
+        actual_version = importlib.metadata.version("camel-oasis")
+    except importlib.metadata.PackageNotFoundError:
+        logger.warning(
+            "install_reddit_nested_comments_patch: camel-oasis nicht gefunden "
+            "— Patch NICHT installiert (sichtbare Degradation, #1713 S5)"
+        )
+        return False
+
+    if actual_version != _REDDIT_NESTED_EXPECTED_VERSION:
+        logger.warning(
+            "install_reddit_nested_comments_patch: erwartet camel-oasis==%s, "
+            "gefunden %s — Patch NICHT installiert (sichtbare Degradation, #1713 S5)",
+            _REDDIT_NESTED_EXPECTED_VERSION,
+            actual_version,
+        )
+        return False
+
+    try:
+        import oasis.social_platform.database as _oasis_db
+        import oasis.social_platform.platform as _oasis_platform
+        import oasis.social_platform.platform_utils as _oasis_pu
+        import oasis.social_agent.agent_action as _oasis_aa
+    except ImportError:
+        return False
+
+    # Idempotenz-Pruefung: alle Patches am selben Sentinel
+    if getattr(_oasis_db.create_db, "_agora_nested_comments_applied", False):
+        return True
+
+    # --- (b) Schema-Patch: create_db ---
+    _original_create_db = _oasis_db.create_db
+
+    def _patched_create_db(db_path: Any = None) -> Any:  # type: ignore[misc]
+        conn, cursor = _original_create_db(db_path)
+        cursor.execute("PRAGMA table_info(comment)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "parent_comment_id" not in cols:
+            cursor.execute(
+                "ALTER TABLE comment ADD COLUMN parent_comment_id INTEGER"
+            )
+            conn.commit()
+        return conn, cursor
+
+    _patched_create_db._agora_nested_comments_applied = True  # type: ignore[attr-defined]
+    _oasis_db.create_db = _patched_create_db  # type: ignore[assignment]
+    # Platform importiert create_db direkt in seinen Namespace
+    _oasis_platform.create_db = _patched_create_db  # type: ignore[assignment]
+
+    # --- (c) Platform.create_comment ---
+    import asyncio as _asyncio
+    _original_platform_create_comment = _oasis_platform.Platform.create_comment
+
+    async def _patched_platform_create_comment(
+        self: Any, agent_id: int, comment_message: Any
+    ) -> Any:
+        if isinstance(comment_message, (list, tuple)) and len(comment_message) == 3:
+            post_id_arg, content_arg, parent_comment_id_arg = comment_message
+        else:
+            post_id_arg, content_arg = comment_message
+            parent_comment_id_arg = None
+
+        if parent_comment_id_arg is not None:
+            self.db_cursor.execute(
+                "SELECT post_id FROM comment WHERE comment_id = ?",
+                (parent_comment_id_arg,),
+            )
+            row = self.db_cursor.fetchone()
+            if row is None:
+                return {
+                    "success": False,
+                    "error": (
+                        f"parent_comment_id {parent_comment_id_arg} existiert nicht"
+                    ),
+                }
+            if row[0] != post_id_arg:
+                return {
+                    "success": False,
+                    "error": (
+                        f"parent_comment_id {parent_comment_id_arg} gehoert zu "
+                        f"post_id {row[0]}, nicht zu {post_id_arg}"
+                    ),
+                }
+
+        result = await _original_platform_create_comment(
+            self, agent_id, (post_id_arg, content_arg)
+        )
+        if result.get("success") and parent_comment_id_arg is not None:
+            comment_id_new = result.get("comment_id")
+            if comment_id_new is not None:
+                self.db_cursor.execute(
+                    "UPDATE comment SET parent_comment_id = ? WHERE comment_id = ?",
+                    (parent_comment_id_arg, comment_id_new),
+                )
+                self.db.commit()
+        return result
+
+    _patched_platform_create_comment._agora_nested_comments_applied = True  # type: ignore[attr-defined]
+    _oasis_platform.Platform.create_comment = _patched_platform_create_comment  # type: ignore[method-assign]
+
+    # --- (d) SocialAction.create_comment ---
+    _original_sa_create_comment = _oasis_aa.SocialAction.create_comment
+
+    async def _patched_sa_create_comment(
+        self: Any, post_id: int, content: str, parent_comment_id: int | None = None
+    ) -> Any:
+        r"""Create a new comment for a specified post given content.
+
+        This method creates a new comment based on the provided content and
+        associates it with the given post ID. Upon successful execution, it
+        returns a dictionary indicating success and the ID of the newly created
+        comment.
+
+        Args:
+            post_id (int): The ID of the post to which the comment is to be
+                added.
+            content (str): The content of the comment to be created.
+            parent_comment_id (int | None): Optional ID of an existing comment
+                to reply to. When set, this comment becomes a nested reply
+                within the same post's thread. The parent comment must belong
+                to the same post_id. Defaults to None (top-level comment).
+
+        Returns:
+            dict: A dictionary with two key-value pairs. The 'success' key
+                maps to a boolean indicating whether the comment creation was
+                successful. The 'comment_id' key maps to the integer ID of the
+                newly created comment.
+
+                Example of a successful return:
+                    {'success': True, 'comment_id': 123}
+        """
+        if parent_comment_id is not None:
+            comment_message: Any = (post_id, content, parent_comment_id)
+        else:
+            comment_message = (post_id, content)
+        return await self.perform_action(
+            comment_message,
+            "create_comment",  # ActionType.CREATE_COMMENT.value
+        )
+
+    _patched_sa_create_comment._agora_nested_comments_applied = True  # type: ignore[attr-defined]
+    _oasis_aa.SocialAction.create_comment = _patched_sa_create_comment  # type: ignore[method-assign]
+
+    # --- (e) PlatformUtils._add_comments_to_posts ---
+    _original_add_comments = _oasis_pu.PlatformUtils._add_comments_to_posts
+
+    def _patched_add_comments_to_posts(self: Any, posts_results: Any) -> Any:
+        posts = _original_add_comments(self, posts_results)
+        for post in posts:
+            for comment in post.get("comments", []):
+                cid = comment.get("comment_id")
+                if cid is not None:
+                    try:
+                        self.db_cursor.execute(
+                            "SELECT parent_comment_id FROM comment WHERE comment_id = ?",
+                            (cid,),
+                        )
+                        pcid_row = self.db_cursor.fetchone()
+                        comment["parent_comment_id"] = pcid_row[0] if pcid_row else None
+                    except Exception:
+                        comment["parent_comment_id"] = None
+                else:
+                    comment["parent_comment_id"] = None
+        return posts
+
+    _patched_add_comments_to_posts._agora_nested_comments_applied = True  # type: ignore[attr-defined]
+    _oasis_pu.PlatformUtils._add_comments_to_posts = _patched_add_comments_to_posts  # type: ignore[method-assign]
+
+    logger.info(
+        "install_reddit_nested_comments_patch: alle Patches installiert "
+        "(camel-oasis==%s, #1713 S5)",
+        actual_version,
+    )
+    return True
