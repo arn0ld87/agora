@@ -1,0 +1,1 @@
+- Der Jev-Pilot dokumentiert die zwölf synthetischen Benchmark-Fälle als Maintainer-Prüfbogen und die fehlenden Kalibrations- und Datenschutz-Nachweise vor einem möglichen Rollout.
