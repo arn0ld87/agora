@@ -252,7 +252,7 @@ function onKeydown(event: KeyboardEvent, roundNum: number): void {
   gap: 12px;
   padding: var(--sim-header-py) var(--sim-header-px);
   font-size: var(--sim-time-fs);
-  background: var(--status-danger-soft, var(--status-red-bg, rgba(224, 122, 104, 0.14)));
+  background: var(--status-red-bg);
   color: var(--status-red);
 }
 .srl-retry {

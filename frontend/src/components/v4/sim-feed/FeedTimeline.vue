@@ -178,7 +178,7 @@ watch(
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: var(--status-danger-soft, var(--status-red-bg, rgba(224,122,104,0.14)));
+  background: var(--status-red-bg);
   color: var(--status-red);
 }
 .ft-retry {

@@ -217,7 +217,7 @@ const hasMore = computed(() => props.page.next_cursor !== null)
   color: var(--status-warning, var(--status-orange));
 }
 .sat-badge--danger {
-  background: var(--status-danger-soft, var(--status-red-bg, rgba(224, 122, 104, 0.14)));
+  background: var(--status-red-bg);
   color: var(--status-red);
 }
 .sat-empty {
