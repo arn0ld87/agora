@@ -7,7 +7,7 @@
   not supported". Jetzt setzen der Tools-Pfad und `chat()`/`chat_json()` ein
   top-level `reasoning_effort` (Route-Wert, bei `force_no_thinking` `none`),
   aber nur wenn die bestehende Provider-Detection `openai` liefert und das
-  Modell zur Reasoning-Familie gehört (`gpt-5`…`gpt-9`, `o1`/`o3`/`o4`).
+  Modell zur Reasoning-Familie gehört (`gpt-5.x`, `gpt-6.x`, `o1`/`o3`/`o4`; die Erkennung aus #1572 deckt vorsorglich auch spätere Major-Versionen ab).
   Ollama, OpenRouter, openai-kompatible Proxies und Nicht-Reasoning-Modelle
   (`gpt-4.1`, `gpt-4o`) bekommen den Parameter nicht. Lehnt ein älteres
   Reasoning-Modell den Wert `none` ab, wiederholt ein neuer Quirk den Request
