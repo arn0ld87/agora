@@ -28,6 +28,15 @@ const showChildren = computed(() => props.depth < props.maxDepth)
 function openThread(postId: string): void {
   emit('openThread', postId)
 }
+
+// §2.8: jenseits von maxDepth wird nicht mehr rekursiv aufgebaut — der Klick
+// springt stattdessen in den Strang-Fokus des Unterbaums (dieser Knoten wird
+// die neue Wurzel in SimThreadFocusView), statt lokal aufzuklappen. Das
+// nutzt dieselbe openThread-Route wie ein Klick auf den Beitrag selbst und
+// braucht keinen zusaetzlichen Expand-Zustand.
+function showMore(): void {
+  openThread(props.node.post_id)
+}
 </script>
 
 <template>
@@ -44,7 +53,7 @@ function openThread(postId: string): void {
         @open-thread="openThread"
       />
     </template>
-    <button v-else-if="children.length > 0" type="button" class="stl-show-more" @click.prevent>
+    <button v-else-if="children.length > 0" type="button" class="stl-show-more" @click="showMore">
       {{ t('feed.showMoreReplies', { count: children.length }, children.length) }}
     </button>
   </div>

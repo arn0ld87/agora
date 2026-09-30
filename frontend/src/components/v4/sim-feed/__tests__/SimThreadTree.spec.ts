@@ -94,6 +94,20 @@ describe('SimThreadTree', () => {
     expect(w.get('.stl-show-more').text()).toBe('feed.showMoreReplies:1')
   })
 
+  it('Klick auf "weitere anzeigen" springt in den Strang-Fokus des Unterbaums (openThread mit dem verdeckten Knoten)', async () => {
+    // §2.8: jenseits maxDepth klappt der Button NICHT lokal auf, sondern
+    // navigiert per openThread auf den Knoten, dessen Kinder verdeckt sind
+    // (d1) — SimThreadFocusView zentriert den Strang dann auf d1 neu.
+    const root = mkPost({ post_id: 'root-1' })
+    const nodes = [
+      mkPost({ post_id: 'd1', parent_post_id: 'root-1' }),
+      mkPost({ post_id: 'd2', parent_comment_id: 'd1' }),
+    ]
+    const w = mount(SimThreadTree, { props: { root, nodes, loading: false, maxDepth: 1 } })
+    await w.get('.stl-show-more').trigger('click')
+    expect(w.emitted('openThread')?.[0]).toEqual(['d1'])
+  })
+
   it('openThread von einem verschachtelten FeedItem bubbelt bis zur Wurzel-Komponente', async () => {
     // FeedItem.open() adressiert immer die Strang-Wurzel (root_post_id ??
     // parent_post_id ?? post_id) — der Klick auf die Antwort 'c-1' emittiert
