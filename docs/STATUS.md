@@ -107,6 +107,8 @@ Unterstützte Transportklassen sind `http`, `local` und `cli`. `codex_cli` ist e
 
 Die `max_completion_tokens`-/`temperature`-Heuristik (`app/llm/providers/openai.py`, gespiegelt in `scripts/_sim_common.py`) deckt die gesamte GPT-Reasoning-Major-Version `gpt-5`…`gpt-9` proaktiv sowie `o1`/`o3`/`o4` ab, statt jede neue Modellgeneration erst nach einem eigenen 400er-Incident nachzuziehen (#1572).
 
+`reasoning_effort` der Route wird seit #1738 als top-level Parameter an OpenAI-Reasoning-Modelle gesendet (Tools-Pfad und `chat()`/`chat_json()`; `force_no_thinking` erzwingt `none`), nur bei Detection `openai` und Reasoning-Familie — Ollama, OpenRouter, openai-kompatible Proxies und Nicht-Reasoning-Modelle (`gpt-4.1`) bekommen ihn nicht. Ohne den Parameter sperrt OpenAI Function-Tools auf `gpt-6.1-sol` mit 400. Ältere Reasoning-Modelle, die `none` ablehnen, werden per `REASONING_EFFORT_QUIRK` einmal ohne den Parameter wiederholt (der Tools-400 zählt nicht dazu); der Vision-Pfad (`describe_image`) sendet ihn noch nicht.
+
 `frontend/src/views/Settings/LlmProvidersView.vue` rendert CLI-/Session-Provider seit #1415 nicht mehr wie HTTP-Provider: `codex_cli` (`auth_mode="session"`) zeigt weder Key- noch Base-URL-Feld, nur einen Hinweis auf die lokale `codex login`-Session; `claude_cli` (`auth_mode="api_key"`) behält das Key-Feld, verliert aber das Base-URL-Feld. `transport`/`auth_mode` liefert der `ProviderDescriptor` aus der Registry-Matrix; eine gespeicherte Connection gewinnt.
 
 Ob ein Provider ohne eigenen Secret auskommt, entscheidet seit dem Fix für den
@@ -230,6 +232,7 @@ Offen bleibt LLM-gestützte Koreferenz (#1470, laut Plan außerhalb des Scopes).
 
 - Contract-invalid Reports dürfen nicht als normal `completed` ausgeliefert werden.
 - Teilberichte aus Cancel-, Section-Failure- oder Fallback-Outline-Pfaden werden als `INCOMPLETE` klassifiziert; Resume bewahrt die Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).
+- Ein nicht-transienter Provider-400 (kein 408/429/5xx/Timeout, kein Prompt-spezifischer wie Context-Length) in einer Section lässt die restlichen Sections ohne weiteren LLM-Call als sichtbaren Fallback enden; der Bericht bleibt `INCOMPLETE`. Der Fallback-Text nennt Fehlerklasse und gekürzte, von Secrets bereinigte Providermeldung (#1738). `BudgetExceededError` wird weiter hart durchgereicht.
 - Ein `INCOMPLETE`-Report kann weiterhin auslieferbar sein; der tatsächliche Reportstatus steht in der Run-Metadaten-Sicht.
 
 ### Abschnittsgenerierung (Section-ReACT)

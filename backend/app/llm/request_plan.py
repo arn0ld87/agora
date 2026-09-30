@@ -216,6 +216,19 @@ ab; hier bleibt das Netz für die, die noch nicht in der Heuristik stehen.
 """
 
 
+REASONING_EFFORT_QUIRK = Quirk(
+    name="reasoning_effort param",
+    remedy="reasoning_effort dropped",
+    matches=_provider_openai.is_reasoning_effort_400,
+    rewrite=_provider_openai.drop_reasoning_effort,
+)
+"""400 weil ein aelteres Reasoning-Modell den Wert ``"none"`` ablehnt (#1738).
+
+Der Erkenner schliesst den Tools-400 ("Function tools with reasoning_effort
+are not supported") bewusst aus — der entsteht gerade ohne den Parameter.
+"""
+
+
 def _with_quirk[T](
     inner: Callable[[Dict[str, Any]], T],
     quirk: Quirk,
