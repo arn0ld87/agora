@@ -86,6 +86,26 @@ manuelle Prüfung bzw. Folgearbeit.
   als Elternteil identifiziert werden — ein späterer Beitrag, der ihn
   referenziert, wird dadurch selbst zur Wurzel statt die Kette zu
   verlängern.
+- **L4 Kommentar-auf-Kommentar (#1713 Slice S5):** seit dem
+  nested-comments-Patch (`install_reddit_nested_comments_patch`,
+  Reddit, nur `camel-oasis==0.2.5`) trägt `CREATE_COMMENT` zusätzlich
+  `parent_comment_id`. Zeigt das Feld auf einen früheren Kommentar, hängt der
+  neue Kommentar in der Kette an diesem Kommentar (Namensraum `comment`) statt
+  pauschal am Elternpost — eine echte Antwort-auf-Antwort-Kette zählt jetzt
+  auch als solche, nicht nur als zwei getrennte Tiefe-1-Äste unter demselben
+  Post. Fehlt `parent_comment_id` (Twitter, oder Reddit-Kommentare ohne
+  erkannten Parent), bleibt das alte Verhalten erhalten: der Kommentar hängt
+  direkt unter seinem Post.
+- **L3 `own_post_share` und Twitter-Kommentare (#1713 Slice S5):** Seit S5
+  kann Twitter `CREATE_COMMENT`/`LIKE_COMMENT` ausführen (vorher nur
+  `CREATE_POST`/`QUOTE_POST`/`REPOST`/`LIKE_POST`/`FOLLOW`). Kommentare zählen
+  in den Nenner von `own_post_share`
+  (`CREATE_POST`+`CREATE_COMMENT`+`QUOTE_POST`+`REPOST`), nicht in den Zähler.
+  Ein Twitter-Lauf nach S5 ist deshalb nicht direkt mit der Baseline vor S5
+  vergleichbar: ein niedrigerer Wert kann schlicht daher kommen, dass Agenten
+  jetzt antworten können, statt nur eigene Beiträge zu setzen. **Beim Vergleich
+  von Läufen vor/nach S5 die Aktionsraum-Änderung ausdrücklich kennzeichnen.**
+  Der Zielwert (≥ 20 %) bleibt unverändert und gilt je Lauf.
 - **L7-Match** ist wörtlich (case-sensitive), nicht semantisch: eine Zahl aus
   dem Seed oder eine 8-Wort-Folge muss exakt im Post-Inhalt auftauchen.
 - **`duplicate_log_lines`** zählt gezielt die #1713-Altlauf-Signatur (ein

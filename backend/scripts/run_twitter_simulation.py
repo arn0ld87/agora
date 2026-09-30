@@ -175,6 +175,8 @@ class TwitterSimulationRunner(SinglePlatformRunner):
     """Twitter simulation runner — dünne Subklasse der SinglePlatformRunner-Basis."""
 
     # Twitter available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
+    # #1713 S5: CREATE_COMMENT (Replies) und LIKE_COMMENT generisch verfuegbar seit OASIS 0.2.5.
+    # Kein DISLIKE_POST/DISLIKE_COMMENT auf Twitter — Twitter kennt dieses Konzept nicht.
     AVAILABLE_ACTIONS = [
         ActionType.CREATE_POST,
         ActionType.LIKE_POST,
@@ -182,11 +184,14 @@ class TwitterSimulationRunner(SinglePlatformRunner):
         ActionType.FOLLOW,
         ActionType.DO_NOTHING,
         ActionType.QUOTE_POST,
+        ActionType.CREATE_COMMENT,
+        ActionType.LIKE_COMMENT,
     ]
 
     # String names for prompts
     AVAILABLE_ACTION_NAMES = [
-        "CREATE_POST", "LIKE_POST", "REPOST", "FOLLOW", "DO_NOTHING", "QUOTE_POST"
+        "CREATE_POST", "LIKE_POST", "REPOST", "FOLLOW", "DO_NOTHING", "QUOTE_POST",
+        "CREATE_COMMENT", "LIKE_COMMENT",
     ]
 
     PLATFORM_NAME = "Twitter"

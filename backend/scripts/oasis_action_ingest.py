@@ -319,6 +319,29 @@ def _enrich_action_context(
                     action_args['post_author_name'] = post_info.get('author_name', '')
                     action_args['post_author_agent_id'] = post_info.get('author_agent_id')
             _attach_engagement_score(cursor, 'comment', 'comment_id', action_args)
+            # #1713 S5: parent_comment_id aus nested-comments-Patch (nur wenn Spalte
+            # in der DB vorhanden — Resume-sicher, kein Fehler bei aelteren DBs).
+            if 'parent_comment_id' not in action_args:
+                comment_id_val = action_args.get('comment_id')
+                if comment_id_val is not None:
+                    try:
+                        cursor.execute("PRAGMA table_info(comment)")
+                        cols = {row[1] for row in cursor.fetchall()}
+                        if 'parent_comment_id' in cols:
+                            cursor.execute(
+                                "SELECT parent_comment_id FROM comment WHERE comment_id = ?",
+                                (comment_id_val,),
+                            )
+                            pcid_row = cursor.fetchone()
+                            if pcid_row is not None:
+                                action_args['parent_comment_id'] = pcid_row[0]
+                    except sqlite3.Error:
+                        logger.warning(
+                            "parent_comment_id-Lookup fuer comment_id=%s fehlgeschlagen "
+                            "(#1713 S5) — Feld bleibt unbefuellt",
+                            comment_id_val,
+                            exc_info=True,
+                        )
 
         # Create post: Voting-Stand zum Erzeugungszeitpunkt mitführen, damit der
         # Live-Feed einen echten Wert zeigt statt einer hartkodierten 0

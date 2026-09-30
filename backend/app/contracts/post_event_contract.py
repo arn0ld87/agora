@@ -139,7 +139,8 @@ class PostCreatedEvent(BaseModel):
         default=None,
         description=(
             "Elternkommentar innerhalb eines Reddit-Strangs (Baum-Kante). "
-            "Vorerst immer None — Backfill folgt in einem Folge-Slice."
+            "Gesetzt wenn der nested-comments-Patch aktiv ist (camel-oasis==0.2.5, "
+            "nur Reddit). Twitter-Kommentare kennen dieses Feld nicht (#1713 S5)."
         ),
     )
     root_post_id: str | None = Field(

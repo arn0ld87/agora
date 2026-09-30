@@ -89,7 +89,7 @@
         }
       ],
       "default": null,
-      "description": "Elternkommentar innerhalb eines Reddit-Strangs (Baum-Kante). Vorerst immer None \u2014 Backfill folgt in einem Folge-Slice.",
+      "description": "Elternkommentar innerhalb eines Reddit-Strangs (Baum-Kante). Gesetzt wenn der nested-comments-Patch aktiv ist (camel-oasis==0.2.5, nur Reddit). Twitter-Kommentare kennen dieses Feld nicht (#1713 S5).",
       "title": "Parent Comment Id"
     },
     "parent_persona_id": {
