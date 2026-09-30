@@ -13,3 +13,12 @@
   Reasoning-Modell den Wert `none` ab, wiederholt ein neuer Quirk den Request
   einmal ohne `reasoning_effort` (eigener Budget-Attempt); der Tools-400 matcht
   den Erkenner bewusst nicht.
+- Report-Lauf: Ein nicht-transienter Provider-400 (z. B. dieser Tools-400) in einer
+  Section wiederholte sich bisher für alle weiteren Sections. Jetzt setzen die
+  restlichen Sections keinen LLM-Call mehr ab und enden als sichtbarer Fallback;
+  der Bericht bleibt `INCOMPLETE`, `report.error` nennt die Ursache. 408/429/5xx,
+  Timeouts und Prompt-spezifische 400er (Context-Length, Content-Filter) laufen
+  unverändert weiter, `BudgetExceededError` wird weiter hart durchgereicht. Der
+  Fallback-Text nennt statt des pauschalen „ungültiger API-Key, Rate-Limit,
+  Modell nicht verfügbar" die Fehlerklasse und eine gekürzte, von Secrets
+  bereinigte Providermeldung.

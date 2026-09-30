@@ -232,6 +232,7 @@ Offen bleibt LLM-gestützte Koreferenz (#1470, laut Plan außerhalb des Scopes).
 
 - Contract-invalid Reports dürfen nicht als normal `completed` ausgeliefert werden.
 - Teilberichte aus Cancel-, Section-Failure- oder Fallback-Outline-Pfaden werden als `INCOMPLETE` klassifiziert; Resume bewahrt die Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).
+- Ein nicht-transienter Provider-400 (kein 408/429/5xx/Timeout, kein Prompt-spezifischer wie Context-Length) in einer Section lässt die restlichen Sections ohne weiteren LLM-Call als sichtbaren Fallback enden; der Bericht bleibt `INCOMPLETE`. Der Fallback-Text nennt Fehlerklasse und gekürzte, von Secrets bereinigte Providermeldung (#1738). `BudgetExceededError` wird weiter hart durchgereicht.
 - Ein `INCOMPLETE`-Report kann weiterhin auslieferbar sein; der tatsächliche Reportstatus steht in der Run-Metadaten-Sicht.
 
 ### Abschnittsgenerierung (Section-ReACT)
