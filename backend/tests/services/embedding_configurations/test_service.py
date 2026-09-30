@@ -328,11 +328,43 @@ def test_sync_legacy_is_noop_when_active_configuration_is_identical(
     assert len(store.list_configurations(scope="global")) == 1
 
 
+def test_sync_legacy_is_noop_when_only_the_guessed_provider_kind_differs(
+    store: EmbeddingConfigurationStore,
+) -> None:
+    """Regression: eigener Endpunkt mit Key. Store ``custom``, Legacy-Heuristik
+    ``openai``, Modell und Dimension gleich -> kein Konflikt, kein Write."""
+    active = store.upsert_configuration(
+        configuration_id="emb-active",
+        provider_connection_id="conn-custom",
+        provider_kind="custom",
+        model_id="qwen3-embedding:4b",
+        dimensions=2560,
+        scope="global",
+        project_id=None,
+        status="active",
+    )
+    service = EmbeddingConfigurationService(
+        store=store,
+        connection_store=_FakeConnectionStore([_make_connection(kind="ollama")]),
+        secrets_store=_NoopSecretsStore(),
+    )
+    result = service.sync_legacy(
+        provider_connection_id="legacy",
+        provider_kind="openai",
+        model_id="qwen3-embedding:4b",
+        dimensions=2560,
+    )
+    assert result.outcome == "noop"
+    assert result.configuration is not None
+    assert result.configuration.id == active.id
+    assert len(store.list_configurations(scope="global")) == 1
+
+
 def test_sync_legacy_is_conflict_when_active_configuration_diverges(
     store: EmbeddingConfigurationStore,
 ) -> None:
-    """Maintainer-Entscheidung (2026-09): eine Abweichung in Modell,
-    Provider oder Dimension wird gemeldet, nicht automatisch aufgeloest —
+    """Maintainer-Entscheidung (2026-09): eine Abweichung in Modell
+    oder Dimension wird gemeldet, nicht automatisch aufgeloest —
     der Store bleibt die Wahrheit, es wird nichts geschrieben."""
     active = store.upsert_configuration(
         configuration_id="emb-active",

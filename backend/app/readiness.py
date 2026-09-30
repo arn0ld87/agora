@@ -260,11 +260,15 @@ def _detect_embedding_env_divergence() -> (
     legacy = build_legacy_view()
     if legacy is None:
         return None
-    if (
-        legacy.provider_kind == active.provider_kind
-        and legacy.model_id == active.model_id
-        and legacy.dimensions == active.dimensions
-    ):
+    # Verglichen werden nur Modell und Dimension — genau die Werte, deren
+    # Abweichung Vektorindex und Retrieval bricht. ``provider_kind`` der
+    # Env-Seite ist geraten (``_classify_legacy_provider``: jeder Nicht-
+    # Loopback-Endpunkt mit Key gilt als ``openai``), der Store kennt den
+    # echten Typ. Ein eigener OpenAI-kompatibler Endpunkt mit Key (Store:
+    # ``custom``) war dadurch dauerhaft "divergent", /readyz 503 und der
+    # Container nie healthy. Der Typ bleibt im Body sichtbar, entscheidet
+    # aber nicht mehr.
+    if legacy.model_id == active.model_id and legacy.dimensions == active.dimensions:
         return None
     return (
         EmbeddingLegacyDivergence(

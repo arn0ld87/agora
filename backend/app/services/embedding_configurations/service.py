@@ -238,8 +238,9 @@ class EmbeddingConfigurationService:
         * Keine aktive globale Konfiguration existiert -> ``created``, die
           Legacy-Sicht wird persistiert.
         * Eine aktive globale Konfiguration existiert und ist identisch
-          (Provider, Modell, Dimension) -> ``noop``, nichts wird
-          geschrieben.
+          (Modell, Dimension) -> ``noop``, nichts wird geschrieben. Der
+          Provider-Typ zaehlt nicht: auf der Legacy-Seite ist er nur
+          geraten.
         * Eine aktive globale Konfiguration existiert und weicht ab ->
           ``conflict``, nichts wird geschrieben. Maintainer-Entscheidung
           (2026-09): der Konflikt wird gemeldet, nicht automatisch
@@ -260,11 +261,11 @@ class EmbeddingConfigurationService:
             )
             return EmbeddingLegacySyncResult(outcome="created", configuration=config)
 
-        if (
-            active.provider_kind == provider_kind
-            and active.model_id == model_id
-            and active.dimensions == dimensions
-        ):
+        # Nur Modell und Dimension entscheiden (wie /readyz): ``provider_kind``
+        # der Legacy-Sicht ist aus URL und Key geraten und haelt jeden eigenen
+        # Endpunkt mit Key fuer ``openai``, waehrend der Store ihn korrekt als
+        # ``custom`` fuehrt. Das waere ein Dauerkonflikt ohne echte Abweichung.
+        if active.model_id == model_id and active.dimensions == dimensions:
             return EmbeddingLegacySyncResult(outcome="noop", configuration=active)
 
         return EmbeddingLegacySyncResult(
