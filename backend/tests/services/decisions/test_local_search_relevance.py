@@ -1,25 +1,54 @@
-"""Tests für den Shadow-Pilot-Use-Case (f005, Slice `decision-pilot`, Task
-`shadow-usecase`): lokale Keyword-Relevanzbewertung.
+"""Tests für den Decision-Layer-Use-Case `local-search-relevance` (f005,
+Slice `decision-pilot`/`jev-core`, Tasks `shadow-usecase`/`resolve-fn`):
+lokale Keyword-Relevanzbewertung.
 
-Kernanforderung: Default-Verhalten (``AGORA_DECISION_LAYER_MODE=disabled``)
-bleibt unverändert, und ein Fehler in der Decision Layer darf nie nach
-außen dringen.
+Kernanforderungen:
+- Default-Verhalten (``AGORA_DECISION_LAYER_MODE=disabled``) bleibt
+  unverändert, und ein Fehler in der Decision Layer darf nie nach außen
+  dringen.
+- ``shadow``: unverändertes Verhalten des vormaligen
+  ``shadow_relevance_check`` (nur auf ``resolve_relevance``/``rule=``
+  migriert).
+- ``authoritative``: Jev zuerst, ``RuleProvider`` als Rückfall bei jeder
+  Jev-Unverfügbarkeit oder -Ausnahme. In KEINEM Pfad landet Query- oder
+  Fakt-Text im Log — auch nicht über eine SDK-Exception, die die Anfrage
+  spiegelt.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import logging
+import sys
+import time
+from pathlib import Path
 
+import httpx2
 import pytest
+from typesafe_sdk import (
+    TypeSafeAPITimeoutError,
+    TypeSafeAuthenticationError,
+    TypeSafeRateLimitError,
+)
 
 from app.config import Config
 from app.contracts.decision_contract import DecisionResult, DecisionState, NoulQuestion
-from app.services.decisions.local_search_shadow import (
+from app.services.decisions.jev_provider import DecisionJevResponseError
+from app.services.decisions.local_search_relevance import (
+    RELEVANCE_ASSERTION,
     _USE_CASE_ID,
     _relevance_rule,
-    shadow_relevance_check,
+    _reset_jev_cache_for_tests,
+    resolve_relevance,
 )
 from app.services.decisions.rule_provider import RuleProvider
+
+#: Auffällige Marker statt echter Query-/Fakttexte in den Rückfall-Tests —
+#: so kann geprüft werden, dass der Text in KEINEM Logpfad landet, auch
+#: nicht über die Message einer (fingierten) SDK-Exception, die die
+#: Anfrage spiegelt.
+_QUERY_MARKER = "MARKER-QUERY-e8f3c1"
+_FACT_MARKER = "MARKER-FACT-91ab7d"
 
 
 class _RecordingProvider:
@@ -65,31 +94,86 @@ class _UnknownCostProvider:
         )
 
 
+class _FakeJevProvider:
+    """Fake-``DecisionProvider`` für den authoritative-Pfad: liefert entweder
+    ein Ergebnis oder wirft die injizierte Ausnahme. Kein Netzwerk, keine
+    echte ``typesafe_sdk``-Instanz."""
+
+    def __init__(
+        self, *, result: DecisionResult | None = None, exc: Exception | None = None
+    ) -> None:
+        self._result = result
+        self._exc = exc
+        self.calls: list[tuple[DecisionState, NoulQuestion]] = []
+
+    def decide(self, state: DecisionState, question: NoulQuestion) -> DecisionResult:
+        self.calls.append((state, question))
+        if self._exc is not None:
+            raise self._exc
+        assert self._result is not None
+        return self._result
+
+
+def _jev_result(*, probability_yes: float = 0.9) -> DecisionResult:
+    return DecisionResult(
+        use_case_id=_USE_CASE_ID,
+        provider="jev",
+        answer=None,
+        probability_yes=probability_yes,
+        confidence=0.8,
+        model_version="jev-1.13.0",
+        request_id="req-jev-1",
+        cost_micros=120,
+        latency_ms=42,
+        shadow=False,
+    )
+
+
 @pytest.fixture(autouse=True)
 def _default_mode_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "disabled")
 
 
-class TestShadowRelevanceCheckDisabled:
-    def test_does_nothing_when_mode_is_disabled(self) -> None:
-        provider = _RecordingProvider()
-        shadow_relevance_check("Bundeskanzleramt", "ein Fakt", 100, provider=provider)
+@pytest.fixture(autouse=True)
+def _reset_jev_cache():
+    _reset_jev_cache_for_tests()
+    yield
+    _reset_jev_cache_for_tests()
 
+
+class TestResolveRelevanceDisabled:
+    def test_returns_none_and_calls_nothing_when_mode_is_disabled(self) -> None:
+        provider = _RecordingProvider()
+        result = resolve_relevance("Bundeskanzleramt", "ein Fakt", 100, rule=provider)
+
+        assert result is None
         assert provider.calls == []
 
-    def test_does_nothing_without_a_top_fact_even_in_shadow_mode(
+    def test_returns_none_without_a_top_fact_even_in_shadow_mode(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         provider = _RecordingProvider()
 
-        shadow_relevance_check("Bundeskanzleramt", None, 100, provider=provider)
+        result = resolve_relevance("Bundeskanzleramt", None, 100, rule=provider)
 
+        assert result is None
         assert provider.calls == []
 
+    def test_returns_none_without_a_top_fact_in_authoritative_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        jev = _FakeJevProvider(result=_jev_result())
 
-class TestShadowRelevanceCheckShadowMode:
-    def test_calls_the_provider_and_logs_a_shadow_result(
+        result = resolve_relevance("Bundeskanzleramt", None, 100, jev=jev)
+
+        assert result is None
+        assert jev.calls == []
+
+
+class TestResolveRelevanceShadowMode:
+    def test_calls_the_rule_provider_and_returns_a_shadow_result(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         # ``get_logger`` setzt ``propagate=False`` (app/utils/logger.py) —
@@ -97,14 +181,14 @@ class TestShadowRelevanceCheckShadowMode:
         # Logger-Kette also explizit erlauben (siehe test_transport_security.py).
         monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
         monkeypatch.setattr(
-            logging.getLogger("agora.decisions.local_search_shadow"), "propagate", True
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
         )
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         provider = _RecordingProvider()
 
-        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_shadow"):
-            shadow_relevance_check(
-                "Bundeskanzleramt", "ein Fakt über Berlin", 100, provider=provider
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(
+                "Bundeskanzleramt", "ein Fakt über Berlin", 100, rule=provider
             )
 
         assert len(provider.calls) == 1
@@ -112,6 +196,8 @@ class TestShadowRelevanceCheckShadowMode:
         assert isinstance(question, NoulQuestion)
         assert state.use_case_id == _USE_CASE_ID
         assert state.state == {"top_score": 100}
+        assert result is not None
+        assert result.shadow is True
         assert "decision_layer_shadow" in caplog.text
 
     def test_unknown_cost_still_logs_the_successful_result(
@@ -125,15 +211,16 @@ class TestShadowRelevanceCheckShadowMode:
         bewusst sichtbar machen soll."""
         monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
         monkeypatch.setattr(
-            logging.getLogger("agora.decisions.local_search_shadow"), "propagate", True
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
         )
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
 
-        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_shadow"):
-            shadow_relevance_check(
-                "Bundeskanzleramt", "ein Fakt", 100, provider=_UnknownCostProvider()
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(
+                "Bundeskanzleramt", "ein Fakt", 100, rule=_UnknownCostProvider()
             )
 
+        assert result is not None
         assert "decision_layer_shadow use_case=" in caplog.text
         assert "cost_micros=None" in caplog.text
         assert "decision_layer_shadow failed" not in caplog.text
@@ -143,16 +230,17 @@ class TestShadowRelevanceCheckShadowMode:
     ) -> None:
         monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
         monkeypatch.setattr(
-            logging.getLogger("agora.decisions.local_search_shadow"), "propagate", True
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
         )
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         provider = _FailingProvider()
 
-        with caplog.at_level(logging.ERROR, logger="agora.decisions.local_search_shadow"):
+        with caplog.at_level(logging.ERROR, logger="agora.decisions.local_search_relevance"):
             # Wirft nicht — ein Fehler in der Decision Layer darf local_search
             # nie stören.
-            shadow_relevance_check("Bundeskanzleramt", "ein Fakt", 100, provider=provider)
+            result = resolve_relevance("Bundeskanzleramt", "ein Fakt", 100, rule=provider)
 
+        assert result is None
         assert "decision_layer_shadow failed" in caplog.text
 
     def test_same_query_and_fact_yield_the_same_context_hash(
@@ -161,8 +249,8 @@ class TestShadowRelevanceCheckShadowMode:
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         provider = _RecordingProvider()
 
-        shadow_relevance_check("Bundeskanzleramt", "ein Fakt", 100, provider=provider)
-        shadow_relevance_check("Bundeskanzleramt", "ein Fakt", 100, provider=provider)
+        resolve_relevance("Bundeskanzleramt", "ein Fakt", 100, rule=provider)
+        resolve_relevance("Bundeskanzleramt", "ein Fakt", 100, rule=provider)
 
         first_hash = provider.calls[0][0].context_hash
         second_hash = provider.calls[1][0].context_hash
@@ -174,8 +262,8 @@ class TestShadowRelevanceCheckShadowMode:
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         provider = _RecordingProvider()
 
-        shadow_relevance_check("Bundeskanzleramt", "Fakt A", 100, provider=provider)
-        shadow_relevance_check("Bundeskanzleramt", "Fakt B", 100, provider=provider)
+        resolve_relevance("Bundeskanzleramt", "Fakt A", 100, rule=provider)
+        resolve_relevance("Bundeskanzleramt", "Fakt B", 100, rule=provider)
 
         first_hash = provider.calls[0][0].context_hash
         second_hash = provider.calls[1][0].context_hash
@@ -236,31 +324,27 @@ class TestRunsOverEveryTypedProvider:
     ) -> None:
         monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
         monkeypatch.setattr(
-            logging.getLogger("agora.decisions.local_search_shadow"), "propagate", True
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
         )
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
 
         for expected_provider, provider in self._providers():
             caplog.clear()
-            with caplog.at_level(
-                logging.INFO, logger="agora.decisions.local_search_shadow"
-            ):
-                shadow_relevance_check(
-                    "Bundeskanzleramt", "ein Fakt", 100, provider=provider
-                )
+            with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+                resolve_relevance("Bundeskanzleramt", "ein Fakt", 100, rule=provider)
 
             assert f"provider={expected_provider}" in caplog.text, (
                 f"{expected_provider}: keine Shadow-Telemetrie — der Aufruf ist "
                 "entweder nicht durchgelaufen oder hat still versagt."
             )
             # Ein stiller Fehlschlag würde sonst als 'bestanden' durchgehen,
-            # weil shadow_relevance_check nie wirft.
+            # weil resolve_relevance nie wirft.
             assert "decision_layer_shadow failed" not in caplog.text
 
 
 class TestDefaultRuleProvider:
-    """Der Default-Provider (kein ``provider=`` übergeben) — RuleProvider
-    mit der Schwellenwertregel dieses Moduls."""
+    """Der Default-Provider (kein ``rule=`` übergeben) — RuleProvider mit
+    der Schwellenwertregel dieses Moduls."""
 
     def test_answers_yes_when_top_score_is_at_or_above_the_threshold(
         self, monkeypatch: pytest.MonkeyPatch
@@ -275,7 +359,7 @@ class TestDefaultRuleProvider:
                 captured.append(result)
                 return result
 
-        shadow_relevance_check("Bundeskanzleramt", "ein Fakt", 100, provider=_Spy())
+        resolve_relevance("Bundeskanzleramt", "ein Fakt", 100, rule=_Spy())
 
         assert captured[0].probability_yes == pytest.approx(1.0)
         assert captured[0].provider == "rule"
@@ -294,6 +378,251 @@ class TestDefaultRuleProvider:
                 captured.append(result)
                 return result
 
-        shadow_relevance_check("Bundeskanzleramt", "ein Fakt", 0, provider=_Spy())
+        resolve_relevance("Bundeskanzleramt", "ein Fakt", 0, rule=_Spy())
 
         assert captured[0].probability_yes == pytest.approx(0.0)
+
+
+class TestResolveRelevanceAuthoritativeSuccess:
+    def test_jev_success_yields_provider_jev_and_the_benchmark_state_form(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        jev = _FakeJevProvider(result=_jev_result())
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance("Bundeskanzleramt", "Ein Fakt über Berlin", 100, jev=jev)
+
+        assert result is not None
+        assert result.provider == "jev"
+        assert result.shadow is False
+        assert result.fallback_chain == ["jev"]
+
+        assert len(jev.calls) == 1
+        state, question = jev.calls[0]
+        assert isinstance(question, NoulQuestion)
+        assert state.state == {
+            "assertion": RELEVANCE_ASSERTION,
+            "query": "Bundeskanzleramt",
+            "fact": "Ein Fakt über Berlin",
+        }
+        assert "decision_layer_authoritative" in caplog.text
+        assert "Bundeskanzleramt" not in caplog.text
+        assert "Ein Fakt über Berlin" not in caplog.text
+
+
+class TestResolveRelevanceAuthoritativeFallback:
+    """Jede Ursache eines Jev-Rückfalls landet beim selben Ziel: Rule,
+    ``shadow=False``, ``fallback_chain=["jev", "rule"]`` — und in keinem
+    Fall taucht Query- oder Fakttext im Log auf, selbst wenn die
+    (fingierte) Jev-Ausnahme sie in ihrer Message spiegelt."""
+
+    @staticmethod
+    def _auth_error(request_id: str | None = "req-auth-1") -> TypeSafeAuthenticationError:
+        headers = httpx2.Headers({"x-typesafe-request-id": request_id} if request_id else {})
+        return TypeSafeAuthenticationError(401, {"error": "unauthorized"}, headers)
+
+    @staticmethod
+    def _rate_limit_error() -> TypeSafeRateLimitError:
+        return TypeSafeRateLimitError(429, {"error": "rate limited"}, httpx2.Headers())
+
+    def _run_fallback_case(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, jev_exc: Exception
+    ) -> tuple[DecisionResult | None, str]:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        jev = _FakeJevProvider(exc=jev_exc)
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100, jev=jev)
+
+        return result, caplog.text
+
+    @pytest.mark.parametrize(
+        "make_exc",
+        [
+            pytest.param(lambda: TypeSafeAPITimeoutError(2.0), id="timeout"),
+            pytest.param(
+                lambda: TestResolveRelevanceAuthoritativeFallback._rate_limit_error(),
+                id="rate-limit",
+            ),
+            pytest.param(
+                lambda: DecisionJevResponseError(f"leak-attempt {_FACT_MARKER}"),
+                id="response-error",
+            ),
+            pytest.param(
+                lambda: RuntimeError(f"leak-attempt {_QUERY_MARKER} {_FACT_MARKER}"),
+                id="generic-runtime-error",
+            ),
+        ],
+    )
+    def test_jev_exception_falls_back_to_rule(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        make_exc,
+    ) -> None:
+        result, log_text = self._run_fallback_case(monkeypatch, caplog, make_exc())
+
+        assert result is not None
+        assert result.provider == "rule"
+        assert result.shadow is False
+        assert result.fallback_chain == ["jev", "rule"]
+        assert _QUERY_MARKER not in log_text
+        assert _FACT_MARKER not in log_text
+
+    def test_auth_error_falls_back_and_never_leaks_the_request(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        result, log_text = self._run_fallback_case(monkeypatch, caplog, self._auth_error())
+
+        assert result is not None
+        assert result.provider == "rule"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert _QUERY_MARKER not in log_text
+        assert _FACT_MARKER not in log_text
+        # Request-ID ist unkritisch (keine Anfrageinhalte) und darf im Log
+        # zur Korrelation erscheinen.
+        assert "req-auth-1" in log_text
+
+    def test_no_key_falls_back_to_rule(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance.resolve_jev_api_key",
+            lambda: None,
+        )
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100)
+
+        assert result is not None
+        assert result.provider == "rule"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert "fallback_reason=no_key" in caplog.text
+        assert _QUERY_MARKER not in caplog.text
+        assert _FACT_MARKER not in caplog.text
+
+    def test_auth_block_prevents_a_second_jev_call_until_it_expires(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+
+        # Erster Aufruf: injizierter Jev-Provider wirft einen Auth-Fehler —
+        # das muss den internen Cache sperren.
+        jev = _FakeJevProvider(exc=self._auth_error(request_id=None))
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            first = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100, jev=jev)
+        assert first is not None
+        assert first.provider == "rule"
+
+        # Zweiter Aufruf OHNE injizierten Provider: muss die Sperre über
+        # ``_jev_provider()`` greifen lassen und darf resolve_jev_api_key/
+        # build_jev_client gar nicht erst aufrufen.
+        def _fail_if_called(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("Jev-Provider darf waehrend der Sperre nicht gebaut werden")
+
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance.resolve_jev_api_key",
+            _fail_if_called,
+        )
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance.build_jev_client",
+            _fail_if_called,
+        )
+        caplog.clear()
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            second = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100)
+
+        assert second is not None
+        assert second.provider == "rule"
+        assert "fallback_reason=auth_blocked" in caplog.text
+
+        # Nach Ablauf der Sperre (300s) greift ``_jev_provider()`` wieder
+        # normal durch — hier bewusst auf "kein Key" statt eines echten
+        # Aufrufs, um weiterhin ohne Netzwerk zu bleiben.
+        monkeypatch.undo()
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance.resolve_jev_api_key",
+            lambda: None,
+        )
+        real_monotonic = time.monotonic()
+        monkeypatch.setattr(time, "monotonic", lambda: real_monotonic + 301.0)
+
+        caplog.clear()
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            third = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100)
+
+        assert third is not None
+        assert third.provider == "rule"
+        assert "fallback_reason=no_key" in caplog.text
+        assert "auth_blocked" not in caplog.text
+
+    def test_rule_fallback_failure_yields_none_and_logs_only_class_names(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        jev = _FakeJevProvider(exc=RuntimeError(f"leak {_QUERY_MARKER}"))
+
+        class _FailingRule:
+            def decide(self, state: DecisionState, question: NoulQuestion) -> DecisionResult:
+                raise RuntimeError(f"leak {_FACT_MARKER}")
+
+        with caplog.at_level(logging.ERROR, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(
+                _QUERY_MARKER, _FACT_MARKER, 100, jev=jev, rule=_FailingRule()
+            )
+
+        assert result is None
+        assert "rule_fallback_failed=RuntimeError" in caplog.text
+        assert _QUERY_MARKER not in caplog.text
+        assert _FACT_MARKER not in caplog.text
+
+
+class TestBenchmarkScriptsShareTheAssertionConstant:
+    """Beide Jev-Skripte importieren ``RELEVANCE_ASSERTION`` statt die
+    Aussage separat zu definieren — sonst könnten Benchmark, Probe und der
+    produktive authoritative-Pfad unbemerkt auseinanderlaufen."""
+
+    @staticmethod
+    def _load(script_name: str):
+        script_path = Path(__file__).resolve().parents[3] / "scripts" / script_name
+        spec = importlib.util.spec_from_file_location(script_name, script_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def test_jev_benchmark_local_search_uses_the_shared_constant(self) -> None:
+        module = self._load("jev_benchmark_local_search.py")
+        assert module.RELEVANCE_ASSERTION is RELEVANCE_ASSERTION
+
+    def test_jev_rollout_probe_uses_the_shared_constant(self) -> None:
+        module = self._load("jev_rollout_probe.py")
+        assert module.RELEVANCE_ASSERTION is RELEVANCE_ASSERTION
