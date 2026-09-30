@@ -137,6 +137,7 @@ class TestEnumValues:
             "embedding_unavailable",
             "graph_below_threshold",
             "persona_rule_based_fallback",
+            "person_represents_organization_merged",
         }
 
     def test_severity_values_are_stable(self):

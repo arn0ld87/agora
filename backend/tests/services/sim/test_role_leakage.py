@@ -670,3 +670,51 @@ def test_twitter_profile_erben_beruf_aus_reddit_profilen(tmp_path: Path):
     summary = audit_sim_dir(sim)
     assert summary.text_actions == 1
     assert summary.conflicts == 0
+
+
+# ---------------------------------------------------------------------------
+# Issue #1713/#1470: Person vertritt ihre Organisation (affiliation)
+# ---------------------------------------------------------------------------
+
+
+class TestPersonRepresentsOrganizationAffiliation:
+    """Eine Person, die laut Graph-Relation eine Organisation vertritt,
+    trägt ``affiliation``. Eine Selbstreferenz wie „wir, <Organisation>"
+    ist dann die eigene Rolle — keine Rollenvertauschung."""
+
+    def setup_method(self) -> None:
+        self.vertreterin = _make_persona(
+            name="Miriam Vogt",
+            profession="Geschäftsführerin",
+            user_id=0,
+        )
+        self.vertreterin["affiliation"] = "Berufsförderungswerk Leipzig"
+        self.andere = _make_persona(
+            name="Jens Weber",
+            profession="Ausbilder",
+            user_id=1,
+        )
+        self.all_personas = [self.vertreterin, self.andere]
+
+    def test_selbstreferenz_auf_vertretene_organisation_ist_kein_konflikt(self) -> None:
+        result = _check(
+            agent_name="Miriam Vogt",
+            own_persona=self.vertreterin,
+            all_personas=self.all_personas,
+            content="Wir als Berufsförderungswerk Leipzig setzen uns für gute Ausbildung ein.",
+        )
+        assert result is None
+
+    def test_ohne_affiliation_bleibt_dieselbe_referenz_unmatched(self) -> None:
+        """Gegenprobe: ohne ``affiliation`` ist dieselbe Selbstreferenz weiterhin
+        eine Rollenvertauschung — der Fix greift gezielt, nicht pauschal."""
+        ohne_affiliation = dict(self.vertreterin)
+        ohne_affiliation.pop("affiliation")
+        result = _check(
+            agent_name="Miriam Vogt",
+            own_persona=ohne_affiliation,
+            all_personas=[ohne_affiliation, self.andere],
+            content="Wir als Berufsförderungswerk Leipzig setzen uns für gute Ausbildung ein.",
+        )
+        assert result is not None
+        assert result.reason == "unmatched_self_reference"
