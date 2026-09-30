@@ -66,4 +66,36 @@ Die fünf Benchmark-Commits wurden auf `origin/main` (`bc47d27fb`) in `feat/f005
 
 Der Review von PR #1731 (Codex) hat einen echten Mangel im Jev-Arm dieses Runners gefunden: `jev_state` sendete nur `{"query": ..., "fact": ...}`, ohne eine Aussage, die Jev bewerten kann. `_NOUL_INSTRUCTIONS` in `jev_provider.py` fragt aber wörtlich nach der Wahrscheinlichkeit, dass „die Aussage im State" zutrifft — ohne eine explizite Aussage wie `"assertion": "Der Fakt ist für die Suchanfrage relevant."` (dieselbe, die `jev_rollout_probe.py` bereits verwendet) bewertet Jev nichts Definiertes gegen `expected_relevant`.
 
-Der Runner ist entsprechend gefixt (`backend/scripts/jev_benchmark_local_search.py`). **Damit ist die oben berichtete Jev-Accuracy von 12/12 (Fußnote 1) nicht mehr belastbar** — sie wurde am 21.09.2026 gegen die unterspezifizierte Prompt-Form gemessen, bevor dieser Fix existierte. Ein neuer Live-Lauf mit gebundenem `TYPESAFE_API_KEY` steht aus und ist Voraussetzung für jede erneute Zahl zu diesem Use Case; bis dahin gilt für den Jev-Arm dieses Benchmarks: **kein verwertbares Ergebnis**, nur die Rule-Baseline (8/12 bzw. 67 %) bleibt unverändert gültig, weil sie vom State-Fix nicht betroffen ist.
+Der Runner ist entsprechend gefixt (`backend/scripts/jev_benchmark_local_search.py`). Damit war die oben berichtete Jev-Accuracy von 12/12 (Fußnote 1) nicht mehr belastbar — sie wurde am 21.09.2026 gegen die unterspezifizierte Prompt-Form gemessen, bevor dieser Fix existierte. Der Live-Lauf im nächsten Abschnitt ersetzt sie.
+
+## Live-Lauf mit korrigierter Prompt-Form (30.09.2026, `jev-1.13.0`)
+
+Erneuter Lauf des Runners auf `main` (`7b0f30c2`, enthält den `assertion`-Fix aus PR #1731) mit gebundenem Key gegen die echte API. Die Rohwerte je Fall sind hier archiviert, damit die Zahl unabhängig nachprüfbar ist.
+
+| Fall | Query | top_score | erwartet | Rule | Jev-P(ja) | Jev korrekt | Kosten (µ$) | Latenz (ms) |
+|---|---|---|---|---|---|---|---|---|
+| exact-match | 'Bundeskanzleramt' | 100 | ja | ✓ | 0.88 | ✓ | 14 | 442 |
+| keyword-overlap | 'Bundesministerium Finanzen' | 20 | ja | ✓ | 0.87 | ✓ | 14 | 288 |
+| no-overlap | 'Bundeskanzleramt' | 0 | nein | ✓ | 0.06 | ✓ | 14 | 262 |
+| coincidental-substring | 'Rat' | 100 | nein | ✗ | 0.34 | ✓ | 14 | 307 |
+| partial-relevant | 'Bundestag Ausschuss' | 20 | ja | ✓ | 0.80 | ✓ | 14 | 276 |
+| different-institution | 'Bundeskanzleramt' | 0 | nein | ✓ | 0.10 | ✓ | 14 | 270 |
+| single-keyword-weak-match | 'Bundeskanzleramt Pressekonferenz' | 10 | nein | ✗ | 0.08 | ✓ | 14 | 283 |
+| long-fact-relevant | 'Bundesministerium Digitales' | 20 | ja | ✓ | 0.87 | ✓ | 15 | 285 |
+| abbreviation-mismatch | 'BMF' | 0 | ja | ✗ | 0.84 | ✓ | 14 | 271 |
+| negation-in-fact | 'Bundeskanzleramt Stellungnahme' | 20 | ja | ✓ | 0.66 | ✓ | 14 | 281 |
+| different-topic-shared-word | 'Bundeskanzleramt Sicherheit' | 10 | nein | ✗ | 0.19 | ✓ | 14 | 249 |
+| multi-entity-relevant | 'Bundeskanzleramt Bundestag' | 20 | ja | ✓ | 0.80 | ✓ | 14 | 251 |
+
+| Metrik | Rule-Baseline | Jev |
+|---|---|---|
+| Accuracy | 67 % (8/12) | 100 % (12/12) |
+| Fehler (API/Schema) | — | 0 |
+| Latenz median / max | ~0 ms | 278 ms / 442 ms |
+| Kosten gesamt | 0 | 169 Mikro-USD (12 Aufrufe) |
+
+Beobachtungen:
+
+- Jev löst alle vier Keyword-Fallstricke der Regel, auch `abbreviation-mismatch` (P(ja) 0,84).
+- Die knappsten Entscheidungen sind `coincidental-substring` (0,34) und `negation-in-fact` (0,66) — beide richtig, aber mit geringerem Abstand zur 0,5-Schwelle als der Rest. Das sind die ersten Kandidaten für eine Kalibrationsprüfung.
+- Die Grenzen oben gelten unverändert: Ground Truth nicht maintainer-geprüft, ein Lauf, 12 Fälle, keine Kalibrationsprüfung, Datenschutzfreigabe für Klartext-State offen. Die Einschätzung („weitere Datenerhebung, kein Promote, kein Reject") bleibt deshalb bestehen.
