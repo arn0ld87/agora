@@ -673,6 +673,13 @@ class SinglePlatformRunner:
         elif enable_tools and not AGENT_TOOLS_AVAILABLE:
             print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
 
+        # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
+        # damit sie im Tool-Loop in den Prompt gelangen statt nur in der
+        # Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
+        agent_configs_by_id = {
+            cfg.get("agent_id"): cfg for cfg in self.config.get("agent_configs", [])
+        }
+
         round_control = RoundBoundaryControl(self.simulation_dir, budget_guard)
         budget_abort_info = None
         for round_num in range(total_rounds):
@@ -714,6 +721,7 @@ class SinglePlatformRunner:
                         agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
                         agent_role = getattr(agent, 'profession', 'Unknown')
                         agent_bio = getattr(agent, 'bio', '')
+                        agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                         action = await self.tool_loop.decide_action(
                             agent=agent,
@@ -722,7 +730,11 @@ class SinglePlatformRunner:
                             agent_name=agent_name,
                             agent_role=agent_role,
                             agent_bio=agent_bio,
-                            language=self.config.get("language", "de")
+                            language=self.config.get("language", "de"),
+                            stance=agent_cfg.get("stance"),
+                            sentiment_bias=agent_cfg.get("sentiment_bias"),
+                            posts_per_hour=agent_cfg.get("posts_per_hour"),
+                            comments_per_hour=agent_cfg.get("comments_per_hour"),
                         )
                         actions[agent] = action
                     except Exception as e:

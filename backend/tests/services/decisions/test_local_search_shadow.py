@@ -190,6 +190,7 @@ class TestRunsOverEveryTypedProvider:
 
     @staticmethod
     def _providers() -> list[tuple[str, object]]:
+        from types import SimpleNamespace
         from unittest.mock import MagicMock
 
         from app.contracts.decision_contract import DecisionResult
@@ -203,11 +204,14 @@ class TestRunsOverEveryTypedProvider:
         llm_client.chat_json.return_value = {"probability_yes": 0.5, "confidence": 0.5}
 
         jev_client = MagicMock(spec=["system_one"])
-        jev_client.system_one.return_value = {
-            "answers": [{"id": "q1", "probability_yes": 0.5, "confidence": 0.5}],
-            "model": "jev-1.13.0",
-            "usage": {"input_tokens": 10, "output_tokens": 0},
-        }
+        jev_client.system_one.return_value = SimpleNamespace(
+            model="jev-1.13.0",
+            request_id="req-shadow-test",
+            usage=SimpleNamespace(input_tokens=10, output_tokens=0),
+            choices={},
+            scores={},
+            nouls={"decision": SimpleNamespace(noul=0.5)},
+        )
 
         scripted = DecisionResult(
             use_case_id=_USE_CASE_ID,

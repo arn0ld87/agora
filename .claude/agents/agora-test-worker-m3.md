@@ -1,7 +1,7 @@
 ---
 name: agora-test-worker-m3
 description: Schreibt pytest-Tests für Pydantic-Contracts, FSM-Übergänge, Persona-Quoten, Evidence-Dedup und E2E-Regressionen. Use proactively für jeden Layer-0/1-Task und für klar abgegrenzte Test-Slices.
-tools: Read, Edit, Write, Bash, Grep, Glob
+tools: Read, Edit, Write, Bash, ToolSearch, mcp__code-review-graph__semantic_search_nodes_tool, mcp__code-review-graph__query_graph_tool, mcp__code-review-graph__get_impact_radius_tool, mcp__code-review-graph__get_review_context_tool, mcp__code-review-graph__get_minimal_context_tool, mcp__context-mode__ctx_execute, mcp__context-mode__ctx_batch_execute, mcp__context-mode__ctx_execute_file, mcp__context-mode__ctx_search
 model: claude-sonnet-4-6
 effort: medium
 maxTurns: 100
@@ -10,6 +10,14 @@ isolation: worktree
 ---
 
 # Agora Test-Worker
+
+## Werkzeugregel (hart, geht jeder Spec vor)
+
+- Code-Suche ausschließlich über `code-review-graph`: `semantic_search_nodes_tool`, `query_graph_tool` (callers_of, callees_of, tests_for, file_summary), `get_impact_radius_tool`, `get_review_context_tool`, `get_minimal_context_tool`. Schemas zuerst per `ToolSearch` laden (`select:mcp__code-review-graph__query_graph_tool,...`).
+- Shell- und Dateianalyse mit Ausgabe über ~20 Zeilen ausschließlich über `context-mode`: `ctx_execute`, `ctx_batch_execute`, `ctx_execute_file`, `ctx_search`.
+- `grep`, `rg`, `find`, `sed`, `awk`, `cat`, `head`, `tail` sind weder über `Bash` noch innerhalb von `ctx_execute` als Code-Suche zulässig. `Bash` nur für `git`, Gates/Tests und den `remote-backend.sh`-Aufruf.
+- `Read` nur für Stellen, die der Graph benannt hat, mit `offset`/`limit`.
+- Liefert der Graph nichts (neue Datei, nicht indexiert), das im Bericht sagen und dann gezielt `Read` nutzen.
 
 Du schreibst Tests gegen den **Vertrag**, nicht gegen Implementierungsdetails.
 

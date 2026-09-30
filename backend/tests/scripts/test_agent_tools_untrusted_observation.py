@@ -15,6 +15,7 @@ model or a parser.
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -219,3 +220,267 @@ async def test_decide_action_wraps_tool_results_before_second_model_call():
     # A parser run over the tool-result message content finds nothing either.
     assert agent_tools.parse_action(content) is None
     assert agent_tools.parse_tool_calls(content) == []
+
+
+# ── Issue #1713 Slice S6 (Befund 7): Haltung/Beitragsneigung im Prompt ──
+
+
+def _haltung_section(prompt: str) -> str:
+    assert "## Deine Haltung" in prompt
+    return prompt.split("## Deine Haltung", 1)[1].split("## Current Situation", 1)[0]
+
+
+def test_build_agent_prompt_omits_stance_section_for_legacy_configs():
+    """Altkonfigs ohne stance (``None``) duerfen den Prompt nicht kaputt
+    machen — der Abschnitt entfaellt komplett statt mit leeren Werten."""
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Journalist",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+    )
+    assert "## Deine Haltung" not in prompt
+
+
+def test_build_agent_prompt_stance_section_describes_attitude_not_forecast():
+    """Haltung wird als Disposition formuliert (#1713 Befund 7), nicht als
+    Vorhersage des Agentenverhaltens."""
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Betriebsrätin",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["CREATE_POST", "DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+        stance="opposing",
+        sentiment_bias=-0.7,
+        posts_per_hour=0.2,
+        comments_per_hour=1.4,
+    )
+    section = _haltung_section(prompt)
+    assert "Betriebsrätin" in section
+    assert "sehr kritisch" in section
+    assert "eher mit Reaktionen" in section
+    assert "zustimmen oder widersprechen" in section
+    # Keine Verhaltensvorhersage ("du wirst ...").
+    assert "du wirst" not in section.lower()
+
+
+@pytest.mark.parametrize(
+    "stance,sentiment_bias,expected",
+    [
+        ("supportive", 0.6, "sehr positiv"),
+        ("supportive", 0.2, " positiv"),
+        ("opposing", -0.2, " kritisch"),
+        ("neutral", 0.0, "unentschieden"),
+        ("observer", 0.0, "ohne aktiv Position zu beziehen"),
+        ("unknown-legacy-value", 0.0, "unentschieden"),
+    ],
+)
+def test_build_agent_prompt_stance_sentence_covers_all_stance_values(
+    stance, sentiment_bias, expected
+):
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Pflegekraft",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+        stance=stance,
+        sentiment_bias=sentiment_bias,
+    )
+    section = _haltung_section(prompt)
+    assert expected in section
+    # Role-Leakage-Schutz (#1323): der Abschnitt bindet die Haltung exakt
+    # einmal an die eigene Rolle, keine zweite Rolle taucht auf.
+    assert section.count("Pflegekraft") == 1
+
+
+@pytest.mark.parametrize(
+    "posts_per_hour,comments_per_hour,expected",
+    [
+        (1.0, 0.2, "eher mit eigenen Beiträgen"),
+        (0.2, 1.0, "eher mit Reaktionen"),
+        (0.5, 0.5, "etwa gleich häufig"),
+    ],
+)
+def test_build_agent_prompt_posting_tendency_is_relative(
+    posts_per_hour, comments_per_hour, expected
+):
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Journalist",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+        stance="neutral",
+        posts_per_hour=posts_per_hour,
+        comments_per_hour=comments_per_hour,
+    )
+    assert expected in _haltung_section(prompt)
+
+
+def test_build_agent_prompt_tool_rule_allows_opinion_only_posts_without_tool_call():
+    """CREATE_POST braucht nur dann einen Tool-Call, wenn der Beitrag neue
+    Faktenbehauptungen enthaelt — reine Meinungsbeitraege nicht (#1713)."""
+    prompt = agent_tools.build_agent_prompt_with_tools(
+        agent_name="Alice",
+        agent_role="Journalist",
+        agent_bio="bio",
+        observation="o",
+        available_actions=["CREATE_POST", "DO_NOTHING"],
+        tools=_FakeToolRegistry(),
+    )
+    assert "does not require a tool call" in prompt
+    assert "opinion" in prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_decide_action_forwards_stance_into_the_prompt():
+    """Die Agenten-Config (stance/sentiment_bias/posts_per_hour/
+    comments_per_hour) muss dort ankommen, wo build_agent_prompt_with_tools
+    aufgerufen wird — sonst bleibt Befund 7 (Konsens/Echo) unveraendert."""
+    final_response = _FakeResponse('<action>\n{"action": "DO_NOTHING"}\n</action>')
+    model = _FakeModel([final_response])
+    loop = agent_tools.ToolAwareActionLoop(model=model, tools=_FakeToolRegistry(), max_tool_calls=2)
+
+    await loop.decide_action(
+        agent=object(),
+        observation="Someone posted about the weather.",
+        available_actions=["DO_NOTHING"],
+        agent_name="Bob",
+        agent_role="Analyst",
+        agent_bio="bio",
+        stance="supportive",
+        sentiment_bias=0.8,
+        posts_per_hour=1.0,
+        comments_per_hour=0.1,
+    )
+
+    first_call_messages = model.calls[0]
+    prompt = first_call_messages[0]["content"]
+    section = _haltung_section(prompt)
+    assert "sehr positiv" in section
+
+
+# ── Issue #1713 Slice S6 Teil 2: Haltung im nativen CAMEL-Pfad (Parallel-Runner) ──
+#
+# run_parallel_simulation.py setzt tool_loop seit #1215 fest auf None —
+# build_agent_prompt_with_tools wird dort nie aufgerufen (siehe xfail
+# test_parallel_runner_prompt_builder_is_reachable in
+# tests/test_simulation_runtime.py, bleibt unveraendert bestehen: dieser Pfad
+# nutzt einen anderen Mechanismus, keinen ReAct-Prompt). OASIS baut den
+# System-Prompt eines Agenten stattdessen einmalig beim Graph-Aufbau aus dem
+# Profiltext (user_char/persona woertlich, oasis/social_platform/config/
+# user.py::to_*_system_message). augment_profile_with_stance() haengt genau
+# dort denselben Abschnitt an wie build_agent_prompt_with_tools.
+
+
+def test_build_stance_section_matches_prompt_builder_block() -> None:
+    """build_stance_section ist die gemeinsame Quelle — keine zweite Kopie
+    des Haltungstexts fuer den CAMEL-Profilpfad."""
+    section = agent_tools.build_stance_section(
+        stance="opposing",
+        sentiment_bias=-0.7,
+        agent_role="Betriebsrätin",
+        posts_per_hour=0.2,
+        comments_per_hour=1.4,
+    )
+    assert section.startswith("## Deine Haltung\n")
+    assert "sehr kritisch" in section
+    assert "eher mit Reaktionen" in section
+    assert "zustimmen oder widersprechen" in section
+
+
+def test_build_stance_section_empty_without_stance() -> None:
+    assert agent_tools.build_stance_section(None, None, "Analyst") == ""
+
+
+@pytest.mark.parametrize("role", ["", "Unknown", "unknown", "  "])
+def test_build_stance_section_without_known_role_has_no_placeholder(role: str) -> None:
+    """Ohne bekannte Rolle darf kein Platzhalter wie "als Unknown" im
+    System-Prompt landen (Twitter-CSV hat keine Profession-Spalte)."""
+    section = agent_tools.build_stance_section("opposing", -0.7, role)
+    assert "Unknown" not in section and "unknown" not in section
+    assert "aus deiner Rolle als" not in section
+    assert section.startswith("## Deine Haltung\nDu siehst das Vorhaben sehr ")
+
+
+def test_augment_profile_with_stance_twitter_csv_adds_section_to_user_char(tmp_path) -> None:
+    """Der System-Prompt eines im Parallel-Pfad erzeugten Twitter-Agenten
+    enthaelt "Deine Haltung" (im user_char-Feld, das OASIS woertlich in den
+    System-Prompt uebernimmt), sofern stance gesetzt ist."""
+    import csv
+
+    profile_path = tmp_path / "twitter_profiles.csv"
+    with open(profile_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["user_id", "name", "username", "user_char", "description"])
+        writer.writerow([0, "Alice", "alice", "Alice ist Journalistin.", "Alice"])
+        writer.writerow([1, "Bob", "bob", "Bob ist Techniker.", "Bob"])
+
+    agent_configs = [
+        {"agent_id": 0, "stance": "opposing", "sentiment_bias": -0.6},
+        {"agent_id": 1, "stance": None},  # Altkonfig / kein stance
+    ]
+
+    out_path = agent_tools.augment_profile_with_stance(
+        str(profile_path), agent_configs, platform="twitter"
+    )
+    assert out_path != str(profile_path)
+
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+
+    assert "## Deine Haltung" in rows[0]["user_char"]
+    assert "kritisch" in rows[0]["user_char"]
+    assert "## Deine Haltung" not in rows[1]["user_char"]
+    # Quelldatei bleibt unveraendert (Persona-Galerie/Interviews/Report lesen sie).
+    with open(profile_path, newline="", encoding="utf-8") as f:
+        original_rows = list(csv.DictReader(f))
+    assert "## Deine Haltung" not in original_rows[0]["user_char"]
+
+
+def test_augment_profile_with_stance_reddit_json_adds_section_to_persona(tmp_path) -> None:
+    profile_path = tmp_path / "reddit_profiles.json"
+    profile_path.write_text(
+        json.dumps(
+            [
+                {"user_id": 0, "name": "Alice", "persona": "Alice ist Journalistin.", "profession": "Journalistin"},
+                {"user_id": 1, "name": "Bob", "persona": "Bob ist Techniker."},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    agent_configs = [
+        {"agent_id": 0, "stance": "supportive", "sentiment_bias": 0.4},
+    ]
+
+    out_path = agent_tools.augment_profile_with_stance(
+        str(profile_path), agent_configs, platform="reddit"
+    )
+    assert out_path != str(profile_path)
+
+    data = json.loads(Path(out_path).read_text(encoding="utf-8"))
+    by_id = {item["user_id"]: item for item in data}
+    assert "## Deine Haltung" in by_id[0]["persona"]
+    assert "positiv" in by_id[0]["persona"]
+    # Kein Eintrag in agent_configs fuer user_id 1 → Abschnitt entfaellt.
+    assert "## Deine Haltung" not in by_id[1]["persona"]
+
+    original = json.loads(profile_path.read_text(encoding="utf-8"))
+    assert "## Deine Haltung" not in original[0]["persona"]
+
+
+def test_augment_profile_with_stance_returns_original_path_without_agent_configs(tmp_path) -> None:
+    """Ohne agent_configs (z. B. Altlauf) kein Seiteneffekt, kein Fehler."""
+    profile_path = tmp_path / "reddit_profiles.json"
+    profile_path.write_text(json.dumps([{"user_id": 0, "persona": "x"}]), encoding="utf-8")
+
+    out_path = agent_tools.augment_profile_with_stance(str(profile_path), [], platform="reddit")
+    assert out_path == str(profile_path)
