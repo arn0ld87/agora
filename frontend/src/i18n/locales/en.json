@@ -1683,6 +1683,29 @@
       "error": "Rounds could not be loaded.",
       "retry": "Retry"
     },
+    "roundsList": {
+      "roundLabel": "Round {round}",
+      "noActions": "No actions in this round."
+    },
+    "actionType": {
+      "CREATE_POST": "Posts",
+      "CREATE_COMMENT": "Comments",
+      "LIKE_POST": "Likes (post)",
+      "DISLIKE_POST": "Dislikes (post)",
+      "LIKE_COMMENT": "Likes (comment)",
+      "DISLIKE_COMMENT": "Dislikes (comment)",
+      "REPOST": "Reposts",
+      "QUOTE_POST": "Quotes",
+      "FOLLOW": "Follows",
+      "MUTE": "Mutes",
+      "SEARCH_POSTS": "Post searches",
+      "SEARCH_USER": "User searches",
+      "TREND": "Trend lookups",
+      "REFRESH": "Refreshes",
+      "DO_NOTHING": "Idle",
+      "INTERVIEW": "Interviews",
+      "OTHER": "Other"
+    },
     "actionsTable": {
       "round": "Round",
       "time": "Time",

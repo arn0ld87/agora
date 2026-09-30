@@ -1683,6 +1683,29 @@
       "error": "Runden konnten nicht geladen werden.",
       "retry": "Erneut versuchen"
     },
+    "roundsList": {
+      "roundLabel": "Runde {round}",
+      "noActions": "Keine Aktionen in dieser Runde."
+    },
+    "actionType": {
+      "CREATE_POST": "Beiträge",
+      "CREATE_COMMENT": "Kommentare",
+      "LIKE_POST": "Likes (Beitrag)",
+      "DISLIKE_POST": "Dislikes (Beitrag)",
+      "LIKE_COMMENT": "Likes (Kommentar)",
+      "DISLIKE_COMMENT": "Dislikes (Kommentar)",
+      "REPOST": "Reposts",
+      "QUOTE_POST": "Zitate",
+      "FOLLOW": "Follows",
+      "MUTE": "Stummschaltungen",
+      "SEARCH_POSTS": "Beitragssuchen",
+      "SEARCH_USER": "Personensuchen",
+      "TREND": "Trend-Abfragen",
+      "REFRESH": "Aktualisierungen",
+      "DO_NOTHING": "Untätig",
+      "INTERVIEW": "Interviews",
+      "OTHER": "Sonstige"
+    },
     "actionsTable": {
       "round": "Runde",
       "time": "Zeit",
