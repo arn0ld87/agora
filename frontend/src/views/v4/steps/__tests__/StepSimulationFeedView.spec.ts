@@ -186,6 +186,16 @@ describe('StepSimulationFeedView', () => {
     expect(wrapper.findAll('.fi-root')).toHaveLength(8)
   })
 
+  // Regression: 'connecting' (Erstverbindung) wurde vor dem Fix auf
+  // 'reconnecting' gemappt und zeigte faelschlich den "Verbindung
+  // verloren"-Banner beim allerersten Laden (FeedTimeline.vue).
+  it('Erstverbindung (streamState="connecting") zeigt keinen Reconnect-Banner', () => {
+    const wrapper = mountFeed()
+    // Bewusst VOR jedem await: onMounted() hat den Stream noch nicht
+    // gestartet (streamStarted=false), streamState ist also 'connecting'.
+    expect(wrapper.text()).not.toContain('feed.streamLost')
+  })
+
   it('Klick auf einen Beitrag navigiert per router.push zu SimThreadFocus', async () => {
     snapshotFeed = [mkPost({ platform: 'reddit', post_id: 'snap-r-1' })]
     const wrapper = mountFeed()

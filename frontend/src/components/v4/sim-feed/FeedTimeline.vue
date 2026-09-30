@@ -25,7 +25,12 @@ export interface FeedTimelineError {
 
 const props = defineProps<{
   items: PostCreatedEvent[]
-  streamState: 'open' | 'reconnecting' | 'closed' | 'ended'
+  // 'connecting' ist ein eigener Zustand (Erstverbindung) und zeigt KEINEN
+  // Reconnect-Banner — nur 'reconnecting' (Verbindung war offen und ist
+  // abgebrochen) tut das. Vorher wurde 'connecting' vom Aufrufer auf
+  // 'reconnecting' gemappt, was beim ersten Laden faelschlich den
+  // "Verbindung verloren"-Banner zeigte.
+  streamState: 'connecting' | 'open' | 'reconnecting' | 'closed' | 'ended'
   isSnapshotLoading: boolean
   error: FeedTimelineError | null
 }>()
@@ -93,8 +98,6 @@ watch(
 
 <template>
   <div class="ft-root">
-    <NewItemsPill :count="pillCount" :visible="pillCount > 0" @click="scrollToBottom" />
-
     <div
       v-if="streamState === 'reconnecting'"
       class="ft-banner ft-banner--warn"
@@ -148,6 +151,14 @@ watch(
         </div>
       </div>
     </div>
+
+    <!--
+      DOM-Position bewusst NACH der Timeline (§6 Punkt 9: Tab-Reihenfolge
+      Filter -> Timeline -> Pill). Die visuelle Position "oberhalb der
+      Liste" (§2.6) kommt ausschliesslich aus `order: -1` in
+      NewItemsPill.vue, nicht aus der Dokumentreihenfolge.
+    -->
+    <NewItemsPill :count="pillCount" :visible="pillCount > 0" @click="scrollToBottom" />
   </div>
 </template>
 

@@ -199,7 +199,7 @@ function openThread(postId: string): void {
     />
     <FeedTimeline
       :items="filteredItems"
-      :stream-state="streamState === 'connecting' ? 'reconnecting' : streamState"
+      :stream-state="streamState"
       :is-snapshot-loading="isSnapshotLoading"
       :error="snapshotError"
       @open-thread="openThread"
