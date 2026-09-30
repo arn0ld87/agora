@@ -1125,6 +1125,14 @@ def _decode_actions_cursor(raw: str | None) -> int:
     return max(value, 0)
 
 
+def _coerce_action_type(raw: str) -> SimActionType:
+    """Unbekannte Rohtypen landen in ``OTHER`` — auch beim Filtern (#1713)."""
+    try:
+        return SimActionType(raw)
+    except ValueError:
+        return SimActionType.OTHER
+
+
 def _resolve_target_post_id(action_type: str, args: dict) -> str | None:
     """Post, auf den die Aktion wirkt — nicht der ggf. neu erzeugte Beitrag
     (der steht bereits im Feed-Event, nicht im Protokoll-Ziel)."""
@@ -1146,10 +1154,7 @@ def _agent_action_to_record(action: "AgentAction") -> SimActionRecord | None:
     Degradations-Haltung wie ``evidence_omitted`` bei ``/report/<id>/evidence``.
     """
     args = action.action_args or {}
-    try:
-        action_type = SimActionType(action.action_type)
-    except ValueError:
-        action_type = SimActionType.OTHER
+    action_type = _coerce_action_type(action.action_type)
 
     comment_id = args.get("comment_id") if action_type in (
         SimActionType.LIKE_COMMENT,
@@ -1223,7 +1228,9 @@ def get_simulation_actions(simulation_id: str):
         round_num=round_num,
     )
     if action_type_filter is not None:
-        matching = [a for a in matching if a.action_type == action_type_filter.value]
+        matching = [
+            a for a in matching if _coerce_action_type(a.action_type) is action_type_filter
+        ]
 
     page_slice = matching[offset:offset + limit]
     next_offset = offset + limit

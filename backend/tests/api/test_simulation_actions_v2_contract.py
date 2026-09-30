@@ -61,6 +61,23 @@ class TestActionTypeFilter:
         assert len(data["items"]) == 1
         assert data["items"][0]["action_type"] == "LIKE_POST"
 
+    def test_filter_other_matches_unknown_raw_types(self, client) -> None:
+        """Filter OTHER trifft Rohtypen, die im Record als OTHER erscheinen (#1713)."""
+        actions = [
+            _action(action_type="SOME_FUTURE_ACTION"),
+            _action(action_type="CREATE_POST"),
+        ]
+        with (
+            patch(
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
+                return_value=actions,
+            ),
+            patch("app.api.simulation_run.validate_simulation_id", return_value=True),
+        ):
+            resp = client.get(f"/api/simulation/{VALID_SIM_ID}/actions?action_type=OTHER")
+        items = resp.get_json()["data"]["items"]
+        assert [item["action_type"] for item in items] == ["OTHER"]
+
     def test_unknown_action_type_falls_back_to_other(self, client) -> None:
         actions = [_action(action_type="SOME_FUTURE_ACTION")]
         with (
