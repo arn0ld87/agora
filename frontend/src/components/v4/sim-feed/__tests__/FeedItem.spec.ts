@@ -95,8 +95,11 @@ describe('FeedItem', () => {
   })
 
   it('Enter auf dem Artikel emittiert openThread mit der Strang-Wurzel', async () => {
+    const feed = useSimFeed('sim-fi')
+    feed.ingest(mkPost({ post_id: 'root-9' }))
+    feed.flushPending()
     const w = mount(FeedItem, {
-      props: { post: mkPost({ post_id: 'p-2', root_post_id: 'root-9' }) },
+      props: { post: mkPost({ post_id: 'p-2', kind: 'comment', root_post_id: 'root-9' }) },
     })
     await w.get('.fi-root').trigger('keydown', { key: 'Enter' })
     expect(w.emitted('openThread')?.[0]).toEqual(['root-9'])
@@ -106,6 +109,19 @@ describe('FeedItem', () => {
     const w = mount(FeedItem, { props: { post: mkPost({ post_id: 'p-3' }) } })
     await w.get('.fi-root').trigger('keydown', { key: ' ' })
     expect(w.emitted('openThread')?.[0]).toEqual(['p-3'])
+  })
+
+  it('verschachtelte Antwort ohne root_post_id öffnet die bekannte Strang-Wurzel', async () => {
+    const feed = useSimFeed('sim-fi')
+    feed.ingestMany([
+      mkPost({ post_id: 'root' }),
+      mkPost({ post_id: 'parent', kind: 'comment', parent_comment_id: 'root' }),
+    ])
+    const w = mount(FeedItem, {
+      props: { post: mkPost({ post_id: 'child', kind: 'comment', parent_comment_id: 'parent' }) },
+    })
+    await w.get('.fi-root').trigger('click')
+    expect(w.emitted('openThread')?.[0]).toEqual(['root'])
   })
 
   it('isNew=true rendert den Neu-Marker', () => {

@@ -113,13 +113,13 @@ const isLegacyRun = computed(
 
 const degradation = computed<SimRunHeaderDegradation | null>(() => {
   if (snapshotFailedBoth.value) {
-    return { kind: 'snapshot_missing', hint: 'Anfangsbestand konnte nicht geladen werden.' }
+    return { kind: 'snapshot_missing', hint: t('feed.degradation.snapshot_missing') }
   }
   if (streamState.value === 'reconnecting') {
-    return { kind: 'stream_lost', hint: 'Live-Verbindung verloren.' }
+    return { kind: 'stream_lost', hint: t('feed.degradation.stream_lost') }
   }
   if (isLegacyRun.value) {
-    return { kind: 'legacy_run', hint: 'Aelterer Lauf ohne vollstaendige Diskurs-Daten.' }
+    return { kind: 'legacy_run', hint: t('feed.degradation.legacy_run') }
   }
   return null
 })

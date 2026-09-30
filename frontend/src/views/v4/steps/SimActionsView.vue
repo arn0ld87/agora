@@ -67,6 +67,7 @@ const streamStarted = ref(false)
 const page = ref<SimActionPage>({ items: [], next_cursor: null })
 const isActionsLoading = ref(true)
 const actionsError = ref<{ code: string; message: string } | null>(null)
+let activeActionsRequestId = 0
 
 const platformFilter = computed<'all' | Platform>(
   () => (route.query.platform as 'all' | Platform) ?? 'all',
@@ -123,6 +124,7 @@ async function loadSnapshot(): Promise<void> {
 }
 
 async function loadActions(reset: boolean): Promise<void> {
+  const requestId = ++activeActionsRequestId
   isActionsLoading.value = true
   actionsError.value = null
   try {
@@ -135,13 +137,16 @@ async function loadActions(reset: boolean): Promise<void> {
         action_type: typeFilter.value ?? undefined,
       }),
     )
+    if (requestId !== activeActionsRequestId) return
     page.value = reset
       ? response
       : { items: [...page.value.items, ...response.items], next_cursor: response.next_cursor }
   } catch {
-    actionsError.value = { code: 'actions_failed', message: t('feed.actionsTable.loadError') }
+    if (requestId === activeActionsRequestId) {
+      actionsError.value = { code: 'actions_failed', message: t('feed.actionsTable.loadError') }
+    }
   } finally {
-    isActionsLoading.value = false
+    if (requestId === activeActionsRequestId) isActionsLoading.value = false
   }
 }
 
@@ -210,13 +215,13 @@ const isLegacyRun = computed(
 
 const degradation = computed<SimRunHeaderDegradation | null>(() => {
   if (snapshotFailedBoth.value) {
-    return { kind: 'snapshot_missing', hint: 'Anfangsbestand konnte nicht geladen werden.' }
+    return { kind: 'snapshot_missing', hint: t('feed.degradation.snapshot_missing') }
   }
   if (streamState.value === 'reconnecting') {
-    return { kind: 'stream_lost', hint: 'Live-Verbindung verloren.' }
+    return { kind: 'stream_lost', hint: t('feed.degradation.stream_lost') }
   }
   if (isLegacyRun.value) {
-    return { kind: 'legacy_run', hint: 'Aelterer Lauf ohne vollstaendige Diskurs-Daten.' }
+    return { kind: 'legacy_run', hint: t('feed.degradation.legacy_run') }
   }
   return null
 })

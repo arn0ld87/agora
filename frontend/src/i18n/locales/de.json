@@ -1650,7 +1650,7 @@
     "repostSourceMissing": "Bezug nicht erfasst",
     "parentThreadMissing": "Übergeordneter Beitrag nicht erfasst",
     "newItems": "{count} neue Beiträge",
-    "streamLost": "Verbindung verloren — versuche Reconnect ({attempt})",
+    "streamLost": "Verbindung verloren — versuche Reconnect",
     "errors": {
       "snapshotFailed": "Snapshot-Ladefehler"
     },

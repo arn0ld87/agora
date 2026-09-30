@@ -14,7 +14,7 @@ import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{ count: number; visible: boolean }>()
 const { t } = useI18n()
-const emit = defineEmits<{ click: [] }>()
+const emit = defineEmits<{ click: []; dismiss: [] }>()
 
 const AUTO_HIDE_MS = 20_000
 let hideTimer: ReturnType<typeof setTimeout> | null = null
@@ -31,7 +31,7 @@ watch(
   ([visible]) => {
     clearTimer()
     if (visible) {
-      hideTimer = setTimeout(() => emit('click'), AUTO_HIDE_MS)
+      hideTimer = setTimeout(() => emit('dismiss'), AUTO_HIDE_MS)
     }
   },
   { immediate: true },

@@ -75,12 +75,12 @@ const degradationHint = computed(() => {
 <template>
   <div
     class="srh-root"
-    role="status"
+    role="group"
     :aria-busy="loading ? 'true' : 'false'"
     :aria-label="t('feed.live')"
   >
     <span class="srh-live-dot" :data-state="streamState" aria-hidden="true"></span>
-    <span class="srh-stream">{{ streamLabel }}</span>
+    <span class="srh-stream" role="status">{{ streamLabel }}</span>
     <span class="srh-divider" aria-hidden="true">·</span>
     <span class="srh-round">{{ roundLabel }}</span>
     <span class="srh-divider" aria-hidden="true">·</span>

@@ -9,13 +9,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 import type { SimActionPage } from '@/contracts/simActionContract'
 import type { SimulationActionsParams } from '@/api/simulation'
 
 let actionsCalls: SimulationActionsParams[] = []
-let actionsResponses: Array<{ success: boolean; data: SimActionPage }> = []
+type ActionResponse = { success: boolean; data: SimActionPage }
+let actionsResponses: Array<ActionResponse | Promise<ActionResponse>> = []
 
 vi.mock('@/api/simulation', () => ({
   getSimulationFeedSnapshot: () => Promise.resolve([]),
@@ -48,7 +50,7 @@ vi.mock('vue-i18n', () => ({
 
 const routerPushMock = vi.fn()
 const routerReplaceMock = vi.fn()
-let currentQuery: Record<string, string> = {}
+let currentQuery = reactive<Record<string, string>>({})
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { simulationId: 'test-sim-actions' }, query: currentQuery }),
   useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
@@ -81,7 +83,7 @@ describe('SimActionsView', () => {
     resetSimFeedStore('test-sim-actions')
     actionsCalls = []
     actionsResponses = []
-    currentQuery = {}
+    currentQuery = reactive<Record<string, string>>({})
     routerPushMock.mockClear()
     routerReplaceMock.mockClear()
   })
@@ -127,6 +129,31 @@ describe('SimActionsView', () => {
 
     expect(actionsCalls[1].cursor).toBe('cursor-2')
     expect(w.findAll('.sat-row')).toHaveLength(2)
+  })
+
+  it('verwirft eine veraltete Load-more-Antwort nach Filterwechsel', async () => {
+    actionsResponses = [
+      { success: true, data: { items: [mkAction({ agent_id: 'initial' })], next_cursor: 'next' } },
+    ]
+    const w = mount(SimActionsView)
+    await flushPromises()
+
+    let resolveOld!: (response: ActionResponse) => void
+    actionsResponses = [
+      new Promise<ActionResponse>((resolve) => { resolveOld = resolve }),
+      { success: true, data: { items: [mkAction({ agent_name: 'Filtered' })], next_cursor: null } },
+    ]
+    await w.get('.sat-load-more').trigger('click')
+    currentQuery.round = '2'
+    await flushPromises()
+    expect(actionsCalls.at(-1)?.round_num).toBe(2)
+    expect(w.findAll('.sat-row')).toHaveLength(1)
+    expect(w.text()).toContain('Filtered')
+
+    resolveOld({ success: true, data: { items: [mkAction({ agent_name: 'Stale' })], next_cursor: null } })
+    await flushPromises()
+    expect(w.findAll('.sat-row')).toHaveLength(1)
+    expect(w.text()).not.toContain('Stale')
   })
 
   it('Klick auf eine Zeile mit target_post_id navigiert per router.push zu SimThreadFocus', async () => {

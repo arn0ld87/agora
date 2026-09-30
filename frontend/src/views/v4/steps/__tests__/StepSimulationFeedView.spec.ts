@@ -20,6 +20,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { computed } from 'vue'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
+import SimFilterBar from '@/components/v4/sim-feed/SimFilterBar.vue'
 
 // ---- Mocks ----
 
@@ -74,6 +75,7 @@ vi.mock('@tanstack/vue-virtual', () => ({
         getVirtualItems: () => rows,
         getTotalSize: () => count * 120,
         scrollToIndex: () => {},
+        measureElement: () => {},
       }
     }),
 }))
@@ -211,6 +213,16 @@ describe('StepSimulationFeedView', () => {
     await flushPromises()
 
     expect(wrapper.findAll('.fi-root')).toHaveLength(2)
+  })
+
+  it('ungültige Plattform und Runde in der URL fallen auf ungefiltert zurück', async () => {
+    currentQuery = { platform: 'unknown', round: 'nicht-numerisch' }
+    snapshotFeed = [mkPost({ post_id: 'p-1' })]
+    const wrapper = mountFeed()
+    await flushPromises()
+
+    expect(wrapper.getComponent(SimFilterBar).props()).toMatchObject({ platform: 'all', round: null })
+    expect(wrapper.findAll('.fi-root')).toHaveLength(1)
   })
 
   it('Klick auf einen Beitrag navigiert per router.push zu SimThreadFocus', async () => {

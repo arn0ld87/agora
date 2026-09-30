@@ -11,7 +11,7 @@
  * Sprung an. Virtualisierung ueber @tanstack/vue-virtual, estimateSize=120,
  * overscan=6.
  */
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from 'vue-i18n'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
@@ -44,8 +44,7 @@ const isAtBottom = ref(true)
 const pillCount = ref(0)
 const newIds = ref<Set<string>>(new Set())
 
-let prevIds = new Set<string>()
-let baselineCaptured = false
+let prevIds = new Set(props.items.map((post) => post.post_id))
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -58,6 +57,10 @@ const virtualizer = useVirtualizer(
 
 const virtualRows = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+function measureRow(element: Element | ComponentPublicInstance | null): void {
+  if (element instanceof Element) virtualizer.value.measureElement(element)
+}
 
 function onScroll(): void {
   const el = scrollEl.value
@@ -77,9 +80,8 @@ function scrollToBottom(): void {
 watch(
   () => props.items,
   (list) => {
-    if (!baselineCaptured) {
+    if (props.isSnapshotLoading) {
       prevIds = new Set(list.map((p) => p.post_id))
-      baselineCaptured = true
       return
     }
     const added: PostCreatedEvent[] = list.filter((p) => !prevIds.has(p.post_id))
@@ -94,6 +96,18 @@ watch(
   },
   { flush: 'post' },
 )
+
+watch(
+  () => props.isSnapshotLoading,
+  (loading, wasLoading) => {
+    if (wasLoading && !loading) {
+      prevIds = new Set(props.items.map((post) => post.post_id))
+      newIds.value.clear()
+      pillCount.value = 0
+    }
+  },
+  { flush: 'sync' },
+)
 </script>
 
 <template>
@@ -103,7 +117,7 @@ watch(
       class="ft-banner ft-banner--warn"
       role="status"
     >
-      {{ t('feed.streamLost', { attempt: 1 }) }}
+      {{ t('feed.streamLost') }}
     </div>
 
     <div v-if="error" class="ft-banner ft-banner--error" role="alert">
@@ -134,6 +148,8 @@ watch(
         <div
           v-for="row in virtualRows"
           :key="items[row.index].post_id"
+          :ref="measureRow"
+          :data-index="row.index"
           class="ft-row"
           :style="{
             position: 'absolute',
@@ -158,7 +174,7 @@ watch(
       Liste" (§2.6) kommt ausschliesslich aus `order: -1` in
       NewItemsPill.vue, nicht aus der Dokumentreihenfolge.
     -->
-    <NewItemsPill :count="pillCount" :visible="pillCount > 0" @click="scrollToBottom" />
+    <NewItemsPill :count="pillCount" :visible="pillCount > 0" @click="scrollToBottom" @dismiss="pillCount = 0" />
   </div>
 </template>
 

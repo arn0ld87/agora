@@ -299,6 +299,14 @@ function createStore(simulationId: string) {
     return byIdMap.value.get(postId)
   }
 
+  function resolveStoreRootId(post: PostCreatedEvent): string | null {
+    const posts = byIdMap.value
+    return resolveRootId(post, posts, (id) => {
+      const candidate = id === post.post_id ? post : posts.get(id)
+      return candidate !== undefined && isThreadRoot(candidate)
+    })
+  }
+
   const activityRate = computed<number>(() => {
     const recent = all.value.slice(-30)
     if (recent.length < 2) return 0
@@ -316,6 +324,7 @@ function createStore(simulationId: string) {
     activityRate,
     flatTimeline,
     byId,
+    resolveRootId: resolveStoreRootId,
     ingest,
     ingestMany,
     clear,

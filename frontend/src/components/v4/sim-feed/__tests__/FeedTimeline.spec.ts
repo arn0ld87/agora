@@ -10,6 +10,10 @@ import { computed, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
+import NewItemsPill from '../NewItemsPill.vue'
+
+const scrollToIndexMock = vi.hoisted(() => vi.fn())
+const measureElementMock = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key, te: () => true }),
@@ -28,7 +32,8 @@ vi.mock('@tanstack/vue-virtual', () => ({
       return {
         getVirtualItems: () => rows,
         getTotalSize: () => count * 120,
-        scrollToIndex: () => {},
+        scrollToIndex: scrollToIndexMock,
+        measureElement: measureElementMock,
       }
     }),
 }))
@@ -63,6 +68,13 @@ function baseProps(items: PostCreatedEvent[] = []) {
 }
 
 describe('FeedTimeline', () => {
+  it('setzt den Mess-Ref und data-index auf jede virtuelle Zeile', () => {
+    measureElementMock.mockClear()
+    const w = mount(FeedTimeline, { props: baseProps([mkPost(), mkPost({ post_id: 'p-2' })]) })
+    expect(w.findAll('.ft-row').map((row) => row.attributes('data-index'))).toEqual(['0', '1'])
+    expect(measureElementMock).toHaveBeenCalledTimes(2)
+  })
+
   it('isSnapshotLoading zeigt drei Skeleton-Zeilen mit aria-busy', () => {
     const w = mount(FeedTimeline, { props: { ...baseProps(), isSnapshotLoading: true } })
     expect(w.find('[aria-busy="true"]').exists()).toBe(true)
@@ -107,11 +119,7 @@ describe('FeedTimeline', () => {
     Object.defineProperty(scrollEl, 'scrollTop', { value: 0, configurable: true, writable: true })
     await w.get('.ft-scroll').trigger('scroll')
 
-    // Der watch()-Callback auf `items` laeuft nicht bei `immediate: true` —
-    // der erste Trigger nach dem Mount erfasst nur die Baseline (siehe
-    // FeedTimeline.vue). Erst der zweite setProps-Aufruf zaehlt als
-    // "neu angekommen" und erhoeht pillCount.
-    await w.setProps({ items: [...items] })
+    // Bereits der erste neue Post nach dem Mount muss den Pill anzeigen.
     await w.setProps({ items: [...items, mkPost({ post_id: 'p-2' })] })
     await nextTick()
 
@@ -121,6 +129,21 @@ describe('FeedTimeline', () => {
     // (order: -1 in NewItemsPill.vue haelt die Optik).
     const html = w.html()
     expect(html.indexOf('ft-scroll')).toBeLessThan(html.indexOf('nip-root'))
+
+    scrollToIndexMock.mockClear()
+    w.getComponent(NewItemsPill).vm.$emit('dismiss')
+    await nextTick()
+    expect(w.find('.nip-root').exists()).toBe(false)
+    expect(scrollToIndexMock).not.toHaveBeenCalled()
+  })
+
+  it('zählt Snapshot-Posts beim Ende des Ladens nicht als neu', async () => {
+    const w = mount(FeedTimeline, {
+      props: { ...baseProps([]), isSnapshotLoading: true },
+    })
+    await w.setProps({ items: [mkPost()], isSnapshotLoading: false })
+    expect(w.find('.nip-root').exists()).toBe(false)
+    expect(w.find('.fi-root--new').exists()).toBe(false)
   })
 
   it('rendert Posts und leitet openThread von FeedItem weiter', async () => {

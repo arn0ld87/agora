@@ -1650,7 +1650,7 @@
     "repostSourceMissing": "Source not captured",
     "parentThreadMissing": "Parent post not captured",
     "newItems": "{count} new posts",
-    "streamLost": "Connection lost — retrying ({attempt})",
+    "streamLost": "Connection lost — retrying",
     "errors": {
       "snapshotFailed": "Snapshot load failed"
     },

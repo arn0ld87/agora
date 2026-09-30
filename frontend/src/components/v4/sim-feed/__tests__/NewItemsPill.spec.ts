@@ -39,10 +39,11 @@ describe('NewItemsPill', () => {
     expect(w.emitted('click')).toHaveLength(1)
   })
 
-  it('emittiert click nach 20s Inaktivitaet (Auto-Hide)', async () => {
+  it('emittiert dismiss statt click nach 20s Inaktivitaet', async () => {
     const w = mount(NewItemsPill, { props: { count: 2, visible: true } })
     vi.advanceTimersByTime(20_000)
     await Promise.resolve()
-    expect(w.emitted('click')).toHaveLength(1)
+    expect(w.emitted('dismiss')).toHaveLength(1)
+    expect(w.emitted('click')).toBeUndefined()
   })
 })

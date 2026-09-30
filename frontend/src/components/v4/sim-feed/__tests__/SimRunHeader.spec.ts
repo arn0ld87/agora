@@ -24,16 +24,17 @@ function baseProps() {
 }
 
 describe('SimRunHeader', () => {
-  it('rendert role=status mit aria-busy=false im Normalzustand', () => {
+  it('gruppiert den Kopf und begrenzt role=status auf den Stream', () => {
     const w = mount(SimRunHeader, { props: baseProps() })
-    const root = w.get('[role="status"]')
+    const root = w.get('[role="group"]')
     expect(root.attributes('aria-busy')).toBe('false')
     expect(root.text()).toContain('feed.header.round')
+    expect(w.get('[role="status"]').classes()).toContain('srh-stream')
   })
 
   it('loading=true ersetzt Rundenanzeige/Zeit/Anzahl durch "—" und setzt aria-busy', () => {
     const w = mount(SimRunHeader, { props: { ...baseProps(), loading: true } })
-    const root = w.get('[role="status"]')
+    const root = w.get('[role="group"]')
     expect(root.attributes('aria-busy')).toBe('true')
     expect(w.find('.srh-round').text()).toBe('—')
     expect(w.find('.srh-simtime').text()).toBe('—')

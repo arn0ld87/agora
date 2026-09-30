@@ -43,13 +43,16 @@ const streamStarted = ref(false)
 // --- Query-Filter (persistiert via URL, §1) -------------------------------
 
 const platformFilter = computed<'all' | Platform>(
-  () => (route.query.platform as 'all' | Platform) ?? 'all',
+  () => route.query.platform === 'reddit' || route.query.platform === 'twitter'
+    ? route.query.platform
+    : 'all',
 )
-const roundFilter = computed<number | null>(() =>
-  typeof route.query.round === 'string' && route.query.round !== ''
-    ? Number(route.query.round)
-    : null,
-)
+const roundFilter = computed<number | null>(() => {
+  const value = route.query.round
+  if (typeof value !== 'string' || value === '') return null
+  const round = Number(value)
+  return Number.isNaN(round) ? null : round
+})
 const personaFilter = computed<string | null>(
   () => (typeof route.query.persona === 'string' ? route.query.persona : null) || null,
 )
@@ -162,13 +165,13 @@ const isLegacyRun = computed(
 
 const degradation = computed<SimRunHeaderDegradation | null>(() => {
   if (snapshotFailedBoth.value) {
-    return { kind: 'snapshot_missing', hint: 'Anfangsbestand konnte nicht geladen werden.' }
+    return { kind: 'snapshot_missing', hint: t('feed.degradation.snapshot_missing') }
   }
   if (streamState.value === 'reconnecting') {
-    return { kind: 'stream_lost', hint: 'Live-Verbindung verloren.' }
+    return { kind: 'stream_lost', hint: t('feed.degradation.stream_lost') }
   }
   if (isLegacyRun.value) {
-    return { kind: 'legacy_run', hint: 'Aelterer Lauf ohne vollstaendige Diskurs-Daten.' }
+    return { kind: 'legacy_run', hint: t('feed.degradation.legacy_run') }
   }
   return null
 })
