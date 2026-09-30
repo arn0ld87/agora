@@ -85,6 +85,39 @@ class TestKindMapping:
         assert payload["root_post_id"] == "reddit:42"
         assert payload["parent_persona_name"] == "Mara Lindner"
         assert payload["parent_persona_id"] == "3"
+        # Kein parent_comment_id in den action_args (ingest hat keinen Wert
+        # gefunden, z.B. Top-Level-Kommentar) -> Feld bleibt None.
+        assert payload["parent_comment_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_create_comment_carries_parent_comment_id_from_action_args(
+        self, monkeypatch
+    ) -> None:
+        """(#1713 S5) ``oasis_action_ingest`` befuellt parent_comment_id in den
+        enriched action_args; der Emitter uebernimmt den Wert als String in
+        den Redis-Payload (Kommentar-auf-Kommentar, Reddit)."""
+        client = _captured_publish(monkeypatch)
+        await _emit(
+            client,
+            platform="reddit",
+            action_data={
+                "agent_id": 7,
+                "agent_name": "Jonas Berg",
+                "action_type": "CREATE_COMMENT",
+                "action_args": {
+                    "comment_id": 99,
+                    "post_id": 42,
+                    "content": "Antwort auf Elternkommentar",
+                    "post_author_name": "Mara Lindner",
+                    "post_author_agent_id": 3,
+                    "parent_comment_id": 5,
+                },
+            },
+            round_num=2,
+        )
+        payload = json.loads(client.publish.await_args.args[1])
+        assert payload["kind"] == "comment"
+        assert payload["parent_comment_id"] == "5"
 
     @pytest.mark.asyncio
     async def test_repost_has_kind_repost_empty_body_and_reference(self, monkeypatch) -> None:

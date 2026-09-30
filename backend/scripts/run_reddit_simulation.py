@@ -36,6 +36,7 @@ try:
         install_max_tokens_warning_filter,
         install_memory_sampler,
         install_recsys_mean_pooling_patch,
+        install_reddit_nested_comments_patch,
         install_script_paths,
         load_project_env,
         make_default_memory_sink,
@@ -56,6 +57,7 @@ except ImportError:  # direct script execution
         install_max_tokens_warning_filter,
         install_memory_sampler,
         install_recsys_mean_pooling_patch,
+        install_reddit_nested_comments_patch,
         install_script_paths,
         load_project_env,
         make_default_memory_sink,
@@ -100,6 +102,10 @@ def _install_runtime_profile() -> None:
     _mean_pooling_patched = install_recsys_mean_pooling_patch()
     logging.getLogger("agora.run_reddit_simulation").info(
         "twhin-bert mean-pooling patch installed = %s (#1236)", _mean_pooling_patched
+    )
+    _nested_comments_patched = install_reddit_nested_comments_patch()
+    logging.getLogger("agora.run_reddit_simulation").info(
+        "reddit nested-comments patch installed = %s (#1713 S5)", _nested_comments_patched
     )
     _camel_context_floor = apply_camel_context_floor()
     logging.getLogger("agora.run_reddit_simulation").info("context-patch token_limit floor = %s", _camel_context_floor)

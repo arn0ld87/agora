@@ -22,7 +22,7 @@ Ein Host kann Agora aus fertigen Images starten, statt `agora` und `nginx` selbs
 
 `edge` und `sha-<7>` von `main` haben **keinen** Smoke durchlaufen. Für Releases gilt weiter der Smoke.
 
-Beide Images tragen eine Build-Provenance-Attestation. Sie belegt Commit, Workflow und Runner (Details: [`../sbom-provenance.md`](../sbom-provenance.md)). Nur `linux/amd64`.
+Beide Images tragen eine Build-Provenance-Attestation. Sie belegt Commit, Workflow und Runner (Details: [`../sbom-provenance.md`](../sbom-provenance.md)). Beide Images sind Multi-Arch-Manifeste (`linux/amd64` und `linux/arm64`); armserver ist aarch64 und zieht die arm64-Variante. Die Attestation gilt für den Digest der Manifest-Liste.
 
 ## Einmalig: Pakete öffentlich schalten
 

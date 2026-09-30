@@ -26,7 +26,8 @@
 #   Overlay, das den nginx-Service anlegt (prod-with-proxy.yml oder das
 #   Host-Overlay), und muss als LETZTES -f stehen, damit `build: !reset`
 #   die dort gesetzten build-Bloecke entfernt.
-# - Nur linux/amd64.
+# - Multi-Arch: linux/amd64 und linux/arm64. armserver ist aarch64 und zieht
+#   automatisch die arm64-Variante.
 #
 # Deploy (Beispiel mit Reverse-Proxy-Overlay):
 #
