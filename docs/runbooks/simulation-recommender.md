@@ -17,8 +17,10 @@ OASIS betreibt zwei strukturell unterschiedliche Recommender:
   Bio + letztem Post, embedded jeden Kandidaten-Post mit
   `Twitter/twhin-bert-base`, rankt über Cosinus-Ähnlichkeit × Recency-Faktor.
   Zusätzlich fließen die Posts der eigenen Followees in einen Refresh-Schritt
-  ein (`platform.py:285-304`). Defaults (`env.py:78-85`):
-  `refresh_rec_post_count=2`, `max_rec_post_len=2`, `following_post_count=3`.
+  ein (`platform.py:285-304`). OASIS-Defaults (`env.py:78-85`):
+  `refresh_rec_post_count=2`, `max_rec_post_len=2`, `following_post_count=3` —
+  Agora überschreibt diese seit Issue #1713 Slice S4 auf `5`/`5`/`5` (siehe
+  „Feed-Parameter" unten und `docs/runbooks/simulation-liveness.md` §Hebel).
 - **Reddit — `rec_sys_reddit`** (`oasis/social_platform/recsys.py`,
   Zeilen 168-257): nicht personalisiert. Hot-Score aus `likes − dislikes` und
   Alter, **identische Liste für alle Agenten** — kein BERT, keine
@@ -35,6 +37,34 @@ Issue geplante Architekturänderung.
 patcht `process_recsys_posts.process_batch` unabhängig davon, ob eine
 Simulation Twitter oder Reddit fährt — auf Reddit bleibt der Patch folgenlos,
 weil `rec_sys_reddit` ihn nie aufruft (#1236, siehe Docstring im Code).
+
+## Feed-Parameter (#1713 S4)
+
+Der OASIS-Default hält den Twitter-Feed sehr eng: ein Agent sieht pro
+Refresh nur 2 empfohlene und 3 Follow-Posts (`max_rec_post_len=2`
+begrenzt zusätzlich den Buffer der Recommendation-Tabelle). Das verknappt
+den Diskursanlass strukturell — wer nichts im Feed sieht, hat nichts zu
+beantworten, unabhängig von `activity_level`. `run_twitter_simulation`
+(`backend/scripts/run_parallel_simulation.py`) und `SinglePlatformRunner`
+(`backend/scripts/sim_runtime/platform_runner.py`) bauen deshalb für Twitter
+ein eigenes `oasis.Platform`-Objekt statt `oasis.DefaultPlatformType.TWITTER`
+direkt an `oasis.make` zu reichen:
+
+| Parameter | OASIS-Default | Agora (Twitter) |
+|---|---|---|
+| `refresh_rec_post_count` | 2 | 5 |
+| `max_rec_post_len` | 2 | 5 |
+| `following_post_count` | 3 | 5 |
+
+Die Konstanten liegen zentral in
+`backend/app/services/simulation_activity_policy.py`
+(`TWITTER_REFRESH_REC_POST_COUNT`/`TWITTER_MAX_REC_POST_LEN`/
+`TWITTER_FOLLOWING_POST_COUNT`). Kostenhinweis: die zugrundeliegende
+TwHIN-BERT-Anfrage bleibt eine Anfrage pro Refresh, nur mit mehr
+zurückgegebenen Kandidaten — kein zusätzlicher LLM-Call, kein
+zusätzlicher BERT-Forward-Pass. Reddit bleibt unverändert beim
+OASIS-Default (`rec_sys_reddit`, bereits großzügig bei
+`max_rec_post_len=100`).
 
 ## Cache-Verhalten und Offline-Modus (#1713 S3)
 

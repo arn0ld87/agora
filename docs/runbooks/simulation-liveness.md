@@ -99,6 +99,43 @@ manuelle Prüfung bzw. Folgearbeit.
 
 ---
 
+## Hebel: Aktivitätskonfiguration und Feed-Parameter (#1713 S4)
+
+Baseline-Läufe (vor diesem Slice) lagen bei 0,16-0,22 Aktionen/Agent/Runde
+(L1-Ziel ≥ 0,6) und rund 25 % aktiven Agenten/Runde (L2-Ziel ≥ 40 %). Drei
+Konfigurationswerte konnten das strukturell verhindern — LLM-Output *und*
+Regel-Fallback unabhängig voneinander:
+
+- `agents_per_hour_min`/`agents_per_hour_max` (Zeitkonfiguration) —
+  begrenzen den Ziel-Kandidatenpool je Runde.
+- `activity_level` (Agentenkonfiguration) — Pro-Agent-Wahrscheinlichkeit,
+  in einer aktiven Stunde überhaupt Kandidat zu werden.
+- `active_hours` (Agentenkonfiguration) — grenzt Agenten auf enge
+  Tagesfenster ein (z. B. Behörden nur 9-17 Uhr) und leert den
+  Kandidatenpool in allen übrigen Stunden, unabhängig von `activity_level`.
+
+`backend/app/services/simulation_activity_policy.py` hebt alle drei Werte
+auf eine Untergrenze an (`agents_per_hour_min ≥ ceil(0,4·N)`,
+`agents_per_hour_max ≥ ceil(0,7·N)`, `activity_level ≥ 0,5`, `active_hours`
+deckt mindestens 06-23 Uhr ab — 0-5 Uhr bleibt bewusst die
+DACH-Nachtruhe-Ausnahme). Die Runden-Auswahl selbst
+(`select_active_agent_ids`) ist seitdem ein gemeinsamer Helfer für
+`platform_runner.py` und `run_parallel_simulation.py` statt zweier
+Kopien.
+
+Zusätzlich vergrößert Agora den Twitter-Feed gegenüber dem engen
+OASIS-Default (`refresh_rec_post_count`/`max_rec_post_len`/
+`following_post_count` von 2/2/3 auf 5/5/5) — Details in
+`docs/runbooks/simulation-recommender.md` §Feed-Parameter. Reddit bleibt
+unverändert.
+
+**Wichtig:** Diese Untergrenzen erhöhen ausschließlich den
+*Erwartungswert* aktiver Agenten pro Runde, um L1/L2 erreichbar zu machen.
+Sie behaupten keine Aussage über reales Stakeholder-Verhalten (ADR-0002) —
+Agora sagt kein menschliches Verhalten vorher.
+
+---
+
 ## Hebel: Haltung im Agenten-Prompt gegen Konsens/Echo (S6)
 
 L5/L6 markieren einen bekannten blinden Fleck: `contra_reply_share` und die

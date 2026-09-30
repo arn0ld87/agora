@@ -28,7 +28,6 @@ import asyncio
 import json
 import logging
 import os
-import random
 import signal
 import sys
 from datetime import datetime
@@ -79,6 +78,14 @@ try:
     from .run_control import RoundAction, RoundBoundaryControl
 except ImportError:  # direct script execution
     from sim_runtime.run_control import RoundAction, RoundBoundaryControl
+
+# Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
+from app.services.simulation_activity_policy import (
+    TWITTER_FOLLOWING_POST_COUNT,
+    TWITTER_MAX_REC_POST_LEN,
+    TWITTER_REFRESH_REC_POST_COUNT,
+    select_active_agent_ids,
+)
 
 # CAMEL/Oasis — harte Abhängigkeit wie in den Runner-Skripten.
 from camel.models import ModelFactory  # noqa: E402
@@ -343,43 +350,8 @@ class SinglePlatformRunner:
         time_config = self.config.get("time_config", {})
         agent_configs = self.config.get("agent_configs", [])
 
-        # Base activation count
-        base_min = time_config.get("agents_per_hour_min", 5)
-        base_max = time_config.get("agents_per_hour_max", 20)
-
-        # Adjust by time period
-        peak_hours = time_config.get("peak_hours", [9, 10, 11, 14, 15, 20, 21, 22])
-        off_peak_hours = time_config.get("off_peak_hours", [0, 1, 2, 3, 4, 5])
-
-        if current_hour in peak_hours:
-            multiplier = time_config.get("peak_activity_multiplier", 1.5)
-        elif current_hour in off_peak_hours:
-            multiplier = time_config.get("off_peak_activity_multiplier", 0.3)
-        else:
-            multiplier = 1.0
-
-        target_count = int(random.uniform(base_min, base_max) * multiplier)
-
-        # Calculate activation probability based on each Agent's configuration
-        candidates = []
-        for cfg in agent_configs:
-            agent_id = cfg.get("agent_id", 0)
-            active_hours = cfg.get("active_hours", list(range(8, 23)))
-            activity_level = cfg.get("activity_level", 0.5)
-
-            # Check if in active time
-            if current_hour not in active_hours:
-                continue
-
-            # Calculate probability based on activity level
-            if random.random() < activity_level:
-                candidates.append(agent_id)
-
-        # Random selection
-        selected_ids = random.sample(
-            candidates,
-            min(target_count, len(candidates))
-        ) if candidates else []
+        # Geteilte Auswahl-Logik mit run_parallel_simulation.py (#1713 Slice S4).
+        selected_ids = select_active_agent_ids(time_config, agent_configs, current_hour)
 
         # Convert to Agent objects
         active_agents = []
@@ -545,9 +517,24 @@ class SinglePlatformRunner:
 
         # Create environment
         print("Create OASIS environment...")
+        if self.PLATFORM_TYPE == oasis.DefaultPlatformType.TWITTER:
+            # Issue #1713 Slice S4: OASIS-Default haelt den Twitter-Feed sehr
+            # eng (siehe simulation_activity_policy.py Docstring) — eigenes
+            # Platform-Objekt statt DefaultPlatformType.TWITTER, damit
+            # refresh_rec_post_count/max_rec_post_len/following_post_count
+            # ueber die im OASIS-Paket vorgesehenen Parameter greifen.
+            platform_arg: Any = oasis.Platform(
+                db_path=db_path,
+                recsys_type="twhin-bert",
+                refresh_rec_post_count=TWITTER_REFRESH_REC_POST_COUNT,
+                max_rec_post_len=TWITTER_MAX_REC_POST_LEN,
+                following_post_count=TWITTER_FOLLOWING_POST_COUNT,
+            )
+        else:
+            platform_arg = self.PLATFORM_TYPE
         self.env = oasis.make(
             agent_graph=self.agent_graph,
-            platform=self.PLATFORM_TYPE,
+            platform=platform_arg,
             database_path=db_path,
             semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
         )
