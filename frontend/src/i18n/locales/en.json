@@ -1715,7 +1715,11 @@
       "target": "Target",
       "payload": "Content",
       "loadMore": "Load more",
-      "empty": "No actions logged yet."
+      "empty": "No actions logged yet.",
+      "roleConflict": "Role conflict",
+      "failed": "failed",
+      "noTarget": "—",
+      "noPayload": "—"
     },
     "header": {
       "round": "Round {current}/{total}",

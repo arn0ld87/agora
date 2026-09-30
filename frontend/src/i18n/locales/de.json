@@ -1715,7 +1715,11 @@
       "target": "Ziel",
       "payload": "Inhalt",
       "loadMore": "Weitere laden",
-      "empty": "Noch keine Aktionen protokolliert."
+      "empty": "Noch keine Aktionen protokolliert.",
+      "roleConflict": "Rollenkonflikt",
+      "failed": "fehlgeschlagen",
+      "noTarget": "—",
+      "noPayload": "—"
     },
     "header": {
       "round": "Runde {current}/{total}",
