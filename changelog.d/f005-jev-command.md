@@ -1,0 +1,1 @@
+- Der Repository-Befehl `/jev` zeigt den Status des Decision-Piloten und startet den isolierten Local-Search-Benchmark oder seine Tests.

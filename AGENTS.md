@@ -17,6 +17,7 @@ Jede Aenderung beginnt beim Vertrag (`backend/app/contracts/`), nie beim Consume
 3. Vor Push: `bash scripts/pre-push-gate.sh [backend|frontend|schemas]`.
 4. Changelog-Fragment in `changelog.d/<nr>-<slug>.md` — nie `CHANGELOG.md` direkt.
 5. Istzustand in `docs/STATUS.md` synchronisieren (Test-Zaehler ausgenommen).
+6. Aenderungen an Persistenz, Migrationen, Env-Defaults oder Compose-Stack ziehen `docs/runbooks/upgrade.md` im selben PR nach.
 
 ## Verboten
 
