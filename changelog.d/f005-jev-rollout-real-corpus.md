@@ -1,0 +1,1 @@
+- Ein read-only Jev-Korpus-Extraktor paart echte Report-Suchanfragen mit Fakten aus demselben Neo4j-Graphen und gibt standardmäßig nur aggregierte Zählwerte aus.
