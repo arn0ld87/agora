@@ -80,6 +80,7 @@ from app.contracts.llm_provider_keys_contract import (
 )
 from app.contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 from app.contracts.post_event_contract import PostCreatedEvent
+from app.contracts.sim_action_contract import RoundSummary, SimActionPage, SimActionRecord
 from app.contracts.llm_request import (
     NormalizedLlmRequest,
     NormalizedLlmChunk,
@@ -268,6 +269,10 @@ CONTRACTS: dict[str, type] = {
     # Kennzahlen "Simulation lebt" (Issue #1713 Slice S0)
     "platform-liveness.schema.json": PlatformLiveness,
     "simulation-liveness-report.schema.json": SimulationLivenessReport,
+    # Aktionsprotokoll und Runden-Uebersicht fuer den Feed (Issue #1713 Slice UI-2a)
+    "sim-action-record.schema.json": SimActionRecord,
+    "sim-action-page.schema.json": SimActionPage,
+    "round-summary.schema.json": RoundSummary,
 }
 
 

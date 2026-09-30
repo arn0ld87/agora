@@ -9,6 +9,17 @@
       "title": "Platform",
       "type": "string"
     },
+    "PostKind": {
+      "description": "Diskurs-Art eines Beitrags fuer die Thread-/Diskursdarstellung (#1713).\n\n``None`` (kein Wert im Payload) markiert Vor-Slice-UI-2a-Daten \u2014 das\nFrontend leitet dort weiterhin aus ``parent_post_id`` ab, ob es sich um\neine Antwort handelt.",
+      "enum": [
+        "post",
+        "comment",
+        "quote",
+        "repost"
+      ],
+      "title": "PostKind",
+      "type": "string"
+    },
     "VoiceRegister": {
       "description": "Voice-Register aus oasis_profile_generator (Sub-Slice 10).\n\nVokabular ist der Profil-Generator-SSoT (``formal-de``/``neutral-de``/\n``technical-de``/``skeptisch-de``). Das alte Vokabular\n``formal``/``casual``/``jugendsprache`` war nie an den Generator\nangebunden und ist entfernt \u2014 der Runner-Fallback auf ``casual``\nverschleierte bisher jede Persona als \u201ecasual`` (#1009/#1216).\nFrontend rendert Badge in PersonaAvatar.",
       "enum": [
@@ -27,7 +38,8 @@
   "description": "SSE-Frame f\u00fcr einen einzelnen Post-Action des OASIS-Runners.",
   "properties": {
     "body": {
-      "minLength": 1,
+      "default": "",
+      "description": "Beitragstext. Muss nicht-leer sein ausser bei ``kind=repost`` \u2014 ein reiner Repost hat keinen eigenen Text, der geteilte Beitrag steht unter ``reposted_post_id`` (siehe body_required_unless_repost).",
       "title": "Body",
       "type": "string"
     },
@@ -41,6 +53,70 @@
       "default": true,
       "title": "Is Simulated",
       "type": "boolean"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PostKind"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Diskurs-Art (post/comment/quote/repost). None bei Pre-Slice-UI-2a-Daten \u2014 Frontend faellt auf die parent_post_id-Heuristik zurueck."
+    },
+    "like_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Anzahl Likes zum Zeitpunkt der Emission. None bei Altdaten.",
+      "title": "Like Count"
+    },
+    "parent_comment_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Elternkommentar innerhalb eines Reddit-Strangs (Baum-Kante). Vorerst immer None \u2014 Backfill folgt in einem Folge-Slice.",
+      "title": "Parent Comment Id"
+    },
+    "parent_persona_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "persona_id der Eltern-Persona (Antwort/Zitat/Repost-Quelle).",
+      "title": "Parent Persona Id"
+    },
+    "parent_persona_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Anzeigename der Eltern-Persona, fuer die Kontextzeile im Feed.",
+      "title": "Parent Persona Name"
     },
     "parent_post_id": {
       "anyOf": [
@@ -72,6 +148,71 @@
       "minLength": 1,
       "title": "Post Id",
       "type": "string"
+    },
+    "quote_body": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Text des zitierten Beitrags bei kind=quote (nested Block im Feed).",
+      "title": "Quote Body"
+    },
+    "quoted_post_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "post_id des zitierten Beitrags bei kind=quote.",
+      "title": "Quoted Post Id"
+    },
+    "reposted_post_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "post_id des geteilten Beitrags bei kind=repost.",
+      "title": "Reposted Post Id"
+    },
+    "root_post_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Wurzel-Post des Strangs, dem dieser Beitrag angehoert.",
+      "title": "Root Post Id"
+    },
+    "round_num": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sim-Runde, in der die Aktion ausgefuehrt wurde. None bei Altdaten.",
+      "title": "Round Num"
     },
     "score": {
       "default": 0,
@@ -114,7 +255,6 @@
     "persona_id",
     "persona_name",
     "voice_register",
-    "body",
     "timestamp"
   ],
   "title": "PostCreatedEvent",
