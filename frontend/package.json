@@ -34,6 +34,7 @@
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "@pinia/testing": "^2.0.1",
     "@supabase/supabase-js": "^2.117.1",
+    "@tanstack/vue-virtual": "^3.13.39",
     "axios": "^1.20.0",
     "d3": "^7.9.0",
     "dompurify": "^3.4.15",

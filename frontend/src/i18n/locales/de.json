@@ -1633,7 +1633,108 @@
     "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
     "pipeline": "Pipeline",
     "feedTab": "Live-Feed",
-    "resonanceBar": "Resonanz der letzten Beiträge (Zustimmung minus Widerspruch)"
+    "threadsTab": "Diskurs",
+    "roundsTab": "Runden",
+    "actionsTab": "Protokoll",
+    "resonanceBar": "Resonanz der letzten Beiträge (Zustimmung minus Widerspruch)",
+    "threadsPlaceholder": "Noch keine Diskussionsstränge in diesem Lauf.",
+    "threadFocusPlaceholder": "Dieser Strang ist noch nicht verfügbar.",
+    "roundsPlaceholder": "Noch keine Runden gestartet.",
+    "actionsPlaceholder": "Noch keine Aktionen protokolliert.",
+    "noPosts": "Noch keine Beiträge in diesem Lauf.",
+    "noPostsHint": "Ein Blick in die Runden-Ansicht zeigt, ob die Simulation bereits läuft.",
+    "replyTo": "Antwort an @{name}",
+    "replyToUnknown": "Antwort auf früheren Beitrag",
+    "quoteMissing": "Zitat nicht mehr auffindbar",
+    "repostedBy": "@{name} hat geteilt",
+    "repostSourceMissing": "Bezug nicht erfasst",
+    "parentThreadMissing": "Übergeordneter Beitrag nicht erfasst",
+    "newItems": "{count} neue Beiträge",
+    "streamLost": "Verbindung verloren — versuche Reconnect",
+    "errors": {
+      "snapshotFailed": "Snapshot-Ladefehler"
+    },
+    "degradation": {
+      "snapshot_missing": "Anfangsbestand konnte nicht geladen werden.",
+      "stream_lost": "Live-Verbindung verloren.",
+      "legacy_run": "Älterer Lauf ohne vollständige Diskurs-Daten."
+    },
+    "scope": {
+      "platform": "Plattform",
+      "platformAll": "Alle",
+      "round": "Runde",
+      "roundAll": "Alle Runden",
+      "persona": "Persona",
+      "personaAll": "Alle Personas",
+      "search": "Suche",
+      "searchPlaceholder": "Beiträge durchsuchen…",
+      "noPersonas": "Noch keine Personen im Feed"
+    },
+    "threadList": {
+      "replies": "{count} Antworten",
+      "reposts": "{count} Reposts",
+      "quotes": "{count} Zitate",
+      "empty": "Noch keine Diskussionsstränge.",
+      "emptyFiltered": "Kein Strang passt zu den aktuellen Filtern."
+    },
+    "threadTree": {
+      "orphan": "Übergeordneter Beitrag nicht erfasst",
+      "loading": "Strang wird geladen…"
+    },
+    "rounds": {
+      "empty": "Noch keine Runden gestartet",
+      "error": "Runden konnten nicht geladen werden.",
+      "retry": "Erneut versuchen"
+    },
+    "roundsList": {
+      "roundLabel": "Runde {round}",
+      "noActions": "Keine Aktionen in dieser Runde."
+    },
+    "actionType": {
+      "CREATE_POST": "Beiträge",
+      "CREATE_COMMENT": "Kommentare",
+      "LIKE_POST": "Likes (Beitrag)",
+      "DISLIKE_POST": "Dislikes (Beitrag)",
+      "LIKE_COMMENT": "Likes (Kommentar)",
+      "DISLIKE_COMMENT": "Dislikes (Kommentar)",
+      "REPOST": "Reposts",
+      "QUOTE_POST": "Zitate",
+      "FOLLOW": "Follows",
+      "MUTE": "Stummschaltungen",
+      "SEARCH_POSTS": "Beitragssuchen",
+      "SEARCH_USER": "Personensuchen",
+      "TREND": "Trend-Abfragen",
+      "REFRESH": "Aktualisierungen",
+      "DO_NOTHING": "Untätig",
+      "INTERVIEW": "Interviews",
+      "OTHER": "Sonstige"
+    },
+    "actionsTable": {
+      "round": "Runde",
+      "time": "Zeit",
+      "persona": "Persona",
+      "platform": "Plattform",
+      "type": "Aktion",
+      "target": "Ziel",
+      "payload": "Inhalt",
+      "loadMore": "Weitere laden",
+      "empty": "Noch keine Aktionen protokolliert.",
+      "roleConflict": "Rollenkonflikt",
+      "failed": "fehlgeschlagen",
+      "noTarget": "—",
+      "noPayload": "—",
+      "loadError": "Protokoll konnte nicht geladen werden."
+    },
+    "header": {
+      "round": "Runde {current}/{total}",
+      "roundUnknown": "Runde —",
+      "posts": "{count} Beiträge",
+      "streamConnecting": "Verbinde…",
+      "streamOpen": "Live",
+      "streamReconnecting": "Verbindung wird wiederhergestellt…",
+      "streamClosed": "Verbindung geschlossen",
+      "streamEnded": "Lauf beendet"
+    }
   },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"
@@ -1873,6 +1974,22 @@
     "stepSimulationFeed": {
       "title": "Live-Feed",
       "subtitle": "Reddit- und Twitter-Aktivität der laufenden Simulation verfolgen"
+    },
+    "simThreads": {
+      "title": "Diskurs",
+      "subtitle": "Diskussionsstränge dieses Laufs, sortiert nach jüngster Aktivität"
+    },
+    "simThreadFocus": {
+      "title": "Strang",
+      "subtitle": "Ein Diskussionsstrang mit allen Antworten"
+    },
+    "simRounds": {
+      "title": "Runden",
+      "subtitle": "Aktionsbilanz je Simulationsrunde"
+    },
+    "simActions": {
+      "title": "Protokoll",
+      "subtitle": "Alle protokollierten Simulationsaktionen, filterbar"
     },
     "shelf": {
       "dateYesterday": "Gestern",

@@ -286,6 +286,36 @@ body {
 }
 
 /* ============================================================
+   Slice UI-2b (#1713) — Sim-Feed-Tokens
+   docs/design/simulation-feed.md §3. Ersetzt Pixel-/Farb-Literale in
+   components/v4/sim-feed/*.vue (Feed, Diskurs, Strang, Runden, Protokoll).
+   Deviation: die Spec nennt `--status-amber`; das Repo führt dafür bereits
+   `--status-warning` (= --status-orange, siehe Zeile ~92) — kein zweiter
+   Amber-Rohwert noetig.
+   ============================================================ */
+:root, [data-theme="dark"] {
+  --sim-item-py: 12px;
+  --sim-item-px: 16px;
+  --sim-item-gap: 12px;
+  --sim-item-divider: 1px solid var(--hairline);
+  --sim-item-new-bg: color-mix(in oklab, var(--accent) 12%, transparent);
+  --sim-thread-indent: 20px;
+  --sim-thread-rule: 1px solid var(--border-subtle);
+  --sim-header-py: 10px;
+  --sim-header-px: 16px;
+  --sim-badge-fg-reddit: var(--text-primary);
+  --sim-badge-fg-twitter: var(--text-primary);
+  --sim-badge-bg: var(--gray-3);
+  --sim-pill-shadow: var(--shadow-2);
+  --sim-new-dot: var(--accent-warm);
+  --sim-live-dot-open: var(--status-green);
+  --sim-live-dot-reconnect: var(--status-warning);
+  --sim-live-dot-closed: var(--text-tertiary);
+  --sim-time-fs: var(--fs-small);
+  --sim-persona-fs: var(--fs-body);
+}
+
+/* ============================================================
    Slice 7.1 — Golden-Gate-Tokens (Vertrag in designTokens.spec.ts)
    Dark-first: dieser Block trägt selbst [data-theme="dark"], damit die
    theme-starken Werte (--accent-warm-hover, --status-coral, --status-coral-bg,

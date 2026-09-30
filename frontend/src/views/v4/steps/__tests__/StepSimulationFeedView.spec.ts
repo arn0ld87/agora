@@ -2,36 +2,33 @@
  * StepSimulationFeedView — Vitest-Smoke-Tests.
  *
  * Slice FE-Redesign-5 · 2026-05-15
+ * Slice UI-2b (#1713), Commit 3: View umgebaut auf FeedTimeline/SimFilterBar/
+ * SimRunHeader (docs/design/simulation-feed.md §2.5) — Stubs und Assertions
+ * auf die alte Dual-Column-Struktur (FeedColumn/SimulationPulseBar/
+ * RedditThread/TwitterPost) sind entfallen, die View importiert sie nicht
+ * mehr direkt.
  *
  * Prueft:
  * 1. Mock-Stream injiziert Posts → useSimFeed empfängt sie.
- * 2. Reddit-Count stimmt nach 5 Reddit-Posts.
- * 3. Twitter-Count stimmt nach 3 Twitter-Posts.
+ * 2. Snapshot wird für beide Plattformen geladen, Stream startet zuerst.
+ * 3. Reddit- und Twitter-Posts landen als FeedItem in der Timeline.
+ * 4. openThread navigiert per router.push zu SimThreadFocus.
+ * 5. Unmount/Remount: Store-Bestand bleibt erhalten (Slice 9 · #1007).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
+import { computed } from 'vue'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
+import SimFilterBar from '@/components/v4/sim-feed/SimFilterBar.vue'
 
 // ---- Mocks ----
 
-// useEventStream mocken: Wir speichern den post_created-Handler und können
-// ihn im Test manuell triggern.
 let capturedPostCreatedHandler: ((data: PostCreatedEvent) => void) | undefined
-
-// #1009 — Snapshot-Fetch beim Mount mocken. Wir zeichnen die Aufrufe auf,
-// um zu verifizieren, dass die View beide Plattformen lädt, ohne echte
-// HTTP-Requests abzusetzen. `snapshotFeed` steuert den Rückgabewert pro
-// Plattform; default ist leer.
 let snapshotFetchCalls: { simulationId: string; platform: string }[] = []
 let snapshotFeed: PostCreatedEvent[] = []
 
 // Reihenfolge-Tracker: Race-Condition-Regression (#1009 Codex-Finding).
-// start() muss VOR dem ersten Snapshot-Fetch aufgerufen werden, sonst geht
-// ein Post verloren, der zwischen Snapshot-Read und stream.start() geschrieben
-// wird (post_created hat kein Replay). Ein globaler Zähler fixiert die
-// Aufrufreihenfolge unabhängig von Timern.
 let callOrder = 0
 let streamStartOrder = -1
 let snapshotFirstFetchOrder = -1
@@ -42,6 +39,11 @@ vi.mock('@/api/simulation', () => ({
     snapshotFetchCalls.push({ simulationId, platform })
     return Promise.resolve(snapshotFeed.filter((p) => p.platform === platform))
   },
+  getSimulationRounds: () => Promise.resolve({ success: true, data: { rounds: [] } }),
+}))
+
+vi.mock('@/api/envelope', () => ({
+  unwrap: (envelope: { data: unknown }) => envelope.data,
 }))
 
 vi.mock('@/composables/useEventStream', () => ({
@@ -61,50 +63,41 @@ vi.mock('@/composables/useEventStream', () => ({
   },
 }))
 
-// Sub-Komponenten stubben für Isolation
-vi.mock('@/components/v4/sim-feed/FeedColumn.vue', () => ({
-  default: {
-    name: 'FeedColumn',
-    props: ['title', 'channel'],
-    template: '<section :data-channel="channel"><slot /></section>',
-  },
-}))
-vi.mock('@/components/v4/sim-feed/SimulationPulseBar.vue', () => ({
-  default: {
-    name: 'SimulationPulseBar',
-    // #1209 5b — recentPosts speist die Resonanz-Leiste. Der Stub macht die
-    // Anzahl sichtbar, damit der Test die Übergabe am echten Elternpfad prüft.
-    props: ['activityRate', 'redditCount', 'twitterCount', 'recentPosts'],
-    template:
-      '<div class="pulse-bar" :data-reddit="redditCount" :data-twitter="twitterCount"' +
-      ' :data-recent="(recentPosts || []).length" />',
-  },
-}))
-vi.mock('@/components/v4/sim-feed/RedditThread.vue', () => ({
-  default: {
-    name: 'RedditThread',
-    props: ['node', 'depth'],
-    template: '<div class="reddit-thread-stub" :data-id="node.post_id">{{ node.body }}</div>',
-  },
-}))
-vi.mock('@/components/v4/sim-feed/TwitterPost.vue', () => ({
-  default: {
-    name: 'TwitterPost',
-    props: ['post'],
-    template: '<article class="twitter-post-stub" :data-id="post.post_id">{{ post.body }}</article>',
-  },
+// @tanstack/vue-virtual misst reale Layout-Groessen (ResizeObserver,
+// clientHeight) — jsdom liefert dafuer keine sinnvollen Werte, siehe
+// FeedTimeline.spec.ts.
+vi.mock('@tanstack/vue-virtual', () => ({
+  useVirtualizer: (optionsRef: { value: { count: number } }) =>
+    computed(() => {
+      const count = optionsRef.value.count
+      const rows = Array.from({ length: count }, (_, index) => ({ index, start: index * 120 }))
+      return {
+        getVirtualItems: () => rows,
+        getTotalSize: () => count * 120,
+        scrollToIndex: () => {},
+        measureElement: () => {},
+      }
+    }),
 }))
 
-// useRoute mocken
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (key: string) => key, te: () => true }),
+}))
+
+// useRoute/useRouter mocken — die View navigiert seit Slice UI-2b (#1713)
+// per router.push() zu SimThreadFocus (openThread), statt nur die Route zu
+// lesen.
+const routerPushMock = vi.fn()
+const routerReplaceMock = vi.fn()
+let currentQuery: Record<string, string> = {}
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { simulationId: 'test-sim-1' } }),
+  useRoute: () => ({ params: { simulationId: 'test-sim-1' }, query: currentQuery }),
+  useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
 }))
 
 // useSimFeed batcht eingehende Posts pro Animation Frame (#1007). jsdoms
-// requestAnimationFrame loest erst nach ~16ms Realzeit aus; die Tests unten
-// pruefen den Feed-State direkt nach dem synchronen Handler-Aufruf ohne auf
-// einen echten Frame zu warten. Globaler Stub macht rAF synchron, damit
-// bestehende Assertions unveraendert bleiben.
+// requestAnimationFrame loest erst nach ~16ms Realzeit aus; rAF-Stub macht
+// den Flush synchron.
 vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
   cb(0)
   return 0
@@ -112,39 +105,8 @@ vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
 
 import StepSimulationFeedView from '../StepSimulationFeedView.vue'
 
-// ---- i18n ----
-const i18n = createI18n({
-  legacy: false,
-  locale: 'de',
-  messages: {
-    de: {
-      feed: {
-        reddit: 'Reddit',
-        twitter: 'Twitter',
-        simBadge: 'SIM',
-        activity: 'Posts/min',
-        live: 'Live',
-        empty: 'Noch keine Aktivität.',
-      },
-      common: { scrollToBottom: 'Zum aktuellen Beitrag springen' },
-      // Redesign PR 2: PageHeader-Titel der neuen AppShell-Huelle.
-      views: {
-        stepSimulationFeed: {
-          title: 'Live-Feed',
-          subtitle: 'Reddit- und Twitter-Aktivität der laufenden Simulation verfolgen',
-        },
-      },
-    },
-  },
-})
-
-// Fix #1713: Kopf/Breadcrumbs/Tabs sitzen in SimulationLayout.vue (der
-// Elternroute); diese View ist nur noch der Feed-Inhalt und braucht darum
-// keinen Router mehr.
 function mountFeed() {
-  return mount(StepSimulationFeedView, {
-    global: { plugins: [i18n] },
-  })
+  return mount(StepSimulationFeedView)
 }
 
 // ---- Helpers ----
@@ -155,7 +117,7 @@ function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
     post_id: `p-${Math.random().toString(36).slice(2)}`,
     parent_post_id: null,
     platform: 'reddit',
-persona_id: 'alice',
+    persona_id: 'alice',
     persona_name: 'Test Persona',
     voice_register: 'neutral-de',
     is_simulated: true,
@@ -175,6 +137,8 @@ describe('StepSimulationFeedView', () => {
     callOrder = 0
     streamStartOrder = -1
     snapshotFirstFetchOrder = -1
+    currentQuery = {}
+    routerPushMock.mockClear()
   })
 
   it('mountet ohne Crash und stellt Stream auf', async () => {
@@ -192,10 +156,6 @@ describe('StepSimulationFeedView', () => {
   })
 
   it('#1009: startet den Stream VOR dem Snapshot-Fetch (Race-Condition, Codex-Finding)', async () => {
-    // post_created hat kein Replay: ein Post, der zwischen Snapshot-Read und
-    // stream.start() geschrieben wird, fehlt im Snapshot UND vor start() gibt
-    // es keinen Listener. Also muss start() zuerst kommen; die seen-Dedup
-    // fängt den Overlap ab. Vor dem Fix stand stream.start() NACH dem Fetch.
     mountFeed()
     await flushPromises()
     expect(streamStartOrder).toBeGreaterThanOrEqual(0)
@@ -203,9 +163,7 @@ describe('StepSimulationFeedView', () => {
     expect(streamStartOrder).toBeLessThan(snapshotFirstFetchOrder)
   })
 
-  it('#1009: Snapshot-Posts werden beim Mount in den Feed ingestiert', async () => {
-    // Snapshot liefert einen Reddit- und einen Twitter-Post; der Mock gibt
-    // plattformgefiltert zurück.
+  it('#1009: Snapshot-Posts werden beim Mount in den Feed ingestiert und als FeedItem gerendert', async () => {
     snapshotFeed = [
       mkPost({ platform: 'reddit', post_id: 'snap-r-1' }),
       mkPost({ platform: 'twitter', post_id: 'snap-t-1' }),
@@ -214,56 +172,72 @@ describe('StepSimulationFeedView', () => {
     const wrapper = mountFeed()
     await flushPromises()
 
-    const pulseBar = wrapper.find('.pulse-bar')
-    expect(Number(pulseBar.attributes('data-reddit'))).toBe(1)
-    expect(Number(pulseBar.attributes('data-twitter'))).toBe(1)
+    expect(wrapper.findAll('.fi-root')).toHaveLength(2)
   })
 
-  it('Reddit-Count: 5 Reddit-Posts kommen in RedditThread-Stubs an', async () => {
+  it('Reddit- und Twitter-Posts aus dem Stream landen in der Timeline', async () => {
     const wrapper = mountFeed()
     await flushPromises()
 
-    // 5 Reddit-Posts injizieren
     for (let i = 0; i < 5; i++) {
       capturedPostCreatedHandler?.(mkPost({ platform: 'reddit', post_id: `r-${i}` }))
     }
-    await flushPromises()
-
-    const pulseBar = wrapper.find('.pulse-bar')
-    expect(Number(pulseBar.attributes('data-reddit'))).toBe(5)
-    expect(Number(pulseBar.attributes('data-twitter'))).toBe(0)
-  })
-
-  it('Twitter-Count: 3 Twitter-Posts kommen in TwitterPost-Stubs an', async () => {
-    const wrapper = mountFeed()
-    await flushPromises()
-
     for (let i = 0; i < 3; i++) {
       capturedPostCreatedHandler?.(mkPost({ platform: 'twitter', post_id: `t-${i}` }))
     }
     await flushPromises()
 
-    const pulseBar = wrapper.find('.pulse-bar')
-    expect(Number(pulseBar.attributes('data-twitter'))).toBe(3)
-    expect(Number(pulseBar.attributes('data-reddit'))).toBe(0)
+    expect(wrapper.findAll('.fi-root')).toHaveLength(8)
   })
 
-  // #1209 5b — die Resonanz-Leiste bekam `recentPosts` nie übergeben und fiel
-  // deshalb immer auf den statischen Fallback zurück; die Score-Einfärbung lief
-  // in der echten Anwendung nie. Dieser Test deckt den Produktionspfad ab, nicht
-  // den Component-Test mit handgereichten Props.
-  it('#1209: die View reicht recentPosts an die Resonanz-Leiste durch', async () => {
+  // Regression: 'connecting' (Erstverbindung) wurde vor dem Fix auf
+  // 'reconnecting' gemappt und zeigte faelschlich den "Verbindung
+  // verloren"-Banner beim allerersten Laden (FeedTimeline.vue).
+  it('Erstverbindung (streamState="connecting") zeigt keinen Reconnect-Banner', () => {
+    const wrapper = mountFeed()
+    // Bewusst VOR jedem await: onMounted() hat den Stream noch nicht
+    // gestartet (streamStarted=false), streamState ist also 'connecting'.
+    expect(wrapper.text()).not.toContain('feed.streamLost')
+  })
+
+  // §1: `since` filtert clientseitig gegen `timestamp` (Backend kennt den
+  // Parameter weder fuer /feed-snapshot noch fuer den Stream).
+  it('?since= filtert Beitraege vor dem Zeitstempel heraus', async () => {
+    currentQuery = { since: '2026-05-15T12:00:05Z' }
+    snapshotFeed = [
+      mkPost({ post_id: 'before', timestamp: '2026-05-15T12:00:00Z' }),
+      mkPost({ post_id: 'at', timestamp: '2026-05-15T12:00:05Z' }),
+      mkPost({ post_id: 'after', timestamp: '2026-05-15T12:00:10Z' }),
+    ]
     const wrapper = mountFeed()
     await flushPromises()
 
-    expect(Number(wrapper.find('.pulse-bar').attributes('data-recent'))).toBe(0)
+    expect(wrapper.findAll('.fi-root')).toHaveLength(2)
+  })
 
-    for (let i = 0; i < 3; i++) {
-      capturedPostCreatedHandler?.(mkPost({ platform: 'reddit', post_id: `res-${i}`, score: i }))
-    }
+  it('ungültige Plattform und Runde in der URL fallen auf ungefiltert zurück', async () => {
+    currentQuery = { platform: 'unknown', round: 'nicht-numerisch' }
+    snapshotFeed = [mkPost({ post_id: 'p-1' })]
+    const wrapper = mountFeed()
     await flushPromises()
 
-    expect(Number(wrapper.find('.pulse-bar').attributes('data-recent'))).toBe(3)
+    expect(wrapper.getComponent(SimFilterBar).props()).toMatchObject({ platform: 'all', round: null })
+    expect(wrapper.findAll('.fi-root')).toHaveLength(1)
+  })
+
+  it('Klick auf einen Beitrag navigiert per router.push zu SimThreadFocus', async () => {
+    snapshotFeed = [mkPost({ platform: 'reddit', post_id: 'snap-r-1' })]
+    const wrapper = mountFeed()
+    await flushPromises()
+
+    await wrapper.get('.fi-root').trigger('click')
+
+    expect(routerPushMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'SimThreadFocus',
+        params: expect.objectContaining({ simulationId: 'test-sim-1', postId: 'snap-r-1' }),
+      }),
+    )
   })
 
   // Slice 9 · #1007 — kein clearSimFeed mehr in onBeforeUnmount.
@@ -276,13 +250,13 @@ describe('StepSimulationFeedView', () => {
     }
     await flushPromises()
 
-    expect(Number(wrapper1.find('.pulse-bar').attributes('data-reddit'))).toBe(4)
+    expect(wrapper1.findAll('.fi-root')).toHaveLength(4)
 
     wrapper1.unmount()
 
     const wrapper2 = mountFeed()
     await flushPromises()
 
-    expect(Number(wrapper2.find('.pulse-bar').attributes('data-reddit'))).toBe(4)
+    expect(wrapper2.findAll('.fi-root')).toHaveLength(4)
   })
 })
