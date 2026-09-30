@@ -120,3 +120,24 @@ class TestSimulationRounds:
             resp = client.get(f"/api/simulation/{VALID_SIM_ID}/rounds")
         rounds = resp.get_json()["data"]["rounds"]
         assert rounds[0]["action_counts"]["OTHER"] == 1
+
+    def test_unknown_platform_skipped_without_500(self, client) -> None:
+        """Altbestand mit unbekanntem platform-Wert darf kein 500 ausloesen (#1713)."""
+        actions = [
+            _action(platform="legacy_platform", action_type="CREATE_POST"),
+            _action(platform="reddit", action_type="LIKE_POST"),
+        ]
+        with (
+            patch(
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
+                return_value=actions,
+            ),
+            patch("app.api.simulation_run.validate_simulation_id", return_value=True),
+        ):
+            resp = client.get(f"/api/simulation/{VALID_SIM_ID}/rounds")
+
+        assert resp.status_code == 200
+        rounds = resp.get_json()["data"]["rounds"]
+        # legacy_platform-Eintrag wird uebersprungen; nur reddit bleibt
+        assert len(rounds) == 1
+        assert rounds[0]["platform"] == "reddit"

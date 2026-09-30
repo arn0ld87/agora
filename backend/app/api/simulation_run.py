@@ -1204,7 +1204,17 @@ def get_simulation_actions(simulation_id: str):
     platform = request.args.get('platform')
     agent_id = request.args.get('agent_id', type=int)
     round_num = request.args.get('round_num', type=int)
-    action_type = request.args.get('action_type')
+    action_type_raw = request.args.get('action_type')
+    action_type_filter: SimActionType | None = None
+    if action_type_raw is not None:
+        try:
+            action_type_filter = SimActionType(action_type_raw)
+        except ValueError:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Unbekannter action_type: {action_type_raw!r}",
+                status=400,
+            )
 
     matching = SimulationRunner.get_all_actions(
         simulation_id=simulation_id,
@@ -1212,8 +1222,8 @@ def get_simulation_actions(simulation_id: str):
         agent_id=agent_id,
         round_num=round_num,
     )
-    if action_type:
-        matching = [a for a in matching if a.action_type == action_type]
+    if action_type_filter is not None:
+        matching = [a for a in matching if a.action_type == action_type_filter.value]
 
     page_slice = matching[offset:offset + limit]
     next_offset = offset + limit
@@ -1254,10 +1264,18 @@ def get_simulation_rounds(simulation_id: str):
             action_type = SimActionType.OTHER
         counts[action_type] = counts.get(action_type, 0) + 1
 
-    summaries = [
-        RoundSummary(round_num=round_num, platform=Platform(platform), action_counts=counts)
-        for (round_num, platform), counts in grouped.items()
-    ]
+    summaries: list[RoundSummary] = []
+    for (round_num, platform), counts in grouped.items():
+        try:
+            plat = Platform(platform)
+        except ValueError:
+            logger.warning(
+                "get_simulation_rounds: unbekannter platform-Wert %r in Altbestand — "
+                "Eintrag wird uebersprungen",
+                platform,
+            )
+            continue
+        summaries.append(RoundSummary(round_num=round_num, platform=plat, action_counts=counts))
     summaries.sort(key=lambda s: (s.round_num, s.platform.value))
     return json_success({"rounds": [s.model_dump(mode="json") for s in summaries]})
 

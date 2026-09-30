@@ -165,3 +165,30 @@ class TestRoleConflictAndSuccess:
             resp = client.get(f"/api/simulation/{VALID_SIM_ID}/actions")
         item = resp.get_json()["data"]["items"][0]
         assert item["success"] is False
+
+
+class TestActionTypeQueryValidation:
+    def test_invalid_action_type_returns_400(self, client) -> None:
+        """Unbekannter action_type-Filterwert ergibt 400, nicht leere Liste (#1713)."""
+        with patch("app.api.simulation_run.validate_simulation_id", return_value=True):
+            resp = client.get(
+                f"/api/simulation/{VALID_SIM_ID}/actions?action_type=NOT_A_REAL_TYPE"
+            )
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert body["success"] is False
+        assert body["code"] == "validation_failed"
+
+    def test_valid_action_type_does_not_return_400(self, client) -> None:
+        """Bekannter action_type-Filterwert ergibt keinen Fehler."""
+        with (
+            patch(
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
+                return_value=[],
+            ),
+            patch("app.api.simulation_run.validate_simulation_id", return_value=True),
+        ):
+            resp = client.get(
+                f"/api/simulation/{VALID_SIM_ID}/actions?action_type=CREATE_POST"
+            )
+        assert resp.status_code == 200
