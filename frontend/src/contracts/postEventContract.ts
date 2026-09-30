@@ -62,7 +62,9 @@ export const PostCreatedEventSchema = z
     kind: PostKindSchema.nullable().optional(),
     /** Likes zum Emissionszeitpunkt. null/undefined bei Altdaten. */
     like_count: z.number().int().nullable().optional(),
-    /** Elternkommentar im Reddit-Strang. Vorerst immer null. */
+    /** Elternkommentar im Reddit-Strang. Gesetzt wenn der nested-comments-Patch
+     *  aktiv ist (camel-oasis==0.2.5, nur Reddit). Twitter kennt dieses Feld
+     *  nicht (#1713 S5). */
     parent_comment_id: z.string().nullable().optional(),
     /** persona_id der Eltern-Persona (Antwort/Zitat/Repost). */
     parent_persona_id: z.string().nullable().optional(),
