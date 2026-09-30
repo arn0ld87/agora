@@ -10,6 +10,11 @@ import {
   type PostCreatedEvent,
 } from '../contracts/postEventContract'
 import type {
+  SimActionType,
+  SimActionPage,
+  RoundsResponse,
+} from '../contracts/simActionContract'
+import type {
   AvailableModelsResponse as AvailableModelsResponseContract,
   ModelPreset as ModelPresetContract,
 } from '../contracts/modelPresetContract'
@@ -282,7 +287,10 @@ export interface PersonaTemplateRecord {
 
 export interface SimulationActionsParams {
   limit?: number
-  offset?: number
+  /** Cursor-basierte Pagination (ersetzt offset, #1713). */
+  cursor?: string
+  /** Aktionsart-Filter (SimActionType, #1713). */
+  action_type?: SimActionType
   platform?: SimulationPlatform
   agent_id?: string
   round_num?: number
@@ -501,15 +509,25 @@ export const getAgentStats = (simulationId: string): Promise<ApiEnvelope<AgentSt
 }
 
 /**
- * Get simulation action history
+ * GET /api/simulation/<id>/actions — cursor-paginierte Aktionsliste (#1713).
  * @param simulationId
- * @param params - { limit, offset, platform, agent_id, round_num }
+ * @param params - { limit, cursor, action_type, platform, agent_id, round_num }
  */
 export const getSimulationActions = (
   simulationId: string,
   params: SimulationActionsParams = {}
-): Promise<ApiEnvelope<unknown[]>> => {
+): Promise<ApiEnvelope<SimActionPage>> => {
   return service.get(`/api/simulation/${simulationId}/actions`, { params })
+}
+
+/**
+ * GET /api/simulation/<id>/rounds — Rundenübersicht je Plattform (#1713).
+ * @param simulationId
+ */
+export const getSimulationRounds = (
+  simulationId: string
+): Promise<ApiEnvelope<RoundsResponse>> => {
+  return service.get(`/api/simulation/${simulationId}/rounds`)
 }
 
 /**

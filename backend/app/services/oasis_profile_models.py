@@ -183,6 +183,12 @@ class OasisAgentProfile:
     source_entity_uuid: Optional[str] = None
     source_entity_type: Optional[str] = None
 
+    # Issue #1713/#1470: Name der Organisation, die diese Persona laut
+    # belegter Graph-Relation vertritt (siehe EntityNode.affiliation /
+    # prepare_entities._merge_persons_with_organizations). 1:1-Spiegel von
+    # ``PersonaModel.affiliation``.
+    affiliation: Optional[str] = None
+
     # Segment tag for PersonaQuotaPlan validation (= entity_type by default)
     segment: Optional[str] = None
 
@@ -267,6 +273,8 @@ class OasisAgentProfile:
             profile["source_entity_uuid"] = self.source_entity_uuid
         if self.source_entity_type:
             profile["source_entity_type"] = self.source_entity_type
+        if self.affiliation:
+            profile["affiliation"] = self.affiliation
         # Issue #1246: immer geschrieben — der Konsument muss Kollektiv und
         # Individuum unterscheiden koennen, ohne den Entitaetstyp nachzuschlagen.
         profile["persona_kind"] = self.persona_kind
@@ -316,6 +324,8 @@ class OasisAgentProfile:
             profile["source_entity_uuid"] = self.source_entity_uuid
         if self.source_entity_type:
             profile["source_entity_type"] = self.source_entity_type
+        if self.affiliation:
+            profile["affiliation"] = self.affiliation
         # Issue #1246: immer geschrieben — der Konsument muss Kollektiv und
         # Individuum unterscheiden koennen, ohne den Entitaetstyp nachzuschlagen.
         profile["persona_kind"] = self.persona_kind
@@ -354,6 +364,7 @@ class OasisAgentProfile:
             "interested_topics": self.interested_topics,
             "source_entity_uuid": self.source_entity_uuid,
             "source_entity_type": self.source_entity_type,
+            "affiliation": self.affiliation,
             "persona_kind": self.persona_kind,
             "segment": self.segment,
             "voice_register": self.voice_register,

@@ -4,15 +4,31 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from . import prepare_service as _legacy
 from .degradation_collector import DegradationCollector
 from .entity_alias_resolution import resolve_aliases
 from .entity_reader import FilteredEntities
+from .persona_domain_coherence import is_collective_entity_type
 
 if TYPE_CHECKING:
     from .entity_reader import EntityNode, EntityReader
     from .prepare_checkpoint import PreparePersonaCheckpoint
     from .simulation_manager import SimulationState
+
+
+# Issue #1713/#1470: Relationstyp, den der system-eigene Ontologie-
+# Generator fuer "Person vertritt Organisation" vorsieht (siehe
+# ontology_generator.py, Abschnitt "Relationship Type Reference": REPRESENTS).
+# Bewusst eine feste Liste bestehender, vom
+# System selbst erzeugbarer Relationstypen — keine Namensheuristik auf
+# Personen- oder Organisationsnamen. Vergleich case-insensitiv, weil
+# projektspezifische Ontologien den Relationsnamen leicht abweichend
+# schreiben koennen (z. B. "works_for").
+# Nur REPRESENTS: WORKS_FOR/AFFILIATED_WITH belegen Zugehoerigkeit, keine
+# Vertretung. Sonst wuerde z. B. eine Betriebsraetin, die fuer die Klinik
+# arbeitet, die Klinik als Akteur ersetzen und "fuer sie sprechen".
+_REPRESENTATION_RELATION_TYPES = frozenset({"REPRESENTS"})
 
 def _strip_leading_article (tokens :list [str ])->list [str ]:
     """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
@@ -165,6 +181,164 @@ entities :"List[EntityNode]",max_agents :int
     return selected
 
 
+def _is_organization_entity(entity: "EntityNode") -> bool:
+    """Grundwort-Klassifikation (#1246) — dieselbe wie beim Kollektiv-Persona-Pfad."""
+    return is_collective_entity_type(entity.get_entity_type() or "Entity")
+
+
+def _is_representation_edge(edge: Dict[str, Any]) -> bool:
+    """Zeigt diese ausgehende Kante auf eine belegte 'vertritt'-Relation?
+
+    Vergleich case-insensitiv gegen ``_REPRESENTATION_RELATION_TYPES`` — keine
+    Namensheuristik auf Personen-/Organisationsnamen.
+    """
+    if edge.get("direction") != "outgoing":
+        return False
+    edge_name = str(edge.get("edge_name") or "").strip().upper()
+    return edge_name in _REPRESENTATION_RELATION_TYPES
+
+
+def _representation_target(
+    person: "EntityNode", edge: Dict[str, Any], by_uuid: Dict[str, "EntityNode"]
+) -> Optional["EntityNode"]:
+    """Liefert die Ziel-Organisation der Kante, falls sie eine ist."""
+    target_uuid = edge.get("target_node_uuid")
+    if not isinstance(target_uuid, str):
+        return None
+    target = by_uuid.get(target_uuid)
+    if target is None or target.uuid == person.uuid:
+        return None
+    return target if _is_organization_entity(target) else None
+
+
+def _find_representatives(
+    persons: "List[EntityNode]", by_uuid: Dict[str, "EntityNode"]
+) -> Dict[str, "List[EntityNode]"]:
+    """Organisation-UUID -> Liste der sie laut Graph-Relation vertretenden Personen."""
+    representatives: Dict[str, List["EntityNode"]] = {}
+    for person in persons:
+        for edge in person.related_edges or []:
+            if not _is_representation_edge(edge):
+                continue
+            target = _representation_target(person, edge, by_uuid)
+            if target is None:
+                continue
+            representatives.setdefault(target.uuid, []).append(person)
+    return representatives
+
+
+def _apply_single_representative_merge(
+    person: "EntityNode",
+    org: "EntityNode",
+    degradations: Optional[DegradationCollector],
+) -> None:
+    """Regelfall (Issue #1713): genau eine Person vertritt die Organisation."""
+    person.affiliation = org.name
+    _legacy.logger.info(
+        "Person-Organisation-Zusammenlegung (#1713): person=%s organisation=%s "
+        "— ein Agent statt zwei",
+        person.name,
+        org.name,
+    )
+    if degradations is not None:
+        degradations.record(
+            DegradationKind.PERSON_REPRESENTS_ORGANIZATION_MERGED,
+            DegradationSeverity.WARNING,
+            f"{person.name} vertritt {org.name} laut Graph-Relation; "
+            "Organisation wird nicht zusaetzlich als eigener Agent gefuehrt.",
+            context={"person_uuid": person.uuid, "organization_uuid": org.uuid},
+        )
+
+
+def _apply_collective_affiliation(persons: "List[EntityNode]", org: "EntityNode") -> None:
+    """Kollektiver Akteur (Issue #1713): Organisation bleibt eigener Agent."""
+    for person in persons:
+        person.affiliation = org.name
+    _legacy.logger.info(
+        "Organisation bleibt eigener Agent (#1713): organisation=%s wird von "
+        "%d Personen vertreten (kollektiver Akteur)",
+        org.name,
+        len(persons),
+    )
+
+
+def _merge_persons_with_organizations(
+    entities: "List[EntityNode]",
+    degradations: Optional[DegradationCollector] = None,
+) -> "List[EntityNode]":
+    """Legt eine Person mit der Organisation zusammen, die sie laut Graph vertritt.
+
+    Issue #1713/#1470: Eine Person und die Organisation, fuer die sie laut
+    belegter Graph-Relation arbeitet/spricht (``_REPRESENTATION_RELATION_
+    TYPES``), wurden bisher als zwei getrennte Agenten gefuehrt. Das fuehrte
+    zur Role-Leakage-Folgemeldung ``unmatched_self_reference``, wenn die
+    Person-Persona im Simulationstext "wir, <Organisation>" schrieb, ohne
+    dass irgendeine Persona diese Organisation als eigene Rolle trug.
+
+    Regel (Maintainer-Entscheidung, Issue #1713):
+    - Vertritt genau eine Person die Organisation, bleibt die Person der
+      Agent; die Organisation wird nicht zusaetzlich gefuehrt. Die Person
+      traegt die Organisation fortan als ``affiliation``.
+    - Vertreten mehrere Personen dieselbe Organisation (kollektiver Akteur)
+      oder keine, bleibt die Organisation ein eigener Agent. Im
+      Mehrfach-Fall tragen alle repraesentierenden Personen zusaetzlich die
+      ``affiliation`` — sie sprechen weiterhin auch fuer sich selbst.
+
+    Jede Zusammenlegung wird sichtbar protokolliert (strukturiertes Log +
+    ``DegradationCollector``-Eintrag), nie still.
+    """
+    by_uuid = {entity.uuid: entity for entity in entities}
+    if len(by_uuid) < 2:
+        return entities
+
+    persons = [entity for entity in entities if not _is_organization_entity(entity)]
+    if not persons:
+        return entities
+
+    representatives = _find_representatives(persons, by_uuid)
+    if not representatives:
+        return entities
+
+    merged_org_uuids: set[str] = set()
+    for org_uuid, reps in representatives.items():
+        org = by_uuid[org_uuid]
+        # Dieselbe Person kann ueber mehrere Kanten (z. B. WORKS_FOR und
+        # REPRESENTS) auf dieselbe Organisation zeigen — pro Person nur
+        # einmal zaehlen.
+        unique_reps = list({person.uuid: person for person in reps}.values())
+
+        if len(unique_reps) == 1:
+            _apply_single_representative_merge(unique_reps[0], org, degradations)
+            merged_org_uuids.add(org_uuid)
+        else:
+            _apply_collective_affiliation(unique_reps, org)
+
+    if not merged_org_uuids:
+        return entities
+
+    return [entity for entity in entities if entity.uuid not in merged_org_uuids]
+
+
+def _replace_filtered_entities_if_reduced(
+    filtered: "FilteredEntities", new_entities: "List[EntityNode]"
+) -> bool:
+    """Uebernimmt ``new_entities`` in ``filtered``, falls sie die Liste verkleinert.
+
+    Gemeinsames Update-Muster fuer die drei Vorverarbeitungsschritte in
+    ``_phase_read_entities`` (Eignungsfilter, Alias-Aufloesung,
+    Person-Organisation-Zusammenlegung) — jeder verkleinert hoechstens die
+    Kandidatenliste, nie erweitert er sie.
+    """
+    if len(new_entities) >= len(filtered.entities):
+        return False
+    filtered.entities = new_entities
+    filtered.filtered_count = len(new_entities)
+    filtered.entity_types = {
+        entity.get_entity_type() or "Entity" for entity in new_entities
+    }
+    return True
+
+
 def _phase_read_entities (
 state :SimulationState ,
 storage :Any ,
@@ -199,12 +373,7 @@ degradations :Optional [DegradationCollector ]=None ,
     # (Product) usw. Der Eignungsfilter schließt sie vor dem
     # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
     eligibility =_legacy .filter_eligible_entities (filtered .entities ,degradations =degradations )
-    if eligibility .exclusions :
-        filtered .entities =eligibility .eligible
-        filtered .filtered_count =len (filtered .entities )
-        filtered .entity_types ={
-        entity .get_entity_type ()or "Entity"for entity in filtered .entities
-        }
+    _replace_filtered_entities_if_reduced(filtered, eligibility.eligible)
 
     # Issue #1470 (Slice 4.2): Alias-Auflösung vor Dedupe/Cap.
     # Entitäten, die dieselbe Person/Organisation benennen (z. B. „BFW",
@@ -213,18 +382,23 @@ degradations :Optional [DegradationCollector ]=None ,
     # Kein Merge über semantische Klassen hinweg; kein LLM-Aufruf. Der
     # Resume-Pfad liest die kanonischen UUIDs aus dem Checkpoint und muss
     # deshalb nicht erneut auflösen.
+    entities_before_alias = len(filtered.entities)
     alias_resolved = resolve_aliases(filtered.entities)
-    if len(alias_resolved) < len(filtered.entities):
+    if _replace_filtered_entities_if_reduced(filtered, alias_resolved):
         _legacy.logger.info(
             "Alias-Aufloesung: %d → %d Entitaeten nach Cluster-Bildung",
-            len(filtered.entities),
+            entities_before_alias,
             len(alias_resolved),
         )
-        filtered.entities = alias_resolved
-        filtered.filtered_count = len(alias_resolved)
-        filtered.entity_types = {
-            entity.get_entity_type() or "Entity" for entity in alias_resolved
-        }
+
+    # Issue #1713/#1470: Person und die von ihr vertretene Organisation zu
+    # einem Agenten zusammenlegen, bevor dedupliziert/gecappt wird — sonst
+    # belegen beide getrennt Persona-Plaetze, obwohl sie im Bericht
+    # dieselbe Stimme sind.
+    merged_entities = _merge_persons_with_organizations(
+        filtered.entities, degradations=degradations
+    )
+    _replace_filtered_entities_if_reduced(filtered, merged_entities)
 
         # Issue #1177: Vor dem Cap deduplizieren. Mehrfachnennungen derselben
         # Stakeholdergruppe belegten sonst die begrenzten Persona-Plaetze und

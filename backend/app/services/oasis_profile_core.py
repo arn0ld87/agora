@@ -41,6 +41,18 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     # Build context information
     context =self ._build_entity_context (entity )
 
+    # Issue #1713/#1470: Die Person wurde beim Prepare-Lesen mit der
+    # Organisation zusammengelegt, die sie laut Graph-Relation vertritt.
+    # Der Prompt bekommt das explizit, sonst schreibt das Modell eine Bio,
+    # die diese Zugehoerigkeit nicht kennt.
+    if entity .affiliation :
+        context =(
+        f"### Organisationszugehörigkeit\n"
+        f"Diese Person vertritt laut Wissensgraph „{entity .affiliation }“. "
+        f"Bio und Personenbeschreibung sollen das benennen, z. B. "
+        f"„spricht für {entity .affiliation }“.\n\n{context }"
+        )
+
     if use_llm :
     # Use LLM to generate detailed persona
         profile_data =self ._generate_profile_with_llm (
@@ -59,6 +71,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         entity_summary =entity .summary ,
         entity_attributes =entity .attributes ,
         demographic_slot =demographic_slot ,
+        affiliation =entity .affiliation ,
         )
 
         # Issue #1247: Das Modell darf die Entitaet zurueckweisen, statt eine
@@ -169,6 +182,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
     interested_topics =profile_data .get ("interested_topics",[]),
     source_entity_uuid =entity .uuid ,
     source_entity_type =entity_type ,
+    affiliation =entity .affiliation ,
     segment =segment ,
     persona_kind =persona_kind ,
     voice_register =profile_data .get ("voice_register"),
