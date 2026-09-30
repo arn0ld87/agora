@@ -225,6 +225,22 @@ Ein handgeschriebenes Dict für eine neue oder geänderte JSON-Grenze bleibt tro
 
 `GET /api/simulation/<id>` validiert seit [#1713](https://github.com/arn0ld87/agora/issues/1713) über `SimulationStatusResponse` (`backend/app/contracts/simulation_status_contract.py`, `extra="forbid"`): `status` ist die zur Lesezeit projizierte Antwort (siehe [`api.md`](api.md#simulation--apisimulation)), `runner_status` der ungefilterte `RunnerStatus`-Rohwert aus `run_state.json` (`null` ohne Run-State) und `interview_env_alive` die Interview-IPC-Liveness. `SimulationStatusValue`/`RunnerStatusValue` sind als Literal gespiegelt statt importiert, damit der Contract keine Laufzeit-Abhängigkeit auf `app.services.simulation_manager`/`app.services.sim.run_state_store` trägt (Muster aus `simulation_record_contract.py`).
 
+### Feed-Verträge: SimActionRecord, SimActionPage, RoundSummary (#1713 UI-2a)
+
+`backend/app/contracts/sim_action_contract.py` definiert drei Pydantic-Modelle (`extra="forbid"`):
+
+- **`SimActionRecord`** — eine einzelne Agenten-Aktion. Felder: `round_num` (int), `sim_time` (float|null), `timestamp` (datetime), `platform` (Platform), `agent_id` (str), `agent_name` (str|null), `action_type` (SimActionType), `target_post_id` (str|null), `target_comment_id` (str|null), `target_agent_id` (str|null), `target_agent_name` (str|null), `content` (str|null), `success` (bool|null), `role_conflict` (str|null).
+- **`SimActionPage`** — Cursor-paginierte Ergebnisseite. Felder: `items` (list[SimActionRecord]), `next_cursor` (str|null). `next_cursor` ist opak; `null` markiert die letzte Seite.
+- **`RoundSummary`** — Bilanz je `(round_num, platform)`. Felder: `round_num` (int), `platform` (Platform), `action_counts` (dict[SimActionType, int]).
+
+`SimActionType` ist ein `StrEnum` mit Werten: `CREATE_POST`, `CREATE_COMMENT`, `LIKE_POST`, `DISLIKE_POST`, `LIKE_COMMENT`, `DISLIKE_COMMENT`, `REPOST`, `QUOTE_POST`, `FOLLOW`, `UNFOLLOW`, `OTHER`. Altbestand mit unbekanntem `action_type` wird auf `OTHER` gemappt, nicht verworfen.
+
+**Degradations-Haltung:** Altbestand mit unbekanntem `platform`-Wert wird in `GET /<id>/actions` (über `_agent_action_to_record`) und in `GET /<id>/rounds` mit `logger.warning` übersprungen statt 500 zu werfen — analog zu `evidence_omitted` beim Report-Evidence-Endpoint.
+
+**Breaking Change gegenüber Vor-#1713:** `GET /<id>/actions` liefert nicht mehr `offset`/`count`/`actions`, sondern `items`/`next_cursor` als Envelope-`data`.
+
+**PostCreatedEvent v2:** `backend/app/contracts/post_event_contract.py::PostCreatedEvent` trägt seit #1713 die Felder `in_reply_to_post_id` (str|null) und `quoted_post_id` (str|null) für Kommentar- und Repost-Bezüge, außerdem `post_id` als persistente ID (nicht mehr nur `temp_id`). JSON-Schema: `schemas/post-created-event.schema.json`.
+
 ### Status-Meldungen: `message_key`
 
 `PrepareStatusResponse`, `ReportStatusResponse` und `TaskStatusResponse` tragen seit [#1174](https://github.com/arn0ld87/agora/issues/1174) neben dem Klartext `message` einen stabilen `message_key` (Muster aus #1458, z. B. `prepare.already_completed`, `prepare.task_started`, `prepare.not_started`, `report.generated`, `report.failed`, `report.awaiting_task`). `message` bleibt als Fallback erhalten; das Frontend löst bekannte Schlüssel zentral auf (`frontend/src/i18n/statusMessage.ts::resolveStatusMessage`), ein unbekannter oder fehlender Schlüssel fällt auf `message` zurück. Seit [#1557](https://github.com/arn0ld87/agora/issues/1557) gilt das auch für `RunDetail` (`GET /api/runs`, `/api/runs/<id>`): Lifecycle-Meldungen aus `runs.py`/`simulation_run.py` tragen `run.*`-Schlüssel, Regal und Dossier lösen sie über dieselbe Funktion auf. Ein Update mit neuer `message`, aber ohne Schlüssel, räumt den alten Schlüssel ab. Der Runner-Sync aus `monitor_simulation` und die Restart-Reconciliation liefern darum `run.runner_status_<status>` (ein Schlüssel je `RunnerStatus`-Wert), damit der Startschlüssel nicht beim ersten Poll verloren geht.

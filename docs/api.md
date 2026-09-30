@@ -95,6 +95,35 @@ Nutzer-Stop und Infrastrukturabbruch sind unterschiedliche Zustände: ein expliz
 
 `POST /api/simulation/<id>/branch` akzeptiert seit #886 eine kanonische `ai_model_ref` (Provider-Connection + Modell, `BranchOverrides`-Contract, `backend/app/contracts/branch_request_contract.py`) statt nur des Legacy-Strings `llm_model`; eine unbekannte oder deaktivierte Connection antwortet mit HTTP 400, die Kombination beider Felder ebenso. `llm_model` bleibt als deprecated Key erhalten. `POST /api/runs/<id>/replay` reicht seither die volle `AiModelRef` an `create_branch` durch statt nur die `model_id`.
 
+#### Aktionsprotokoll und Rundensummary (#1713 UI-2a)
+
+`GET /api/simulation/<id>/actions` — cursor-paginiertes Aktionsprotokoll als `SimActionPage`.
+
+| Query-Parameter | Typ | Default | Beschreibung |
+|---|---|---|---|
+| `cursor` | string | — | Opakes Cursor-Token aus `next_cursor` der Vorgänger-Antwort; ungültig/negativ → 0 |
+| `limit` | int | 50 | Einträge pro Seite; wird auf 1–200 geclampd |
+| `round_num` | int | — | Nur Aktionen dieser Runde |
+| `agent_id` | int | — | Nur Aktionen dieses Agenten |
+| `platform` | string | — | `reddit` oder `twitter` |
+| `action_type` | string | — | Muss ein gültiger `SimActionType`-Wert sein; unbekannter Wert → **400 `validation_failed`** |
+
+Antwortform (`data`-Feld der Envelope):
+```json
+{
+  "items": [ /* SimActionRecord[] */ ],
+  "next_cursor": "50"   // null wenn letzte Seite
+}
+```
+
+`next_cursor` ist ein opakes Token (aktuell ein Offset-String); Clients dürfen dessen Format nicht parsen. Die früheren Felder `offset`, `count` und `actions` sind entfallen (**Breaking Change** gegenüber dem Vor-#1713-Stand).
+
+---
+
+`GET /api/simulation/<id>/rounds` — Aktionsbilanz je `(round_num, platform)`-Paar als `{"rounds": [RoundSummary]}`.
+
+Keine Query-Parameter. Einträge werden nach `(round_num, platform)` aufsteigend sortiert. Altbestand mit unbekanntem `platform`-Wert wird mit `logger.warning` übersprungen statt HTTP 500 zu werfen (Degradations-Haltung analog zu `evidence_omitted`).
+
 ### Report — `/api/report`
 
 Wichtige Bereiche:

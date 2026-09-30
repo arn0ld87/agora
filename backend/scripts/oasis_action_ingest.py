@@ -237,6 +237,7 @@ def _enrich_action_context(
                     if original_info:
                         action_args['original_content'] = original_info.get('content', '')
                         action_args['original_author_name'] = original_info.get('author_name', '')
+                        action_args['original_author_agent_id'] = original_info.get('author_agent_id')
 
         # Quote post: supplement original post content, author, and quote comment
         elif action_type == 'QUOTE_POST':
@@ -248,6 +249,7 @@ def _enrich_action_context(
                 if original_info:
                     action_args['original_content'] = original_info.get('content', '')
                     action_args['original_author_name'] = original_info.get('author_name', '')
+                    action_args['original_author_agent_id'] = original_info.get('author_agent_id')
 
             # Get quote post comment content (quote_content)
             if new_post_id:
@@ -315,6 +317,7 @@ def _enrich_action_context(
                 if post_info:
                     action_args['post_content'] = post_info.get('content', '')
                     action_args['post_author_name'] = post_info.get('author_name', '')
+                    action_args['post_author_agent_id'] = post_info.get('author_agent_id')
             _attach_engagement_score(cursor, 'comment', 'comment_id', action_args)
 
         # Create post: Voting-Stand zum Erzeugungszeitpunkt mitführen, damit der
@@ -404,7 +407,15 @@ def _get_post_info(
                 if user_row:
                     author_name = user_row[0] or user_row[1] or ''
 
-            return {'content': content, 'author_name': author_name}
+            # author_agent_id (#1713 UI-2a): stabile Persona-ID des Autors,
+            # damit Emitter/Snapshot eine parent_persona_id fuellen koennen
+            # statt nur den Anzeigenamen. None wenn agent_id unaufloesbar
+            # (Fallback-User ohne OASIS-agent_id-Zuordnung).
+            return {
+                'content': content,
+                'author_name': author_name,
+                'author_agent_id': agent_id,
+            }
     except Exception:
         pass
     return None

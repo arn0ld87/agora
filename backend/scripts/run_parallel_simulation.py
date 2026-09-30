@@ -319,8 +319,10 @@ async def _emit_post_created_to_redis(
     action_data: Dict[str, Any],
     redis_url: Optional[str],
     sim_time_iso: Optional[str] = None,
+    round_num: Optional[int] = None,
 ) -> None:
-    """Publish a PostCreatedEvent to Redis after a CREATE_POST/CREATE_COMMENT action.
+    """Publish a PostCreatedEvent to Redis after a CREATE_POST/CREATE_COMMENT/
+    REPOST/QUOTE_POST action.
 
     Runs inside the asyncio event loop of the OASIS subprocess (Pfad B).
     Silently no-ops when REDIS_URL is unset or Redis is unreachable.
@@ -332,24 +334,87 @@ async def _emit_post_created_to_redis(
     und mit dem Mount-Snapshot (#1009) dedupliziert. Kommentare tragen
     ``parent_post_id`` = Elternpost, damit der Reddit-Reply-Tree Äste bekommt
     (#1216 5c).
+
+    #1713 UI-2a — ``kind``/Bezugsfelder fuer die Thread-/Diskursdarstellung:
+    REPOST und QUOTE_POST lesen ``original_post_id``/``original_content``/
+    ``original_author_name``/``quote_content``, die
+    ``oasis_action_ingest._enrich_action_context`` bereits anreichert.
+    ``parent_comment_id`` bleibt None — Reddit kennt bislang nur eine
+    Verschachtelungsebene (Kommentar -> Post), ein Backfill fuer tiefere
+    Kommentar-Baeume ist ein Folge-Slice. ``root_post_id`` wird nur gesetzt,
+    wenn er sich ohne mehrstufige Aufloesung direkt aus den vorhandenen
+    Referenzfeldern ergibt (Kommentar -> Elternpost, Repost -> Original) —
+    ein Zitat startet konzeptionell einen eigenen Strang und bekommt daher
+    keinen root_post_id.
     """
     if not redis_url:
         return
     action_args = action_data.get("action_args", {})
     action_type = action_data.get("action_type", "CREATE_POST")
     platform_value = "twitter" if "twitter" in platform.lower() else "reddit"
-    body = action_args.get("content") or action_args.get("text") or ""
+
+    kind = {
+        "CREATE_COMMENT": "comment",
+        "REPOST": "repost",
+        "QUOTE_POST": "quote",
+    }.get(action_type, "post")
+
+    quoted_post_id: Optional[str] = None
+    quote_body: Optional[str] = None
+    reposted_post_id: Optional[str] = None
+    root_post_id: Optional[str] = None
+    parent_persona_id: Optional[str] = None
+    parent_persona_name: Optional[str] = None
 
     # post_id / parent_post_id plattformpräfixen; Kommentare referenzieren
     # ihren Elternpost, Posts haben keinen Parent (top-level).
     if action_type == "CREATE_COMMENT":
+        body = action_args.get("content") or action_args.get("text") or ""
         raw_id = action_args.get("comment_id") or action_args.get("id")
         parent_raw = action_args.get("post_id") or action_args.get("new_post_id")
         if not raw_id or not parent_raw or not body:
             return
         post_id = f"{platform_value}:comment:{raw_id}"
         parent_post_id = f"{platform_value}:{parent_raw}"
+        root_post_id = parent_post_id
+        author_agent_id = action_args.get("post_author_agent_id")
+        parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
+        parent_persona_name = action_args.get("post_author_name") or None
+    elif action_type == "REPOST":
+        # Ein reiner Repost hat keinen eigenen Text — der geteilte Beitrag
+        # steht unter reposted_post_id (Contract-Ausnahme fuer body).
+        body = ""
+        raw_id = str(action_args.get("new_post_id") or action_args.get("post_id") or "")
+        if not raw_id:
+            return
+        post_id = f"{platform_value}:{raw_id}"
+        parent_post_id = None
+        original_raw = action_args.get("original_post_id")
+        if original_raw:
+            reposted_post_id = f"{platform_value}:{original_raw}"
+            root_post_id = reposted_post_id
+        author_agent_id = action_args.get("original_author_agent_id")
+        parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
+        parent_persona_name = action_args.get("original_author_name") or None
+    elif action_type == "QUOTE_POST":
+        # quote_content ist die eigene Kommentierung der zitierenden Person
+        # (Feed-body); original_content ist der Text des zitierten Beitrags
+        # (quote_body, nested Block).
+        body = action_args.get("quote_content") or ""
+        raw_id = str(action_args.get("new_post_id") or action_args.get("post_id") or "")
+        if not raw_id or not body:
+            return
+        post_id = f"{platform_value}:{raw_id}"
+        parent_post_id = None
+        quoted_raw = action_args.get("quoted_id")
+        if quoted_raw:
+            quoted_post_id = f"{platform_value}:{quoted_raw}"
+        quote_body = action_args.get("original_content") or None
+        author_agent_id = action_args.get("original_author_agent_id")
+        parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
+        parent_persona_name = action_args.get("original_author_name") or None
     else:  # CREATE_POST
+        body = action_args.get("content") or action_args.get("text") or ""
         raw_id = str(
             action_args.get("post_id")
             or action_args.get("new_post_id")
@@ -397,6 +462,20 @@ async def _emit_post_created_to_redis(
         "score": score,
         # Task 1 — virtuelle Sim-Zeit pro CREATE_POST. None bei alten Callern.
         "sim_time": sim_time_iso,
+        # #1713 UI-2a — Thread-/Diskursfelder.
+        "kind": kind,
+        "round_num": round_num,
+        "parent_comment_id": None,
+        "root_post_id": root_post_id,
+        "quoted_post_id": quoted_post_id,
+        "reposted_post_id": reposted_post_id,
+        "quote_body": quote_body,
+        "parent_persona_id": parent_persona_id,
+        "parent_persona_name": parent_persona_name,
+        # Ein frisch erzeugter Beitrag hat per Definition 0 Likes — spaetere
+        # Votes aktualisieren dieses bereits gesendete Live-Event nicht
+        # (gleiche Semantik wie ``score``, siehe Docstring oben).
+        "like_count": 0,
     }
     channel = f"agora:sim:{simulation_id}:post_created"
     try:
@@ -1505,47 +1584,11 @@ async def run_twitter_simulation(
     
     total_actions = 0
     last_rowid = 0  # Track last processed row in Database (use rowid to avoid created_at format differences)
-    
-    # Execute initial events
-    event_config = config.get("event_config", {})
-    initial_posts = event_config.get("initial_posts", [])
-    
-    # Log round 0 start (initial event phase)
-    if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-    
-    initial_action_count = 0
-    if initial_posts:
-        def _log_initial_post(agent_id, content):
-            nonlocal total_actions, initial_action_count
-            if action_logger:
-                action_logger.log_action(
-                    round_num=0,
-                    agent_id=agent_id,
-                    agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                    action_type="CREATE_POST",
-                    action_args={"content": content}
-                )
-                total_actions += 1
-                initial_action_count += 1
 
-        initial_actions, published_count = build_initial_post_actions(
-            initial_posts, result.env.agent_graph, on_published=_log_initial_post
-        )
-
-        if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(format_initial_posts_log(published_count, len(initial_actions)))
-            # Initial-Post-Zeilen sind bereits ueber _log_initial_post geloggt
-            # (Runde 0). last_rowid auf den aktuellen DB-Stand ziehen, sonst
-            # liest die erste Hauptrunde dieselben Trace-Zeilen erneut (#1713).
-            last_rowid = get_max_trace_rowid(db_path)
-
-    # Log round 0 end
-    if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
-
-    # Main simulation loop
+    # Rundentakt vorab aufloesen (verschoben aus dem alten "Main simulation
+    # loop"-Abschnitt, #1713 UI-2a): die Startpost-Emission unten braucht
+    # minutes_per_round/start_hour_offset/sim_clock_anchor bereits fuer Runde
+    # 0 — vorher existierten diese Variablen erst nach der Startpost-Phase.
     time_config = config.get("time_config", {})
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
@@ -1570,6 +1613,69 @@ async def run_twitter_simulation(
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    # Execute initial events
+    event_config = config.get("event_config", {})
+    initial_posts = event_config.get("initial_posts", [])
+
+    # Log round 0 start (initial event phase)
+    if action_logger:
+        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
+
+    initial_action_count = 0
+    if initial_posts:
+        initial_actions, published_count = build_initial_post_actions(
+            initial_posts, result.env.agent_graph
+        )
+
+        if initial_actions:
+            await result.env.step(initial_actions)
+            log_info(format_initial_posts_log(published_count, len(initial_actions)))
+            # #1713 UI-2a (L4): echte post_id aus der DB lesen statt vor dem
+            # Schreiben zu raten. Die alte on_published-Callback lief VOR
+            # env.step() — der Post existierte da noch nicht in der
+            # OASIS-DB, post_id blieb leer und der Startpost fehlte im
+            # Aktionsprotokoll wie im Live-Feed. fetch_new_actions_from_db
+            # liest dieselbe trace-Tabelle wie die Hauptrunde und reichert
+            # post_id ueber denselben Pfad an (oasis_action_ingest).
+            initial_db_actions, last_rowid = fetch_new_actions_from_db(
+                db_path, last_rowid, agent_names
+            )
+            _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
+            _redis_url_for_emit = os.environ.get("REDIS_URL")
+            _action_count = len(initial_db_actions)
+            for _action_idx, action_data in enumerate(initial_db_actions):
+                if action_logger:
+                    action_logger.log_action(
+                        round_num=0,
+                        agent_id=action_data["agent_id"],
+                        agent_name=action_data["agent_name"],
+                        action_type=action_data["action_type"],
+                        action_args=action_data["action_args"],
+                    )
+                    total_actions += 1
+                    initial_action_count += 1
+                if action_data.get("action_type") == "CREATE_POST":
+                    await _emit_post_created_to_redis(
+                        simulation_id=_sim_id_for_emit,
+                        platform="twitter",
+                        action_data=action_data,
+                        redis_url=_redis_url_for_emit,
+                        round_num=0,
+                        sim_time_iso=compute_post_sim_time(
+                            sim_clock_anchor,
+                            start_hour_offset,
+                            0,
+                            minutes_per_round,
+                            _action_idx,
+                            _action_count,
+                        ).isoformat(),
+                    )
+
+    # Log round 0 end
+    if action_logger:
+        action_logger.log_round_end(0, initial_action_count)
+
+    # Main simulation loop
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
     # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
     # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
@@ -1671,12 +1777,16 @@ async def run_twitter_simulation(
                 total_actions += 1
                 round_action_count += 1
             # Slice 5-pre: emit PostCreatedEvent to Redis for SSE live-feed.
-            if action_data.get("action_type") == "CREATE_POST":
+            # #1713 UI-2a: Twitter emittiert seit Slice UI-2a auch REPOST und
+            # QUOTE_POST — beide sind eigene Beitraege im Feed, nicht nur
+            # stille Aktionszaehler.
+            if action_data.get("action_type") in ("CREATE_POST", "REPOST", "QUOTE_POST"):
                 await _emit_post_created_to_redis(
                     simulation_id=_sim_id_for_emit,
                     platform="twitter",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
+                    round_num=round_num + 1,
                     sim_time_iso=compute_post_sim_time(
                         sim_clock_anchor,
                         start_hour_offset,
@@ -1826,47 +1936,8 @@ async def run_reddit_simulation(
     
     total_actions = 0
     last_rowid = 0  # Track last processed row in Database (use rowid to avoid created_at format differences)
-    
-    # Execute initial events
-    event_config = config.get("event_config", {})
-    initial_posts = event_config.get("initial_posts", [])
-    
-    # Log round 0 start (initial event phase)
-    if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-    
-    initial_action_count = 0
-    if initial_posts:
-        def _log_initial_post(agent_id, content):
-            nonlocal total_actions, initial_action_count
-            if action_logger:
-                action_logger.log_action(
-                    round_num=0,
-                    agent_id=agent_id,
-                    agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                    action_type="CREATE_POST",
-                    action_args={"content": content}
-                )
-                total_actions += 1
-                initial_action_count += 1
 
-        initial_actions, published_count = build_initial_post_actions(
-            initial_posts, result.env.agent_graph, on_published=_log_initial_post
-        )
-
-        if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(format_initial_posts_log(published_count, len(initial_actions)))
-            # Initial-Post-Zeilen sind bereits ueber _log_initial_post geloggt
-            # (Runde 0). last_rowid auf den aktuellen DB-Stand ziehen, sonst
-            # liest die erste Hauptrunde dieselben Trace-Zeilen erneut (#1713).
-            last_rowid = get_max_trace_rowid(db_path)
-
-    # Log round 0 end
-    if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
-
-    # Main simulation loop
+    # Rundentakt vorab aufloesen (siehe Twitter-Branch oben, #1713 UI-2a).
     time_config = config.get("time_config", {})
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
@@ -1889,6 +1960,65 @@ async def run_reddit_simulation(
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    # Execute initial events
+    event_config = config.get("event_config", {})
+    initial_posts = event_config.get("initial_posts", [])
+
+    # Log round 0 start (initial event phase)
+    if action_logger:
+        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
+
+    initial_action_count = 0
+    if initial_posts:
+        initial_actions, published_count = build_initial_post_actions(
+            initial_posts, result.env.agent_graph
+        )
+
+        if initial_actions:
+            await result.env.step(initial_actions)
+            log_info(format_initial_posts_log(published_count, len(initial_actions)))
+            # #1713 UI-2a (L4) — siehe Twitter-Branch: echte post_id nach
+            # env.step() aus der trace-Tabelle lesen statt vor dem Schreiben
+            # zu raten.
+            initial_db_actions, last_rowid = fetch_new_actions_from_db(
+                db_path, last_rowid, agent_names
+            )
+            _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
+            _redis_url_for_emit = os.environ.get("REDIS_URL")
+            _action_count = len(initial_db_actions)
+            for _action_idx, action_data in enumerate(initial_db_actions):
+                if action_logger:
+                    action_logger.log_action(
+                        round_num=0,
+                        agent_id=action_data["agent_id"],
+                        agent_name=action_data["agent_name"],
+                        action_type=action_data["action_type"],
+                        action_args=action_data["action_args"],
+                    )
+                    total_actions += 1
+                    initial_action_count += 1
+                if action_data.get("action_type") == "CREATE_POST":
+                    await _emit_post_created_to_redis(
+                        simulation_id=_sim_id_for_emit,
+                        platform="reddit",
+                        action_data=action_data,
+                        redis_url=_redis_url_for_emit,
+                        round_num=0,
+                        sim_time_iso=compute_post_sim_time(
+                            sim_clock_anchor,
+                            start_hour_offset,
+                            0,
+                            minutes_per_round,
+                            _action_idx,
+                            _action_count,
+                        ).isoformat(),
+                    )
+
+    # Log round 0 end
+    if action_logger:
+        action_logger.log_round_end(0, initial_action_count)
+
+    # Main simulation loop
     round_control = RoundBoundaryControl(simulation_dir, budget_guard)
     # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
     # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
@@ -1997,6 +2127,7 @@ async def run_reddit_simulation(
                     platform="reddit",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
+                    round_num=round_num + 1,
                     sim_time_iso=compute_post_sim_time(
                         sim_clock_anchor,
                         start_hour_offset,
