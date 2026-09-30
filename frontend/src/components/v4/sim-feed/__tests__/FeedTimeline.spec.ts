@@ -6,7 +6,7 @@
  * keine echten Layout-Maße fuer @tanstack/vue-virtual.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { computed } from 'vue'
+import { computed, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 import { resetSimFeedStore } from '@/composables/useSimFeed'
@@ -91,6 +91,36 @@ describe('FeedTimeline', () => {
       props: { ...baseProps(), streamState: 'reconnecting' },
     })
     expect(w.text()).toContain('feed.streamLost')
+  })
+
+  it('NewItemsPill steht im DOM nach der Timeline (Tab-Reihenfolge Filter -> Timeline -> Pill, §6.9)', async () => {
+    resetSimFeedStore('sim-ft')
+    const items = [mkPost({ post_id: 'p-1' })]
+    const w = mount(FeedTimeline, { props: baseProps(items) })
+    await nextTick()
+
+    // Nutzer scrollt vom unteren Rand weg, damit neue Items den Pill statt
+    // eines stillen Anhaengens ausloesen (siehe onScroll/isAtBottom).
+    const scrollEl = w.get('.ft-scroll').element as HTMLElement
+    Object.defineProperty(scrollEl, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scrollEl, 'clientHeight', { value: 200, configurable: true })
+    Object.defineProperty(scrollEl, 'scrollTop', { value: 0, configurable: true, writable: true })
+    await w.get('.ft-scroll').trigger('scroll')
+
+    // Der watch()-Callback auf `items` laeuft nicht bei `immediate: true` —
+    // der erste Trigger nach dem Mount erfasst nur die Baseline (siehe
+    // FeedTimeline.vue). Erst der zweite setProps-Aufruf zaehlt als
+    // "neu angekommen" und erhoeht pillCount.
+    await w.setProps({ items: [...items] })
+    await w.setProps({ items: [...items, mkPost({ post_id: 'p-2' })] })
+    await nextTick()
+
+    expect(w.find('.nip-root').exists()).toBe(true)
+    // DOM-Reihenfolge (nicht die visuelle Position): .ft-scroll steht vor
+    // dem Pill-Markup, obwohl der Pill visuell darueber liegt
+    // (order: -1 in NewItemsPill.vue haelt die Optik).
+    const html = w.html()
+    expect(html.indexOf('ft-scroll')).toBeLessThan(html.indexOf('nip-root'))
   })
 
   it('rendert Posts und leitet openThread von FeedItem weiter', async () => {

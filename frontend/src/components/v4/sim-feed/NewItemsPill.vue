@@ -55,6 +55,10 @@ function onClick(): void {
 
 <style scoped>
 .nip-root {
+  /* DOM-Position ist absichtlich NACH der Timeline (Tab-Reihenfolge, §6.9,
+     FeedTimeline.vue). `order: -1` haelt die visuelle Position "oberhalb der
+     Liste" (§2.6), ohne die Dokumentreihenfolge zu aendern. */
+  order: -1;
   position: sticky;
   top: 8px;
   left: 50%;
