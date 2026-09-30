@@ -181,6 +181,9 @@ def _patch_heavy_deps(monkeypatch: Any) -> None:
     monkeypatch.setattr(rps, "create_model", lambda config, use_boost=False: object())
     monkeypatch.setattr(rps, "preflight_model_probe", lambda model: None)
     monkeypatch.setattr(rps, "compute_start_hour_offset", lambda config, total_rounds, minutes_per_round: 0)
+    # Seit S4 (#1721) baut der Twitter-Pfad ein eigenes oasis.Platform, das
+    # die DB-Tabellen sofort anlegt; _FakeEnv legt sie selbst an.
+    monkeypatch.setattr(rps.oasis, "Platform", lambda **kwargs: object())
     monkeypatch.setattr(
         rps.oasis,
         "make",
