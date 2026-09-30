@@ -291,6 +291,46 @@ def test_readyz_stays_ready_when_store_configuration_matches_env(
     assert check["env"] is None
 
 
+def test_readyz_ignores_guessed_provider_kind_for_custom_endpoint_with_key(
+    app, client, tmp_path, monkeypatch
+):
+    """Regression: eigener OpenAI-kompatibler Endpunkt mit API-Key.
+
+    Der Store fuehrt ihn korrekt als ``custom``, die Env-Heuristik raet aus
+    "Nicht-Loopback + Key" ``openai``. Modell und Dimension sind identisch —
+    das ist keine Divergenz. Vorher: /readyz 503, Container nie healthy
+    (armserver, Deploy von 245cc5ff zurueckgerollt).
+    """
+    monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+    from app.services.embedding_configuration_store import EmbeddingConfigurationStore
+
+    EmbeddingConfigurationStore(data_dir=tmp_path).upsert_configuration(
+        configuration_id="emb-active",
+        provider_connection_id="conn-custom",
+        provider_kind="custom",
+        model_id="qwen3-embedding:4b",
+        dimensions=2560,
+        scope="global",
+        project_id=None,
+        status="active",
+    )
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "EMBEDDING_MODEL", "qwen3-embedding:4b")
+    monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "https://embeddings.example.test:8089/v1")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", "test-key-not-a-secret")
+    monkeypatch.setattr(Config, "VECTOR_DIM", 2560)
+    app.config["EMBEDDING_MODEL"] = "qwen3-embedding:4b"
+    app.config["VECTOR_DIM"] = 2560
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 200
+    check = response.get_json()["checks"]["embedding_config"]
+    assert check["ok"] is True
+    assert check["state"] == "ok"
+
+
 def test_readyz_returns_503_when_store_configuration_diverges_from_env(
     app, client, tmp_path, monkeypatch
 ):

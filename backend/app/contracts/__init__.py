@@ -73,7 +73,14 @@ from .persona_entity_context import EntityRelationship, PersonaEntityContext
 from .post_event_contract import (
     Platform,
     PostCreatedEvent,
+    PostKind,
     VoiceRegister as PostVoiceRegister,
+)
+from .sim_action_contract import (
+    RoundSummary as SimRoundSummary,
+    SimActionPage,
+    SimActionRecord,
+    SimActionType,
 )
 from .api_keys_contract import (
     ApiKeyCreateRequest,
@@ -243,10 +250,15 @@ __all__ = [
     "PipelineDegradationReport",
     "Platform",
     "PostCreatedEvent",
+    "PostKind",
     "Project",
     "ProjectListResponse",
     "ProjectStatus",
     "PostVoiceRegister",
+    "SimActionPage",
+    "SimActionRecord",
+    "SimActionType",
+    "SimRoundSummary",
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
     "PersonaTargetContract",

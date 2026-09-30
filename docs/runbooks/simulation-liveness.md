@@ -86,6 +86,26 @@ manuelle Prüfung bzw. Folgearbeit.
   als Elternteil identifiziert werden — ein späterer Beitrag, der ihn
   referenziert, wird dadurch selbst zur Wurzel statt die Kette zu
   verlängern.
+- **L4 Kommentar-auf-Kommentar (#1713 Slice S5):** seit dem
+  nested-comments-Patch (`install_reddit_nested_comments_patch`,
+  Reddit, nur `camel-oasis==0.2.5`) trägt `CREATE_COMMENT` zusätzlich
+  `parent_comment_id`. Zeigt das Feld auf einen früheren Kommentar, hängt der
+  neue Kommentar in der Kette an diesem Kommentar (Namensraum `comment`) statt
+  pauschal am Elternpost — eine echte Antwort-auf-Antwort-Kette zählt jetzt
+  auch als solche, nicht nur als zwei getrennte Tiefe-1-Äste unter demselben
+  Post. Fehlt `parent_comment_id` (Twitter, oder Reddit-Kommentare ohne
+  erkannten Parent), bleibt das alte Verhalten erhalten: der Kommentar hängt
+  direkt unter seinem Post.
+- **L3 `own_post_share` und Twitter-Kommentare (#1713 Slice S5):** Seit S5
+  kann Twitter `CREATE_COMMENT`/`LIKE_COMMENT` ausführen (vorher nur
+  `CREATE_POST`/`QUOTE_POST`/`REPOST`/`LIKE_POST`/`FOLLOW`). Kommentare zählen
+  in den Nenner von `own_post_share`
+  (`CREATE_POST`+`CREATE_COMMENT`+`QUOTE_POST`+`REPOST`), nicht in den Zähler.
+  Ein Twitter-Lauf nach S5 ist deshalb nicht direkt mit der Baseline vor S5
+  vergleichbar: ein niedrigerer Wert kann schlicht daher kommen, dass Agenten
+  jetzt antworten können, statt nur eigene Beiträge zu setzen. **Beim Vergleich
+  von Läufen vor/nach S5 die Aktionsraum-Änderung ausdrücklich kennzeichnen.**
+  Der Zielwert (≥ 20 %) bleibt unverändert und gilt je Lauf.
 - **L7-Match** ist wörtlich (case-sensitive), nicht semantisch: eine Zahl aus
   dem Seed oder eine 8-Wort-Folge muss exakt im Post-Inhalt auftauchen.
 - **`duplicate_log_lines`** zählt gezielt die #1713-Altlauf-Signatur (ein
@@ -96,6 +116,97 @@ manuelle Prüfung bzw. Folgearbeit.
   zuletzt gesehenen `round_start`-Event in Dateireihenfolge abgeleitet; ganz
   ohne Bezug fällt die Zeile aus den rundenbasierten Kennzahlen heraus statt
   Runde 0 zu erfinden.
+
+---
+
+## Hebel: Aktivitätskonfiguration und Feed-Parameter (#1713 S4)
+
+Baseline-Läufe (vor diesem Slice) lagen bei 0,16-0,22 Aktionen/Agent/Runde
+(L1-Ziel ≥ 0,6) und rund 25 % aktiven Agenten/Runde (L2-Ziel ≥ 40 %). Drei
+Konfigurationswerte konnten das strukturell verhindern — LLM-Output *und*
+Regel-Fallback unabhängig voneinander:
+
+- `agents_per_hour_min`/`agents_per_hour_max` (Zeitkonfiguration) —
+  begrenzen den Ziel-Kandidatenpool je Runde.
+- `activity_level` (Agentenkonfiguration) — Pro-Agent-Wahrscheinlichkeit,
+  in einer aktiven Stunde überhaupt Kandidat zu werden.
+- `active_hours` (Agentenkonfiguration) — grenzt Agenten auf enge
+  Tagesfenster ein (z. B. Behörden nur 9-17 Uhr) und leert den
+  Kandidatenpool in allen übrigen Stunden, unabhängig von `activity_level`.
+
+`backend/app/services/simulation_activity_policy.py` hebt alle drei Werte
+auf eine Untergrenze an (`agents_per_hour_min ≥ ceil(0,4·N)`,
+`agents_per_hour_max ≥ ceil(0,7·N)`, `activity_level ≥ 0,5`, `active_hours`
+deckt mindestens 06-23 Uhr ab — 0-5 Uhr bleibt bewusst die
+DACH-Nachtruhe-Ausnahme). Die Runden-Auswahl selbst
+(`select_active_agent_ids`) ist seitdem ein gemeinsamer Helfer für
+`platform_runner.py` und `run_parallel_simulation.py` statt zweier
+Kopien.
+
+Zusätzlich vergrößert Agora den Twitter-Feed gegenüber dem engen
+OASIS-Default (`refresh_rec_post_count`/`max_rec_post_len`/
+`following_post_count` von 2/2/3 auf 5/5/5) — Details in
+`docs/runbooks/simulation-recommender.md` §Feed-Parameter. Reddit bleibt
+unverändert.
+
+**Wichtig:** Diese Untergrenzen erhöhen ausschließlich den
+*Erwartungswert* aktiver Agenten pro Runde, um L1/L2 erreichbar zu machen.
+Sie behaupten keine Aussage über reales Stakeholder-Verhalten (ADR-0002) —
+Agora sagt kein menschliches Verhalten vorher.
+
+---
+
+## Hebel: Haltung im Agenten-Prompt gegen Konsens/Echo (S6)
+
+L5/L6 markieren einen bekannten blinden Fleck: `contra_reply_share` und die
+Persona-Haltungsverteilung wurden in diesem Skript bewusst nicht berechnet,
+weil dafür eine Stance-Klassifikation fehlte. Slice S6 aus
+[#1713](https://github.com/arn0ld87/agora/issues/1713) (Rest von
+[#1323](https://github.com/arn0ld87/agora/issues/1323)) adressiert die
+Ursache eine Ebene früher, nicht die Messung: `stance`/`sentiment_bias`/
+`posts_per_hour`/`comments_per_hour` aus `simulation_config_agents.py`
+erreichten den Agenten-Prompt bisher nie — jeder Agent bekam dieselbe neutrale
+Ausgangslage, was Konsens/Echo nach einer Runde begünstigt.
+`backend/scripts/agent_tools.py::build_stance_section` ist die eine
+gemeinsame Textquelle für den Abschnitt „Deine Haltung" (Disposition, keine
+Verhaltensvorhersage, an die eigene Rolle gebunden, keine wörtliche
+Übernahme aus Bio/Beobachtung). Eine erzwungene Konfliktquote gibt es
+bewusst nicht (Maintainer-Entscheidung) — der Hebel ist die sichtbare
+Haltung, kein Streitauftrag.
+
+**Reichweite — beide Simulationspfade, Haltung genau einmal je Agent:**
+
+- `SinglePlatformRunner` (`sim_runtime/platform_runner.py`) reicht die
+  Felder in den je Runde erreichbaren ReAct-Tool-Loop durch
+  (`build_agent_prompt_with_tools`).
+- `run_parallel_simulation.py` (Standardpfad für Twitter+Reddit, natives
+  CAMEL-Function-Calling statt ReAct) setzt `tool_loop` seit
+  [#1215](https://github.com/arn0ld87/agora/issues/1215) fest auf `None` —
+  `build_agent_prompt_with_tools` bleibt dort unerreichbar, siehe
+  `test_parallel_runner_prompt_builder_is_reachable` (`xfail`,
+  `backend/tests/test_simulation_runtime.py`, bewusst unverändert
+  gelassen: der Test prüft nur diesen einen Mechanismus, nicht den
+  zweiten unten). Stattdessen trägt
+  `agent_tools.py::augment_profile_with_stance` denselben Abschnitt **vor**
+  dem Graph-Aufbau in eine eigene Kopie von `twitter_profiles.csv`/
+  `reddit_profiles.json` ein (Suffix `_with_stance`) — genau die Felder
+  (`user_char`/`persona`), die OASIS beim Aufbau des Agent-Graphs
+  (`generate_twitter_agent_graph`/`generate_reddit_agent_graph`) wörtlich in
+  den System-Prompt jedes Agenten übernimmt
+  (`oasis/social_platform/config/user.py::UserInfo.to_*_system_message`,
+  vendored, nicht gepatcht). Die Originaldateien bleiben unverändert, damit
+  Persona-Galerie, Interviews und Report weiter die unveränderte Persona
+  sehen. Für `SinglePlatformRunner` wird nicht zusätzlich augmentiert — die
+  Haltung stünde sonst zweimal im Kontext desselben Agenten.
+- Twitter-Profildateien führen keine Profession-Spalte
+  (`_save_twitter_csv`); die Haltungssatz-Rolle fällt dort wie im
+  ReAct-Pfad auf „Unknown" zurück (`agent.profession` ist auf keinem der
+  beiden CAMEL-Agent-Objekte gesetzt) — eine bestehende Lücke in der
+  Rollen-Plumbing, kein neuer Defekt von S6 und nicht Teil dieses Slice.
+
+L5/L6 bleiben weiterhin `null`/nicht berechnet — S6 ändert den Prompt/das
+Profil, nicht dieses Messskript. Ob sich `contra_reply_share` danach messbar
+verschiebt, ist eine offene Folgefrage, keine Zusage.
 
 ---
 

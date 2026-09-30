@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSimFeed, clearSimFeed, resetSimFeedStore, MAX_POSTS_PER_FEED } from '../useSimFeed'
+import {
+  useSimFeed,
+  clearSimFeed,
+  resetSimFeedStore,
+  MAX_POSTS_PER_FEED,
+  parentIdOf,
+  buildThreadSummaries,
+  collectThreadNodes,
+} from '../useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 
 function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
@@ -235,5 +243,149 @@ describe('useSimFeed', () => {
     feed.flushPending()
 
     expect(feed.redditPosts.value.map((p) => p.post_id)).toEqual(['first', 'second'])
+  })
+
+  // Slice UI-2b (#1713) — flatTimeline, byId, parentIdOf
+
+  it('flatTimeline: sortiert beide Plattformen chronologisch aufsteigend', () => {
+    const feed = useSimFeed('sim-1')
+    feed.ingest(
+      mkPost({ platform: 'twitter', post_id: 't-new', timestamp: '2026-05-15T12:02:00Z' }),
+    )
+    feed.ingest(
+      mkPost({ platform: 'reddit', post_id: 'r-old', timestamp: '2026-05-15T12:00:00Z' }),
+    )
+    feed.flushPending()
+    expect(feed.flatTimeline.value.map((p) => p.post_id)).toEqual(['r-old', 't-new'])
+  })
+
+  it('byId: loest einen bekannten Post auf, liefert undefined fuer unbekannte post_id', () => {
+    const feed = useSimFeed('sim-1')
+    feed.ingest(mkPost({ post_id: 'p-known' }))
+    feed.flushPending()
+    expect(feed.byId('p-known')?.post_id).toBe('p-known')
+    expect(feed.byId('p-missing')).toBeUndefined()
+  })
+
+  it('parentIdOf: bevorzugt parent_comment_id vor parent_post_id', () => {
+    expect(
+      parentIdOf(mkPost({ parent_comment_id: 'c-1', parent_post_id: 'p-1' })),
+    ).toBe('c-1')
+  })
+
+  it('parentIdOf: faellt auf parent_post_id zurueck, wenn parent_comment_id fehlt', () => {
+    expect(parentIdOf(mkPost({ parent_comment_id: null, parent_post_id: 'p-1' }))).toBe('p-1')
+  })
+
+  it('parentIdOf: null, wenn beide Kanten fehlen (Strang-Wurzel)', () => {
+    expect(parentIdOf(mkPost({ parent_comment_id: null, parent_post_id: null }))).toBeNull()
+  })
+
+  // Slice UI-2b (#1713) — buildThreadSummaries, collectThreadNodes (§2.7, §2.8)
+
+  describe('buildThreadSummaries', () => {
+    it('gruppiert Replies/Reposts/Quotes unter ihre Wurzel und zaehlt korrekt', () => {
+      const posts = [
+        mkPost({ post_id: 'root-1', kind: 'post', parent_post_id: null, round_num: 0 }),
+        mkPost({
+          post_id: 'reply-1',
+          kind: 'comment',
+          parent_post_id: 'root-1',
+          root_post_id: 'root-1',
+          round_num: 1,
+          timestamp: '2026-05-15T12:01:00Z',
+        }),
+        mkPost({
+          post_id: 'repost-1',
+          kind: 'repost',
+          parent_post_id: 'root-1',
+          root_post_id: 'root-1',
+          round_num: 1,
+          timestamp: '2026-05-15T12:02:00Z',
+        }),
+        mkPost({
+          post_id: 'quote-1',
+          kind: 'quote',
+          root_post_id: 'root-1',
+          round_num: 2,
+          timestamp: '2026-05-15T12:03:00Z',
+        }),
+      ]
+      const summaries = buildThreadSummaries(posts)
+      expect(summaries).toHaveLength(1)
+      expect(summaries[0].root.post_id).toBe('root-1')
+      expect(summaries[0].replyCount).toBe(1)
+      expect(summaries[0].repostCount).toBe(1)
+      expect(summaries[0].quoteCount).toBe(1)
+      expect(summaries[0].activeRounds).toEqual([0, 1, 2])
+      expect(summaries[0].lastActivityAt).toBe('2026-05-15T12:03:00Z')
+    })
+
+    it('kind=comment/quote/repost ohne Elternkante ist nie eine Wurzel (Data Gap)', () => {
+      const orphanComment = mkPost({ post_id: 'c-1', kind: 'comment', parent_post_id: null })
+      const summaries = buildThreadSummaries([orphanComment])
+      expect(summaries).toHaveLength(0)
+    })
+
+    it('kind=null (Legacy-Daten) ohne Elternkante zaehlt als Wurzel', () => {
+      const legacyRoot = mkPost({ post_id: 'legacy-1', kind: null, parent_post_id: null })
+      const summaries = buildThreadSummaries([legacyRoot])
+      expect(summaries).toHaveLength(1)
+      expect(summaries[0].root.post_id).toBe('legacy-1')
+    })
+
+    it('loest die Wurzel ueber die Elternkette auf, wenn root_post_id fehlt', () => {
+      const posts = [
+        mkPost({ post_id: 'root-2', kind: 'post', parent_post_id: null }),
+        mkPost({ post_id: 'reply-a', kind: 'comment', parent_post_id: 'root-2' }),
+        mkPost({ post_id: 'reply-b', parent_comment_id: 'reply-a' }),
+      ]
+      const summaries = buildThreadSummaries(posts)
+      expect(summaries).toHaveLength(1)
+      expect(summaries[0].replyCount).toBe(2)
+    })
+
+    it('sortiert Straenge nach lastActivityAt absteigend', () => {
+      const posts = [
+        mkPost({ post_id: 'root-old', kind: 'post', timestamp: '2026-05-15T10:00:00Z' }),
+        mkPost({ post_id: 'root-new', kind: 'post', timestamp: '2026-05-15T11:00:00Z' }),
+      ]
+      const summaries = buildThreadSummaries(posts)
+      expect(summaries.map((s) => s.root.post_id)).toEqual(['root-new', 'root-old'])
+    })
+
+    it('ein Post mit unbekanntem root_post_id und ohne aufloesbare Kette gehoert zu keinem Strang', () => {
+      const orphan = mkPost({ post_id: 'orphan-1', root_post_id: 'missing-root', parent_post_id: null, kind: 'comment' })
+      const summaries = buildThreadSummaries([orphan])
+      expect(summaries).toHaveLength(0)
+    })
+  })
+
+  describe('collectThreadNodes', () => {
+    it('sammelt alle Nachfahren einer Wurzel ueber root_post_id', () => {
+      const posts = [
+        mkPost({ post_id: 'root-3', kind: 'post' }),
+        mkPost({ post_id: 'a', root_post_id: 'root-3', parent_post_id: 'root-3' }),
+        mkPost({ post_id: 'b', root_post_id: 'root-3', parent_comment_id: 'a' }),
+        mkPost({ post_id: 'other-root', kind: 'post' }),
+      ]
+      const nodes = collectThreadNodes('root-3', posts)
+      expect(nodes.map((n) => n.post_id).sort()).toEqual(['a', 'b'])
+    })
+
+    it('sammelt Nachfahren ueber die Elternkette, wenn root_post_id fehlt', () => {
+      const posts = [
+        mkPost({ post_id: 'root-4', kind: 'post' }),
+        mkPost({ post_id: 'child', parent_post_id: 'root-4' }),
+        mkPost({ post_id: 'grandchild', parent_comment_id: 'child' }),
+      ]
+      const nodes = collectThreadNodes('root-4', posts)
+      expect(nodes.map((n) => n.post_id).sort()).toEqual(['child', 'grandchild'])
+    })
+
+    it('liefert eine leere Liste ohne Nachfahren', () => {
+      const posts = [mkPost({ post_id: 'lonely-root', kind: 'post' })]
+      expect(collectThreadNodes('lonely-root', posts)).toEqual([])
+    })
   })
 })

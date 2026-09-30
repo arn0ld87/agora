@@ -214,6 +214,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             persona =entity .summary or "A participant in social discussions.",
             source_entity_uuid =entity .uuid ,
             source_entity_type =entity_type ,
+            affiliation =entity .affiliation ,
             # Issue #1029: Notprofil nach einem Ausfall — noch
             # dünner als das regelbasierte, also erst recht nicht
             # als echte Stimme zu behandeln.
@@ -362,6 +363,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
                 persona =entity .summary or "A participant in social discussions.",
                 source_entity_uuid =entity .uuid ,
                 source_entity_type =entity_type ,
+                affiliation =entity .affiliation ,
                 # Issue #1029: Notprofil nach einem Ausfall — noch
                 # dünner als das regelbasierte, also erst recht
                 # nicht als echte Stimme zu behandeln.

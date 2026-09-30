@@ -69,13 +69,15 @@ _CHAIN_OWN_ID_FIELDS: dict[str, tuple[str, ...]] = {
     "REPOST": ("new_post_id", "id"),
 }
 _CHAIN_PARENT_ID_FIELDS: dict[str, tuple[str, ...]] = {
-    "CREATE_COMMENT": ("post_id", "new_post_id"),
+    # #1713 S5: parent_comment_id wird zuerst geprueft (Kommentar-auf-Kommentar
+    # verlaengert die Kette); erst danach faellt es auf den Elternpost zurueck.
+    "CREATE_COMMENT": ("parent_comment_id", "post_id", "new_post_id"),
     "QUOTE_POST": ("quoted_id",),
     "REPOST": ("reposted_id", "original_post_id"),
 }
 # CREATE_POST/-COMMENT/QUOTE_POST/REPOST erzeugen jeweils einen Post ausser
-# CREATE_COMMENT (eigener Namensraum) — Kommentare werden nie als Eltern
-# referenziert, nur Posts, daher genuegt ein einziger Eltern-Namensraum.
+# CREATE_COMMENT (eigener Namensraum). Mit nested comments (#1713 S5) koennen
+# Kommentare selbst als Eltern auftreten -> Namensraum dynamisch.
 _CHAIN_OWN_NAMESPACE_BY_TYPE = {
     "CREATE_POST": "post",
     "CREATE_COMMENT": "comment",
@@ -83,6 +85,10 @@ _CHAIN_OWN_NAMESPACE_BY_TYPE = {
     "REPOST": "post",
 }
 _CHAIN_PARENT_NAMESPACE = "post"
+# Felder, deren Namespace vom Default _CHAIN_PARENT_NAMESPACE abweicht (#1713 S5).
+_CHAIN_PARENT_NAMESPACE_BY_FIELD: dict[str, str] = {
+    "parent_comment_id": "comment",
+}
 
 _WORD_RE = re.compile(r"\S+")
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
@@ -295,16 +301,32 @@ def _chain_own_id(action: dict[str, Any]) -> Any | None:
     return None
 
 
-def _chain_parent_id(action: dict[str, Any]) -> Any | None:
-    fields = _CHAIN_PARENT_ID_FIELDS.get(action.get("action_type"))
+def _chain_parent_info(action: dict[str, Any]) -> tuple[Any, str] | None:
+    """Liefert ``(parent_id, namespace)`` fuer die erste gefundene Elternreferenz.
+
+    #1713 S5: ``parent_comment_id`` zeigt auf einen Kommentar (Namespace
+    ``"comment"``), alle anderen Felder zeigen auf Posts (Namespace ``"post"``).
+    """
+    action_type = action.get("action_type")
+    fields = _CHAIN_PARENT_ID_FIELDS.get(action_type)
     if not fields:
         return None
     args = action.get("action_args") or {}
     for field in fields:
         value = args.get(field)
         if value is not None:
-            return value
+            ns = _CHAIN_PARENT_NAMESPACE_BY_FIELD.get(field, _CHAIN_PARENT_NAMESPACE)
+            return value, ns
     return None
+
+
+def _chain_parent_id(action: dict[str, Any]) -> Any | None:
+    """Rueckwaertskompatibel: liefert nur die parent_id (ohne Namespace).
+
+    Intern wird ``_chain_parent_info`` genutzt.
+    """
+    info = _chain_parent_info(action)
+    return info[0] if info is not None else None
 
 
 def _max_chain_length(real_actions: list[dict[str, Any]], key_prefix: str) -> int | None:
@@ -337,8 +359,8 @@ def _max_chain_length(real_actions: list[dict[str, Any]], key_prefix: str) -> in
             continue
         found_any = True
         own_key = (key_prefix, own_namespace, own_id)
-        parent_id = _chain_parent_id(action)
-        parent_key = (key_prefix, _CHAIN_PARENT_NAMESPACE, parent_id) if parent_id is not None else None
+        parent_info = _chain_parent_info(action)
+        parent_key = (key_prefix, parent_info[1], parent_info[0]) if parent_info is not None else None
         node_depth = depth_by_key[parent_key] + 1 if parent_key in depth_by_key else 0
         depth_by_key[own_key] = node_depth
         if node_depth > max_depth:

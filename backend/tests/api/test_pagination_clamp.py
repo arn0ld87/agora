@@ -1,6 +1,10 @@
 """Tests für Pagination-Clamps an /actions und /run-status/detail.
 
 Baustein C — Hardening PR 5
+#1713 UI-2a: /actions liefert seither ``SimActionPage`` (Cursor statt
+Offset) — ``TestActionsLimitClamp`` nutzt echte ``AgentAction``-Fixtures
+und patcht ``get_all_actions`` (nicht mehr ``get_actions``), damit die
+Konvertierung nach ``SimActionRecord`` gueltige Daten sieht.
 """
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ import pytest
 from flask import Flask
 
 from app.api import simulation_bp
+from app.services.sim.run_state_store import AgentAction
 
 
 VALID_SIM_ID = "sim_0123456789ab"
@@ -33,6 +38,21 @@ def _make_fake_actions(n: int = 5):
     return actions
 
 
+def _make_agent_actions(n: int) -> list[AgentAction]:
+    return [
+        AgentAction(
+            round_num=1,
+            timestamp="2026-09-29T09:00:00+00:00",
+            platform="reddit",
+            agent_id=1,
+            agent_name="Mara Lindner",
+            action_type="CREATE_POST",
+            action_args={"post_id": i, "content": f"Post {i}"},
+        )
+        for i in range(n)
+    ]
+
+
 def _make_run_state():
     rs = MagicMock()
     rs.current_round = 1
@@ -46,13 +66,13 @@ def _make_run_state():
 
 class TestActionsLimitClamp:
     def test_actions_limit_clamped_to_max_500(self, client):
-        """?limit=10000 wird auf 500 geclampt — Antwort enthält höchstens 500 Einträge."""
-        fake_actions = _make_fake_actions(5)
+        """?limit=10000 wird auf 500 geclampt — die Seite enthält höchstens 500 Einträge."""
+        fake_actions = _make_agent_actions(600)
         with (
             patch(
-                "app.api.simulation_run.SimulationRunner.get_actions",
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
                 return_value=fake_actions,
-            ) as mock_get,
+            ),
             patch("app.api.simulation_run.validate_simulation_id", return_value=True),
         ):
             resp = client.get(
@@ -60,40 +80,37 @@ class TestActionsLimitClamp:
             )
 
         assert resp.status_code == 200
-        # Der Aufruf an get_actions muss mit limit=500 erfolgen (geclampt)
-        call_kwargs = mock_get.call_args
-        passed_limit = call_kwargs.kwargs.get("limit") or call_kwargs.args[1] if call_kwargs.args else None
-        if passed_limit is None and call_kwargs.kwargs:
-            passed_limit = call_kwargs.kwargs.get("limit")
-        assert passed_limit == 500, f"limit wurde nicht auf 500 geclampt: {call_kwargs}"
+        data = resp.get_json()["data"]
+        assert len(data["items"]) == 500, f"limit wurde nicht auf 500 geclampt: {len(data['items'])}"
+        assert data["next_cursor"] == "500"
 
-    def test_actions_offset_clamped_to_zero_for_negative_input(self, client):
-        """?offset=-5 führt zu offset=0 — keine 400, sondern stilles Clamp."""
-        fake_actions = _make_fake_actions(3)
+    def test_actions_invalid_cursor_clamped_to_zero(self, client):
+        """Ungültiger/negativer cursor führt zu Offset 0 — keine 400, stilles Clamp."""
+        fake_actions = _make_agent_actions(3)
         with (
             patch(
-                "app.api.simulation_run.SimulationRunner.get_actions",
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
                 return_value=fake_actions,
-            ) as mock_get,
+            ),
             patch("app.api.simulation_run.validate_simulation_id", return_value=True),
         ):
             resp = client.get(
-                f"/api/simulation/{VALID_SIM_ID}/actions?offset=-5"
+                f"/api/simulation/{VALID_SIM_ID}/actions?cursor=-5"
             )
 
         assert resp.status_code == 200
-        call_kwargs = mock_get.call_args
-        passed_offset = call_kwargs.kwargs.get("offset")
-        assert passed_offset == 0, f"offset wurde nicht auf 0 geclampt: {call_kwargs}"
+        data = resp.get_json()["data"]
+        assert len(data["items"]) == 3
+        assert data["next_cursor"] is None
 
     def test_actions_valid_limit_passed_through(self, client):
-        """?limit=50 wird unverändert durchgereicht."""
-        fake_actions = _make_fake_actions(2)
+        """?limit=50 begrenzt die Seite auf 50 Einträge."""
+        fake_actions = _make_agent_actions(120)
         with (
             patch(
-                "app.api.simulation_run.SimulationRunner.get_actions",
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
                 return_value=fake_actions,
-            ) as mock_get,
+            ),
             patch("app.api.simulation_run.validate_simulation_id", return_value=True),
         ):
             resp = client.get(
@@ -101,9 +118,9 @@ class TestActionsLimitClamp:
             )
 
         assert resp.status_code == 200
-        call_kwargs = mock_get.call_args
-        passed_limit = call_kwargs.kwargs.get("limit")
-        assert passed_limit == 50
+        data = resp.get_json()["data"]
+        assert len(data["items"]) == 50
+        assert data["next_cursor"] == "50"
 
 
 class TestRunStatusDetailPagination:

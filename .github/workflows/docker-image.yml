@@ -79,14 +79,13 @@ jobs:
     # Aufgefallen ist das nie, weil `build-only` vorher immer abbrach und der
     # Smoke-Job deshalb nie zum Zug kam.
     #
-    # amd64 ist auch die Architektur, die tatsächlich ausgeliefert wird:
-    # `publish` baut auf `ubuntu-latest`, das Image in GHCR war also immer
-    # amd64; armserver ist ein amd64-Host und zieht es seit #1708 per
-    # deploy/compose/docker-compose.ghcr.yml, statt lokal zu bauen.
-    # Für die Kette build → smoke → publish gibt es damit keinen belegten
-    # arm64-Bedarf. Werden echte arm64-Images gebraucht, gehört das als
-    # Multi-Platform-Build (`platforms: linux/amd64,linux/arm64`) in den
-    # publish-Job — nicht als abweichender Runner für build-only.
+    # Ausgeliefert werden seit dieser Aenderung linux/amd64 UND linux/arm64
+    # (Multi-Arch-Manifest in GHCR). build-only baut und prueft bewusst nur
+    # amd64: Trivy und der Smoke laufen auf `ubuntu-latest`, ein arm64-Image
+    # startet dort nicht. Die arm64-Variante entsteht erst im publish-Job,
+    # nativ auf `ubuntu-24.04-arm` (kein QEMU). armserver ist aarch64 und zieht
+    # die arm64-Variante seit #1708 per deploy/compose/docker-compose.ghcr.yml.
+    # Kein abweichender Runner fuer build-only.
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -519,8 +518,152 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  publish-build:
+    # Schritt 3a: Pro Plattform bauen und per Digest nach GHCR schieben, OHNE
+    # Tags. Erst der publish-Job setzt die Tags auf das Multi-Arch-Manifest.
+    # arm64 laeuft nativ auf `ubuntu-24.04-arm` statt unter QEMU. Gleiches
+    # Smoke-Gate wie publish (siehe dort).
+    name: publish-build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    needs: [build-only, prod-proxy-smoke]
+    if: >-
+      ${{ always() && needs.build-only.result == 'success' && (
+        needs.prod-proxy-smoke.result == 'success' ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prod-proxy-smoke.result == 'skipped') ||
+        (github.event_name == 'workflow_dispatch' && inputs.force_publish == true)
+      ) }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            pair: linux-amd64
+            cache_suffix: ""
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            pair: linux-arm64
+            cache_suffix: -arm64
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            auth.docker.io:443
+            claude.ai:443
+            deb.debian.org:80
+            deb.debian.org:443
+            dl-cdn.alpinelinux.org:443
+            docker-images-prod.s3.amazonaws.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            download.pytorch.org:443
+            download-r2.pytorch.org:443
+            downloads.claude.ai:443
+            files.pythonhosted.org:443
+            ghcr.io:443
+            index.docker.io:443
+            github.com:443
+            objects.githubusercontent.com:443
+            pkg-containers.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            pypi.org:443
+            registry.npmjs.org:443
+            registry-1.docker.io:443
+            release-assets.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            get.anchore.io:443
+            toolbox-data.anchore.io:443
+            *.blob.core.windows.net:443
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Nur fuer die Labels (org.opencontainers.image.source verknuepft das
+      # Package mit dem Repo). Tags setzt der publish-Job.
+      - name: Extract GHCR metadata
+        id: meta_ghcr
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/agora
+
+      - name: Build und Push per Digest zu GHCR (agora)
+        id: build_ghcr
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          # target: prod — siehe Kommentar im build-only-Job weiter oben (#994).
+          target: prod
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta_ghcr.outputs.labels }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/agora,push-by-name=true,name-canonical=true,push=true
+          # amd64 nutzt den Cache aus build-only (scope=prod); arm64 hat einen
+          # eigenen Scope, damit sich die Plattformen nicht ueberschreiben.
+          cache-from: type=gha,scope=prod${{ matrix.cache_suffix }}
+          cache-to: type=gha,mode=min,scope=prod${{ matrix.cache_suffix }}
+
+      - name: Extract GHCR proxy metadata
+        id: meta_proxy
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/agora-proxy
+
+      - name: Build und Push per Digest zu GHCR (agora-proxy)
+        id: build_proxy
+        # Default-Build-Args: kein Token im Bundle, das Image ist oeffentlich.
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          target: proxy
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta_proxy.outputs.labels }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/agora-proxy,push-by-name=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=proxy${{ matrix.cache_suffix }}
+          cache-to: type=gha,mode=min,scope=proxy${{ matrix.cache_suffix }}
+
+      - name: Export digests
+        env:
+          AGORA_DIGEST: ${{ steps.build_ghcr.outputs.digest }}
+          PROXY_DIGEST: ${{ steps.build_proxy.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/agora-${AGORA_DIGEST#sha256:}"
+          touch "${RUNNER_TEMP}/digests/proxy-${PROXY_DIGEST#sha256:}"
+
+      - name: Upload digests
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digests-${{ matrix.pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
-    # Schritt 3: Push zu GHCR — NUR nach erfolgreichem Smoke.
+    # Schritt 3b: Multi-Arch-Manifest (amd64 + arm64) in GHCR erzeugen und taggen —
+    # NUR nach erfolgreichem Smoke. Die Images pushen die publish-build-Jobs
+    # per Digest; hier entstehen Manifest, Tags, Provenance und SBOM.
     # Docker Hub bleibt ein optionaler Mirror. Der harte Release-Pfad ist GHCR,
     # weil Docker Hub grosse Layer im GitHub-Runner wiederholt mit HTTP 400
     # abweisen kann, obwohl der Reverse-Proxy-Smoke gruen war.
@@ -535,9 +678,9 @@ jobs:
     # ziehen, statt ihn unter Last selbst zu bauen.
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [build-only, prod-proxy-smoke]
+    needs: [build-only, prod-proxy-smoke, publish-build]
     if: >-
-      ${{ always() && needs.build-only.result == 'success' && (
+      ${{ always() && needs.build-only.result == 'success' && needs.publish-build.result == 'success' && (
         needs.prod-proxy-smoke.result == 'success' ||
         (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prod-proxy-smoke.result == 'skipped') ||
         (github.event_name == 'workflow_dispatch' && inputs.force_publish == true)
@@ -631,27 +774,29 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=ref,event=branch,enable=${{ github.ref != 'refs/heads/main' }}
 
-      - name: Build und Push zu GHCR (required)
-        id: build_ghcr
-        # Alle Layers sind durch den build-only-Job bereits im GHA-Cache.
-        # Dieser Build läuft praktisch instant durch (cache-hit auf alle
-        # Layers) und schreibt das fertige Image in die Pflicht-Registry.
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          context: .
-          file: ./Dockerfile
-          # target: prod — siehe Kommentar im build-only-Job weiter oben (#994).
-          # Ohne target würde hier das nginx-proxy-Image statt des App-Images
-          # publiziert.
-          target: prod
-          # Erster harter Push im Workflow — NUR nach erfolgreichem Smoke.
-          push: true
-          tags: ${{ steps.meta_ghcr.outputs.tags }}
-          labels: ${{ steps.meta_ghcr.outputs.labels }}
-          # mode=min — siehe Begründung im build-only-Job weiter oben (#994).
-          # scope=prod — getrennt vom Proxy-Cache, siehe build-only.
-          cache-from: type=gha,scope=prod
-          cache-to: type=gha,mode=min,scope=prod
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Manifest-Liste zu GHCR erzeugen (agora)
+        id: build_ghcr
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/agora
+          META_JSON: ${{ steps.meta_ghcr.outputs.json }}
+        run: |
+          set -euo pipefail
+          files=(agora-*); test "${#files[@]}" -eq 2
+          tags=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$META_JSON")
+          refs=$(for f in agora-*; do printf '%s@sha256:%s ' "$IMAGE" "${f#agora-}"; done)
+          # shellcheck disable=SC2086
+          docker buildx imagetools create $tags $refs
+          first=$(jq -r '.tags[0]' <<< "$META_JSON")
+          digest=$(docker buildx imagetools inspect "$first" --format '{{json .Manifest}}' | jq -r '.digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate GHCR build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -691,20 +836,22 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=ref,event=branch,enable=${{ github.ref != 'refs/heads/main' }}
 
-      - name: Build und Push Proxy zu GHCR (required)
+      - name: Manifest-Liste zu GHCR erzeugen (agora-proxy)
         id: build_proxy
-        # Default-Build-Args: kein Token im Bundle (ALLOW_BUILD_TIME_TOKEN
-        # bleibt false), das Image ist oeffentlich. Cache-Treffer aus build-only.
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: ./Dockerfile
-          target: proxy
-          push: true
-          tags: ${{ steps.meta_proxy.outputs.tags }}
-          labels: ${{ steps.meta_proxy.outputs.labels }}
-          cache-from: type=gha,scope=proxy
-          cache-to: type=gha,mode=min,scope=proxy
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/agora-proxy
+          META_JSON: ${{ steps.meta_proxy.outputs.json }}
+        run: |
+          set -euo pipefail
+          files=(proxy-*); test "${#files[@]}" -eq 2
+          tags=$(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$META_JSON")
+          refs=$(for f in proxy-*; do printf '%s@sha256:%s ' "$IMAGE" "${f#proxy-}"; done)
+          # shellcheck disable=SC2086
+          docker buildx imagetools create $tags $refs
+          first=$(jq -r '.tags[0]' <<< "$META_JSON")
+          digest=$(docker buildx imagetools inspect "$first" --format '{{json .Manifest}}' | jq -r '.digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate GHCR proxy build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

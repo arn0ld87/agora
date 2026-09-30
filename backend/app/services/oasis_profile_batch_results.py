@@ -223,6 +223,7 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
                 persona =entity .summary or "A participant in social discussions.",
                 source_entity_uuid =entity .uuid ,
                 source_entity_type =entity_type ,
+                affiliation =entity .affiliation ,
                 )
                 result_idx ,error =idx ,str (e )
             process_result (result_idx ,profile ,error )

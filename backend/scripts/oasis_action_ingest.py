@@ -237,6 +237,7 @@ def _enrich_action_context(
                     if original_info:
                         action_args['original_content'] = original_info.get('content', '')
                         action_args['original_author_name'] = original_info.get('author_name', '')
+                        action_args['original_author_agent_id'] = original_info.get('author_agent_id')
 
         # Quote post: supplement original post content, author, and quote comment
         elif action_type == 'QUOTE_POST':
@@ -248,6 +249,7 @@ def _enrich_action_context(
                 if original_info:
                     action_args['original_content'] = original_info.get('content', '')
                     action_args['original_author_name'] = original_info.get('author_name', '')
+                    action_args['original_author_agent_id'] = original_info.get('author_agent_id')
 
             # Get quote post comment content (quote_content)
             if new_post_id:
@@ -315,7 +317,31 @@ def _enrich_action_context(
                 if post_info:
                     action_args['post_content'] = post_info.get('content', '')
                     action_args['post_author_name'] = post_info.get('author_name', '')
+                    action_args['post_author_agent_id'] = post_info.get('author_agent_id')
             _attach_engagement_score(cursor, 'comment', 'comment_id', action_args)
+            # #1713 S5: parent_comment_id aus nested-comments-Patch (nur wenn Spalte
+            # in der DB vorhanden — Resume-sicher, kein Fehler bei aelteren DBs).
+            if 'parent_comment_id' not in action_args:
+                comment_id_val = action_args.get('comment_id')
+                if comment_id_val is not None:
+                    try:
+                        cursor.execute("PRAGMA table_info(comment)")
+                        cols = {row[1] for row in cursor.fetchall()}
+                        if 'parent_comment_id' in cols:
+                            cursor.execute(
+                                "SELECT parent_comment_id FROM comment WHERE comment_id = ?",
+                                (comment_id_val,),
+                            )
+                            pcid_row = cursor.fetchone()
+                            if pcid_row is not None:
+                                action_args['parent_comment_id'] = pcid_row[0]
+                    except sqlite3.Error:
+                        logger.warning(
+                            "parent_comment_id-Lookup fuer comment_id=%s fehlgeschlagen "
+                            "(#1713 S5) — Feld bleibt unbefuellt",
+                            comment_id_val,
+                            exc_info=True,
+                        )
 
         # Create post: Voting-Stand zum Erzeugungszeitpunkt mitführen, damit der
         # Live-Feed einen echten Wert zeigt statt einer hartkodierten 0
@@ -404,7 +430,15 @@ def _get_post_info(
                 if user_row:
                     author_name = user_row[0] or user_row[1] or ''
 
-            return {'content': content, 'author_name': author_name}
+            # author_agent_id (#1713 UI-2a): stabile Persona-ID des Autors,
+            # damit Emitter/Snapshot eine parent_persona_id fuellen koennen
+            # statt nur den Anzeigenamen. None wenn agent_id unaufloesbar
+            # (Fallback-User ohne OASIS-agent_id-Zuordnung).
+            return {
+                'content': content,
+                'author_name': author_name,
+                'author_agent_id': agent_id,
+            }
     except Exception:
         pass
     return None

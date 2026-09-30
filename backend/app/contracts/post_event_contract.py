@@ -13,6 +13,14 @@ Frontend. Slice 5 (Dual-Column Sim-Feed) konsumiert.
 
 Wording-Glossar v1: ``is_simulated=True`` ist Pflicht-Marker für alle
 OASIS-emittierten Posts. Frontend rendert SIM-Badge. Kein "prediction".
+
+2026-09-29 — Slice UI-2a (#1713): v2-Felder fuer die Thread-/Diskurs-
+darstellung (``docs/design/simulation-feed.md``, PR #1718) ergaenzt. Alle
+neuen Felder sind optional mit Default ``None`` — bestehende Emitter/
+Snapshots ohne diese Felder bleiben gueltig, altes UI ignoriert sie. Das
+Feld ``body`` darf nur bei ``kind=repost`` leer sein (ein reiner Repost hat
+keinen eigenen Text); jeder andere ``kind`` verlangt weiterhin nicht-leeren
+Text.
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Platform(str, Enum):
@@ -51,6 +59,20 @@ class VoiceRegister(str, Enum):
     SKEPTISCH_DE = "skeptisch-de"
 
 
+class PostKind(str, Enum):
+    """Diskurs-Art eines Beitrags fuer die Thread-/Diskursdarstellung (#1713).
+
+    ``None`` (kein Wert im Payload) markiert Vor-Slice-UI-2a-Daten — das
+    Frontend leitet dort weiterhin aus ``parent_post_id`` ab, ob es sich um
+    eine Antwort handelt.
+    """
+
+    POST = "post"
+    COMMENT = "comment"
+    QUOTE = "quote"
+    REPOST = "repost"
+
+
 class PostCreatedEvent(BaseModel):
     """SSE-Frame für einen einzelnen Post-Action des OASIS-Runners."""
 
@@ -73,7 +95,14 @@ class PostCreatedEvent(BaseModel):
     )
     voice_register: VoiceRegister
     is_simulated: bool = True
-    body: str = Field(..., min_length=1)
+    body: str = Field(
+        default="",
+        description=(
+            "Beitragstext. Muss nicht-leer sein ausser bei ``kind=repost`` — "
+            "ein reiner Repost hat keinen eigenen Text, der geteilte Beitrag "
+            "steht unter ``reposted_post_id`` (siehe body_required_unless_repost)."
+        ),
+    )
     timestamp: datetime
     score: int = Field(
         default=0,
@@ -94,6 +123,64 @@ class PostCreatedEvent(BaseModel):
             "None bei Pre-Slice-5-Daten und für Persistenz-Snapshots ohne Feld."
         ),
     )
+    kind: PostKind | None = Field(
+        default=None,
+        description=(
+            "Diskurs-Art (post/comment/quote/repost). None bei Pre-Slice-"
+            "UI-2a-Daten — Frontend faellt auf die parent_post_id-Heuristik "
+            "zurueck."
+        ),
+    )
+    round_num: int | None = Field(
+        default=None,
+        description="Sim-Runde, in der die Aktion ausgefuehrt wurde. None bei Altdaten.",
+    )
+    parent_comment_id: str | None = Field(
+        default=None,
+        description=(
+            "Elternkommentar innerhalb eines Reddit-Strangs (Baum-Kante). "
+            "Gesetzt wenn der nested-comments-Patch aktiv ist (camel-oasis==0.2.5, "
+            "nur Reddit). Twitter-Kommentare kennen dieses Feld nicht (#1713 S5)."
+        ),
+    )
+    root_post_id: str | None = Field(
+        default=None,
+        description="Wurzel-Post des Strangs, dem dieser Beitrag angehoert.",
+    )
+    quoted_post_id: str | None = Field(
+        default=None,
+        description="post_id des zitierten Beitrags bei kind=quote.",
+    )
+    reposted_post_id: str | None = Field(
+        default=None,
+        description="post_id des geteilten Beitrags bei kind=repost.",
+    )
+    quote_body: str | None = Field(
+        default=None,
+        description="Text des zitierten Beitrags bei kind=quote (nested Block im Feed).",
+    )
+    parent_persona_id: str | None = Field(
+        default=None,
+        description="persona_id der Eltern-Persona (Antwort/Zitat/Repost-Quelle).",
+    )
+    parent_persona_name: str | None = Field(
+        default=None,
+        description="Anzeigename der Eltern-Persona, fuer die Kontextzeile im Feed.",
+    )
+    like_count: int | None = Field(
+        default=None,
+        description="Anzahl Likes zum Zeitpunkt der Emission. None bei Altdaten.",
+    )
+
+    @model_validator(mode="after")
+    def body_required_unless_repost(self) -> "PostCreatedEvent":
+        # Ein reiner Repost traegt seinen Text im referenzierten Beitrag
+        # (reposted_post_id) — jede andere Art braucht eigenen Text (#1713).
+        if self.kind != PostKind.REPOST and not self.body:
+            raise ValueError(
+                "body darf nur bei kind='repost' leer sein"
+            )
+        return self
 
     @field_validator("persona_name")
     @classmethod
@@ -118,5 +205,6 @@ class PostCreatedEvent(BaseModel):
 __all__ = [
     "Platform",
     "PostCreatedEvent",
+    "PostKind",
     "VoiceRegister",
 ]

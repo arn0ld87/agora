@@ -372,8 +372,8 @@ class OasisProfileGenerator:
     def _report_persona_degradation(self, profiles: List[Optional[OasisAgentProfile]], degradations: 'DegradationCollector') -> None:
         return _oasis_profile_rule_based._report_persona_degradation(self, profiles, degradations)
 
-    def _generate_profile_rule_based(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], generation_error: Optional[str]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> Dict[str, Any]:
-        return _oasis_profile_rule_based._generate_profile_rule_based(self, entity_name, entity_type, entity_summary, entity_attributes, generation_error, demographic_slot)
+    def _generate_profile_rule_based(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], generation_error: Optional[str]=None, demographic_slot: Optional[PersonaDemographicSlot]=None, affiliation: Optional[str]=None) -> Dict[str, Any]:
+        return _oasis_profile_rule_based._generate_profile_rule_based(self, entity_name, entity_type, entity_summary, entity_attributes, generation_error, demographic_slot, affiliation)
 
     def _build_collective_payload(self, entity_name: str, entity_type: str, entity_summary: str) -> Dict[str, Any]:
         return _oasis_profile_rule_based._build_collective_payload(self, entity_name, entity_type, entity_summary)

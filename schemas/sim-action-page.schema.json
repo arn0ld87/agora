@@ -1,0 +1,206 @@
+{
+  "$defs": {
+    "Platform": {
+      "description": "Plattform-Enum f\u00fcr Dual-Column-Routing.\n\nEng halten \u2014 andere Channels (Mastodon, Threads) brauchen ADR + Slice.",
+      "enum": [
+        "reddit",
+        "twitter"
+      ],
+      "title": "Platform",
+      "type": "string"
+    },
+    "SimActionRecord": {
+      "additionalProperties": false,
+      "description": "Eine einzelne protokollierte Simulationsaktion (API-Grenze).",
+      "properties": {
+        "action_type": {
+          "$ref": "#/$defs/SimActionType"
+        },
+        "agent_id": {
+          "minLength": 1,
+          "title": "Agent Id",
+          "type": "string"
+        },
+        "agent_name": {
+          "minLength": 1,
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content"
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "role_conflict": {
+          "anyOf": [
+            {
+              "enum": [
+                "foreign_role",
+                "foreign_name_signature",
+                "unmatched_self_reference"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role Conflict"
+        },
+        "round_num": {
+          "minimum": 0,
+          "title": "Round Num",
+          "type": "integer"
+        },
+        "sim_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Simulierte Agenten-Wallclock. None bei Alt-Aktionen ohne Sim-Zeit.",
+          "title": "Sim Time"
+        },
+        "success": {
+          "default": true,
+          "title": "Success",
+          "type": "boolean"
+        },
+        "target_agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Agent Id"
+        },
+        "target_agent_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Agent Name"
+        },
+        "target_comment_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Comment Id"
+        },
+        "target_post_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Post Id"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "round_num",
+        "timestamp",
+        "platform",
+        "agent_id",
+        "agent_name",
+        "action_type"
+      ],
+      "title": "SimActionRecord",
+      "type": "object"
+    },
+    "SimActionType": {
+      "description": "Bekannte Aktionsarten aus dem OASIS-Trace (``oasis_action_ingest.ACTION_TYPE_MAP``).\n\n``OTHER`` faengt zukuenftige/unbekannte Werte aus Altlaeufen ab, damit ein\neinzelner unerwarteter Log-Eintrag nicht die gesamte Seite ablehnt.",
+      "enum": [
+        "CREATE_POST",
+        "CREATE_COMMENT",
+        "LIKE_POST",
+        "DISLIKE_POST",
+        "LIKE_COMMENT",
+        "DISLIKE_COMMENT",
+        "REPOST",
+        "QUOTE_POST",
+        "FOLLOW",
+        "MUTE",
+        "SEARCH_POSTS",
+        "SEARCH_USER",
+        "TREND",
+        "REFRESH",
+        "DO_NOTHING",
+        "INTERVIEW",
+        "OTHER"
+      ],
+      "title": "SimActionType",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/sim-action-page.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Cursor-paginierte Antwort fuer ``GET /api/simulation/<id>/actions``.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/SimActionRecord"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Opakes Cursor-Token fuer die naechste Seite. None am Ende der Liste.",
+      "title": "Next Cursor"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "SimActionPage",
+  "type": "object"
+}

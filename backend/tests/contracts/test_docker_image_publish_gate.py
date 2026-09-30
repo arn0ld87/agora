@@ -48,7 +48,9 @@ def test_smoke_starts_prebuilt_images_without_building() -> None:
 
 
 def test_smoke_loads_both_images_from_the_artifact() -> None:
-    smoke = _joined(_step_block(_job_block("prod-proxy-smoke"), "Images laden und für Compose umtaggen"))
+    smoke = _joined(
+        _step_block(_job_block("prod-proxy-smoke"), "Images laden und für Compose umtaggen")
+    )
     upload = _joined(_step_block(_job_block("build-only"), "Image-Artefakt hochladen"))
 
     for tar in ("/tmp/image.tar", "/tmp/proxy-image.tar"):
@@ -69,8 +71,39 @@ def test_publish_requires_green_build_only() -> None:
     block = _job_block("publish")
     condition = _normalize_condition(_scalar_value(block, "if"))
 
-    assert "needs: [build-only, prod-proxy-smoke]" in _joined(block)
+    assert "needs: [build-only, prod-proxy-smoke, publish-build]" in _joined(block)
+    assert condition.startswith(
+        "always() && needs.build-only.result == 'success' "
+        "&& needs.publish-build.result == 'success' && ("
+    ), condition
+
+
+def test_publish_build_has_the_same_smoke_gate_as_publish() -> None:
+    """publish-build pusht bereits (per Digest) — es braucht dasselbe Gate.
+
+    Ohne das wuerde ein PR- oder Smoke-roter Lauf ungetaggte Images nach
+    GHCR schieben, auch wenn publish selbst nie laeuft.
+    """
+    build = _job_block("publish-build")
+    publish = _normalize_condition(_scalar_value(_job_block("publish"), "if"))
+    condition = _normalize_condition(_scalar_value(build, "if"))
+
+    assert "needs: [build-only, prod-proxy-smoke]" in _joined(build)
     assert condition.startswith("always() && needs.build-only.result == 'success' && ("), condition
+    # Der Oder-Block (Smoke gruen / main-Push / force_publish) ist identisch.
+    assert condition.split(" && (", 1)[1] == publish.split(" && (", 1)[1]
+
+
+def test_arm64_is_built_natively_for_both_images() -> None:
+    """armserver ist aarch64 — ohne arm64-Variante laeuft das Image nur unter QEMU."""
+    text = _joined(_job_block("publish-build"))
+
+    assert "platform: linux/amd64" in text
+    assert "platform: linux/arm64" in text
+    assert "runner: ubuntu-24.04-arm" in text
+    assert "setup-qemu-action" not in text
+    for image in ("/agora,", "/agora-proxy,"):
+        assert image in text and "push-by-name=true" in text
 
 
 def test_publish_without_smoke_only_on_main_push() -> None:
@@ -109,7 +142,7 @@ def test_proxy_publish_is_attested() -> None:
 
 
 def test_prod_and_proxy_use_separate_cache_scopes() -> None:
-    for job in ("build-only", "publish"):
+    for job in ("build-only", "publish-build"):
         text = _joined(_job_block(job))
         assert "cache-from: type=gha\n" not in text + "\n", f"{job}: GHA-Cache ohne scope"
         assert "scope=prod" in text
@@ -125,5 +158,9 @@ def test_publish_egress_allows_sigstore_for_attestations() -> None:
     """
     step = _joined(_step_block(_job_block("publish"), "Harden Runner"))
 
-    for endpoint in ("fulcio.sigstore.dev:443", "rekor.sigstore.dev:443", "tuf-repo-cdn.sigstore.dev:443"):
+    for endpoint in (
+        "fulcio.sigstore.dev:443",
+        "rekor.sigstore.dev:443",
+        "tuf-repo-cdn.sigstore.dev:443",
+    ):
         assert endpoint in step, f"{endpoint} fehlt in der Egress-Allowlist von publish"

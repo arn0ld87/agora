@@ -4,13 +4,22 @@ Run-control and live-status routes split from the main simulation API module.
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from flask import jsonify, request
+from pydantic import ValidationError
 
 from . import simulation_bp
 from ..config import Config
 from ..contracts.auth_contract import AuthType
+from ..contracts.post_event_contract import Platform
+from ..contracts.sim_action_contract import (
+    RoundSummary,
+    SimActionPage,
+    SimActionRecord,
+    SimActionType,
+)
 from ..models.project import ProjectManager
 from ..security.principal_context import current_principal
 from ..services.persona_review_service import PersonaReviewService
@@ -46,6 +55,7 @@ if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
     from ..contracts.ai_provider_contract import AiModelRef
     from ..contracts.llm_routing_contract import ResolvedRoute
     from ..contracts.run_budget_contract import RunBudgetConfig
+    from ..services.sim.run_state_store import AgentAction
 
 
 def _evaluate_persona_review_gate(simulation_id: str):
@@ -1103,10 +1113,86 @@ def get_run_status_detail(simulation_id: str):
     return json_success(result)
 
 
+def _decode_actions_cursor(raw: str | None) -> int:
+    """Cursor ist ein opakes Offset-Token (str(int)). Ungueltig/negativ -> 0
+    statt 400 — dieselbe stille Clamp-Semantik wie das alte offset (#1713)."""
+    if not raw:
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return max(value, 0)
+
+
+def _coerce_action_type(raw: str) -> SimActionType:
+    """Unbekannte Rohtypen landen in ``OTHER`` — auch beim Filtern (#1713)."""
+    try:
+        return SimActionType(raw)
+    except ValueError:
+        return SimActionType.OTHER
+
+
+def _resolve_target_post_id(action_type: str, args: dict) -> str | None:
+    """Post, auf den die Aktion wirkt — nicht der ggf. neu erzeugte Beitrag
+    (der steht bereits im Feed-Event, nicht im Protokoll-Ziel)."""
+    if action_type in ("LIKE_POST", "DISLIKE_POST", "CREATE_COMMENT"):
+        value = args.get("post_id")
+    elif action_type == "REPOST":
+        value = args.get("original_post_id")
+    elif action_type == "QUOTE_POST":
+        value = args.get("quoted_id")
+    else:
+        value = None
+    return str(value) if value is not None else None
+
+
+def _agent_action_to_record(action: "AgentAction") -> SimActionRecord | None:
+    """Konvertiert die interne ``AgentAction``-Dataclass in den API-Vertrag
+    ``SimActionRecord`` (#1713 UI-2a). Gibt ``None`` bei vertragswidrigen
+    Altbestandsdaten zurueck statt die ganze Seite abzureissen — dieselbe
+    Degradations-Haltung wie ``evidence_omitted`` bei ``/report/<id>/evidence``.
+    """
+    args = action.action_args or {}
+    action_type = _coerce_action_type(action.action_type)
+
+    comment_id = args.get("comment_id") if action_type in (
+        SimActionType.LIKE_COMMENT,
+        SimActionType.DISLIKE_COMMENT,
+    ) else None
+
+    try:
+        return SimActionRecord(
+            round_num=action.round_num,
+            sim_time=None,  # Aktionsprotokoll persistiert keine Sim-Zeit.
+            timestamp=datetime.fromisoformat(action.timestamp),
+            platform=Platform(action.platform),
+            agent_id=str(action.agent_id),
+            agent_name=action.agent_name,
+            action_type=action_type,
+            target_post_id=_resolve_target_post_id(action.action_type, args),
+            target_comment_id=str(comment_id) if comment_id is not None else None,
+            target_agent_id=None,  # Kein numerischer Ziel-Agent im Protokoll verfuegbar.
+            target_agent_name=args.get("target_user_name") or None,
+            content=args.get("content") or None,
+            success=action.success,
+            role_conflict=action.role_conflict,
+        )
+    except (ValidationError, ValueError, TypeError):
+        # Vertragswidriger Altbestand (z. B. unbekannter platform-Wert) darf
+        # nicht die ganze Seite abreissen — dieselbe Degradations-Haltung
+        # wie ``evidence_omitted`` bei ``/report/<id>/evidence``.
+        logger.warning(
+            "Failed to convert AgentAction to SimActionRecord (skipped)",
+            exc_info=True,
+        )
+        return None
+
+
 @simulation_bp.route('/<simulation_id>/actions', methods=['GET'])
 @handle_api_errors(logger=logger, log_prefix="Failed to get action history")
 def get_simulation_actions(simulation_id: str):
-    """Get paginated action history for a simulation."""
+    """Cursor-paginiertes Aktionsprotokoll (#1713 UI-2a, ``SimActionPage``)."""
     if not validate_simulation_id(simulation_id):
         return json_error(
             ApiErrorCode.INVALID_ID,
@@ -1119,22 +1205,86 @@ def get_simulation_actions(simulation_id: str):
         minimum=1,
         maximum=MAX_LIMIT,
     )
-    offset = max(request.args.get('offset', 0, type=int), 0)
+    offset = _decode_actions_cursor(request.args.get('cursor'))
     platform = request.args.get('platform')
     agent_id = request.args.get('agent_id', type=int)
     round_num = request.args.get('round_num', type=int)
-    actions = SimulationRunner.get_actions(
+    action_type_raw = request.args.get('action_type')
+    action_type_filter: SimActionType | None = None
+    if action_type_raw is not None:
+        try:
+            action_type_filter = SimActionType(action_type_raw)
+        except ValueError:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Unbekannter action_type: {action_type_raw!r}",
+                status=400,
+            )
+
+    matching = SimulationRunner.get_all_actions(
         simulation_id=simulation_id,
-        limit=limit,
-        offset=offset,
         platform=platform,
         agent_id=agent_id,
         round_num=round_num,
     )
-    return json_success({
-        "count": len(actions),
-        "actions": [action.to_dict() for action in actions],
-    })
+    if action_type_filter is not None:
+        matching = [
+            a for a in matching if _coerce_action_type(a.action_type) is action_type_filter
+        ]
+
+    page_slice = matching[offset:offset + limit]
+    next_offset = offset + limit
+    next_cursor = str(next_offset) if next_offset < len(matching) else None
+
+    items = [
+        record
+        for record in (_agent_action_to_record(a) for a in page_slice)
+        if record is not None
+    ]
+    page = SimActionPage(items=items, next_cursor=next_cursor)
+    return json_success(page.model_dump(mode="json"))
+
+
+@simulation_bp.route('/<simulation_id>/rounds', methods=['GET'])
+@handle_api_errors(logger=logger, log_prefix="Failed to get round summaries")
+def get_simulation_rounds(simulation_id: str):
+    """Aktionsbilanz je Runde und Plattform (#1713 UI-2a, ``RoundSummary``).
+
+    Anders als ``/timeline`` (ein kombinierter Eintrag je Runde ueber beide
+    Plattformen) liefert dieser Endpoint einen Eintrag je (round_num,
+    platform) — die Runden-Ansicht des Feeds filtert je Plattform.
+    """
+    if not validate_simulation_id(simulation_id):
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
+
+    actions = SimulationRunner.get_all_actions(simulation_id=simulation_id)
+    grouped: dict[tuple[int, str], dict[SimActionType, int]] = {}
+    for action in actions:
+        key = (action.round_num, action.platform)
+        counts = grouped.setdefault(key, {})
+        try:
+            action_type = SimActionType(action.action_type)
+        except ValueError:
+            action_type = SimActionType.OTHER
+        counts[action_type] = counts.get(action_type, 0) + 1
+
+    summaries: list[RoundSummary] = []
+    for (round_num, platform), counts in grouped.items():
+        try:
+            plat = Platform(platform)
+        except ValueError:
+            logger.warning(
+                "get_simulation_rounds: unbekannter platform-Wert %r in Altbestand — "
+                "Eintrag wird uebersprungen",
+                platform,
+            )
+            continue
+        summaries.append(RoundSummary(round_num=round_num, platform=plat, action_counts=counts))
+    summaries.sort(key=lambda s: (s.round_num, s.platform.value))
+    return json_success({"rounds": [s.model_dump(mode="json") for s in summaries]})
 
 
 @simulation_bp.route('/<simulation_id>/timeline', methods=['GET'])

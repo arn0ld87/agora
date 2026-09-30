@@ -26,6 +26,11 @@ class EntityNode:
     related_edges: List[Dict[str, Any]] = field(default_factory=list)
     # Related other nodes
     related_nodes: List[Dict[str, Any]] = field(default_factory=list)
+    # Issue #1713/#1470: Name der Organisation, die diese Entitaet laut
+    # belegter Graph-Relation vertritt (siehe prepare_entities._merge_
+    # persons_with_organizations). ``None`` fuer alle Entitaeten ohne
+    # Merge — der Regelfall.
+    affiliation: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -36,6 +41,7 @@ class EntityNode:
             "attributes": self.attributes,
             "related_edges": self.related_edges,
             "related_nodes": self.related_nodes,
+            "affiliation": self.affiliation,
         }
 
     def get_entity_type(self) -> Optional[str]:

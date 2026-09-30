@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "Platform": {
+      "description": "Plattform-Enum f\u00fcr Dual-Column-Routing.\n\nEng halten \u2014 andere Channels (Mastodon, Threads) brauchen ADR + Slice.",
+      "enum": [
+        "reddit",
+        "twitter"
+      ],
+      "title": "Platform",
+      "type": "string"
+    },
+    "SimActionType": {
+      "description": "Bekannte Aktionsarten aus dem OASIS-Trace (``oasis_action_ingest.ACTION_TYPE_MAP``).\n\n``OTHER`` faengt zukuenftige/unbekannte Werte aus Altlaeufen ab, damit ein\neinzelner unerwarteter Log-Eintrag nicht die gesamte Seite ablehnt.",
+      "enum": [
+        "CREATE_POST",
+        "CREATE_COMMENT",
+        "LIKE_POST",
+        "DISLIKE_POST",
+        "LIKE_COMMENT",
+        "DISLIKE_COMMENT",
+        "REPOST",
+        "QUOTE_POST",
+        "FOLLOW",
+        "MUTE",
+        "SEARCH_POSTS",
+        "SEARCH_USER",
+        "TREND",
+        "REFRESH",
+        "DO_NOTHING",
+        "INTERVIEW",
+        "OTHER"
+      ],
+      "title": "SimActionType",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/round-summary.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Aggregierte Aktionsbilanz einer Sim-Runde je Plattform.\n\n``action_counts`` ist bewusst ein offenes Mapping (Enum-Wert -> Anzahl)\nstatt Einzelfelder je Aktionsart \u2014 neue Aktionsarten brauchen dann keine\nVertragsaenderung.",
+  "properties": {
+    "action_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/SimActionType"
+      },
+      "title": "Action Counts",
+      "type": "object"
+    },
+    "platform": {
+      "$ref": "#/$defs/Platform"
+    },
+    "round_num": {
+      "minimum": 0,
+      "title": "Round Num",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "round_num",
+    "platform"
+  ],
+  "title": "RoundSummary",
+  "type": "object"
+}

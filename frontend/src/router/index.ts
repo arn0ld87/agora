@@ -224,17 +224,43 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
         props: true,
       },
+      // Slice UI-2b (#1713): Diskurs-, Strang-, Runden- und Protokollansichten
+      // als eigenstaendige Kind-Routen — siehe docs/design/simulation-feed.md §1.
+      {
+        path: 'threads',
+        name: 'SimThreads',
+        component: () => import('../views/v4/steps/SimThreadsView.vue'),
+        props: true,
+      },
+      {
+        path: 'thread/:postId',
+        name: 'SimThreadFocus',
+        component: () => import('../views/v4/steps/SimThreadFocusView.vue'),
+        props: true,
+      },
+      {
+        path: 'rounds',
+        name: 'SimRounds',
+        component: () => import('../views/v4/steps/SimRoundsView.vue'),
+        props: true,
+      },
+      {
+        path: 'actions',
+        name: 'SimActions',
+        component: () => import('../views/v4/steps/SimActionsView.vue'),
+        props: true,
+      },
     ],
   },
   // Redesign PR 7 (Audit §5 "Simulation live") legte ein eigenstaendiges
   // Vollbild-Instrument an, das nie an die Tab-Navigation angeschlossen
-  // wurde (Befund 6, verwaiste Route). Bis der Runden-Tab kommt, leitet der
-  // Deep-Link auf den bestehenden Feed-Tab um; SimulationLiveView.vue bleibt
-  // als Komponente erhalten.
+  // wurde (Befund 6, verwaiste Route). Slice UI-2b (#1713): Ziel ist jetzt
+  // die Runden-Ansicht (naeher am urspruenglichen Zweck der Live-Route als
+  // der Feed) — SimulationLiveView.vue bleibt als Komponente erhalten.
   {
     path: '/v4/simulation/:simulationId/live',
     redirect: (to) => ({
-      name: 'StepSimulationFeed',
+      name: 'SimRounds',
       params: { simulationId: String(to.params.simulationId) },
       query: to.query,
     }),

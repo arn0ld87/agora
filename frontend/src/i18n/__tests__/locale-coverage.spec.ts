@@ -147,4 +147,35 @@ describe('locale-coverage', () => {
     expect(deKeys).toContain('step2.model.ollamaOption')
     expect(enKeys).toContain('step2.model.ollamaOption')
   })
+
+  // #1713 Befund 5 (Design-Abnahme): StepSimulationFeedView.vue,
+  // SimThreadsView.vue, SimActionsView.vue und SimRoundsView.vue setzten
+  // Fehlermeldungen als deutsches Literal statt ueber i18n. Diese Keys
+  // muessen unter en tatsaechlich Englisch liefern, nicht nur existieren.
+  it('feed.errors.snapshotFailed liefert unter en Englisch, nicht das deutsche Literal (#1713)', () => {
+    expect((de as { feed: { errors: { snapshotFailed: string } } }).feed.errors.snapshotFailed).toBe(
+      'Snapshot-Ladefehler',
+    )
+    expect((en as { feed: { errors: { snapshotFailed: string } } }).feed.errors.snapshotFailed).toBe(
+      'Snapshot load failed',
+    )
+  })
+
+  it('feed.actionsTable.loadError liefert unter en Englisch (#1713)', () => {
+    expect(
+      (de as { feed: { actionsTable: { loadError: string } } }).feed.actionsTable.loadError,
+    ).toBe('Protokoll konnte nicht geladen werden.')
+    expect(
+      (en as { feed: { actionsTable: { loadError: string } } }).feed.actionsTable.loadError,
+    ).toBe('Could not load the action log.')
+  })
+
+  it('feed.rounds.error liefert unter en Englisch (#1713, von SimRoundsView.vue wiederverwendet)', () => {
+    expect((de as { feed: { rounds: { error: string } } }).feed.rounds.error).toBe(
+      'Runden konnten nicht geladen werden.',
+    )
+    expect((en as { feed: { rounds: { error: string } } }).feed.rounds.error).toBe(
+      'Rounds could not be loaded.',
+    )
+  })
 })

@@ -26,6 +26,122 @@ export interface RedditNode extends PostCreatedEvent {
   children: RedditNode[]
 }
 
+/**
+ * Kante-Regel fuer Straenge (Slice UI-2b, §2.8): `parent_comment_id`, wenn
+ * gesetzt (Reddit-Baum), sonst `parent_post_id` (Twitter-Replies, flach, und
+ * Reddit-Wurzelantworten vor dem Slice-5-Backfill). Funktioniert mit und
+ * ohne `parent_comment_id` im Snapshot.
+ */
+export function parentIdOf(post: PostCreatedEvent): string | null {
+  return post.parent_comment_id ?? post.parent_post_id ?? null
+}
+
+/**
+ * Wurzel-Praedikat fuer Diskurs-Straenge (§2.7): keine Elternkante und
+ * `kind` ist entweder `post` oder unbekannt (Pre-Slice-UI-2a-Daten tragen
+ * kein `kind`). `comment`/`quote`/`repost` sind nie Wurzeln, auch wenn
+ * ihre Elternkante fehlt — das ist ein Data Gap, keine neue Wurzel.
+ */
+function isThreadRoot(post: PostCreatedEvent): boolean {
+  return parentIdOf(post) === null && (post.kind == null || post.kind === 'post')
+}
+
+const THREAD_CHAIN_LIMIT = 64
+
+/**
+ * Loest die Strang-Wurzel eines Posts auf: zuerst ueber `root_post_id`
+ * (wenn er auf eine bekannte Wurzel zeigt), sonst ueber die Elternkette
+ * (`parentIdOf`). Bricht die Kette ab (Zyklus, Tiefenlimit, unbekannter
+ * Vorfahre), liefert die Funktion `null` — der Post gehoert dann zu
+ * keinem Strang, statt eine Zuordnung zu erfinden.
+ */
+function resolveRootId(
+  post: PostCreatedEvent,
+  byId: Map<string, PostCreatedEvent>,
+  isKnownRoot: (id: string) => boolean,
+): string | null {
+  if (post.root_post_id && isKnownRoot(post.root_post_id)) return post.root_post_id
+  let current: PostCreatedEvent | undefined = post
+  const visited = new Set<string>()
+  for (let i = 0; i < THREAD_CHAIN_LIMIT && current; i++) {
+    if (isKnownRoot(current.post_id)) return current.post_id
+    if (visited.has(current.post_id)) return null
+    visited.add(current.post_id)
+    const parentId = parentIdOf(current)
+    if (!parentId) return null
+    current = byId.get(parentId)
+  }
+  return null
+}
+
+export interface SimThreadSummary {
+  root: PostCreatedEvent
+  replyCount: number
+  repostCount: number
+  quoteCount: number
+  lastActivityAt: string
+  activeRounds: number[]
+}
+
+/**
+ * Gruppiert eine Post-Liste zu Strang-Zusammenfassungen fuer `SimThreadList`
+ * (§2.7). Reine Funktion ohne Store-Zugriff — die aufrufende View liefert
+ * die (bereits gefilterte) Post-Liste.
+ */
+export function buildThreadSummaries(posts: PostCreatedEvent[]): SimThreadSummary[] {
+  const byId = new Map<string, PostCreatedEvent>()
+  for (const p of posts) byId.set(p.post_id, p)
+
+  const roots = new Map<string, SimThreadSummary>()
+  for (const p of posts) {
+    if (isThreadRoot(p)) {
+      roots.set(p.post_id, {
+        root: p,
+        replyCount: 0,
+        repostCount: 0,
+        quoteCount: 0,
+        lastActivityAt: p.sim_time ?? p.timestamp,
+        activeRounds: typeof p.round_num === 'number' ? [p.round_num] : [],
+      })
+    }
+  }
+
+  for (const p of posts) {
+    if (isThreadRoot(p)) continue
+    const rootId = resolveRootId(p, byId, (id) => roots.has(id))
+    if (!rootId) continue
+    const summary = roots.get(rootId)!
+    if (p.kind === 'repost') summary.repostCount += 1
+    else if (p.kind === 'quote') summary.quoteCount += 1
+    else summary.replyCount += 1
+    const activity = p.sim_time ?? p.timestamp
+    if (activity.localeCompare(summary.lastActivityAt) > 0) summary.lastActivityAt = activity
+    if (typeof p.round_num === 'number' && !summary.activeRounds.includes(p.round_num)) {
+      summary.activeRounds.push(p.round_num)
+    }
+  }
+
+  for (const summary of roots.values()) summary.activeRounds.sort((a, b) => a - b)
+
+  return [...roots.values()].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+}
+
+/**
+ * Sammelt alle Posts eines Strangs ohne die Wurzel selbst — Datenquelle fuer
+ * `SimThreadTree` (§2.8). Gleiche Zuordnungsregel wie `buildThreadSummaries`
+ * (`root_post_id`, sonst Elternkette), nur als flache Liste statt Summary.
+ */
+export function collectThreadNodes(rootId: string, posts: PostCreatedEvent[]): PostCreatedEvent[] {
+  const byId = new Map<string, PostCreatedEvent>()
+  for (const p of posts) byId.set(p.post_id, p)
+  const isKnownRoot = (id: string): boolean => id === rootId
+
+  return posts.filter((p) => {
+    if (p.post_id === rootId) return false
+    return resolveRootId(p, byId, isKnownRoot) === rootId
+  })
+}
+
 const MAX_STORES = 10
 
 /**
@@ -163,6 +279,34 @@ function createStore(simulationId: string) {
    */
   const recentPosts = computed<PostCreatedEvent[]>(() => all.value.slice(-30))
 
+  /**
+   * Chronologisch aufsteigende Gesamtliste beider Plattformen — Datenquelle
+   * fuer `FeedTimeline` (Slice UI-2b, §2.5). Filter (Plattform/Runde/Persona/
+   * Freitext) liegen bei der aufrufenden View, nicht hier.
+   */
+  const flatTimeline = computed<PostCreatedEvent[]>(() =>
+    [...all.value].sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+  )
+
+  const byIdMap = computed<Map<string, PostCreatedEvent>>(() => {
+    const map = new Map<string, PostCreatedEvent>()
+    for (const p of all.value) map.set(p.post_id, p)
+    return map
+  })
+
+  /** Loest einen Post ueber seine post_id auf — z.B. fuer Repost-Referenzen. */
+  function byId(postId: string): PostCreatedEvent | undefined {
+    return byIdMap.value.get(postId)
+  }
+
+  function resolveStoreRootId(post: PostCreatedEvent): string | null {
+    const posts = byIdMap.value
+    return resolveRootId(post, posts, (id) => {
+      const candidate = id === post.post_id ? post : posts.get(id)
+      return candidate !== undefined && isThreadRoot(candidate)
+    })
+  }
+
   const activityRate = computed<number>(() => {
     const recent = all.value.slice(-30)
     if (recent.length < 2) return 0
@@ -178,6 +322,9 @@ function createStore(simulationId: string) {
     redditTree,
     recentPosts,
     activityRate,
+    flatTimeline,
+    byId,
+    resolveRootId: resolveStoreRootId,
     ingest,
     ingestMany,
     clear,

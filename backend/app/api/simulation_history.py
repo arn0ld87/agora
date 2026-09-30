@@ -13,7 +13,7 @@ from flask import current_app, request
 
 from . import simulation_bp
 from ..contracts.auth_contract import AuthType
-from ..contracts.post_event_contract import Platform, PostCreatedEvent
+from ..contracts.post_event_contract import Platform, PostCreatedEvent, PostKind
 from ..security.principal_context import current_principal
 from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 from ..models.project import ProjectManager
@@ -472,10 +472,22 @@ def _build_snapshot_event(
     num_likes: int,
     num_dislikes: int,
     profiles: Dict[int, Dict[str, Any]],
+    kind: str = "post",
+    root_post_id: Optional[str] = None,
+    quoted_post_id: Optional[str] = None,
+    reposted_post_id: Optional[str] = None,
+    quote_body: Optional[str] = None,
+    parent_persona_id: Optional[str] = None,
+    parent_persona_name: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Baut ein validiertes PostCreatedEvent-Dict oder None bei unbrauchbaren Daten."""
+    """Baut ein validiertes PostCreatedEvent-Dict oder None bei unbrauchbaren Daten.
+
+    #1713 UI-2a: ``kind``/Bezugsfelder fuer die Thread-/Diskursdarstellung.
+    Ein reiner Repost hat keinen eigenen Text (Contract-Ausnahme) — die
+    alte ``not body``-Sperre wuerde ihn sonst stumm verwerfen.
+    """
     timestamp = _parse_created_at_tz(created_at)
-    if timestamp is None or not body:
+    if timestamp is None or (not body and kind != "repost"):
         return None
 
     profile = profiles.get(int(user_id)) if user_id is not None else None
@@ -505,8 +517,77 @@ def _build_snapshot_event(
         body=body,
         timestamp=timestamp,
         score=score,
+        kind=PostKind(kind) if kind else None,
+        # Der Snapshot liest aus der SQLite-Post-/Comment-Tabelle — dort ist
+        # keine Runde persistiert (anders als im Live-Emit ueber die
+        # trace-Tabelle). None statt eines erfundenen Werts.
+        round_num=None,
+        parent_comment_id=None,
+        root_post_id=root_post_id,
+        quoted_post_id=quoted_post_id,
+        reposted_post_id=reposted_post_id,
+        quote_body=quote_body,
+        parent_persona_id=parent_persona_id,
+        parent_persona_name=parent_persona_name,
+        # Akkumulierter Endstand aus der DB — anders als beim Live-Emit (dort
+        # immer 0, da frisch erzeugt) ein echter, nicht erfundener Wert.
+        like_count=num_likes,
     )
     return event.model_dump(mode="json")
+
+
+def _derive_post_reference_fields(
+    row: Any,
+    author_by_post_id: Dict[int, "tuple[Optional[int], Optional[str]]"],
+    platform: str,
+) -> Dict[str, Any]:
+    """Leitet kind/Bezugsfelder/body fuer eine ``post``-Zeile ab (#1713 UI-2a).
+
+    Ausgelagert aus ``_build_feed_snapshot`` (radon-Hotspot, rank D) — reine
+    Fall-Unterscheidung ohne I/O, deshalb separat testbar.
+    """
+    original_post_id = row["original_post_id"]
+    if original_post_id is None:
+        return {
+            "kind": "post",
+            "root_post_id": None,
+            "quoted_post_id": None,
+            "reposted_post_id": None,
+            "quote_body": None,
+            "parent_persona_id": None,
+            "parent_persona_name": None,
+            "body": row["content"] or "",
+        }
+
+    orig_agent_id, orig_name = author_by_post_id.get(original_post_id, (None, None))
+    parent_persona_id = str(orig_agent_id) if orig_agent_id is not None else None
+    quote_content = row["quote_content"]
+    if quote_content:
+        # Quote-Zeile: content ist bereits die (denormalisierte) Kopie des
+        # zitierten Originaltexts, quote_content die eigene Kommentierung —
+        # dieselbe Semantik wie im trace-basierten Live-Emit
+        # (oasis_action_ingest).
+        return {
+            "kind": "quote",
+            "root_post_id": None,
+            "quoted_post_id": f"{platform}:{original_post_id}",
+            "reposted_post_id": None,
+            "quote_body": row["content"] or None,
+            "parent_persona_id": parent_persona_id,
+            "parent_persona_name": orig_name,
+            "body": quote_content,
+        }
+
+    return {
+        "kind": "repost",
+        "root_post_id": f"{platform}:{original_post_id}",
+        "quoted_post_id": None,
+        "reposted_post_id": f"{platform}:{original_post_id}",
+        "quote_body": None,
+        "parent_persona_id": parent_persona_id,
+        "parent_persona_name": orig_name,
+        "body": row["content"] or "",
+    }
 
 
 def _build_feed_snapshot(
@@ -527,11 +608,20 @@ def _build_feed_snapshot(
         try:
             cur.execute(
                 "SELECT p.post_id, p.user_id, p.content, p.created_at, "
-                "p.num_likes, p.num_dislikes, u.agent_id, u.name "
+                "p.num_likes, p.num_dislikes, p.original_post_id, p.quote_content, "
+                "u.agent_id, u.name "
                 "FROM post p LEFT JOIN user u ON p.user_id = u.user_id "
                 "ORDER BY p.created_at ASC",
             )
-            for row in cur.fetchall():
+            post_rows = cur.fetchall()
+            # Index fuer die Autor-Aufloesung von Repost/Quote-Referenzen
+            # (#1713 UI-2a): der Original-Autor steht nur auf DESSEN eigener
+            # Zeile, nicht auf der Repost-/Quote-Zeile selbst.
+            author_by_post_id: Dict[int, tuple[Optional[int], Optional[str]]] = {
+                row["post_id"]: (row["agent_id"], row["name"]) for row in post_rows
+            }
+            for row in post_rows:
+                ref = _derive_post_reference_fields(row, author_by_post_id, platform)
                 ev = _build_snapshot_event(
                     simulation_id=simulation_id,
                     platform=platform,
@@ -540,11 +630,18 @@ def _build_feed_snapshot(
                     user_id=row["user_id"],
                     agent_id=row["agent_id"],
                     user_name=row["name"],
-                    body=row["content"] or "",
+                    body=ref["body"],
                     created_at=row["created_at"],
                     num_likes=row["num_likes"] or 0,
                     num_dislikes=row["num_dislikes"] or 0,
                     profiles=profiles,
+                    kind=ref["kind"],
+                    root_post_id=ref["root_post_id"],
+                    quoted_post_id=ref["quoted_post_id"],
+                    reposted_post_id=ref["reposted_post_id"],
+                    quote_body=ref["quote_body"],
+                    parent_persona_id=ref["parent_persona_id"],
+                    parent_persona_name=ref["parent_persona_name"],
                 )
                 if ev is not None:
                     events.append(ev)
@@ -562,11 +659,19 @@ def _build_feed_snapshot(
                     "ORDER BY c.created_at ASC",
                 )
                 for row in cur.fetchall():
+                    parent_post_id = f"{platform}:{row['post_id']}"
+                    # Elternpost-Autor fuer die Kontextzeile im Feed
+                    # ("Antwort an @..."), #1713 UI-2a. Reddit kennt bislang
+                    # nur eine Verschachtelungsebene — der Elternpost ist
+                    # immer ein echter Post, kein Kommentar.
+                    parent_agent_id, parent_name = author_by_post_id.get(
+                        row["post_id"], (None, None)
+                    )
                     ev = _build_snapshot_event(
                         simulation_id=simulation_id,
                         platform=platform,
                         post_id_prefixed=f"{platform}:comment:{row['comment_id']}",
-                        parent_post_id=f"{platform}:{row['post_id']}",
+                        parent_post_id=parent_post_id,
                         user_id=row["user_id"],
                         agent_id=row["agent_id"],
                         user_name=row["name"],
@@ -575,6 +680,12 @@ def _build_feed_snapshot(
                         num_likes=row["num_likes"] or 0,
                         num_dislikes=row["num_dislikes"] or 0,
                         profiles=profiles,
+                        kind="comment",
+                        root_post_id=parent_post_id,
+                        parent_persona_id=(
+                            str(parent_agent_id) if parent_agent_id is not None else None
+                        ),
+                        parent_persona_name=parent_name,
                     )
                     if ev is not None:
                         events.append(ev)

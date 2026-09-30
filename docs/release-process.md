@@ -10,6 +10,7 @@
 Verwandte Dokumente:
 
 - [`runbooks/release-versioning.md`](runbooks/release-versioning.md)
+- [`runbooks/upgrade.md`](runbooks/upgrade.md)
 - [`../ROADMAP.md`](../ROADMAP.md)
 - [`STATUS.md`](STATUS.md)
 - [`deployment-prod-like.md`](deployment-prod-like.md)
@@ -187,7 +188,7 @@ Empfohlene Struktur:
 1. **Header** — Version, Datum, Release-Linie.
 2. **TL;DR** — was ändert sich für Nutzer/Operatoren.
 3. **Highlights** — relevante Änderungen mit Issue-/PR-Bezug.
-4. **Migration/Upgrade** — neue Variablen, Storage-/Schemaänderungen, Pflichtschritte.
+4. **Migration/Upgrade** — neue Variablen, Storage-/Schemaänderungen, Pflichtschritte. Verweist auf den passenden Sprung in [`runbooks/upgrade.md`](runbooks/upgrade.md), statt ihn zu wiederholen.
 5. **Verifikation** — welche Gates/Tests auf dem Release-Candidate tatsächlich liefen.
 6. **Bekannte Grenzen** — ehrlich und konkret.
 7. **Rollback** — falls release-spezifische Besonderheiten existieren.
@@ -301,7 +302,7 @@ Rollback bedeutet auf einen bekannten guten Release-Commit/Image-Digest zurückz
 
 ### Daten
 
-Wenn ein Release Persistenz oder Migrationen verändert, muss der dokumentierte Backup-/Restore-/Rollback-Pfad gelten. Ohne Restore-Test ist ein `git checkout` **kein vollständiger Rollback**.
+Wenn ein Release Persistenz oder Migrationen verändert, muss der dokumentierte Backup-/Restore-/Rollback-Pfad gelten (Upgrade-Sprünge und Rückwege je Schritt: [`runbooks/upgrade.md`](runbooks/upgrade.md)). Ohne Restore-Test ist ein `git checkout` **kein vollständiger Rollback**.
 
 Siehe [`backup-restore.md`](backup-restore.md) und Release-Gate #766.
 

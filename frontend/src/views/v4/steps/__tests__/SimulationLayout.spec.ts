@@ -5,7 +5,8 @@
  * runParamsHandover.spec.ts fuer StepSimulationView lag, bevor Kopf,
  * Breadcrumbs, Stepper und Tabs hierher gewandert sind:
  * 1. AppShell/PipelineStepper/Breadcrumbs werden mit simulationId gerendert.
- * 2. Ein Tab-Wechsel nimmt die aktuelle Query mit (projectId, Run-Parameter).
+ * 2. SimTabsBar bekommt den korrekten activeTab je Route (inkl. Namens-Prefix
+ *    fuer SimThreadFocus, Slice UI-2b #1713).
  * 3. Fehlt projectId in der Query, laedt das Layout es einmalig ueber
  *    getSimulation() nach, statt den Rueckweg still abzubrechen.
  * 4. clearSimFeed/clearSimClock laufen beim Unmount des Layouts (Verlassen
@@ -54,10 +55,9 @@ const STUBS = {
   PageHeader: { name: 'PageHeader', props: ['title', 'subtitle'], template: '<header><slot name="right" /></header>' },
   PipelineStepper: { name: 'PipelineStepper', props: ['currentStep'], template: '<div />' },
   StepModelOverrideChip: true,
-  Tabs: {
-    name: 'Tabs',
-    props: ['modelValue', 'tabs', 'urlSync'],
-    emits: ['update:modelValue'],
+  SimTabsBar: {
+    name: 'SimTabsBar',
+    props: ['activeTab', 'simulationId'],
     template: '<nav />',
   },
   RouterView: { template: '<div />' },
@@ -90,15 +90,19 @@ describe('SimulationLayout', () => {
     expect(breadcrumbs.some((c) => c.label === 'sim_x')).toBe(true)
   })
 
-  it('nimmt die Query beim Tab-Wechsel mit', async () => {
+  it.each([
+    ['StepSimulation', 'pipeline'],
+    ['StepSimulationFeed', 'feed'],
+    ['SimThreads', 'threads'],
+    ['SimThreadFocus', 'threads'],
+    ['SimRounds', 'rounds'],
+    ['SimActions', 'actions'],
+  ])('reicht activeTab=%s → %s an SimTabsBar durch', (routeName, expectedTab) => {
+    route.name = routeName
     const w = mountLayout()
-    await w.getComponent({ name: 'Tabs' }).vm.$emit('update:modelValue', 'feed')
-
-    expect(routerPush).toHaveBeenCalledWith({
-      name: 'StepSimulationFeed',
-      params: { simulationId: 'sim_x' },
-      query: { projectId: 'project_42' },
-    })
+    const tabsBar = w.getComponent({ name: 'SimTabsBar' })
+    expect(tabsBar.props('activeTab')).toBe(expectedTab)
+    expect(tabsBar.props('simulationId')).toBe('sim_x')
   })
 
   it('laedt projectId nach, wenn es in der Query fehlt', async () => {
