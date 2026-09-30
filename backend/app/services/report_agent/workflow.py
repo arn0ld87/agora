@@ -690,6 +690,13 @@ def _is_persistent_provider_400(exc: BaseException) -> bool:
     return not any(phrase in message for phrase in _PROMPT_SPECIFIC_400_PHRASES)
 
 
+def _persistent_error_note(persistent_error: Optional[tuple[str, str]]) -> str:
+    """Ursachen-Zusatz fuer ``report.error`` bei nicht-transientem 400 (#1738)."""
+    if persistent_error is None:
+        return ""
+    return f" Ursache: {persistent_error[0]}: {persistent_error[1]}"
+
+
 def _section_error_fallback(
     *,
     report_id: str,
@@ -2260,11 +2267,9 @@ def generate_report(
                 f"Sections erfolgreich. Fehlgeschlagen: "
                 f"{', '.join(str(i) for i in sorted(failed_section_indices))}."
             )
-            persistent_error = events_for(agent).persistent_provider_error
-            if persistent_error is not None:
-                failed_note += (
-                    f" Ursache: {persistent_error[0]}: {persistent_error[1]}"
-                )
+            failed_note += _persistent_error_note(
+                events_for(agent).persistent_provider_error
+            )
             logger.warning("report %s: %s", report_id, failed_note)
             report.error = failed_note if not getattr(report, "error", None) else report.error
         report.completed_at = datetime.now().isoformat()

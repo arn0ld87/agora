@@ -1064,8 +1064,7 @@ class LLMClient:
                 think=False if force_no_thinking else self._think,
             ),
             stream=force_stream,
-            extra=self._reasoning_effort_extra(force_no_thinking=force_no_thinking)
-            or None,
+            extra=self._reasoning_effort_extra(force_no_thinking=force_no_thinking),
         )
 
         def _create(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
