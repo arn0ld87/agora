@@ -27,7 +27,9 @@ sichtbar als "übersprungen" markiert, nicht stillschweigend weggelassen.
 
 from __future__ import annotations
 
+import logging
 import statistics
+import sys
 import time
 from dataclasses import dataclass
 
@@ -41,6 +43,11 @@ from app.services.decisions.jev_provider import build_jev_client, resolve_jev_ap
 from app.services.decisions.jev_provider import JevDecisionProvider
 from app.services.decisions.local_search_shadow import _relevance_rule
 from app.services.decisions.rule_provider import RuleOutcome, RuleProvider
+
+# AGENTS.md verbietet print() zugunsten strukturierten Loggings (Review-Fund
+# PR #1731). Der eigene Logger-Name statt root vermeidet Interferenz mit
+# Logging-Konfiguration anderer Skripte/Tests, die dasselbe Modul importieren.
+logger = logging.getLogger("agora.jev_benchmark")
 
 _USE_CASE_ID = "local-search-relevance"
 
@@ -197,9 +204,21 @@ def run() -> list[CaseOutcome]:
             # Shadow-Pfad (local_search_shadow.py), der bewusst nur
             # top_score sendet; dieses Skript testet Jevs Eignung isoliert,
             # nicht den produktiven Aufrufpfad.
+            #
+            # `assertion` ist Pflicht, kein Komfortfeld: `_NOUL_INSTRUCTIONS`
+            # in jev_provider.py fragt wörtlich nach der Wahrscheinlichkeit,
+            # dass "die Aussage im State" zutrifft — ohne eine explizite
+            # Aussage judgt Jev gegen nichts Definiertes, und die daraus
+            # berechnete Accuracy misst nicht `expected_relevant`. Dieselbe
+            # Assertion wie in jev_rollout_probe.py::probe(), damit beide
+            # Skripte dieselbe Frage stellen (Review-Fund PR #1731).
             jev_state = DecisionState(
                 use_case_id=_USE_CASE_ID,
-                state={"query": case.query, "fact": case.fact},
+                state={
+                    "assertion": "Der Fakt ist für die Suchanfrage relevant.",
+                    "query": case.query,
+                    "fact": case.fact,
+                },
                 context_hash=f"bench-{case.case_id}",
             )
             try:
@@ -238,27 +257,39 @@ def _print_report(outcomes: list[CaseOutcome]) -> bool:
     """
     jev_ran = any(o.jev_result is not None or o.jev_error is not None for o in outcomes)
 
-    print(f"# Jev-Benchmark: local-search-relevance ({len(outcomes)} Fälle)\n")
-    print(
+    logger.info("# Jev-Benchmark: local-search-relevance (%d Fälle)\n", len(outcomes))
+    logger.info(
         "| Fall | Query | top_score | erwartet | Rule | Jev-P(ja) | Jev korrekt | Kosten (µ$) | Latenz (ms) |"
     )
-    print("|---|---|---|---|---|---|---|---|---|")
+    logger.info("|---|---|---|---|---|---|---|---|---|")
     for o in outcomes:
         jev_p = f"{o.jev_result.probability_yes:.2f}" if o.jev_result else (o.jev_error or "—")
         jev_ok = "n/a" if o.jev_correct is None else ("✓" if o.jev_correct else "✗")
         cost = "—" if o.jev_cost_micros is None else str(o.jev_cost_micros)
         latency = "—" if o.jev_latency_ms is None else str(o.jev_latency_ms)
-        print(
-            f"| {o.case.case_id} | {o.case.query!r} | {o.top_score} | "
-            f"{'ja' if o.case.expected_relevant else 'nein'} | "
-            f"{'✓' if o.rule_correct else '✗'} | {jev_p} | {jev_ok} | {cost} | {latency} |"
+        logger.info(
+            "| %s | %r | %s | %s | %s | %s | %s | %s | %s |",
+            o.case.case_id,
+            o.case.query,
+            o.top_score,
+            "ja" if o.case.expected_relevant else "nein",
+            "✓" if o.rule_correct else "✗",
+            jev_p,
+            jev_ok,
+            cost,
+            latency,
         )
 
     rule_accuracy = sum(o.rule_correct for o in outcomes) / len(outcomes)
-    print(f"\nRule-Baseline-Accuracy: {rule_accuracy:.0%} ({sum(o.rule_correct for o in outcomes)}/{len(outcomes)})")
+    logger.info(
+        "\nRule-Baseline-Accuracy: %.0f%% (%d/%d)",
+        rule_accuracy * 100,
+        sum(o.rule_correct for o in outcomes),
+        len(outcomes),
+    )
 
     if not jev_ran:
-        print(
+        logger.info(
             "\nJev übersprungen: kein API-Key im Provider-Secret-Store unter 'jev' gebunden."
         )
         return True
@@ -272,38 +303,45 @@ def _print_report(outcomes: list[CaseOutcome]) -> bool:
         # eine andere Grundgesamtheit. Nebeneinander gedruckt sähen beide
         # Zahlen vergleichbar aus, ohne es zu sein — genau die stille
         # Falschaussage, die dieser Lauf nicht produzieren darf.
-        print(
-            f"\nFEHLGESCHLAGEN: {len(jev_errors)} von {len(outcomes)} Jev-Aufrufen "
-            "sind fehlgeschlagen. Es wird bewusst KEINE Jev-Accuracy ausgewiesen — "
-            "eine Quote über nur die geglückten Aufrufe wäre nicht mit der "
-            "Rule-Baseline über alle Fälle vergleichbar."
+        logger.info(
+            "\nFEHLGESCHLAGEN: %d von %d Jev-Aufrufen sind fehlgeschlagen. "
+            "Es wird bewusst KEINE Jev-Accuracy ausgewiesen — eine Quote über "
+            "nur die geglückten Aufrufe wäre nicht mit der Rule-Baseline über "
+            "alle Fälle vergleichbar.",
+            len(jev_errors),
+            len(outcomes),
         )
-        print(f"\nJev-Fehler ({len(jev_errors)}):")
+        logger.info("\nJev-Fehler (%d):", len(jev_errors))
         for o in jev_errors:
-            print(f"  - {o.case.case_id}: {o.jev_error}")
+            logger.info("  - %s: %s", o.case.case_id, o.jev_error)
         return False
 
     if jev_evaluated:
         jev_correct_count = sum(1 for o in jev_evaluated if o.jev_correct)
         jev_accuracy = jev_correct_count / len(jev_evaluated)
-        print(f"Jev-Accuracy: {jev_accuracy:.0%} ({jev_correct_count}/{len(jev_evaluated)})")
+        logger.info("Jev-Accuracy: %.0f%% (%d/%d)", jev_accuracy * 100, jev_correct_count, len(jev_evaluated))
         latencies = [o.jev_latency_ms for o in jev_evaluated if o.jev_latency_ms is not None]
         costs = [o.jev_cost_micros for o in jev_evaluated if o.jev_cost_micros is not None]
         if latencies:
-            print(
-                f"Jev-Latenz: median={statistics.median(latencies):.0f}ms, "
-                f"max={max(latencies)}ms (kein p95/p99 — Fallmenge zu klein für Perzentile)"
+            logger.info(
+                "Jev-Latenz: median=%.0fms, max=%dms (kein p95/p99 — Fallmenge zu klein für Perzentile)",
+                statistics.median(latencies),
+                max(latencies),
             )
         if costs:
-            print(f"Jev-Gesamtkosten: {sum(costs)} Mikro-USD über {len(costs)} Aufrufe")
+            logger.info("Jev-Gesamtkosten: %d Mikro-USD über %d Aufrufe", sum(costs), len(costs))
     return True
 
 
 if __name__ == "__main__":
+    # Nur beim direkten Skriptaufruf konfigurieren, nicht beim Import durch
+    # Tests: reines Nachrichtenformat auf stdout erhält die bisherige
+    # Berichtsform (Markdown-Tabelle), ohne Timestamp-/Level-Praefixe.
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
     t0 = time.monotonic()
     results = run()
     usable = _print_report(results)
-    print(f"\nGesamtlaufzeit: {time.monotonic() - t0:.1f}s")
+    logger.info("\nGesamtlaufzeit: %.1fs", time.monotonic() - t0)
     # Exit-Code statt nur Text: ein fehlgeschlagener Jev-Arm darf nicht als
     # erfolgreicher Lauf durchgehen, wenn dieses Skript aus einem Wrapper
     # oder einer Pipeline heraus aufgerufen wird.

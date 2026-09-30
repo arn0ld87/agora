@@ -1,0 +1,3 @@
+- Ein read-only Jev-Korpus-Extraktor paart echte Report-Suchanfragen mit Fakten aus demselben Neo4j-Graphen und gibt standardmäßig nur aggregierte Zählwerte aus.
+- Ein begrenzter Jev-Probelauf verarbeitet die private, ungelabelte Stichprobe und archiviert pro Fall nur Antwort- und Kostenmetadaten; er weist ohne Ground Truth keine Qualitätsquote aus.
+- Eine Offline-Auswertung prüft Korpus- und Label-Provenienz und lässt KI-Vorlabels nur im ausdrücklich explorativen Modus zu; sie erteilt keine Rollout-Freigabe.

@@ -1,0 +1,1 @@
+- Der Jev-Benchmark (`jev_benchmark_local_search.py`) sendet jetzt eine explizite Relevanz-Aussage im State, damit Jevs Ja/Nein-Antwort tatsächlich gegen `expected_relevant` misst, und protokolliert seinen Bericht strukturiert statt über `print()`. Das zuvor dokumentierte Jev-12/12-Ergebnis gilt bis zu einem neuen Live-Lauf als nicht belastbar.

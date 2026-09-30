@@ -12,6 +12,7 @@ nebeneinander vergleichbar aussehen. Beides ist hier festgenagelt.
 from __future__ import annotations
 
 import importlib.util
+import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -72,6 +73,17 @@ def _outcome(
     )
 
 
+@pytest.fixture(autouse=True)
+def _capture_bench_logger(caplog: pytest.LogCaptureFixture):
+    """``app.utils.logger`` setzt ``propagate = False`` auf ``agora`` —
+    ``agora.jev_benchmark`` erreicht den Root-Handler von ``caplog`` dann
+    nie. Den Handler deshalb direkt am Benchmark-Logger einhängen."""
+    bench_logger = logging.getLogger("agora.jev_benchmark")
+    bench_logger.addHandler(caplog.handler)
+    yield
+    bench_logger.removeHandler(caplog.handler)
+
+
 class TestBenchmarkReportUsability:
     def test_abbreviation_expansion_is_relevant_despite_rule_miss(self) -> None:
         case = next(c for c in _BENCH._CASES if c.case_id == "abbreviation-mismatch")
@@ -86,17 +98,19 @@ class TestBenchmarkReportUsability:
         assert score == 0
         assert _BENCH._rule_fn(state, _BENCH.NoulQuestion()).probability_yes == 0.0
 
-    def test_skipped_jev_arm_is_a_usable_run(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_skipped_jev_arm_is_a_usable_run(self, caplog: pytest.LogCaptureFixture) -> None:
         """Kein gebundener Key ist der dokumentierte Normalfall ohne Zugang,
         kein Fehlschlag — der Lauf liefert dann nur die Rule-Baseline."""
+        caplog.set_level(logging.INFO, logger="agora.jev_benchmark")
         usable = _print_report([_outcome("a"), _outcome("b")])
 
         assert usable is True
-        assert "Jev übersprungen" in capsys.readouterr().out
+        assert "Jev übersprungen" in caplog.text
 
     def test_fully_failed_jev_arm_is_not_a_usable_run(
-        self, capsys: pytest.CaptureFixture[str]
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        caplog.set_level(logging.INFO, logger="agora.jev_benchmark")
         outcomes = [
             _outcome("a", jev_error="TypeSafeAuthenticationError: 401"),
             _outcome("b", jev_error="TypeSafeAuthenticationError: 401"),
@@ -105,18 +119,19 @@ class TestBenchmarkReportUsability:
         usable = _print_report(outcomes)
 
         assert usable is False
-        out = capsys.readouterr().out
+        out = caplog.text
         assert "FEHLGESCHLAGEN" in out
         # Keine ausgewiesene Quote — der Erklaertext nennt "Jev-Accuracy"
         # selbst, geprueft wird deshalb auf die Zahl, nicht auf das Wort.
         assert "Jev-Accuracy:" not in out
 
     def test_partially_failed_jev_arm_reports_no_comparable_accuracy(
-        self, capsys: pytest.CaptureFixture[str]
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Der gefährlichere Fall: ein Teil der Aufrufe glückt. Eine Quote
         über nur diese Teilmenge neben der Rule-Baseline über alle Fälle
         wäre eine stille Falschaussage."""
+        caplog.set_level(logging.INFO, logger="agora.jev_benchmark")
         outcomes = [
             _outcome("ok-1", jev_correct=True),
             _outcome("ok-2", jev_correct=True),
@@ -126,13 +141,14 @@ class TestBenchmarkReportUsability:
         usable = _print_report(outcomes)
 
         assert usable is False
-        out = capsys.readouterr().out
+        out = caplog.text
         assert "Jev-Accuracy:" not in out
         assert "429" in out
 
     def test_clean_jev_arm_reports_accuracy_and_is_usable(
-        self, capsys: pytest.CaptureFixture[str]
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
+        caplog.set_level(logging.INFO, logger="agora.jev_benchmark")
         outcomes = [
             _outcome("a", jev_correct=True),
             _outcome("b", jev_correct=False),
@@ -141,4 +157,4 @@ class TestBenchmarkReportUsability:
         usable = _print_report(outcomes)
 
         assert usable is True
-        assert "Jev-Accuracy: 50% (1/2)" in capsys.readouterr().out
+        assert "Jev-Accuracy: 50% (1/2)" in caplog.text
