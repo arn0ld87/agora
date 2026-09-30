@@ -1651,6 +1651,9 @@
     "parentThreadMissing": "Übergeordneter Beitrag nicht erfasst",
     "newItems": "{count} neue Beiträge",
     "streamLost": "Verbindung verloren — versuche Reconnect ({attempt})",
+    "errors": {
+      "snapshotFailed": "Snapshot-Ladefehler"
+    },
     "degradation": {
       "snapshot_missing": "Anfangsbestand konnte nicht geladen werden.",
       "stream_lost": "Live-Verbindung verloren.",
@@ -1719,7 +1722,8 @@
       "roleConflict": "Rollenkonflikt",
       "failed": "fehlgeschlagen",
       "noTarget": "—",
-      "noPayload": "—"
+      "noPayload": "—",
+      "loadError": "Protokoll konnte nicht geladen werden."
     },
     "header": {
       "round": "Runde {current}/{total}",

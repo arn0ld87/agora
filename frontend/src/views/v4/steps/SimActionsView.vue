@@ -139,7 +139,7 @@ async function loadActions(reset: boolean): Promise<void> {
       ? response
       : { items: [...page.value.items, ...response.items], next_cursor: response.next_cursor }
   } catch {
-    actionsError.value = { code: 'actions_failed', message: 'Protokoll konnte nicht geladen werden.' }
+    actionsError.value = { code: 'actions_failed', message: t('feed.actionsTable.loadError') }
   } finally {
     isActionsLoading.value = false
   }

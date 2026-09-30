@@ -12,6 +12,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed, buildThreadSummaries } from '@/composables/useSimFeed'
 import { getSimulationFeedSnapshot, getSimulationRounds } from '@/api/simulation'
@@ -26,6 +27,7 @@ import SimRunHeader, {
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const simulationId = String(route.params.simulationId)
 const feed = useSimFeed(simulationId)
 
@@ -69,7 +71,7 @@ async function loadSnapshot(): Promise<void> {
   ])
   snapshotFailedBoth.value = reddit === null && twitter === null
   if (snapshotFailedBoth.value) {
-    snapshotError.value = { code: 'snapshot_failed', message: 'Snapshot-Ladefehler' }
+    snapshotError.value = { code: 'snapshot_failed', message: t('feed.errors.snapshotFailed') }
   } else {
     feed.ingestMany([...(reddit ?? []), ...(twitter ?? [])])
   }

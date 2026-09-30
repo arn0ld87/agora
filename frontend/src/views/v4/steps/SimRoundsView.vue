@@ -14,6 +14,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useEventStream } from '@/composables/useEventStream'
 import { useSimFeed } from '@/composables/useSimFeed'
 import { getSimulationFeedSnapshot, getSimulationRounds } from '@/api/simulation'
@@ -27,6 +28,7 @@ import SimRunHeader, {
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const simulationId = String(route.params.simulationId)
 const feed = useSimFeed(simulationId)
 
@@ -62,7 +64,7 @@ async function loadRounds(): Promise<void> {
     const response = unwrap(await getSimulationRounds(simulationId))
     rounds.value = response.rounds ?? []
   } catch {
-    roundsError.value = { code: 'rounds_failed', message: 'Runden konnten nicht geladen werden.' }
+    roundsError.value = { code: 'rounds_failed', message: t('feed.rounds.error') }
   } finally {
     isRoundsLoading.value = false
   }

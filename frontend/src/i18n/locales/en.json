@@ -1651,6 +1651,9 @@
     "parentThreadMissing": "Parent post not captured",
     "newItems": "{count} new posts",
     "streamLost": "Connection lost — retrying ({attempt})",
+    "errors": {
+      "snapshotFailed": "Snapshot load failed"
+    },
     "degradation": {
       "snapshot_missing": "Initial snapshot could not be loaded.",
       "stream_lost": "Live connection lost.",
@@ -1719,7 +1722,8 @@
       "roleConflict": "Role conflict",
       "failed": "failed",
       "noTarget": "—",
-      "noPayload": "—"
+      "noPayload": "—",
+      "loadError": "Could not load the action log."
     },
     "header": {
       "round": "Round {current}/{total}",
