@@ -81,6 +81,20 @@ const typeFilter = computed<SimActionType | null>(() => {
   const raw = route.query.type
   return typeof raw === 'string' && ACTION_TYPES.includes(raw as SimActionType) ? (raw as SimActionType) : null
 })
+// `since` (§1): GET /actions kennt den Parameter serverseitig nicht (siehe
+// backend/app/api/simulation_run.py::get_simulation_actions — nur limit,
+// cursor, platform, agent_id, round_num, action_type). Darum clientseitig
+// gegen `timestamp` gefiltert, nachdem eine Seite geladen wurde; die
+// Cursor-Pagination selbst bleibt unangetastet (loadMore laeuft ungefiltert
+// weiter, nur die Anzeige wird eingeschraenkt).
+const sinceFilter = computed<string | null>(
+  () => (typeof route.query.since === 'string' ? route.query.since : null) || null,
+)
+const filteredActionItems = computed(() =>
+  sinceFilter.value === null
+    ? page.value.items
+    : page.value.items.filter((action) => action.timestamp >= sinceFilter.value!),
+)
 
 function updateQuery(patch: Record<string, string | null>): void {
   const next: Record<string, string> = {}
@@ -250,7 +264,7 @@ function openPost(postId: string): void {
       </div>
     </div>
     <SimActionsTable
-      :page="page"
+      :page="{ items: filteredActionItems, next_cursor: page.next_cursor }"
       :loading="isActionsLoading"
       :filters="{
         round: roundFilter ?? undefined,

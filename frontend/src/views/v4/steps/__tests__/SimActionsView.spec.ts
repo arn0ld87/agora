@@ -146,6 +146,29 @@ describe('SimActionsView', () => {
     )
   })
 
+  // §1: `since` kennt GET /actions serverseitig nicht (siehe
+  // simulation_run.py::get_simulation_actions) — darum clientseitig gegen
+  // `timestamp` gefiltert, die Cursor-Pagination selbst bleibt unberuehrt.
+  it('?since= filtert geladene Aktionen vor dem Zeitstempel heraus', async () => {
+    currentQuery = { since: '2026-05-15T12:00:05Z' }
+    actionsResponses = [
+      {
+        success: true,
+        data: {
+          items: [
+            mkAction({ agent_id: 'before', timestamp: '2026-05-15T12:00:00Z' }),
+            mkAction({ agent_id: 'after', timestamp: '2026-05-15T12:00:10Z' }),
+          ],
+          next_cursor: null,
+        },
+      },
+    ]
+    const w = mount(SimActionsView)
+    await flushPromises()
+
+    expect(w.findAll('.sat-row')).toHaveLength(1)
+  })
+
   it('ein Ladefehler zeigt den Fehlertext, ohne die View abstuerzen zu lassen', async () => {
     actionsResponses = []
     const w = mount(SimActionsView)

@@ -52,6 +52,14 @@ const personaFilter = computed<string | null>(
   () => (typeof route.query.persona === 'string' ? route.query.persona : null) || null,
 )
 const qFilter = computed<string>(() => (typeof route.query.q === 'string' ? route.query.q : ''))
+// `since` (§1): Backend kennt den Parameter weder fuer /feed-snapshot noch
+// fuer den Stream, darum rein clientseitig gegen `timestamp` gefiltert
+// (Wandzeit des Events, nicht `sim_time` — die ist optional/nullable und
+// nicht fuer jeden Altlauf gesetzt). Persistenz laeuft ueber updateQuery,
+// die bestehende Query-Parameter unveraendert mitfuehrt.
+const sinceFilter = computed<string | null>(
+  () => (typeof route.query.since === 'string' ? route.query.since : null) || null,
+)
 
 function updateQuery(patch: Record<string, string | null>): void {
   const next: Record<string, string> = {}
@@ -105,6 +113,7 @@ const filteredItems = computed(() => {
     if (platformFilter.value !== 'all' && post.platform !== platformFilter.value) return false
     if (roundFilter.value !== null && post.round_num !== roundFilter.value) return false
     if (personaFilter.value !== null && post.persona_id !== personaFilter.value) return false
+    if (sinceFilter.value !== null && post.timestamp < sinceFilter.value) return false
     if (q.length > 0 && !post.body.toLowerCase().includes(q)) return false
     return true
   })

@@ -87,8 +87,9 @@ vi.mock('vue-i18n', () => ({
 // lesen.
 const routerPushMock = vi.fn()
 const routerReplaceMock = vi.fn()
+let currentQuery: Record<string, string> = {}
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { simulationId: 'test-sim-1' }, query: {} }),
+  useRoute: () => ({ params: { simulationId: 'test-sim-1' }, query: currentQuery }),
   useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
 }))
 
@@ -134,6 +135,7 @@ describe('StepSimulationFeedView', () => {
     callOrder = 0
     streamStartOrder = -1
     snapshotFirstFetchOrder = -1
+    currentQuery = {}
     routerPushMock.mockClear()
   })
 
@@ -194,6 +196,21 @@ describe('StepSimulationFeedView', () => {
     // Bewusst VOR jedem await: onMounted() hat den Stream noch nicht
     // gestartet (streamStarted=false), streamState ist also 'connecting'.
     expect(wrapper.text()).not.toContain('feed.streamLost')
+  })
+
+  // §1: `since` filtert clientseitig gegen `timestamp` (Backend kennt den
+  // Parameter weder fuer /feed-snapshot noch fuer den Stream).
+  it('?since= filtert Beitraege vor dem Zeitstempel heraus', async () => {
+    currentQuery = { since: '2026-05-15T12:00:05Z' }
+    snapshotFeed = [
+      mkPost({ post_id: 'before', timestamp: '2026-05-15T12:00:00Z' }),
+      mkPost({ post_id: 'at', timestamp: '2026-05-15T12:00:05Z' }),
+      mkPost({ post_id: 'after', timestamp: '2026-05-15T12:00:10Z' }),
+    ]
+    const wrapper = mountFeed()
+    await flushPromises()
+
+    expect(wrapper.findAll('.fi-root')).toHaveLength(2)
   })
 
   it('Klick auf einen Beitrag navigiert per router.push zu SimThreadFocus', async () => {
