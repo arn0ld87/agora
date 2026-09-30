@@ -84,6 +84,20 @@ def _base_db(tmp_path: Path) -> str:
     return str(db_path)
 
 
+def _base_db_with_nested_comments(tmp_path: Path) -> str:
+    """Wie ``_base_db``, aber mit der ``parent_comment_id``-Spalte auf ``comment``.
+
+    Simuliert das Ergebnis von ``install_reddit_nested_comments_patch`` (#1713
+    S5), das die Spalte per ``ALTER TABLE`` nachruestet.
+    """
+    db_path = _base_db(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("ALTER TABLE comment ADD COLUMN parent_comment_id INTEGER")
+    conn.commit()
+    conn.close()
+    return db_path
+
+
 def test_get_post_info_returns_author_agent_id(tmp_path) -> None:
     db_path = _base_db(tmp_path)
     conn = sqlite3.connect(db_path)
@@ -159,3 +173,84 @@ def test_create_comment_enrichment_carries_post_author_agent_id(tmp_path) -> Non
     comment = [a for a in actions if a["action_type"] == "CREATE_COMMENT"][0]
     assert comment["action_args"]["post_author_agent_id"] == 33
     assert comment["action_args"]["post_author_name"] == "Mara Lindner"
+
+
+def test_create_comment_enrichment_carries_parent_comment_id_when_column_present(
+    tmp_path,
+) -> None:
+    """(#1713 S5) Ingest liest parent_comment_id aus der comment-Tabelle, wenn
+    die Spalte vorhanden ist (nested-comments-Patch aktiv, Reddit)."""
+    db_path = _base_db_with_nested_comments(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO comment (comment_id, post_id, user_id, content, parent_comment_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (5, 42, 7, "Elternkommentar", None),
+    )
+    conn.execute(
+        "INSERT INTO comment (comment_id, post_id, user_id, content, parent_comment_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (6, 42, 3, "Antwort auf Elternkommentar", 5),
+    )
+    conn.execute(
+        "INSERT INTO trace (user_id, created_at, action, info) VALUES (?, ?, ?, ?)",
+        (3, "2026-09-29 09:08:00", "create_comment",
+         json.dumps({"content": "Antwort auf Elternkommentar", "comment_id": 6})),
+    )
+    conn.commit()
+    conn.close()
+
+    actions, _ = ingest.fetch_new_actions_from_db(
+        db_path, 0, {33: "Mara Lindner", 77: "Jonas Berg"}
+    )
+    comment = [a for a in actions if a["action_type"] == "CREATE_COMMENT"][0]
+    assert comment["action_args"]["parent_comment_id"] == 5
+
+
+def test_create_comment_enrichment_top_level_parent_comment_id_is_none(tmp_path) -> None:
+    """Top-Level-Kommentar (kein Parent): parent_comment_id wird als None
+    ausgelesen, kein Fehler beim Lookup (#1713 S5)."""
+    db_path = _base_db_with_nested_comments(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO comment (comment_id, post_id, user_id, content, parent_comment_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (5, 42, 7, "Top-Level-Kommentar", None),
+    )
+    conn.execute(
+        "INSERT INTO trace (user_id, created_at, action, info) VALUES (?, ?, ?, ?)",
+        (7, "2026-09-29 09:09:00", "create_comment",
+         json.dumps({"content": "Top-Level-Kommentar", "comment_id": 5})),
+    )
+    conn.commit()
+    conn.close()
+
+    actions, _ = ingest.fetch_new_actions_from_db(
+        db_path, 0, {33: "Mara Lindner", 77: "Jonas Berg"}
+    )
+    comment = [a for a in actions if a["action_type"] == "CREATE_COMMENT"][0]
+    assert comment["action_args"]["parent_comment_id"] is None
+
+
+def test_create_comment_enrichment_without_parent_column_is_resume_safe(tmp_path) -> None:
+    """(#1713 S5) Aeltere/nicht-Reddit-DB ohne parent_comment_id-Spalte: kein
+    Fehler, das Feld bleibt schlicht unbefuellt (Resume-Sicherheit)."""
+    db_path = _base_db(tmp_path)  # OHNE ALTER TABLE -- Spalte fehlt bewusst
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO comment (comment_id, post_id, user_id, content) VALUES (?, ?, ?, ?)",
+        (5, 42, 7, "Antwort ohne Parent-Spalte"),
+    )
+    conn.execute(
+        "INSERT INTO trace (user_id, created_at, action, info) VALUES (?, ?, ?, ?)",
+        (7, "2026-09-29 09:10:00", "create_comment",
+         json.dumps({"content": "Antwort ohne Parent-Spalte", "comment_id": 5})),
+    )
+    conn.commit()
+    conn.close()
+
+    actions, _ = ingest.fetch_new_actions_from_db(
+        db_path, 0, {33: "Mara Lindner", 77: "Jonas Berg"}
+    )
+    comment = [a for a in actions if a["action_type"] == "CREATE_COMMENT"][0]
+    assert "parent_comment_id" not in comment["action_args"]

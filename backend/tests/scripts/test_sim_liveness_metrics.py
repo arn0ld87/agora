@@ -215,6 +215,97 @@ class TestChainCycleTermination:
         assert max_chain == 1
 
 
+class TestNestedCommentChainS5:
+    """#1713 Slice S5: Kommentar-auf-Kommentar (Reddit, nested-comments-Patch)
+    muss die L4-Kette ueber ``parent_comment_id`` verlaengern statt an der
+    Post-Ebene zu kappen (vorher: jedes CREATE_COMMENT haengte immer direkt
+    unter seinem Elternpost, egal ob es tatsaechlich auf einen anderen
+    Kommentar antwortete)."""
+
+    def test_comment_on_comment_extends_chain_via_parent_comment_id(self) -> None:
+        actions = [
+            {
+                "round": 1,
+                "agent_id": 0,
+                "agent_name": "A",
+                "action_type": "CREATE_POST",
+                "action_args": {"content": "root", "post_id": 1},
+            },
+            {
+                # Top-Level-Kommentar: kein parent_comment_id-Wert -> haengt
+                # direkt unter dem Post (Tiefe 1).
+                "round": 1,
+                "agent_id": 1,
+                "agent_name": "B",
+                "action_type": "CREATE_COMMENT",
+                "action_args": {
+                    "content": "Elternkommentar",
+                    "comment_id": 10,
+                    "post_id": 1,
+                    "parent_comment_id": None,
+                },
+            },
+            {
+                # Antwort auf den Elternkommentar (nicht auf den Post) ->
+                # muss ueber parent_comment_id an comment_id=10 haengen,
+                # Tiefe 2.
+                "round": 1,
+                "agent_id": 2,
+                "agent_name": "C",
+                "action_type": "CREATE_COMMENT",
+                "action_args": {
+                    "content": "Antwort auf Elternkommentar",
+                    "comment_id": 11,
+                    "post_id": 1,
+                    "parent_comment_id": 10,
+                },
+            },
+            {
+                # Dritte Ebene: Antwort auf die Antwort -> Tiefe 3.
+                "round": 1,
+                "agent_id": 0,
+                "agent_name": "A",
+                "action_type": "CREATE_COMMENT",
+                "action_args": {
+                    "content": "Antwort auf die Antwort",
+                    "comment_id": 12,
+                    "post_id": 1,
+                    "parent_comment_id": 11,
+                },
+            },
+        ]
+        max_chain = metrics._max_chain_length(actions, "twitter")
+        assert max_chain == 3
+
+    def test_comment_without_parent_comment_id_key_falls_back_to_post(self) -> None:
+        """Rueckwaertskompatibilitaet: fehlt das Feld ``parent_comment_id``
+        komplett in den action_args (Twitter, oder aeltere Laeufe ohne
+        Patch), verhaelt sich die Kette wie vor #1713 S5 -- der Kommentar
+        haengt direkt unter seinem Elternpost."""
+        actions = [
+            {
+                "round": 1,
+                "agent_id": 0,
+                "agent_name": "A",
+                "action_type": "CREATE_POST",
+                "action_args": {"content": "root", "post_id": 1},
+            },
+            {
+                "round": 1,
+                "agent_id": 1,
+                "agent_name": "B",
+                "action_type": "CREATE_COMMENT",
+                "action_args": {
+                    "content": "Antwort",
+                    "comment_id": 10,
+                    "post_id": 1,
+                },
+            },
+        ]
+        max_chain = metrics._max_chain_length(actions, "twitter")
+        assert max_chain == 1
+
+
 def _build_large_run(base_dir: Path, total_actions: int = 5000, agent_count: int = 60) -> Path:
     """Synthetischer Lauf fuer den Performance-Regressionstest: 5000 Aktionen,
     60 Agenten, ueberwiegend QUOTE_POST auf den jeweils juengsten Post einer
