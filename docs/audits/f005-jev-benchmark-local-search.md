@@ -61,3 +61,9 @@ Festgenagelt in `backend/tests/scripts/test_jev_benchmark_report.py` (vier Fäll
 ## Integration auf aktuellem `main` (30.09.2026)
 
 Die fünf Benchmark-Commits wurden auf `origin/main` (`bc47d27fb`) in `feat/f005-jev-benchmark-landing` übernommen. Gezielt liefen nach dem Review 36 Tests grün (vier Live-API-Tests mangels explizitem `TYPESAFE_API_KEY` deselected), dazu 1.011 Contract-Tests, Schema-Drift-Check, Ruff und mypy. Ein erneuter Aufruf des Runners ergab Rule 8/12 und meldete den Jev-Arm mangels gebundenem Provider-Key ausdrücklich als übersprungen. Die oben genannten Jev-Werte sind eine nachträgliche Korrektur des am 21.09.2026 berichteten Laufs; sie sind kein neuer Live-Nachweis für diesen Branch.
+
+## Nachtrag: fehlende Relevanz-Aussage im Jev-State (PR #1731, 30.09.2026)
+
+Der Review von PR #1731 (Codex) hat einen echten Mangel im Jev-Arm dieses Runners gefunden: `jev_state` sendete nur `{"query": ..., "fact": ...}`, ohne eine Aussage, die Jev bewerten kann. `_NOUL_INSTRUCTIONS` in `jev_provider.py` fragt aber wörtlich nach der Wahrscheinlichkeit, dass „die Aussage im State" zutrifft — ohne eine explizite Aussage wie `"assertion": "Der Fakt ist für die Suchanfrage relevant."` (dieselbe, die `jev_rollout_probe.py` bereits verwendet) bewertet Jev nichts Definiertes gegen `expected_relevant`.
+
+Der Runner ist entsprechend gefixt (`backend/scripts/jev_benchmark_local_search.py`). **Damit ist die oben berichtete Jev-Accuracy von 12/12 (Fußnote 1) nicht mehr belastbar** — sie wurde am 21.09.2026 gegen die unterspezifizierte Prompt-Form gemessen, bevor dieser Fix existierte. Ein neuer Live-Lauf mit gebundenem `TYPESAFE_API_KEY` steht aus und ist Voraussetzung für jede erneute Zahl zu diesem Use Case; bis dahin gilt für den Jev-Arm dieses Benchmarks: **kein verwertbares Ergebnis**, nur die Rule-Baseline (8/12 bzw. 67 %) bleibt unverändert gültig, weil sie vom State-Fix nicht betroffen ist.
