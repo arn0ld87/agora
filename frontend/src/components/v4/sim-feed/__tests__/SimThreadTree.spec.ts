@@ -109,14 +109,16 @@ describe('SimThreadTree', () => {
   })
 
   it('openThread von einem verschachtelten FeedItem bubbelt bis zur Wurzel-Komponente', async () => {
-    // FeedItem.open() adressiert immer die Strang-Wurzel (root_post_id ??
-    // parent_post_id ?? post_id) — der Klick auf die Antwort 'c-1' emittiert
-    // darum 'root-1', nicht 'c-1' selbst (siehe FeedItem.vue threadPostId).
+    // Auch ohne globalen Feed-Store liefert der Baum seine bekannte Wurzel
+    // an FeedItem weiter.
     const root = mkPost({ post_id: 'root-1' })
-    const nodes = [mkPost({ post_id: 'c-1', parent_post_id: 'root-1' })]
+    const nodes = [
+      mkPost({ post_id: 'c-1', parent_post_id: 'root-1', kind: 'comment' }),
+      mkPost({ post_id: 'c-2', parent_comment_id: 'c-1', kind: 'comment' }),
+    ]
     const w = mount(SimThreadTree, { props: { root, nodes, loading: false } })
     const items = w.findAll('.fi-root')
-    await items[1].trigger('click')
+    await items[2].trigger('click')
     expect(w.emitted('openThread')?.[0]).toEqual(['root-1'])
   })
 })

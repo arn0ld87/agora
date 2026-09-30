@@ -66,18 +66,19 @@ function openThread(postId: string): void {
 <template>
   <div class="stt-root">
     <div v-if="loading" class="stt-skeleton" aria-busy="true">
-      <FeedItem :post="root" :show-context="false" />
+      <FeedItem :post="root" :show-context="false" :thread-root-id="root.post_id" />
       <div v-for="i in 3" :key="i" class="stt-skeleton-row"></div>
     </div>
     <template v-else>
       <p v-if="isOrphan" class="stt-orphan-chip" role="status">
         {{ t('feed.threadTree.orphan') }}
       </p>
-      <FeedItem :post="root" :show-context="false" @open-thread="openThread" />
+      <FeedItem :post="root" :show-context="false" :thread-root-id="root.post_id" @open-thread="openThread" />
       <SimThreadTreeLevel
         v-for="node in rootChildren"
         :key="node.post_id"
         :node="node"
+        :thread-root-id="root.post_id"
         :children-map="childrenMap"
         :depth="1"
         :max-depth="maxDepth"

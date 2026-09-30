@@ -13,6 +13,7 @@ import FeedItem from './FeedItem.vue'
 
 const props = defineProps<{
   node: PostCreatedEvent
+  threadRootId: string
   childrenMap: Map<string, PostCreatedEvent[]>
   depth: number
   maxDepth: number
@@ -41,12 +42,13 @@ function showMore(): void {
 
 <template>
   <div class="stl-root" :style="{ '--stl-depth': depth }">
-    <FeedItem :post="node" @open-thread="openThread" />
+    <FeedItem :post="node" :thread-root-id="threadRootId" @open-thread="openThread" />
     <template v-if="showChildren">
       <SimThreadTreeLevel
         v-for="child in children"
         :key="child.post_id"
-        :node="child"
+          :node="child"
+          :thread-root-id="threadRootId"
         :children-map="childrenMap"
         :depth="depth + 1"
         :max-depth="maxDepth"

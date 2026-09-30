@@ -23,6 +23,7 @@ const props = withDefaults(
     post: PostCreatedEvent
     isNew?: boolean
     showContext?: boolean
+    threadRootId?: string
   }>(),
   { isNew: false, showContext: true },
 )
@@ -37,7 +38,7 @@ const feed = useSimFeed(props.post.simulation_id)
 const platformLabel = computed(() => (props.post.platform === 'reddit' ? 'R' : 'T'))
 
 // SimThreadFocus adressiert immer die Strang-Wurzel, nicht den Kommentar.
-const threadPostId = computed(() => feed.resolveRootId(props.post))
+const threadPostId = computed(() => props.threadRootId ?? feed.resolveRootId(props.post))
 
 function open(): void {
   if (threadPostId.value) emit('openThread', threadPostId.value)
