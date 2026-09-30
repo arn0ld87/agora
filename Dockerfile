@@ -352,7 +352,10 @@ WORKDIR /app
 # Der Digest-Pin oben bleibt die reproduzierbare Ausgangsbasis und wird
 # weiterhin gebumpt, sobald ein neuer Digest existiert — er ist dann aber
 # eine Hygienemassnahme, nicht mehr der Ausloeser des apt-Laufs.
-ARG APT_SECURITY_EPOCH=2026-09-13
+#
+# 2026-09-30: CVE-2026-84782 / CVE-2026-75804 (openssl-provider-legacy
+# 3.5.7-1~deb13u2 -> 3.5.7-1~deb13u3), build-only-Trivy auf allen PRs rot.
+ARG APT_SECURITY_EPOCH=2026-09-30
 RUN echo "apt security epoch: ${APT_SECURITY_EPOCH}" \
   && apt-get update \
   && apt-get upgrade -y \
