@@ -335,8 +335,13 @@ def _enrich_action_context(
                             pcid_row = cursor.fetchone()
                             if pcid_row is not None:
                                 action_args['parent_comment_id'] = pcid_row[0]
-                    except Exception:
-                        pass
+                    except sqlite3.Error:
+                        logger.warning(
+                            "parent_comment_id-Lookup fuer comment_id=%s fehlgeschlagen "
+                            "(#1713 S5) — Feld bleibt unbefuellt",
+                            comment_id_val,
+                            exc_info=True,
+                        )
 
         # Create post: Voting-Stand zum Erzeugungszeitpunkt mitführen, damit der
         # Live-Feed einen echten Wert zeigt statt einer hartkodierten 0

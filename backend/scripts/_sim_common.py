@@ -7,6 +7,7 @@ import logging
 import os
 import random
 import re
+import sqlite3
 import sys
 import threading
 import time
@@ -1491,17 +1492,19 @@ def install_reddit_nested_comments_patch() -> bool:
     """
     import importlib.metadata
 
+    _patch_logger = logging.getLogger("agora._sim_common")
+
     try:
         actual_version = importlib.metadata.version("camel-oasis")
     except importlib.metadata.PackageNotFoundError:
-        logger.warning(
+        _patch_logger.warning(
             "install_reddit_nested_comments_patch: camel-oasis nicht gefunden "
             "— Patch NICHT installiert (sichtbare Degradation, #1713 S5)"
         )
         return False
 
     if actual_version != _REDDIT_NESTED_EXPECTED_VERSION:
-        logger.warning(
+        _patch_logger.warning(
             "install_reddit_nested_comments_patch: erwartet camel-oasis==%s, "
             "gefunden %s — Patch NICHT installiert (sichtbare Degradation, #1713 S5)",
             _REDDIT_NESTED_EXPECTED_VERSION,
@@ -1541,7 +1544,6 @@ def install_reddit_nested_comments_patch() -> bool:
     _oasis_platform.create_db = _patched_create_db  # type: ignore[assignment]
 
     # --- (c) Platform.create_comment ---
-    import asyncio as _asyncio
     _original_platform_create_comment = _oasis_platform.Platform.create_comment
 
     async def _patched_platform_create_comment(
@@ -1588,6 +1590,14 @@ def install_reddit_nested_comments_patch() -> bool:
                 self.db.commit()
         return result
 
+    # __name__/__qualname__ bewusst NICHT per functools.wraps uebernommen —
+    # der eigene Docstring (parent_comment_id) soll erhalten bleiben. Der
+    # Name muss trotzdem "create_comment" bleiben, sonst dispatcht
+    # Platform.running() ueber getattr(self, action.value) zwar noch korrekt
+    # (Klassenattribut-Name unveraendert), aber Tracebacks/Introspektion
+    # wuerden den internen Wrapper-Namen zeigen.
+    _patched_platform_create_comment.__name__ = "create_comment"
+    _patched_platform_create_comment.__qualname__ = _original_platform_create_comment.__qualname__
     _patched_platform_create_comment._agora_nested_comments_applied = True  # type: ignore[attr-defined]
     _oasis_platform.Platform.create_comment = _patched_platform_create_comment  # type: ignore[method-assign]
 
@@ -1631,6 +1641,14 @@ def install_reddit_nested_comments_patch() -> bool:
             "create_comment",  # ActionType.CREATE_COMMENT.value
         )
 
+    # KRITISCH: OASIS filtert Tools/available_actions ueber
+    # ``tool.func.__name__`` (oasis/social_agent/agent.py, Zeilen ~90/100),
+    # nicht ueber den Klassenattribut-Namen. Ohne den expliziten Rename bliebe
+    # der Funktionsname "_patched_sa_create_comment", der Vergleich gegen
+    # ActionType.CREATE_COMMENT.value == "create_comment" schlaegt fehl und
+    # CREATE_COMMENT verschwindet komplett aus den Agenten-Tools (#1713 S5).
+    _patched_sa_create_comment.__name__ = "create_comment"
+    _patched_sa_create_comment.__qualname__ = _original_sa_create_comment.__qualname__
     _patched_sa_create_comment._agora_nested_comments_applied = True  # type: ignore[attr-defined]
     _oasis_aa.SocialAction.create_comment = _patched_sa_create_comment  # type: ignore[method-assign]
 
@@ -1650,7 +1668,13 @@ def install_reddit_nested_comments_patch() -> bool:
                         )
                         pcid_row = self.db_cursor.fetchone()
                         comment["parent_comment_id"] = pcid_row[0] if pcid_row else None
-                    except Exception:
+                    except sqlite3.Error:
+                        logging.getLogger("agora._sim_common").warning(
+                            "parent_comment_id-Lookup fuer comment_id=%s fehlgeschlagen "
+                            "(#1713 S5) — Feld bleibt None",
+                            cid,
+                            exc_info=True,
+                        )
                         comment["parent_comment_id"] = None
                 else:
                     comment["parent_comment_id"] = None
@@ -1659,7 +1683,7 @@ def install_reddit_nested_comments_patch() -> bool:
     _patched_add_comments_to_posts._agora_nested_comments_applied = True  # type: ignore[attr-defined]
     _oasis_pu.PlatformUtils._add_comments_to_posts = _patched_add_comments_to_posts  # type: ignore[method-assign]
 
-    logger.info(
+    _patch_logger.info(
         "install_reddit_nested_comments_patch: alle Patches installiert "
         "(camel-oasis==%s, #1713 S5)",
         actual_version,
