@@ -51,7 +51,7 @@ class TestLocalSearchUnaffectedByDecisionLayer:
     def test_result_is_identical_in_shadow_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Shadow-Modus darf Score, Reihenfolge und Rückgabewert nicht
         verändern — nur zusätzlich telemetrieren (siehe
-        ``local_search_shadow.py``-Moduldocstring)."""
+        ``local_search_relevance.py``-Moduldocstring)."""
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         storage_disabled = _make_storage_with_one_matching_edge()
         storage_shadow = _make_storage_with_one_matching_edge()
@@ -75,7 +75,7 @@ class TestLocalSearchUnaffectedByDecisionLayer:
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         seen: list[tuple[str, str | None, int]] = []
         monkeypatch.setattr(
-            "app.services.graph.graph_reader.shadow_relevance_check",
+            "app.services.graph.graph_reader.resolve_relevance",
             lambda query, top_fact, top_score, **kwargs: seen.append(
                 (query, top_fact, top_score)
             ),
@@ -118,12 +118,12 @@ class TestLocalSearchUnaffectedByDecisionLayer:
         """Selbst wenn der Shadow-Aufruf selbst bricht (nicht nur der von
         ihm aufgerufene Provider), wirft ``local_search`` nicht — der
         Shadow-Call liegt innerhalb des bestehenden ``try/except`` von
-        ``local_search`` UND ``shadow_relevance_check`` hat eine eigene
-        Absicherung (siehe ``test_local_search_shadow.py``); beide greifen
+        ``local_search`` UND ``resolve_relevance`` hat eine eigene
+        Absicherung (siehe ``test_local_search_relevance.py``); beide greifen
         unabhängig voneinander."""
         monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
         monkeypatch.setattr(
-            "app.services.graph.graph_reader.shadow_relevance_check",
+            "app.services.graph.graph_reader.resolve_relevance",
             lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("should never propagate")),
         )
         storage = _make_storage_with_one_matching_edge()

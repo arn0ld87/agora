@@ -29,6 +29,13 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Entfernen:** `bind_decision_secret.py jev --delete`, danach zwingend `docker compose restart agora` — der Backend-Prozess cacht den Jev-Client samt Key, das Löschen des Store-Eintrags allein widerruft ihn operativ nicht.
 - **Rollback-Implikation:** Ein Rückweg auf eine Agora-Version ohne Jev-Pilot lässt den `jev`-Eintrag in derselben Store-Datei unberührt zurück (keine Schema-Migration nötig — zusätzliche Ref im selben JSON-Objekt). Ein Master-Key-Wechsel (`AGORA_SECRET_KEY` rotieren) re-encryptet über `llm-secrets-doctor.py rotate` wie jeden anderen Eintrag auch automatisch mit.
 - **Master-Key-Prüfung vor dem Schreiben:** Seit dieser Slice verweigert `bind_decision_secret.py` das Binden/Überschreiben, wenn der aktuelle `AGORA_SECRET_KEY` einen bereits vorhandenen Store-Eintrag nicht entschlüsseln kann (Exit `2`) — ein syntaktisch gültiger, aber falscher Master-Key hätte sonst klaglos überschrieben und den vorherigen Ciphertext unwiederbringlich verloren.
+## Env-Default-Änderungen außerhalb des Versionssprungs
+
+Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).
+
+**`AGORA_DECISION_LAYER_MODE`** (f005/ADR-0016, Jev-Decision-Pilot). Default `disabled` — kein Verhaltenswechsel. `shadow` lässt zusätzlich einen `RuleProvider` parallel mitlaufen (nur Telemetrie). `authoritative` schaltet für den Use Case `local-search-relevance` echten Jev-Betrieb scharf: Jev entscheidet, `RuleProvider` ist Rückfall bei jedem Jev-Fehler/fehlendem Key. Ein Upgrade ändert diesen Wert nie automatisch — ein Betreiber, der `authoritative` setzt, sendet damit Suchanfrage und bestbewerteten Fakt im Klartext an TypeSafe (Maintainer-Datenschutzfreigabe 30.09.2026, Alexander Schneider, beschränkt auf genau diesen Modus mit Rule-Rückfall). Siehe [`../STATUS.md`](../STATUS.md), Abschnitt „Decision Layer (Jev-Pilot)“.
+
+**`AGORA_JEV_TIMEOUT_S`** (float, Default `2.0`, gültiger Bereich `0 < Wert <= 30`, von `Config.validate()` erzwungen). Timeout-Budget für genau einen Jev-Aufruf im `authoritative`-Pfad. Wirkt nur, wenn `AGORA_DECISION_LAYER_MODE=authoritative` gesetzt ist; da `local-search-relevance` ein heißer Retrieval-Pfad ist, blockiert ein hängender Jev-Aufruf lokale Suchen höchstens um dieses Budget (plus ein interner Retry mit demselben Timeout), bevor der Rule-Rückfall greift. Kein Upgrade-Schritt nötig — reiner Opt-in über `AGORA_DECISION_LAYER_MODE`.
 
 ---
 
