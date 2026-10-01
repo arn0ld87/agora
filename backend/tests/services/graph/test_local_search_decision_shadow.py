@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.config import Config
-from app.services.graph.graph_reader import local_search
+from app.services.graph.graph_reader import local_search, search_graph
 from app.storage.graph_storage import GraphStorage
 
 
@@ -131,3 +131,71 @@ class TestLocalSearchUnaffectedByDecisionLayer:
         result = local_search("g1", "Bundeskanzleramt", storage=storage)
 
         assert isinstance(result.facts, list)
+
+
+class TestRunIdPropagation:
+    """f001 (Slice `jev-budget`): run_id fährt bis zu ``resolve_relevance``
+    huckepack auf ``LLMClient.run_id`` mit — kein neuer Propagationsmechanismus,
+    siehe Moduldocstring von ``local_search_relevance.py``."""
+
+    def test_local_search_forwards_its_run_id_to_resolve_relevance(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
+        seen_run_ids: list[object] = []
+        monkeypatch.setattr(
+            "app.services.graph.graph_reader.resolve_relevance",
+            lambda *args, **kwargs: seen_run_ids.append(kwargs.get("run_id")),
+        )
+        storage = _make_storage_with_one_matching_edge()
+
+        local_search("g1", "Bundeskanzleramt", storage=storage, run_id="run_123")
+
+        assert seen_run_ids == ["run_123"]
+
+    def test_local_search_without_run_id_forwards_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
+        seen_run_ids: list[object] = []
+        monkeypatch.setattr(
+            "app.services.graph.graph_reader.resolve_relevance",
+            lambda *args, **kwargs: seen_run_ids.append(kwargs.get("run_id")),
+        )
+        storage = _make_storage_with_one_matching_edge()
+
+        local_search("g1", "Bundeskanzleramt", storage=storage)
+
+        assert seen_run_ids == [None]
+
+    def test_search_graph_fallback_forwards_the_llm_clients_run_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``search_graph`` degradiert bei einem Storage-Fehler auf
+        ``local_search`` — die run_id des bereits injizierten ``llm``-Clients
+        (``GraphToolsService.llm``) muss denselben Weg mitnehmen."""
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "shadow")
+        seen_run_ids: list[object] = []
+        monkeypatch.setattr(
+            "app.services.graph.graph_reader.resolve_relevance",
+            lambda *args, **kwargs: seen_run_ids.append(kwargs.get("run_id")),
+        )
+        storage = MagicMock(spec=GraphStorage)
+        storage.search.side_effect = RuntimeError("Neo4j down")
+        storage.get_all_edges.return_value = [
+            {
+                "uuid": "e1",
+                "name": "arbeitet_fuer",
+                "fact": "Das Bundeskanzleramt koordiniert die Ressorts.",
+                "source_node_uuid": "n1",
+                "target_node_uuid": "n2",
+                "episode_ids": [],
+            }
+        ]
+        storage.get_all_nodes.return_value = []
+        llm = MagicMock()
+        llm.run_id = "run_from_llm_client"
+
+        search_graph("g1", "Bundeskanzleramt", storage=storage, llm=llm)
+
+        assert seen_run_ids == ["run_from_llm_client"]

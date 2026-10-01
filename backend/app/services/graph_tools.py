@@ -170,8 +170,16 @@ class GraphToolsService:
         scope: str = "edges",
     ) -> SearchResult:
         """Local keyword-matching search (fallback approach)."""
+        # f001 (Slice `jev-budget`): run_id aus dem bereits injizierten
+        # LLMClient lesen, OHNE die lazy ``self.llm``-Property zu beruehren —
+        # die wuerde bei fehlendem ``_llm_client`` einen vollen LLMClient()
+        # samt Active-Config-/Transport-Aufbau nur fuer diesen Attributzugriff
+        # erzwingen. Ohne injizierten Client bleibt run_id None (konsistent
+        # mit den Report-Endpunkten, die GraphToolsService ohne llm_client
+        # bauen, z. B. app/api/report.py Tool-Endpunkte).
+        run_id = getattr(self._llm_client, "run_id", None) if self._llm_client is not None else None
         return _reader.local_search(
-            graph_id, query, storage=self.storage, limit=limit, scope=scope
+            graph_id, query, storage=self.storage, limit=limit, scope=scope, run_id=run_id
         )
 
     def get_all_nodes(self, graph_id: str) -> List[NodeInfo]:
