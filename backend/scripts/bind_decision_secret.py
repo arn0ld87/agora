@@ -63,7 +63,7 @@ logger = logging.getLogger("agora.scripts.bind_decision_secret")
 #: Secret-Refs, die dieses Skript binden/löschen darf. Bewusst eine
 #: Allowlist statt einer freien ``provider_id`` wie beim Doctor — neue
 #: Decision-Provider-Secrets müssen hier explizit aufgenommen werden.
-_ALLOWED_SECRET_REFS = frozenset({JEV_SECRET_REF})
+_ALLOWED_REFS = frozenset({JEV_SECRET_REF})
 
 
 def _configure_logging() -> None:
@@ -90,7 +90,7 @@ def _configure_logging() -> None:
     logger.propagate = False
 
 
-def _read_key_from_stdin(secret_ref: str) -> str:
+def _read_key_from_stdin(store_ref: str) -> str:
     """Liest den Klartext-Key ein, nie als CLI-Argument.
 
     TTY → ``getpass`` (kein Echo auf dem Terminal). Pipe/Redirect → kompletten
@@ -99,7 +99,7 @@ def _read_key_from_stdin(secret_ref: str) -> str:
     wird.
     """
     if sys.stdin.isatty():
-        raw = getpass.getpass(f"{secret_ref}-API-Key (Eingabe wird nicht angezeigt): ")
+        raw = getpass.getpass(f"{store_ref}-API-Key (Eingabe wird nicht angezeigt): ")
     else:
         raw = sys.stdin.read()
     return raw.strip()
@@ -115,8 +115,8 @@ def _parse_args(argv: Optional[list[str]]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "secret_ref",
-        help=f"Erlaubte Refs: {', '.join(sorted(_ALLOWED_SECRET_REFS))}",
+        "store_ref",
+        help=f"Erlaubte Refs: {', '.join(sorted(_ALLOWED_REFS))}",
     )
     parser.add_argument(
         "--delete",
@@ -135,13 +135,13 @@ def main(
     sonst wird der Prozess-Singleton verwendet."""
     _configure_logging()
     args = _parse_args(argv)
-    secret_ref = args.secret_ref
+    store_ref = args.store_ref
 
-    if secret_ref not in _ALLOWED_SECRET_REFS:
+    if store_ref not in _ALLOWED_REFS:
         logger.error(
             "Unbekannte Secret-Ref %r. Erlaubt: %s",
-            secret_ref,
-            ", ".join(sorted(_ALLOWED_SECRET_REFS)),
+            store_ref,
+            ", ".join(sorted(_ALLOWED_REFS)),
         )
         return 2
 
@@ -149,25 +149,25 @@ def main(
         active_store = store if store is not None else get_llm_provider_secrets_store()
 
         if args.delete:
-            deleted = active_store.delete(secret_ref)
+            deleted = active_store.delete(store_ref)
             if deleted:
-                logger.info("Secret '%s' gelöscht.", secret_ref)
+                logger.info("Secret '%s' gelöscht.", store_ref)
             else:
-                logger.info("Secret '%s' war nicht gebunden — nichts zu tun.", secret_ref)
+                logger.info("Secret '%s' war nicht gebunden — nichts zu tun.", store_ref)
             return 0
 
-        key = _read_key_from_stdin(secret_ref)
+        key = _read_key_from_stdin(store_ref)
         if not key:
             logger.error(
                 "Kein Key gelesen (stdin war leer). Es wurde nichts gespeichert."
             )
             return 2
 
-        active_store.upsert(secret_ref, api_key=key)
+        active_store.upsert(store_ref, api_key=key)
 
         # Roundtrip-Kontrolle: entschlüsselt exakt das, was gerade geschrieben
         # wurde, bevor das Skript Erfolg meldet.
-        roundtrip = active_store.get_plaintext(secret_ref)
+        roundtrip = active_store.get_plaintext(store_ref)
         if roundtrip != key:
             logger.error(
                 "Roundtrip-Prüfung fehlgeschlagen: der gespeicherte Wert weicht "
@@ -176,14 +176,15 @@ def main(
             )
             return 1
 
-        entry = active_store.get_entry(secret_ref)
+        entry = active_store.get_entry(store_ref)
         masked = entry.masked_value if entry is not None else "<unbekannt>"
-        logger.info("Secret '%s' gebunden (%s).", secret_ref, masked)
+        logger.info("Secret '%s' gebunden (%s).", store_ref, masked)
         return 0
-    except ValueError as exc:
-        # z. B. LlmProviderSecretsStore.upsert: "api_key zu kurz" — Meldung
-        # enthält keinen Wert, nur die Längen-/Formatbeschreibung.
-        logger.error("Ungültiger Key für '%s': %s", secret_ref, exc)
+    except ValueError:
+        # z. B. LlmProviderSecretsStore.upsert: "api_key zu kurz". Die Meldung
+        # stammt aus einem Aufruf mit dem Key als Argument und wird deshalb
+        # nicht geloggt — nur die feste Beschreibung.
+        logger.error("Ungültiger Key für '%s' (zu kurz oder leer).", store_ref)
         return 2
     except RuntimeError as exc:
         # AGORA_SECRET_KEY fehlt/ungültig oder Store-Datei nicht lesbar —
