@@ -26,17 +26,12 @@ def test_shadow_mode_is_accepted():
     assert validate_decision_layer_mode("shadow") == []
 
 
-def test_authoritative_is_a_recognized_but_not_yet_usable_value():
-    """Review-Befund (Codex, PR #1547): kein verdrahteter Use Case hat einen
-    authoritative-Handler. Vorher wurde der Wert klaglos akzeptiert, obwohl
-    local_search_shadow.py bei jedem Wert außer 'shadow' sofort zurückkehrt
-    — ein Start mit diesem Wert hätte den Betreiber glauben lassen, der
-    Decision Layer sei aktiv, während er still inaktiv blieb."""
-    errors = validate_decision_layer_mode("authoritative")
-
-    assert len(errors) == 1
-    assert "not usable yet" in errors[0]
-    # Bleibt im Vokabular, nur (noch) nicht startbar.
+def test_authoritative_mode_is_accepted():
+    """f005, Task `resolve-fn`: `local_search_relevance.py::resolve_relevance`
+    hat inzwischen einen authoritative-Handler (Jev, Rule-Rückfall) für den
+    einzigen verdrahteten Use Case — der vormalige Ablehnungsgrund (Codex,
+    PR #1547: erkannter, aber unbenutzter Wert) gilt nicht mehr."""
+    assert validate_decision_layer_mode("authoritative") == []
     assert "authoritative" in DECISION_LAYER_MODES
 
 
@@ -54,3 +49,31 @@ def test_unknown_mode_is_rejected():
 
 def test_case_and_whitespace_are_normalized():
     assert validate_decision_layer_mode("  SHADOW  ") == []
+
+
+def test_jev_timeout_defaults_to_two_seconds():
+    assert Config.JEV_TIMEOUT_S == 2.0
+
+
+def test_jev_timeout_accepts_the_valid_range(monkeypatch):
+    monkeypatch.setattr(Config, "JEV_TIMEOUT_S", 0.1)
+    assert not any("AGORA_JEV_TIMEOUT_S" in error for error in Config.validate())
+
+    monkeypatch.setattr(Config, "JEV_TIMEOUT_S", 30.0)
+    assert not any("AGORA_JEV_TIMEOUT_S" in error for error in Config.validate())
+
+
+def test_jev_timeout_rejects_zero_and_negative(monkeypatch):
+    monkeypatch.setattr(Config, "JEV_TIMEOUT_S", 0.0)
+    errors = Config.validate()
+    assert any("AGORA_JEV_TIMEOUT_S" in error for error in errors)
+
+    monkeypatch.setattr(Config, "JEV_TIMEOUT_S", -1.0)
+    errors = Config.validate()
+    assert any("AGORA_JEV_TIMEOUT_S" in error for error in errors)
+
+
+def test_jev_timeout_rejects_values_above_thirty(monkeypatch):
+    monkeypatch.setattr(Config, "JEV_TIMEOUT_S", 30.1)
+    errors = Config.validate()
+    assert any("AGORA_JEV_TIMEOUT_S" in error for error in errors)

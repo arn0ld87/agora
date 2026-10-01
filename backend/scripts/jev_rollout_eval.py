@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.contracts.decision_contract import DecisionState, NoulQuestion
-from app.services.decisions.local_search_shadow import _relevance_rule
+from app.services.decisions.local_search_relevance import _relevance_rule
 
 
 def _by_id(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

@@ -562,7 +562,9 @@ def _tenant_isolation_errors(config: Any) -> list[str]:
 #:   unveraendert (Default).
 #: 'shadow': ein Kandidat (z. B. Jev) laeuft parallel zur bestehenden
 #:   autoritativen Entscheidung, ergebnis wird NICHT verwendet.
-#: 'authoritative': erst nach bestandenem Benchmark und jev-choice-Gate.
+#: 'authoritative': Jev entscheidet, Rule ist Rueckfall. Nutzbar fuer den
+#:   Use Case `local-search-relevance` (f005, Task `resolve-fn`,
+#:   `services/decisions/local_search_relevance.py::resolve_relevance`).
 DECISION_LAYER_MODES = frozenset({'disabled', 'shadow', 'authoritative'})
 
 
@@ -570,30 +572,21 @@ def validate_decision_layer_mode(mode: str) -> list[str]:
     """Prüft AGORA_DECISION_LAYER_MODE. Modulfunktion aus demselben Grund
     wie `validate_project_backend`.
 
-    Review-Befund (Codex, PR #1547): `authoritative` war ein erkannter,
-    aber unbenutzter Wert — Startvalidierung akzeptierte ihn, obwohl der
-    einzige verdrahtete Use Case (`local_search_shadow.py`) bei jedem
-    Wert außer `shadow` sofort zurückkehrt. Ein Betreiber, der
-    `AGORA_DECISION_LAYER_MODE=authoritative` setzt, hätte einen
-    erfolgreichen Start und einen still inaktiven Decision Layer bekommen
-    — genau die Verwechslung von Zustand und Anzeige, die ADR-0002 an
-    anderer Stelle ausschließt. `authoritative` bleibt ein gültiger Wert
-    im Vokabular (`DECISION_LAYER_MODES`), wird aber als Konfigurationsfehler
-    abgelehnt, bis ein echter Handler existiert (erst nach bestandenem
-    Benchmark und `jev-choice`-Gate, siehe Moduldoc oben)."""
+    `authoritative` ist inzwischen nutzbar (f005, Task `resolve-fn`):
+    `local_search_relevance.py::resolve_relevance` (vormals
+    `local_search_shadow.py::shadow_relevance_check`) hat für den
+    einzigen verdrahteten Use Case (`local-search-relevance`) einen
+    authoritative-Handler mit Jev als Primärprovider und `RuleProvider`
+    als Rückfall. Vorher (Review-Befund Codex, PR #1547) war der Wert im
+    Vokabular erkannt, aber ohne Handler — ein Betreiber, der
+    `AGORA_DECISION_LAYER_MODE=authoritative` setzte, hätte einen
+    erfolgreichen Start und einen still inaktiven Decision Layer bekommen.
+    Nur ein unbekannter Wert bleibt ein Konfigurationsfehler."""
     normalized = (mode or '').strip().lower()
     if normalized not in DECISION_LAYER_MODES:
         return [
             f"AGORA_DECISION_LAYER_MODE has unknown value '{normalized}' "
             f"(expected one of: {', '.join(sorted(DECISION_LAYER_MODES))})"
-        ]
-    if normalized == 'authoritative':
-        return [
-            "AGORA_DECISION_LAYER_MODE=authoritative is not usable yet: no "
-            "wired use case has an authoritative handler (jev-choice gate "
-            "not passed). Starting with this value would succeed while the "
-            "Decision Layer silently stays inactive, which is worse than "
-            "refusing to start. Use 'shadow' or 'disabled' instead."
         ]
     return []
 
@@ -786,6 +779,13 @@ class Config:
     DECISION_LAYER_MODE = os.environ.get(
         'AGORA_DECISION_LAYER_MODE', 'disabled'
     ).strip().lower()
+
+    # f005 (Task `resolve-fn`): Timeout-Budget fuer EINEN Jev-Aufruf im
+    # authoritative-Pfad von `local-search-relevance`. Klein gehalten, weil
+    # lokale Suche ein heisser Retrieval-Pfad ist und ein haengender
+    # Jev-Aufruf nicht lange blockieren darf, bevor der Rule-Rueckfall
+    # greift. validate() erzwingt 0 < Wert <= 30.
+    JEV_TIMEOUT_S = float(os.environ.get('AGORA_JEV_TIMEOUT_S', '2.0'))
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
@@ -1135,6 +1135,10 @@ class Config:
         errors.extend(validate_auth_backend(cls))
         # Decision-Layer-Pilotierung (f005, ADR-0016).
         errors.extend(validate_decision_layer_mode(cls.DECISION_LAYER_MODE))
+        if not (0 < cls.JEV_TIMEOUT_S <= 30):
+            errors.append(
+                f"AGORA_JEV_TIMEOUT_S must be > 0 and <= 30 (got {cls.JEV_TIMEOUT_S})"
+            )
         # Job-Lease (Issue #1472).
         errors.extend(
             validate_job_lease_timing(

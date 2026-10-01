@@ -48,10 +48,11 @@ kein verifizierter Zugang bestand; der Benchmark-Task hat ihn.
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from typing import Any, cast
 
-from typesafe_sdk import Choice, JSONContent, Noul, Score, TypeSafeClient
+from typesafe_sdk import Choice, JSONContent, Noul, RetryPolicy, Score, TypeSafeClient
 
 from ...contracts.decision_contract import (
     ChoiceQuestion,
@@ -87,6 +88,26 @@ _NOUL_INSTRUCTIONS = "Beantworte mit der Wahrscheinlichkeit, dass die Aussage im
 _SECRET_REF = "jev"  # noqa: S105 - Store-Schlüsselname, kein Secret
 
 
+class _DropSdkWireDebugLogs(logging.Filter):
+    """Verwirft DEBUG-Records des ``typesafe_sdk``-Loggers.
+
+    Das SDK loggt auf DEBUG Request- und Response-Body im Klartext
+    (``typesafe_sdk/_core/transport.py::RequestState._log_wire``, ``body=%r``),
+    sobald der Logger DEBUG zulässt — per ``TYPESAFE_LOG_LEVEL=debug`` oder
+    einem Root-Logger auf DEBUG. Der Body trägt Query und Fakt; ADR-0016
+    erlaubt im Log nur den ``context_hash``. INFO-Zeilen (Methode, URL,
+    Status, Dauer, Request-ID) bleiben erhalten. Ein Logger-Filter greift
+    unabhängig vom gesetzten Level, anders als ein ``setLevel``."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno > logging.DEBUG
+
+
+_SDK_LOGGER = logging.getLogger("typesafe_sdk")
+if not any(isinstance(f, _DropSdkWireDebugLogs) for f in _SDK_LOGGER.filters):
+    _SDK_LOGGER.addFilter(_DropSdkWireDebugLogs())
+
+
 def resolve_jev_api_key() -> str | None:
     """Liest den Jev-API-Key aus dem bestehenden verschlüsselten
     Provider-Secret-Store. ``None`` heißt: kein Key gebunden — ein
@@ -96,24 +117,30 @@ def resolve_jev_api_key() -> str | None:
 
 
 def build_jev_client(
-    *, model_version: str = JEV_PINNED_MODEL_VERSION, timeout: float = 30.0
+    *,
+    model_version: str = JEV_PINNED_MODEL_VERSION,
+    timeout: float = 30.0,
+    retry: RetryPolicy | None = None,
 ) -> TypeSafeClient:
     """Baut den echten ``TypeSafeClient`` mit dem im Secret-Store
     hinterlegten Key. Wirft laut, wenn kein Key gebunden ist — ein
     Aufrufer, der einen Jev-Client anfordert, aber keinen Key hinterlegt
     hat, hat einen Konfigurationsfehler, keinen Laufzeitfall.
 
-    Retry bleibt beim SDK-Default (siehe Moduldocstring); dieser Adapter
-    konfiguriert hier keine eigene ``RetryPolicy``, weil "absolute
-    Minimal-Konfiguration" für den Benchmark-Piloten reicht — eine
-    use-case-spezifische Anpassung ist eine spätere, eigene Entscheidung.
+    Retry bleibt bei ``retry=None`` beim SDK-Default (siehe Moduldocstring)
+    — der Benchmark-Pilot (``scripts/jev_benchmark_local_search.py``) lässt
+    diesen Parameter unverändert weg und bekommt damit weiterhin exakt das
+    bisherige Verhalten. ``retry`` ist ausschließlich für Aufrufer gedacht,
+    die das Timeout-Budget eines Aufrufs explizit begrenzen müssen (f005,
+    Task `resolve-fn`: ``local_search_relevance.py::_jev_provider`` im
+    authoritative-Pfad, höchstens ein zusätzlicher Versuch).
     """
     api_key = resolve_jev_api_key()
     if not api_key:
         raise RuntimeError(
             f"Kein Jev-API-Key im Provider-Secret-Store unter '{_SECRET_REF}' gebunden."
         )
-    return TypeSafeClient(api_key=api_key, model=model_version, timeout=timeout)
+    return TypeSafeClient(api_key=api_key, model=model_version, timeout=timeout, retry=retry)
 
 
 class DecisionJevResponseError(RuntimeError):

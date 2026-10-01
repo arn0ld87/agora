@@ -41,7 +41,7 @@ from app.contracts.decision_contract import (
 )
 from app.services.decisions.jev_provider import build_jev_client, resolve_jev_api_key
 from app.services.decisions.jev_provider import JevDecisionProvider
-from app.services.decisions.local_search_shadow import _relevance_rule
+from app.services.decisions.local_search_relevance import RELEVANCE_ASSERTION, _relevance_rule
 from app.services.decisions.rule_provider import RuleOutcome, RuleProvider
 
 # AGENTS.md verbietet print() zugunsten strukturierten Loggings (Review-Fund
@@ -54,7 +54,7 @@ _USE_CASE_ID = "local-search-relevance"
 
 def _rule_fn(state: DecisionState, question: DecisionQuestion) -> RuleOutcome:
     """Ruft die produktive Regel auf — dieselbe wie in
-    ``local_search_shadow.py``, nur mit der breiteren ``RuleFn``-Signatur,
+    ``local_search_relevance.py``, nur mit der breiteren ``RuleFn``-Signatur,
     die ``RuleProvider`` erwartet (``_relevance_rule`` ist auf
     ``NoulQuestion`` verengt, weil sie nur dort gebraucht wird)."""
     assert isinstance(question, NoulQuestion)
@@ -201,7 +201,7 @@ def run() -> list[CaseOutcome]:
             # Der reale Jev-Aufruf bekommt Query+Fakt im Klartext (nicht nur
             # top_score) — sonst hat er keinen Inhalt, über den er urteilen
             # kann. Das ist eine andere State-Form als im produktiven
-            # Shadow-Pfad (local_search_shadow.py), der bewusst nur
+            # Shadow-Pfad (local_search_relevance.py), der bewusst nur
             # top_score sendet; dieses Skript testet Jevs Eignung isoliert,
             # nicht den produktiven Aufrufpfad.
             #
@@ -215,7 +215,7 @@ def run() -> list[CaseOutcome]:
             jev_state = DecisionState(
                 use_case_id=_USE_CASE_ID,
                 state={
-                    "assertion": "Der Fakt ist für die Suchanfrage relevant.",
+                    "assertion": RELEVANCE_ASSERTION,
                     "query": case.query,
                     "fact": case.fact,
                 },
