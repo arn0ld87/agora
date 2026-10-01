@@ -310,6 +310,10 @@ class RunEventLog:
         self.work_trace_removed_sections: set[int] = set()
         self.metadata_failed_sections: set[int] = set()
         self.fallback_outline_used: bool = False
+        # (Fehlerklasse, gekürzte Providermeldung) des ersten nicht-transienten
+        # Provider-400 (#1738). Gesetzt → die restlichen Abschnitte setzen
+        # keinen LLM-Call mehr ab, sondern enden als sichtbarer Fallback.
+        self.persistent_provider_error: Optional[tuple[str, str]] = None
 
 
 def events_for(agent: Any) -> RunEventLog:

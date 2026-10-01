@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Literal, TypedDict
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
 from .request_plan import (
+    REASONING_EFFORT_QUIRK,
     TEMPERATURE_QUIRK,
     TOKEN_KEY_QUIRK,
     DEFAULT_REQUEST_OPTIONS,
@@ -254,7 +255,11 @@ def _chat_with_tools(
             think=self._think,
         ),
         stream=force_stream,
-        extra={"tools": tools, "tool_choice": tool_choice},
+        extra={
+            "tools": tools,
+            "tool_choice": tool_choice,
+            **self._reasoning_effort_extra(),
+        },
         options=DEFAULT_REQUEST_OPTIONS,
     )
 
@@ -283,7 +288,7 @@ def _chat_with_tools(
         return execute(
             plan,
             _create,
-            quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK),
+            quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK, REASONING_EFFORT_QUIRK),
             label="tools",
         )
 
