@@ -78,6 +78,7 @@ from app.contracts.decision_contract import (
 )
 from app.repositories.decision_provider import DecisionProvider, decision_layer_mode
 from app.services.decisions.jev_provider import (
+    JEV_PINNED_MODEL_VERSION,
     JevDecisionProvider,
     build_jev_client,
     resolve_jev_api_key,
@@ -339,6 +340,40 @@ def _record_jev_usage(run_id: str, result: DecisionResult) -> None:
         )
 
 
+def _record_jev_failure(run_id: str, *, error_type: str, elapsed_ms: int) -> None:
+    """Fehlgeschlagenen Jev-Call ins Run-Usage-Ledger verbuchen.
+
+    Codex-Review (PR #1742): ohne diesen Call zaehlt ``llm_calls`` (``run_
+    usage_ledger.py::_Bucket.add``, das ausdruecklich auch fehlgeschlagene
+    Providerattempts mitzaehlen soll) nur erfolgreiche Jev-Aufrufe — ein
+    hartes ``max_llm_calls``-Budget liesse sich dann durch wiederholt
+    scheiternde Jev-Calls (z. B. Netzwerkfehler, abgelaufener Key) beliebig
+    oft umgehen, ohne je als Verbrauch zu zaehlen. ``success=False``,
+    Kosten/Tokens bleiben ehrlich ``None`` (SDK-Exceptions tragen keine
+    Kosteninformation). Wirft nie, aus demselben Grund wie
+    :func:`_record_jev_usage`.
+    """
+    try:
+        from app.services.llm_invocation_logger import LlmInvocationLogger
+
+        LlmInvocationLogger(run_id).log_event(
+            stage=_USE_CASE_ID,
+            provider_id="jev",
+            model=JEV_PINNED_MODEL_VERSION,
+            base_url=None,
+            routing_version=0,
+            latency_ms=float(elapsed_ms),
+            success=False,
+            error_type=error_type,
+        )
+    except Exception as exc:  # noqa: BLE001 - Ledger-Fehler duerfen resolve_relevance nie stoeren
+        logger.warning(
+            "decision_layer_authoritative use_case=%s ledger_write_failed=%s",
+            _USE_CASE_ID,
+            type(exc).__name__,
+        )
+
+
 def _resolve_authoritative(
     query: str,
     top_fact: str,
@@ -416,17 +451,32 @@ def _resolve_authoritative(
             active_jev = None
             # Die typesafe-sdk-Exceptions tragen nur `.request_id`, keine
             # Kosteninformation (verifiziert gegen TypeSafeError/
-            # TypeSafeAPIError/TypeSafeAuthenticationError) — eine Verbuchung
-            # ist im Fehlerfall nicht möglich. Die Reservierung aus
-            # check_before_call wird trotzdem freigegeben.
+            # TypeSafeAPIError/TypeSafeAuthenticationError) — ``cost_micros``
+            # bleibt deshalb ehrlich unbekannt (``None``), nicht ``0``. Erst
+            # verbuchen (``success=False``, zaehlt gegen ``max_llm_calls`` —
+            # sonst liesse sich ein hartes Call-Budget durch wiederholt
+            # scheiternde Jev-Calls umgehen), DANN die Reservierung aus
+            # ``check_before_call`` freigeben: ``record_after_call()`` liest
+            # den aktuellen Ledger-Stand fuer die Weich-Limit-Pruefung, und
+            # dieser Call darf darin nicht fehlen (dieselbe Reihenfolge wie
+            # im Erfolgsfall unten).
+            if run_id:
+                elapsed_ms = int((time.monotonic() - _started) * 1000)
+                _record_jev_failure(run_id, error_type=reason, elapsed_ms=elapsed_ms)
             if enforcer is not None:
                 _release_jev_reservation(enforcer)
         else:
             final = result.model_copy(update={"shadow": False, "fallback_chain": ["jev"]})
-            if enforcer is not None:
-                _release_jev_reservation(enforcer)
+            # Erst den Call verbuchen, DANN die Reservierung freigeben:
+            # ``record_after_call()`` (in ``_release_jev_reservation``) liest
+            # den aktuellen Ledger-Stand, um ein weiches Limit zu pruefen —
+            # geschaehe das vor dem Verbuchen, saehe genau DIESER Call sein
+            # eigenes weiches Limit nie erreicht, selbst wenn er es ist, der
+            # es ueberschreitet (Codex-Review PR #1742).
             if run_id:
                 _record_jev_usage(run_id, final)
+            if enforcer is not None:
+                _release_jev_reservation(enforcer)
             _log_authoritative(
                 provider=final.provider,
                 probability_yes=final.probability_yes,
