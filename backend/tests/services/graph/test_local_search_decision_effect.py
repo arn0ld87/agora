@@ -15,6 +15,7 @@ tut.
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 from unittest.mock import MagicMock
 
@@ -71,6 +72,66 @@ def _make_storage_with_two_matching_edges() -> MagicMock:
     ]
     storage.get_all_nodes.return_value = []
     return storage
+
+
+def _make_storage_with_edges_and_node() -> MagicMock:
+    """Wie ``_make_storage_with_two_matching_edges``, plus ein matchender
+    Knoten mit Summary — für scope ``"both"`` (Knoten-Fakten stehen hinter
+    den Kanten-Fakten)."""
+    storage = _make_storage_with_two_matching_edges()
+    storage.get_all_nodes.return_value = [
+        {
+            "uuid": "n1",
+            "name": "Bundeskanzleramt",
+            "labels": ["Entity", "Behoerde"],
+            "summary": "Oberste Bundesbehoerde.",
+        }
+    ]
+    return storage
+
+
+#: Eingefroren mit dem Code-Stand ``origin/feat/f001-jev-budget`` (vor Slice
+#: `search-effect`), Modi ``disabled`` und ``shadow`` lieferten dort identische
+#: Ausgaben. NICHT aus dem aktuellen Code neu erzeugen — sonst prüft der Test
+#: nur noch sich selbst.
+_GOLDEN_JSON = {
+    "edges": (
+        '{"facts": ["Das Bundeskanzleramt koordiniert die Ressorts.", '
+        '"Bundeskanzleramt taucht hier auch auf."], "edges": [{"uuid": "top-edge", '
+        '"name": "Bundeskanzleramt", "fact": "Das Bundeskanzleramt koordiniert die '
+        'Ressorts.", "source_node_uuid": "n1", "target_node_uuid": "n2"}, '
+        '{"uuid": "second-edge", "name": "x", "fact": "Bundeskanzleramt taucht hier '
+        'auch auf.", "source_node_uuid": "n3", "target_node_uuid": "n4"}], '
+        '"nodes": [], "query": "Bundeskanzleramt", "total_count": 2}'
+    ),
+    "both": (
+        '{"facts": ["Das Bundeskanzleramt koordiniert die Ressorts.", '
+        '"Bundeskanzleramt taucht hier auch auf.", "[Bundeskanzleramt]: Oberste '
+        'Bundesbehoerde."], "edges": [{"uuid": "top-edge", "name": '
+        '"Bundeskanzleramt", "fact": "Das Bundeskanzleramt koordiniert die '
+        'Ressorts.", "source_node_uuid": "n1", "target_node_uuid": "n2"}, '
+        '{"uuid": "second-edge", "name": "x", "fact": "Bundeskanzleramt taucht hier '
+        'auch auf.", "source_node_uuid": "n3", "target_node_uuid": "n4"}], '
+        '"nodes": [{"uuid": "n1", "name": "Bundeskanzleramt", "labels": ["Entity", '
+        '"Behoerde"], "summary": "Oberste Bundesbehoerde."}], "query": '
+        '"Bundeskanzleramt", "total_count": 3}'
+    ),
+}
+_GOLDEN_TEXT = {
+    "edges": (
+        "Search Query: Bundeskanzleramt\nFound 2 related results\n\n"
+        "### Related Facts:\n"
+        "1. Das Bundeskanzleramt koordiniert die Ressorts.\n"
+        "2. Bundeskanzleramt taucht hier auch auf."
+    ),
+    "both": (
+        "Search Query: Bundeskanzleramt\nFound 3 related results\n\n"
+        "### Related Facts:\n"
+        "1. Das Bundeskanzleramt koordiniert die Ressorts.\n"
+        "2. Bundeskanzleramt taucht hier auch auf.\n"
+        "3. [Bundeskanzleramt]: Oberste Bundesbehoerde."
+    ),
+}
 
 
 @pytest.fixture
@@ -228,6 +289,31 @@ class TestAuthoritativeIrrelevant:
         assert result.facts == ["Bundeskanzleramt taucht hier auf."]
         assert result.total_count == 1
 
+    def test_scope_both_removes_only_the_top_edge_fact_not_node_facts(
+        self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """scope ``"both"``: Knoten-Fakten werden hinter den Kanten-Fakten
+        angehängt. Entfernt wird nur der Top-Kanten-Fakt; der Knoten-Fakt und
+        seine (leere) Provenance bleiben positionsparallel erhalten."""
+        _patch_resolve_relevance(
+            monkeypatch, _decision_result(provider="jev", probability_yes=0.1)
+        )
+
+        result = local_search(
+            "g1", "Bundeskanzleramt", storage=_make_storage_with_edges_and_node(), scope="both"
+        )
+
+        assert result.facts == [
+            "Bundeskanzleramt taucht hier auch auf.",
+            "[Bundeskanzleramt]: Oberste Bundesbehoerde.",
+        ]
+        assert len(result.fact_provenance) == len(result.facts)
+        assert [edge["uuid"] for edge in result.edges] == ["second-edge"]
+        assert [node["uuid"] for node in result.nodes] == ["n1"]
+        assert result.total_count == 2
+        assert result.relevance is not None
+        assert result.relevance["top_fact_relevant"] is False
+
     def test_no_decision_when_limit_excludes_every_edge(
         self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -362,19 +448,23 @@ class TestShadowAndDisabledByteIdenticalSerialization:
     gleich wie ganz ohne Decision Layer — verglichen gegen eine
     Referenzausgabe, nicht nur gegen sich selbst."""
 
-    def test_disabled_matches_reference_without_decision_layer(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize("mode", ["disabled", "shadow"])
+    @pytest.mark.parametrize("scope", ["edges", "both"])
+    def test_serialization_matches_frozen_pre_slice_output(
+        self, mode: str, scope: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "disabled")
-        storage = _make_storage_with_two_matching_edges()
-        reference_storage = _make_storage_with_two_matching_edges()
+        """Golden-Vergleich gegen eine eingefrorene Ausgabe, erzeugt mit dem
+        Code-Stand ``origin/feat/f001-jev-budget`` (vor diesem Slice) und
+        derselben Storage-Fixture. Byte-Vergleich über ``json.dumps`` (die
+        Key-Reihenfolge zählt) und ``to_text()``."""
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", mode)
 
-        result = local_search("g1", "Bundeskanzleramt", storage=storage)
-        reference = local_search("g1", "Bundeskanzleramt", storage=reference_storage)
+        result = local_search(
+            "g1", "Bundeskanzleramt", storage=_make_storage_with_edges_and_node(), scope=scope
+        )
 
-        assert result.to_dict() == reference.to_dict()
-        assert result.to_text() == reference.to_text()
-        assert "relevance" not in result.to_dict()
+        assert json.dumps(result.to_dict(), ensure_ascii=False) == _GOLDEN_JSON[scope]
+        assert result.to_text() == _GOLDEN_TEXT[scope]
         assert result.relevance is None
 
     def test_shadow_matches_reference_without_decision_layer(
