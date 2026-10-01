@@ -351,6 +351,7 @@ def _resolve_authoritative(
     """Jev ist Primärprovider, ``RuleProvider`` ist Rückfall bei jeder
     Jev-Ausnahme oder fehlender Verfügbarkeit (kein Key / gesperrt / Budget
     erschöpft)."""
+    _started = time.monotonic()
     context_hash = _context_hash(query, top_fact)
     fallback_reason: Optional[str] = None
 
@@ -448,6 +449,13 @@ def _resolve_authoritative(
     try:
         rule_result = active_rule.decide(rule_state, NoulQuestion())
     except Exception as exc:  # noqa: BLE001 - auch der Rueckfall darf local_search nie stoeren
+        # Die Fallback-Kette ist erschoepft: weder Jev noch Rule lieferten
+        # ein Ergebnis. ``None`` waere hier nicht von "disabled"/"kein
+        # top_fact" unterscheidbar; der Vertrag reserviert genau dafuer
+        # ``provider="unresolved"`` (siehe DecisionResult-Docstring). Die
+        # Latenz zaehlt den gesamten Versuch inklusive des (gescheiterten)
+        # Jev-Aufrufs, sonst waere sie faelschlich ~0ms.
+        elapsed_ms = int((time.monotonic() - _started) * 1000)
         logger.error(
             "decision_layer_authoritative use_case=%s rule_fallback_failed=%s "
             "jev_fallback_reason=%s",
@@ -455,9 +463,28 @@ def _resolve_authoritative(
             type(exc).__name__,
             fallback_reason,
         )
-        return None
+        return DecisionResult(
+            use_case_id=_USE_CASE_ID,
+            provider="unresolved",
+            answer=None,
+            confidence=0.0,
+            fallback_chain=["jev", "rule"],
+            cost_micros=None,
+            latency_ms=elapsed_ms,
+            shadow=False,
+        )
 
-    final = rule_result.model_copy(update={"shadow": False, "fallback_chain": ["jev", "rule"]})
+    elapsed_ms = int((time.monotonic() - _started) * 1000)
+    final = rule_result.model_copy(
+        update={
+            "shadow": False,
+            "fallback_chain": ["jev", "rule"],
+            # Ueberschreibt RuleProviders eigene (quasi-instantane) Latenz:
+            # gemessen wird die gesamte Zeit seit Beginn des authoritative-
+            # Versuchs, also inklusive des vorangegangenen Jev-Fehlschlags.
+            "latency_ms": elapsed_ms,
+        }
+    )
     _log_authoritative(
         provider=final.provider,
         probability_yes=final.probability_yes,

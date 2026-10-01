@@ -19,6 +19,16 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 ---
 
+## Env-Default-Änderungen außerhalb des Versionssprungs
+
+Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).
+
+**`AGORA_DECISION_LAYER_MODE`** (f005/ADR-0016, Jev-Decision-Pilot). Default `disabled` — kein Verhaltenswechsel. `shadow` lässt zusätzlich einen `RuleProvider` parallel mitlaufen (nur Telemetrie). `authoritative` schaltet für den Use Case `local-search-relevance` echten Jev-Betrieb scharf: Jev entscheidet, `RuleProvider` ist Rückfall bei jedem Jev-Fehler/fehlendem Key. Ein Upgrade ändert diesen Wert nie automatisch — ein Betreiber, der `authoritative` setzt, sendet damit Suchanfrage und bestbewerteten Fakt im Klartext an TypeSafe (Maintainer-Datenschutzfreigabe 30.09.2026, Alexander Schneider, beschränkt auf genau diesen Modus mit Rule-Rückfall). Siehe [`../STATUS.md`](../STATUS.md), Abschnitt „Decision Layer (Jev-Pilot)“.
+
+**`AGORA_JEV_TIMEOUT_S`** (float, Default `2.0`, gültiger Bereich `0 < Wert <= 30`, von `Config.validate()` erzwungen). Timeout-Budget für genau einen Jev-Aufruf im `authoritative`-Pfad. Wirkt nur, wenn `AGORA_DECISION_LAYER_MODE=authoritative` gesetzt ist; da `local-search-relevance` ein heißer Retrieval-Pfad ist, blockiert ein hängender Jev-Aufruf lokale Suchen höchstens um dieses Budget (plus ein interner Retry mit demselben Timeout), bevor der Rule-Rückfall greift. Kein Upgrade-Schritt nötig — reiner Opt-in über `AGORA_DECISION_LAYER_MODE`.
+
+---
+
 ## 0.9.x → 0.10
 
 ### Was sich ändert
