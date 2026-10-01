@@ -603,6 +603,71 @@ class TestResolveRelevanceAuthoritativeFallback:
         assert _QUERY_MARKER not in caplog.text
         assert _FACT_MARKER not in caplog.text
 
+    def test_key_store_failure_falls_back_to_rule_instead_of_raising(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """``get_bound_store_api_key`` fängt nur ``RuntimeError`` — jeder
+        andere Key-Store-Fehler darf ``local_search`` trotzdem nie abbrechen."""
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+
+        def _store_down() -> str | None:
+            raise ValueError(f"store down {_QUERY_MARKER}")
+
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance.resolve_jev_api_key", _store_down
+        )
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100)
+
+        assert result is not None
+        assert result.provider == "rule"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert "fallback_reason=provider_unavailable(ValueError)" in caplog.text
+        assert _QUERY_MARKER not in caplog.text
+
+    def test_lone_surrogate_in_query_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Eine JSON-Query kann einen einzelnen Surrogat enthalten; vorher
+        warf ``_context_hash`` außerhalb jedes try-Blocks ``UnicodeEncodeError``."""
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance.resolve_jev_api_key", lambda: None
+        )
+
+        result = resolve_relevance("abc\ud800", _FACT_MARKER, 100)
+
+        assert result is not None
+        assert result.provider == "rule"
+
+    def test_unexpected_error_outside_the_fallback_yields_none(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+
+        def _boom(*_args: object) -> str:
+            raise ValueError(f"leak {_FACT_MARKER}")
+
+        monkeypatch.setattr(
+            "app.services.decisions.local_search_relevance._context_hash", _boom
+        )
+
+        with caplog.at_level(logging.ERROR, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100)
+
+        assert result is None
+        assert "unexpected_error=ValueError" in caplog.text
+        assert _FACT_MARKER not in caplog.text
+
 
 class TestBenchmarkScriptsShareTheAssertionConstant:
     """Beide Jev-Skripte importieren ``RELEVANCE_ASSERTION`` statt die

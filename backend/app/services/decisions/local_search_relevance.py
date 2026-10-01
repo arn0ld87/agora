@@ -115,8 +115,12 @@ def _relevance_rule(state: DecisionState, _question: DecisionQuestion) -> RuleOu
 
 def _context_hash(query: str, fact: str) -> str:
     """SHA-256 über Query und Fakt — Telemetrie referenziert den Hash, nie
-    den Klartext (ADR-0016, Abschnitt Security)."""
-    return hashlib.sha256(f"{query}\n{fact}".encode()).hexdigest()[:16]
+    den Klartext (ADR-0016, Abschnitt Security).
+
+    ``surrogatepass``: eine Query aus JSON kann einen einzelnen Surrogat
+    (``"\\ud800"``) enthalten, den striktes UTF-8 ablehnt. Für jede gültige
+    Eingabe ist der Hash byte-gleich zu ``.encode()``."""
+    return hashlib.sha256(f"{query}\n{fact}".encode("utf-8", "surrogatepass")).hexdigest()[:16]
 
 
 def _reset_jev_cache_for_tests() -> None:
@@ -263,7 +267,11 @@ def _resolve_authoritative(
 
     active_jev = jev
     if active_jev is None:
-        active_jev, fallback_reason = _jev_provider()
+        try:
+            active_jev, fallback_reason = _jev_provider()
+        except Exception as exc:  # noqa: BLE001 - Key-Store/Client-Bau-Fehler -> Rule
+            # Kein Cache-Eintrag entsteht; der nächste Aufruf versucht es neu.
+            active_jev, fallback_reason = None, f"provider_unavailable({type(exc).__name__})"
 
     if active_jev is not None:
         jev_state = DecisionState(
@@ -356,7 +364,22 @@ def resolve_relevance(
     if mode == "shadow":
         return _resolve_shadow(query, top_fact, top_score, rule=rule)
     if mode == "authoritative":
-        return _resolve_authoritative(query, top_fact, top_score, jev=jev, rule=rule)
+        # Äußerer Schutz für alles, was ``_resolve_authoritative`` außerhalb
+        # seiner eigenen try-Blöcke tut: Key-Store-Zugriff und Client-Bau in
+        # ``_jev_provider`` (``get_bound_store_api_key`` fängt nur
+        # ``RuntimeError``), ``_context_hash``, ``DecisionState``-Validierung.
+        # Ohne ihn bräche ein Key-Store-Fehler ``local_search`` ab. Nur der
+        # Klassenname wird geloggt — keine Message, kein Traceback, weil
+        # beides Query/Fakt spiegeln kann.
+        try:
+            return _resolve_authoritative(query, top_fact, top_score, jev=jev, rule=rule)
+        except Exception as exc:  # noqa: BLE001 - darf local_search nie stoeren
+            logger.error(
+                "decision_layer_authoritative use_case=%s unexpected_error=%s",
+                _USE_CASE_ID,
+                type(exc).__name__,
+            )
+            return None
     return None
 
 
