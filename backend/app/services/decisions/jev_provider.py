@@ -83,8 +83,14 @@ _CHOICE_INSTRUCTIONS = "Wähle die zutreffendste der angegebenen Kategorien für
 _SCORE_INSTRUCTIONS = "Bewerte den State auf der angegebenen Rubrik."
 _NOUL_INSTRUCTIONS = "Beantworte mit der Wahrscheinlichkeit, dass die Aussage im State zutrifft."
 
+#: Öffentliche Secret-Ref-Konstante für den Jev-Key im Provider-Secret-Store.
+#: Aufrufer außerhalb dieses Moduls (z. B. ``scripts/bind_decision_secret.py``)
+#: importieren diese Konstante statt den String ``"jev"`` ein zweites Mal zu
+#: pflegen — zwei Kopien liefen sonst auseinander, sobald die Ref sich ändert.
+JEV_SECRET_REF = "jev"  # noqa: S105 - Store-Schlüsselname, kein Secret
+
 #: Schlüssel, unter dem der Jev-API-Key im Provider-Secret-Store liegt.
-_SECRET_REF = "jev"  # noqa: S105 - Store-Schlüsselname, kein Secret
+_SECRET_REF = JEV_SECRET_REF
 
 
 def resolve_jev_api_key() -> str | None:
