@@ -48,6 +48,7 @@ kein verifizierter Zugang bestand; der Benchmark-Task hat ihn.
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from typing import Any, cast
 
@@ -85,6 +86,26 @@ _NOUL_INSTRUCTIONS = "Beantworte mit der Wahrscheinlichkeit, dass die Aussage im
 
 #: Schlüssel, unter dem der Jev-API-Key im Provider-Secret-Store liegt.
 _SECRET_REF = "jev"  # noqa: S105 - Store-Schlüsselname, kein Secret
+
+
+class _DropSdkWireDebugLogs(logging.Filter):
+    """Verwirft DEBUG-Records des ``typesafe_sdk``-Loggers.
+
+    Das SDK loggt auf DEBUG Request- und Response-Body im Klartext
+    (``typesafe_sdk/_core/transport.py::RequestState._log_wire``, ``body=%r``),
+    sobald der Logger DEBUG zulässt — per ``TYPESAFE_LOG_LEVEL=debug`` oder
+    einem Root-Logger auf DEBUG. Der Body trägt Query und Fakt; ADR-0016
+    erlaubt im Log nur den ``context_hash``. INFO-Zeilen (Methode, URL,
+    Status, Dauer, Request-ID) bleiben erhalten. Ein Logger-Filter greift
+    unabhängig vom gesetzten Level, anders als ein ``setLevel``."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno > logging.DEBUG
+
+
+_SDK_LOGGER = logging.getLogger("typesafe_sdk")
+if not any(isinstance(f, _DropSdkWireDebugLogs) for f in _SDK_LOGGER.filters):
+    _SDK_LOGGER.addFilter(_DropSdkWireDebugLogs())
 
 
 def resolve_jev_api_key() -> str | None:

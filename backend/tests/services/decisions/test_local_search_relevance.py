@@ -669,6 +669,107 @@ class TestResolveRelevanceAuthoritativeFallback:
         assert _FACT_MARKER not in caplog.text
 
 
+class TestRealSdkClientPath:
+    """Gegen den ECHTEN ``TypeSafeClient`` (kein Fake-Provider): prüft, was
+    die Fake-Tests oben nicht prüfen können — dass das SDK selbst keinen
+    Klartext loggt und dass ``Config.JEV_TIMEOUT_S`` den heißen Pfad
+    tatsächlich begrenzt."""
+
+    def test_sdk_debug_wire_log_never_carries_query_or_fact(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from typesafe_sdk import RetryPolicy, TypeSafeClient
+
+        from app.services.decisions.jev_provider import JevDecisionProvider
+
+        client = TypeSafeClient(
+            api_key="test-key",
+            model="jev-1.13.0",
+            retry=RetryPolicy(max_retries=0),
+            transport=httpx2.MockTransport(lambda _req: httpx2.Response(500, json={})),
+        )
+        state = DecisionState(
+            use_case_id=_USE_CASE_ID,
+            state={"query": _QUERY_MARKER, "fact": _FACT_MARKER},
+            context_hash="h",
+        )
+        with caplog.at_level(logging.DEBUG):
+            logging.getLogger("typesafe_sdk").setLevel(logging.DEBUG)
+            try:
+                with pytest.raises(Exception):
+                    JevDecisionProvider(client).decide(state, NoulQuestion())
+            finally:
+                logging.getLogger("typesafe_sdk").setLevel(logging.NOTSET)
+
+        # Die INFO-Zeile des SDK kommt an (Filter verwirft nicht alles) …
+        assert any(r.name == "typesafe_sdk" for r in caplog.records)
+        # … der DEBUG-Body mit Query/Fakt nicht.
+        assert _QUERY_MARKER not in caplog.text
+        assert _FACT_MARKER not in caplog.text
+
+    def test_hanging_jev_is_cut_off_by_the_timeout_and_falls_back_to_rule(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import socket
+        import threading
+
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(8)
+        accepted: list[socket.socket] = []
+        stop = threading.Event()
+
+        def _accept_and_never_answer() -> None:
+            server.settimeout(0.05)
+            while not stop.is_set():
+                try:
+                    conn, _ = server.accept()
+                except OSError:
+                    continue
+                accepted.append(conn)
+
+        worker = threading.Thread(target=_accept_and_never_answer, daemon=True)
+        worker.start()
+        try:
+            monkeypatch.setenv(
+                "TYPESAFE_BASE_URL", f"http://127.0.0.1:{server.getsockname()[1]}"
+            )
+            monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+            monkeypatch.setattr(Config, "JEV_TIMEOUT_S", 0.2)
+            monkeypatch.setattr(
+                "app.services.decisions.local_search_relevance.resolve_jev_api_key",
+                lambda: "test-key",
+            )
+            monkeypatch.setattr(
+                "app.services.decisions.jev_provider.resolve_jev_api_key", lambda: "test-key"
+            )
+            monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+            monkeypatch.setattr(
+                logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+            )
+
+            started = time.monotonic()
+            with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+                result = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100)
+            elapsed = time.monotonic() - started
+        finally:
+            stop.set()
+            worker.join(timeout=1)
+            for conn in accepted:
+                conn.close()
+            server.close()
+
+        assert result is not None
+        assert result.provider == "rule"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert "fallback_reason=TypeSafeAPITimeoutError" in caplog.text
+        # Obergrenze (max_retries+1)*timeout + Backoff (<=0.5s) + Puffer.
+        # Gemessen ~0.24s: das Retry-Budget (RetryPolicy.timeout = 0.2s) ist
+        # nach dem ersten Timeout aufgebraucht, ein zweiter Versuch startet nicht.
+        assert elapsed < 1.5, f"authoritative path blocked for {elapsed:.2f}s"
+        assert len(accepted) <= 2
+
+
 class TestBenchmarkScriptsShareTheAssertionConstant:
     """Beide Jev-Skripte importieren ``RELEVANCE_ASSERTION`` statt die
     Aussage separat zu definieren — sonst könnten Benchmark, Probe und der
