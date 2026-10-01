@@ -288,6 +288,26 @@ class TestAuthoritativeRelevant:
         assert result.total_count == 2
         assert result.relevance["top_fact_relevant"] is True
 
+    def test_missing_probability_fails_open_but_is_reported_as_none(
+        self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``probability_yes=None``: der Fakt bleibt (fail-open), der Payload
+        meldet aber den Originalwert statt eines erfundenen 1.0."""
+        _patch_resolve_relevance(
+            monkeypatch, _decision_result(provider="jev", probability_yes=None)
+        )
+        storage = _make_storage_with_two_matching_edges()
+
+        result = local_search("g1", "Bundeskanzleramt", storage=storage)
+
+        assert result.total_count == 2
+        assert result.relevance == {
+            "top_fact_relevant": True,
+            "provider": "jev",
+            "probability_yes": None,
+            "fallback": False,
+        }
+
 
 class TestAuthoritativeRuleFallback:
     def test_relevance_reports_rule_provider_and_fallback_true(

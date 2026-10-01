@@ -114,9 +114,11 @@ def _apply_relevance_verdict(
     # Noul-Fragen liefern laut Vertrag immer ``probability_yes`` — ``None``
     # wäre ein unerwarteter Zustand. Fail-open (wie der Rest dieses Moduls):
     # im Zweifel bleibt der Fakt drin, statt ihn ohne belastbares Verdikt
-    # stillschweigend zu entfernen.
-    probability_yes = decision.probability_yes if decision.probability_yes is not None else 1.0
-    top_fact_relevant = probability_yes >= 0.5
+    # stillschweigend zu entfernen. Der Fail-open-Wert gilt NUR für die
+    # Entscheidung — im Payload steht der Originalwert (``None``), damit
+    # kein Verdikt gemeldet wird, das der Provider nie abgegeben hat.
+    probability_yes = decision.probability_yes
+    top_fact_relevant = probability_yes is None or probability_yes >= 0.5
 
     if not top_fact_relevant:
         top_uuid = top_edge.get("uuid", "")
