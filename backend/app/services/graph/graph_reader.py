@@ -337,7 +337,12 @@ def local_search(
             # nicht — ``facts[0]`` wäre bei einer Top-Kante, die nur über
             # ``name`` matcht, der Fakt einer niedriger bewerteten Kante,
             # und die Telemetrie paarte einen Score mit einem fremden Fakt.
-            if scored_edges:
+            #
+            # ``top_edges`` statt ``scored_edges``: bei ``limit <= 0`` steht
+            # die Top-Kante gar nicht im Ergebnis — dann keine Entscheidung
+            # (und kein kostenpflichtiger Jev-Call) über einen Treffer, den
+            # der Aufrufer nie sieht.
+            if top_edges:
                 top_score, top_edge = scored_edges[0]
                 decision = resolve_relevance(
                     query, top_edge.get("fact") or None, top_score, run_id=run_id

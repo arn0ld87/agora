@@ -228,6 +228,28 @@ class TestAuthoritativeIrrelevant:
         assert result.facts == ["Bundeskanzleramt taucht hier auf."]
         assert result.total_count == 1
 
+    def test_no_decision_when_limit_excludes_every_edge(
+        self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``limit=0``: die Top-Kante steht nicht im Ergebnis — kein
+        Decision-Aufruf (kein Jev-Call) und kein ``relevance``-Verdikt über
+        einen Treffer, den der Aufrufer nie sieht."""
+        calls: list[tuple] = []
+
+        def _recording(*args: object, **kwargs: object) -> DecisionResult:
+            calls.append(args)
+            return _decision_result(provider="jev", probability_yes=0.0)
+
+        monkeypatch.setattr("app.services.graph.graph_reader.resolve_relevance", _recording)
+        storage = _make_storage_with_two_matching_edges()
+
+        result = local_search("g1", "Bundeskanzleramt", storage=storage, limit=0)
+
+        assert calls == []
+        assert result.relevance is None
+        assert result.facts == []
+        assert "relevance" not in result.to_dict()
+
 
 class TestAuthoritativeRelevant:
     def test_nothing_is_removed_and_relevance_marks_it_relevant(
