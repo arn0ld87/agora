@@ -42,10 +42,14 @@ Tool-Endpunkte in ``app/api/report.py``, die ``GraphToolsService`` ohne
 ``llm_client`` bauen) findet weder Check noch Verbuchung statt.
 
 Wirft nie: ein Fehler in diesem Modul darf ``local_search`` nie zum Absturz
-bringen. Die bestehende Keyword-Sortierung und der Rückgabewert von
-``local_search`` bleiben unverändert — der Aufrufer verwirft das Ergebnis
-dieses Moduls aktuell (Wirkung auf die Suche folgt in einer eigenen Slice,
-siehe ``graph_reader.py::local_search``).
+bringen. Die bestehende Keyword-Sortierung bleibt in jedem Modus unverändert.
+Im Rückgabewert von ``local_search`` wirkt sich das Verdikt NUR im Modus
+``authoritative`` aus (f001, Slice `search-effect`,
+``graph_reader.py::_apply_relevance_verdict``): bei Irrelevanz
+(``probability_yes < 0.5``) entfernt der Aufrufer den bewerteten Top-Fakt aus
+``facts``/``edges``. In den Modi ``disabled``/``shadow`` verwirft der
+Aufrufer das Ergebnis dieses Moduls weiterhin — Score, Reihenfolge und
+Rückgabewert bleiben dort unverändert.
 
 Datenschutz (authoritative-Modus): Maintainer-Freigabe 30.09.2026
 (Alexander Schneider): Query und Top-Fakt von ``local-search-relevance``

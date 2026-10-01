@@ -40,6 +40,14 @@ class SearchResult:
     # ``provenance_at``.
     fact_provenance: List[Optional[Dict[str, Any]]] = field(default_factory=list)
 
+    # f001 (Slice `search-effect`): Relevanz-Verdikt des Decision Layers
+    # über den bestbewerteten Treffer, NUR im Modus ``authoritative`` gesetzt
+    # (siehe ``graph_reader.py::local_search``/``_apply_relevance_verdict``).
+    # ``None`` in jedem anderen Fall — ``shadow``/``disabled`` und ein
+    # ausbleibendes Decision-Ergebnis liefern denselben ``SearchResult`` wie
+    # vor diesem Slice (siehe ``to_dict``: das Feld fehlt dann im Payload).
+    relevance: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "facts": self.facts,
@@ -52,6 +60,10 @@ class SearchResult:
         # denselben Payload wie vor Issue #1152.
         if any(self.fact_provenance):
             payload["fact_provenance"] = self.fact_provenance
+        # Nur im Modus `authoritative` gesetzt — shadow/disabled bleiben
+        # byte-gleich zum Payload vor diesem Slice.
+        if self.relevance is not None:
+            payload["relevance"] = self.relevance
         return payload
 
     def to_text(self) -> str:

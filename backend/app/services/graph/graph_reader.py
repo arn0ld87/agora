@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from app.contracts.decision_contract import DecisionResult
 from app.storage.graph_storage import GraphStorage
 from app.services.graph.graph_dtos import EdgeInfo, NodeInfo, SearchResult
 from app.services.decisions.local_search_relevance import resolve_relevance
@@ -75,6 +76,65 @@ def _resolve_edge_provenance(
         resolved[edge_uuid] = {"document_id": document_id, "chunk_id": chunk_id}
 
     return resolved
+
+
+def _apply_relevance_verdict(
+    decision: Optional[DecisionResult],
+    *,
+    top_edge: Dict[str, Any],
+    facts: List[str],
+    fact_provenance: List[Optional[Dict[str, Any]]],
+    edges_result: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Wendet das Relevanz-Verdikt des Decision Layers auf das Ergebnis von
+    ``local_search`` an (f001, Slice `search-effect`).
+
+    Wirkung NUR im Modus ``authoritative``: ein solches Ergebnis hat
+    ``shadow is False`` gesetzt (siehe ``local_search_relevance.py``
+    ``_resolve_authoritative``/``_resolve_shadow``). ``shadow``/``disabled``
+    liefern entweder ``None`` oder ein Ergebnis mit ``shadow=True`` — beides
+    lässt diese Funktion ``facts``/``fact_provenance``/``edges_result``
+    unangetastet und liefert selbst ``None`` zurück, damit
+    ``SearchResult.relevance`` unverändert bleibt (byte-gleiches Verhalten
+    zu vor diesem Slice).
+
+    Bei Irrelevanz (``probability_yes < 0.5``) wird GENAU die Kante entfernt,
+    die den bewerteten Top-Fakt geliefert hat — Identität über ``uuid``,
+    nicht über den Fakt-Text (zwei Kanten können denselben Fakt-Text tragen).
+    ``facts``/``fact_provenance`` werden an Position 0 entfernt: Der Aufrufer
+    ruft ``resolve_relevance`` nur mit einem nicht-leeren ``top_fact`` auf
+    (sonst liefert ``resolve_relevance`` ohnehin ``None``, siehe oben), und
+    die Top-Kante wird in ``local_search`` stets zuerst iteriert — ihr Fakt
+    ist deshalb, wenn vorhanden, immer ``facts[0]`` (siehe
+    ``test_shadow_pairs_the_top_score_with_the_fact_of_that_same_edge``).
+    """
+    if decision is None or decision.shadow:
+        return None
+
+    # Noul-Fragen liefern laut Vertrag immer ``probability_yes`` — ``None``
+    # wäre ein unerwarteter Zustand. Fail-open (wie der Rest dieses Moduls):
+    # im Zweifel bleibt der Fakt drin, statt ihn ohne belastbares Verdikt
+    # stillschweigend zu entfernen.
+    probability_yes = decision.probability_yes if decision.probability_yes is not None else 1.0
+    top_fact_relevant = probability_yes >= 0.5
+
+    if not top_fact_relevant:
+        top_uuid = top_edge.get("uuid", "")
+        if facts:
+            facts.pop(0)
+        if fact_provenance:
+            fact_provenance.pop(0)
+        for index, edge in enumerate(edges_result):
+            if edge.get("uuid", "") == top_uuid:
+                edges_result.pop(index)
+                break
+
+    return {
+        "top_fact_relevant": top_fact_relevant,
+        "provider": decision.provider,
+        "probability_yes": probability_yes,
+        "fallback": decision.fallback_chain == ["jev", "rule"],
+    }
 
 
 def search_graph(
@@ -204,6 +264,7 @@ def local_search(
     fact_provenance: List[Optional[Dict[str, Any]]] = []
     edges_result: List[Dict[str, Any]] = []
     nodes_result: List[Dict[str, Any]] = []
+    relevance_info: Optional[Dict[str, Any]] = None
 
     query_lower = query.lower()
     keywords = [
@@ -261,10 +322,10 @@ def local_search(
             # `shadow-usecase`/`resolve-fn`): genau eine zusätzliche
             # Relevanzentscheidung über den bestbewerteten Treffer, no-op
             # solange AGORA_DECISION_LAYER_MODE "disabled" ist. Wirft nie
-            # und ändert weder Score noch Reihenfolge noch Rückgabewert.
-            # Das Ergebnis wird hier bewusst verworfen — Wirkung auf die
-            # Suche (statt nur Telemetrie/Rückfallentscheidung) kommt erst
-            # in der Slice `search-effect`.
+            # und ändert in den Modi ``disabled``/``shadow`` weder Score noch
+            # Reihenfolge noch Rückgabewert. f001 (Slice `search-effect`):
+            # im Modus ``authoritative`` wirkt das Verdikt jetzt auf das
+            # Ergebnis — siehe ``_apply_relevance_verdict``.
             #
             # Fakt und Score stammen aus DERSELBEN Kante: ``facts`` über-
             # springt Kanten mit leerem ``fact`` (oben), ``scored_edges``
@@ -273,7 +334,16 @@ def local_search(
             # und die Telemetrie paarte einen Score mit einem fremden Fakt.
             if scored_edges:
                 top_score, top_edge = scored_edges[0]
-                resolve_relevance(query, top_edge.get("fact") or None, top_score, run_id=run_id)
+                decision = resolve_relevance(
+                    query, top_edge.get("fact") or None, top_score, run_id=run_id
+                )
+                relevance_info = _apply_relevance_verdict(
+                    decision,
+                    top_edge=top_edge,
+                    facts=facts,
+                    fact_provenance=fact_provenance,
+                    edges_result=edges_result,
+                )
 
         if scope in ["nodes", "both"]:
             all_nodes = storage.get_all_nodes(graph_id)
@@ -311,6 +381,7 @@ def local_search(
         query=query,
         total_count=len(facts),
         fact_provenance=fact_provenance,
+        relevance=relevance_info,
     )
 
 
