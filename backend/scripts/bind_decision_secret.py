@@ -138,11 +138,9 @@ def main(
     store_ref = args.store_ref
 
     if store_ref not in _ALLOWED_REFS:
-        logger.error(
-            "Unbekannte Secret-Ref %r. Erlaubt: %s",
-            store_ref,
-            ", ".join(sorted(_ALLOWED_REFS)),
-        )
+        # Die Allowlist steht in --help; sie wird hier nicht geloggt, weil
+        # CodeQL die aus JEV_SECRET_REF gebaute Menge als Secret einstuft.
+        logger.error("Unbekannte Ref %r (erlaubte Werte: siehe --help).", store_ref)
         return 2
 
     try:
