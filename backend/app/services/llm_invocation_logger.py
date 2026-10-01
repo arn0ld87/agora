@@ -32,8 +32,20 @@ class LlmInvocationLogger:
         remote_request_id: Optional[str] = None,
         prompt_tokens: Optional[int] = None,
         completion_tokens: Optional[int] = None,
+        reported_cost_micros: Optional[int] = None,
     ) -> None:
-        """Append a call event to the log file."""
+        """Append a call event to the log file.
+
+        ``reported_cost_micros`` (f001, Slice `jev-budget`): fuer Aufrufer,
+        die ihre Kosten bereits selbst — ueber dieselbe ``PricingRegistry`` —
+        beziffert haben, aber auf dieser Schicht keine Rohtoken-Zahlen mehr
+        kennen (z. B. ``DecisionResult.cost_micros`` eines Jev-Calls, siehe
+        ``services/decisions/local_search_relevance.py``). ``run_usage_ledger
+        ::_Bucket.add`` uebernimmt diesen Wert direkt statt ihn aus
+        ``prompt_tokens``/``completion_tokens`` + Preistabelle zu
+        rekonstruieren. ``None`` (Default) aendert nichts am bisherigen
+        token-basierten Pfad.
+        """
         event = {
             "run_id": self.run_id,
             "stage": stage,
@@ -51,6 +63,7 @@ class LlmInvocationLogger:
             # None = Provider hat keine Usage geliefert (ehrlich, nicht 0).
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
+            "reported_cost_micros": reported_cost_micros,
         }
 
         # Ensure log directory exists

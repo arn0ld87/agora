@@ -106,21 +106,34 @@ class _Bucket:
         else:
             self.events_without_tokens += 1
 
-        quote = pricing.resolve(
-            event.get("provider_id"),
-            event.get("model"),
-            event.get("base_url_sanitized"),
-        )
-        if quote.status == "free":
-            self.saw_free = True
-        elif quote.status == "priced":
+        # f001 (Slice `jev-budget`): ein Aufrufer, der seine Kosten bereits
+        # selbst ueber dieselbe PricingRegistry beziffert hat, aber auf seiner
+        # Schicht keine Rohtoken mehr kennt (Jev-Decision ueber
+        # ``DecisionResult.cost_micros``, siehe
+        # ``services/decisions/local_search_relevance.py``), liefert den
+        # fertigen Wert direkt mit. Der token-basierte Pfad kann ihn nicht
+        # rekonstruieren (keine Tokens vorhanden) — ohne diesen Zweig wuerde
+        # das Event zwar als Call zaehlen, aber nie zu den Kosten beitragen.
+        reported_cost = event.get("reported_cost_micros")
+        if isinstance(reported_cost, int):
             self.saw_priced = True
-            if has_tokens:
-                cost = quote.cost_micros(self.input_tokens_delta(prompt), self.output_tokens_delta(completion))
-                if cost is not None:
-                    self.cost_micros_known += cost
+            self.cost_micros_known += reported_cost
         else:
-            self.saw_unknown_price = True
+            quote = pricing.resolve(
+                event.get("provider_id"),
+                event.get("model"),
+                event.get("base_url_sanitized"),
+            )
+            if quote.status == "free":
+                self.saw_free = True
+            elif quote.status == "priced":
+                self.saw_priced = True
+                if has_tokens:
+                    cost = quote.cost_micros(self.input_tokens_delta(prompt), self.output_tokens_delta(completion))
+                    if cost is not None:
+                        self.cost_micros_known += cost
+            else:
+                self.saw_unknown_price = True
 
     @staticmethod
     def input_tokens_delta(prompt: Any) -> int:
