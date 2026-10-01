@@ -120,10 +120,15 @@ def _apply_relevance_verdict(
 
     if not top_fact_relevant:
         top_uuid = top_edge.get("uuid", "")
-        if facts:
+        # Lokale Absicherung statt Vertrauen auf ``resolve_relevance``
+        # (liefert bei leerem ``top_fact`` heute ``None``): ``facts[0]`` wird
+        # nur entfernt, wenn es nachweislich der bewertete Fakt der Top-Kante
+        # ist — sonst träfe der Pop still den Fakt einer anderen Kante.
+        top_fact = top_edge.get("fact")
+        if top_fact and facts and facts[0] == top_fact:
             facts.pop(0)
-        if fact_provenance:
-            fact_provenance.pop(0)
+            if fact_provenance:
+                fact_provenance.pop(0)
         for index, edge in enumerate(edges_result):
             if edge.get("uuid", "") == top_uuid:
                 edges_result.pop(index)

@@ -192,6 +192,42 @@ class TestAuthoritativeIrrelevant:
             "fallback": False,
         }
 
+    def test_fact_of_another_edge_is_never_removed_when_top_edge_has_no_fact(
+        self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Top-Kante matcht nur über ``name`` und hat keinen Fakt —
+        ``facts[0]`` gehört dann zur zweiten Kante. Selbst wenn (entgegen dem
+        heutigen ``resolve_relevance``) ein Irrelevanz-Verdikt käme, darf
+        dieser fremde Fakt nicht verschwinden."""
+        _patch_resolve_relevance(
+            monkeypatch, _decision_result(provider="jev", probability_yes=0.0)
+        )
+        storage = MagicMock(spec=GraphStorage)
+        storage.get_all_edges.return_value = [
+            {
+                "uuid": "top-edge",
+                "name": "Bundeskanzleramt Koordination",
+                "fact": "",
+                "source_node_uuid": "n1",
+                "target_node_uuid": "n2",
+                "episode_ids": [],
+            },
+            {
+                "uuid": "fact-edge",
+                "name": "x",
+                "fact": "Bundeskanzleramt taucht hier auf.",
+                "source_node_uuid": "n3",
+                "target_node_uuid": "n4",
+                "episode_ids": [],
+            },
+        ]
+        storage.get_all_nodes.return_value = []
+
+        result = local_search("g1", "Bundeskanzleramt Koordination", storage=storage)
+
+        assert result.facts == ["Bundeskanzleramt taucht hier auf."]
+        assert result.total_count == 1
+
 
 class TestAuthoritativeRelevant:
     def test_nothing_is_removed_and_relevance_marks_it_relevant(
