@@ -171,7 +171,7 @@ class TestAuthoritativeIrrelevant:
 
         result = local_search("g1", "Bundeskanzleramt", storage=storage)
 
-        assert result.relevance == {
+        assert result.relevance.model_dump() == {
             "top_fact_relevant": False,
             "provider": "jev",
             "probability_yes": 0.2,
@@ -246,7 +246,7 @@ class TestAuthoritativeIrrelevant:
         assert result.facts == []
         assert result.edges == []
         assert result.total_count == 0
-        assert result.relevance == {
+        assert result.relevance.model_dump() == {
             "top_fact_relevant": False,
             "provider": "jev",
             "probability_yes": 0.0,
@@ -312,7 +312,7 @@ class TestAuthoritativeIrrelevant:
         assert [node["uuid"] for node in result.nodes] == ["n1"]
         assert result.total_count == 2
         assert result.relevance is not None
-        assert result.relevance["top_fact_relevant"] is False
+        assert result.relevance.model_dump()["top_fact_relevant"] is False
 
     def test_no_decision_when_limit_excludes_every_edge(
         self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
@@ -354,7 +354,7 @@ class TestAuthoritativeRelevant:
         ]
         assert [edge["uuid"] for edge in result.edges] == ["top-edge", "second-edge"]
         assert result.total_count == 2
-        assert result.relevance == {
+        assert result.relevance.model_dump() == {
             "top_fact_relevant": True,
             "provider": "jev",
             "probability_yes": 0.9,
@@ -372,7 +372,7 @@ class TestAuthoritativeRelevant:
         result = local_search("g1", "Bundeskanzleramt", storage=storage)
 
         assert result.total_count == 2
-        assert result.relevance["top_fact_relevant"] is True
+        assert result.relevance.model_dump()["top_fact_relevant"] is True
 
     def test_missing_probability_fails_open_but_is_reported_as_none(
         self, authoritative_mode: None, monkeypatch: pytest.MonkeyPatch
@@ -387,7 +387,7 @@ class TestAuthoritativeRelevant:
         result = local_search("g1", "Bundeskanzleramt", storage=storage)
 
         assert result.total_count == 2
-        assert result.relevance == {
+        assert result.relevance.model_dump() == {
             "top_fact_relevant": True,
             "provider": "jev",
             "probability_yes": None,
@@ -411,7 +411,7 @@ class TestAuthoritativeRuleFallback:
 
         result = local_search("g1", "Bundeskanzleramt", storage=storage)
 
-        assert result.relevance == {
+        assert result.relevance.model_dump() == {
             "top_fact_relevant": False,
             "provider": "rule",
             "probability_yes": 0.1,

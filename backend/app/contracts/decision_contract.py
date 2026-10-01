@@ -116,6 +116,13 @@ DecisionQuestion = Annotated[
     Field(discriminator="kind"),
 ]
 
+#: Die Provider-Kennung eines ``DecisionResult`` — als eigener Typ statt
+#: inline im Feld, damit ein Konsument außerhalb dieses Moduls (z. B.
+#: ``graph_relevance_contract.py::SearchRelevanceVerdict``, f001, Slice
+#: `search-effect`) dasselbe Vokabular referenziert, statt eine zweite
+#: Literal-Liste zu pflegen, die unbemerkt auseinanderlaufen könnte.
+DecisionProviderName = Literal["rule", "llm_cheap", "llm_capable", "jev", "fake", "unresolved"]
+
 
 class DecisionResult(BaseModel):
     """Ergebnis eines ``DecisionProvider.decide()``-Aufrufs.
@@ -163,7 +170,7 @@ class DecisionResult(BaseModel):
     model_config = _STRICT
 
     use_case_id: str = Field(min_length=1)
-    provider: Literal["rule", "llm_cheap", "llm_capable", "jev", "fake", "unresolved"]
+    provider: DecisionProviderName
     answer: str | int | float | None
     distribution: dict[str, float] | None = None
     probability_yes: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -227,6 +234,7 @@ __all__ = [
     "ScoreQuestion",
     "NoulQuestion",
     "DecisionQuestion",
+    "DecisionProviderName",
     "DecisionResult",
     "RuleOutcome",
 ]

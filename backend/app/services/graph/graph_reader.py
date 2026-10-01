@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.contracts.decision_contract import DecisionResult
+from app.contracts.graph_relevance_contract import SearchRelevanceVerdict
 from app.storage.graph_storage import GraphStorage
 from app.services.graph.graph_dtos import EdgeInfo, NodeInfo, SearchResult
 from app.services.decisions.local_search_relevance import resolve_relevance
@@ -85,7 +86,7 @@ def _apply_relevance_verdict(
     facts: List[str],
     fact_provenance: List[Optional[Dict[str, Any]]],
     edges_result: List[Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchRelevanceVerdict]:
     """Wendet das Relevanz-Verdikt des Decision Layers auf das Ergebnis von
     ``local_search`` an (f001, Slice `search-effect`).
 
@@ -136,12 +137,12 @@ def _apply_relevance_verdict(
                 edges_result.pop(index)
                 break
 
-    return {
-        "top_fact_relevant": top_fact_relevant,
-        "provider": decision.provider,
-        "probability_yes": probability_yes,
-        "fallback": decision.fallback_chain == ["jev", "rule"],
-    }
+    return SearchRelevanceVerdict(
+        top_fact_relevant=top_fact_relevant,
+        provider=decision.provider,
+        probability_yes=probability_yes,
+        fallback=decision.fallback_chain == ["jev", "rule"],
+    )
 
 
 def search_graph(
@@ -271,7 +272,7 @@ def local_search(
     fact_provenance: List[Optional[Dict[str, Any]]] = []
     edges_result: List[Dict[str, Any]] = []
     nodes_result: List[Dict[str, Any]] = []
-    relevance_info: Optional[Dict[str, Any]] = None
+    relevance_info: Optional[SearchRelevanceVerdict] = None
 
     query_lower = query.lower()
     keywords = [

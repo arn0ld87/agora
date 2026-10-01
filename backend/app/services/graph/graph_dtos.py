@@ -7,6 +7,8 @@ Extracted from app.services.graph_tools — backward-compat re-exports remain th
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
+from app.contracts.graph_relevance_contract import SearchRelevanceVerdict
+
 
 def provenance_at(
     provenance: List[Optional[Dict[str, Any]]], index: int
@@ -46,7 +48,9 @@ class SearchResult:
     # ``None`` in jedem anderen Fall — ``shadow``/``disabled`` und ein
     # ausbleibendes Decision-Ergebnis liefern denselben ``SearchResult`` wie
     # vor diesem Slice (siehe ``to_dict``: das Feld fehlt dann im Payload).
-    relevance: Optional[Dict[str, Any]] = None
+    # Contract statt Dict (Codex-Review PR #1744): exportierte API-Grenze,
+    # siehe ``app/contracts/graph_relevance_contract.py``.
+    relevance: Optional[SearchRelevanceVerdict] = None
 
     def to_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -63,7 +67,7 @@ class SearchResult:
         # Nur im Modus `authoritative` gesetzt — shadow/disabled bleiben
         # byte-gleich zum Payload vor diesem Slice.
         if self.relevance is not None:
-            payload["relevance"] = self.relevance
+            payload["relevance"] = self.relevance.model_dump()
         return payload
 
     def to_text(self) -> str:
