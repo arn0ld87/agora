@@ -678,7 +678,7 @@ class TestRealSdkClientPath:
     def test_sdk_debug_wire_log_never_carries_query_or_fact(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        from typesafe_sdk import RetryPolicy, TypeSafeClient
+        from typesafe_sdk import RetryPolicy, TypeSafeClient, TypeSafeInternalServerError
 
         from app.services.decisions.jev_provider import JevDecisionProvider
 
@@ -696,7 +696,7 @@ class TestRealSdkClientPath:
         with caplog.at_level(logging.DEBUG):
             logging.getLogger("typesafe_sdk").setLevel(logging.DEBUG)
             try:
-                with pytest.raises(Exception):
+                with pytest.raises(TypeSafeInternalServerError):
                     JevDecisionProvider(client).decide(state, NoulQuestion())
             finally:
                 logging.getLogger("typesafe_sdk").setLevel(logging.NOTSET)
