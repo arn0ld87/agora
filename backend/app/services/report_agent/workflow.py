@@ -603,6 +603,116 @@ SECTION_FALLBACK_BODY = (
 )
 SECTION_FALLBACK_TITLE = "Section nicht generiert (LLM-Fehler)"
 
+# #1738: Fallback-Text mit Fehlerklasse und gekürzter Providermeldung. Beginnt
+# bewusst mit dem Marker "konnte nicht generiert werden", damit
+# ``is_fallback_content`` ihn erkennt.
+SECTION_FALLBACK_ERROR_BODY = (
+    "Diese Section konnte nicht generiert werden, weil der LLM-Aufruf "
+    "fehlgeschlagen ist (siehe Server-Log: report_id={report_id}, "
+    "section_index={section_index}). Fehlerklasse: {error_class}. "
+    "Providermeldung: {message} {hint}"
+)
+SECTION_FALLBACK_HINT_GENERIC = (
+    "Mögliche Ursachen: ungültiger API-Key, Rate-Limit, Modell nicht "
+    "verfügbar. Konfiguriere ein gültiges LLM-Profil "
+    "(Settings → LLM-Provider) und starte den Report neu."
+)
+SECTION_FALLBACK_HINT_BAD_REQUEST = (
+    "Der Provider hat die Anfrage als ungültig abgelehnt (HTTP 400); "
+    "dieselbe Konfiguration wiederholt den Fehler deterministisch. Prüfe "
+    "Modell und Parameter der Route (Settings → LLM-Provider) und starte "
+    "den Report neu."
+)
+SECTION_FALLBACK_HINT_SKIPPED = (
+    "Diese Section wurde übersprungen, weil ein vorheriger Abschnitt mit "
+    "demselben nicht-transienten Provider-Fehler (HTTP 400) scheiterte; es "
+    "wurde kein weiterer LLM-Aufruf abgesetzt. Prüfe Modell und Parameter "
+    "der Route (Settings → LLM-Provider) und starte den Report neu."
+)
+
+_PROVIDER_MESSAGE_MAX_CHARS = 240
+_SECRET_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9_\-*]{4,}"),
+    re.compile(r"\bago_[A-Za-z0-9_\-]{4,}"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]+"),
+    re.compile(
+        r"(?i)\b(api[_-]?key|token|secret|password)\b(['\"]?\s*[:=]\s*)['\"]?[^\s'\",;]+"
+    ),
+)
+# 400er, die am Inhalt eines einzelnen Abschnitts hängen (zu langer Kontext,
+# Content-Filter): ein anderer Abschnitt kann trotzdem gelingen.
+_PROMPT_SPECIFIC_400_CODES = frozenset(
+    {"context_length_exceeded", "content_policy_violation", "content_filter"}
+)
+_PROMPT_SPECIFIC_400_PHRASES = (
+    "context length",
+    "context_length",
+    "maximum context",
+    "too many tokens",
+    "content policy",
+    "content_filter",
+)
+
+
+def _redacted_provider_message(exc: BaseException) -> str:
+    """Gekürzte Providermeldung ohne erkennbare Secrets (#1738)."""
+    body = getattr(exc, "body", None)
+    raw = ""
+    if isinstance(body, dict):
+        raw = str(body.get("message") or "")
+    if not raw:
+        raw = str(exc)
+    text = " ".join(raw.split())
+    for pattern in _SECRET_PATTERNS:
+        if pattern.groups >= 2:
+            text = pattern.sub(lambda m: f"{m.group(1)}{m.group(2)}[redacted]", text)
+        else:
+            text = pattern.sub("[redacted]", text)
+    if len(text) > _PROVIDER_MESSAGE_MAX_CHARS:
+        text = text[: _PROVIDER_MESSAGE_MAX_CHARS - 1].rstrip() + "…"
+    return text
+
+
+def _is_persistent_provider_400(exc: BaseException) -> bool:
+    """HTTP 400 des Providers, der für jeden Abschnitt gleich ausfiele (#1738).
+
+    Kein 408/429/5xx, kein Timeout: nur ein echtes 400 (``BadRequestError``).
+    Ausgenommen sind 400er, die am Prompt eines Abschnitts hängen.
+    """
+    if getattr(exc, "status_code", None) != 400:
+        return False
+    body = getattr(exc, "body", None)
+    message = str(exc).lower()
+    if isinstance(body, dict):
+        if str(body.get("code") or "").lower() in _PROMPT_SPECIFIC_400_CODES:
+            return False
+        message += " " + str(body.get("message") or "").lower()
+    return not any(phrase in message for phrase in _PROMPT_SPECIFIC_400_PHRASES)
+
+
+def _persistent_error_note(persistent_error: Optional[tuple[str, str]]) -> str:
+    """Ursachen-Zusatz fuer ``report.error`` bei nicht-transientem 400 (#1738)."""
+    if persistent_error is None:
+        return ""
+    return f" Ursache: {persistent_error[0]}: {persistent_error[1]}"
+
+
+def _section_error_fallback(
+    *,
+    report_id: str,
+    section_index: int,
+    error_class: str,
+    message: str,
+    hint: str,
+) -> str:
+    return SECTION_FALLBACK_ERROR_BODY.format(
+        report_id=report_id,
+        section_index=section_index,
+        error_class=error_class,
+        message=message,
+        hint=hint,
+    )
+
 SECTION_EMPTY_RESPONSE_BODY = (
     "Dieser Abschnitt konnte nicht generiert werden: Das Modell lieferte eine "
     "leere Antwort. Bitte später erneut versuchen."
@@ -752,6 +862,26 @@ def _safe_generate_section_react(
     damit die Pipeline nicht mit ``ReportV3.model_validate``-ValidationError
     aussteigt, wenn ein LLM-Call (z. B. 401 unauthorized) failed.
     """
+    # #1738: Ein vorheriger Abschnitt scheiterte an einem deterministischen
+    # Provider-400. Derselbe Request scheitert für jeden weiteren Abschnitt —
+    # kein weiterer LLM-Call, der Abschnitt endet als sichtbarer Fallback
+    # (``is_fallback_content`` → failed → Bericht INCOMPLETE).
+    persistent = events_for(agent).persistent_provider_error
+    if persistent is not None:
+        logger.warning(
+            "section %d (%r): übersprungen, vorheriger nicht-transienter "
+            "Provider-400 (%s) — kein LLM-Call.",
+            section_index,
+            getattr(section, "title", "<unbekannt>"),
+            persistent[0],
+        )
+        return _section_error_fallback(
+            report_id=report_id,
+            section_index=section_index,
+            error_class=persistent[0],
+            message=persistent[1],
+            hint=SECTION_FALLBACK_HINT_SKIPPED,
+        )
     try:
         result = generate_section_react(
             agent,
@@ -775,9 +905,21 @@ def _safe_generate_section_react(
             getattr(section, "title", "<unbekannt>"),
             exc,
         )
-        return SECTION_FALLBACK_BODY.format(
+        error_class = type(exc).__name__
+        message = _redacted_provider_message(exc)
+        persistent_400 = _is_persistent_provider_400(exc)
+        if persistent_400:
+            events_for(agent).persistent_provider_error = (error_class, message)
+        return _section_error_fallback(
             report_id=report_id,
             section_index=section_index,
+            error_class=error_class,
+            message=message,
+            hint=(
+                SECTION_FALLBACK_HINT_BAD_REQUEST
+                if persistent_400
+                else SECTION_FALLBACK_HINT_GENERIC
+            ),
         )
     if not isinstance(result, str) or not result.strip():
         logger.warning(
@@ -1975,6 +2117,9 @@ def generate_report(
             return report
 
         report.status = ReportStatus.GENERATING
+        # #1738: der Kurzschluss nach einem nicht-transienten Provider-400
+        # gilt pro Generierungslauf, nicht über einen Resume hinweg.
+        events_for(agent).persistent_provider_error = None
         total_sections = len(outline.sections)
         generated_sections = []
         # P0-7: Abschnitte, deren Generierung fehlgeschlagen ist. Eine
@@ -2121,6 +2266,9 @@ def generate_report(
                 f"{total_sections - len(failed_section_indices)}/{total_sections} "
                 f"Sections erfolgreich. Fehlgeschlagen: "
                 f"{', '.join(str(i) for i in sorted(failed_section_indices))}."
+            )
+            failed_note += _persistent_error_note(
+                events_for(agent).persistent_provider_error
             )
             logger.warning("report %s: %s", report_id, failed_note)
             report.error = failed_note if not getattr(report, "error", None) else report.error
