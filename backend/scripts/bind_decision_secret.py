@@ -69,15 +69,23 @@ _ALLOWED_SECRET_REFS = frozenset({JEV_SECRET_REF})
 def _configure_logging() -> None:
     """Richtet den Modul-Logger für Stdout-Ausgabe ein.
 
-    Idempotent: ein zweiter Aufruf (z. B. aus einem Test, der ``main()``
-    mehrfach aufruft) hängt keinen zweiten Handler an. ``propagate = False``
-    verhindert doppelte Zeilen, falls root bereits (z. B. von pytest/caplog)
-    konfiguriert ist.
+    Hängt bei jedem Aufruf einen frischen Handler an ``sys.stdout`` — nicht
+    nur beim ersten Mal. ``logging.StreamHandler`` bindet sich an das
+    ``stream``-Objekt zum Konstruktionszeitpunkt; ein einmalig angelegter
+    Handler würde bei jedem weiteren ``main()``-Aufruf (z. B. aus Tests, die
+    ``capsys`` je Testfall neu binden) am alten, nicht mehr gültigen Stream
+    hängen bleiben. Entfernt dabei gezielt nur den EIGENEN zuvor angehängten
+    Handler, nie fremde (z. B. ``caplog.handler``, den Tests selbst anhängen).
+    ``propagate = False`` verhindert doppelte Zeilen, falls root bereits
+    (z. B. von pytest/caplog) konfiguriert ist.
     """
-    if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        logger.addHandler(handler)
+    own_handler = getattr(_configure_logging, "_own_handler", None)
+    if own_handler is not None and own_handler in logger.handlers:
+        logger.removeHandler(own_handler)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    _configure_logging._own_handler = handler  # type: ignore[attr-defined]
     logger.setLevel(logging.INFO)
     logger.propagate = False
 

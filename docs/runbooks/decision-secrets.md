@@ -54,57 +54,39 @@ docker compose exec -T agora sh -c \
 
 ## Prüfen, dass der Key ankommt
 
-**Abweichung von der ursprünglichen Planung für diesen Abschnitt:** Geplant
-war, nach dem Umschalten auf `AGORA_DECISION_LAYER_MODE=authoritative` eine
-Log-Zeile `decision_layer_authoritative … provider=jev` zu prüfen. Das ist
-mit dem heutigen Code nicht möglich, und wird deshalb hier bewusst nicht so
-dokumentiert:
-
-- `backend/app/config.py::validate_decision_layer_mode` lehnt
-  `authoritative` als **Startvalidierungsfehler** ab ("is not usable yet: no
-  wired use case has an authoritative handler … refusing to start"). Der
-  Container würde mit diesem Wert gar nicht erst hochkommen — es gäbe keine
-  Log-Zeile zu prüfen, weil der Prozess vorher stirbt.
-- Der einzige verdrahtete Use Case,
-  `backend/app/services/decisions/local_search_shadow.py`, ruft im
-  Produktionspfad ausschließlich den kostenlosen, deterministischen
-  `RuleProvider` auf (hartkodierter Default, kein Caller übergibt dort
-  aktuell einen `JevDecisionProvider`). Selbst im gültigen Modus `shadow`
-  entsteht also keine Zeile mit `provider=jev`, nur
-  `decision_layer_shadow … provider=rule …`.
-
-Der gebundene Key wird heute ausschließlich von einem Codepfad tatsächlich
-entschlüsselt und verwendet: dem Benchmark-Skript.
+Zuerst ohne Umschalten, über das Benchmark-Skript (echte Aufrufe gegen
+`https://api.typesafe.ai`, ohne Key meldet es den Jev-Arm als
+"übersprungen"):
 
 ```bash
 docker compose exec -T agora sh -c \
   'cd /app/backend && .venv/bin/python scripts/jev_benchmark_local_search.py'
 ```
 
-Ohne gebundenen Key markiert der Bericht den Jev-Arm als "übersprungen"; mit
-gebundenem Key laufen echte Aufrufe gegen `https://api.typesafe.ai` und der
-Bericht zeigt eine Jev-Accuracy, Latenz und Kosten. Binden bereitet damit die
-künftige Verdrahtung in einen Live-Use-Case vor (das in `config.py`
-erwähnte `jev-choice`-Gate), schaltet aber nichts automatisch scharf — dafür
-braucht es eine eigene, separate Code-Änderung samt bestandenem Benchmark.
+Dann scharf schalten (setzt PR #1740 voraus — vorher lehnt
+`validate_decision_layer_mode` den Wert `authoritative` beim Start ab):
+`AGORA_DECISION_LAYER_MODE=authoritative` in der produktiven `.env`, optional
+`AGORA_JEV_TIMEOUT_S` (Default `2.0`), dann `docker compose up -d agora`.
+Nach dem ersten Report-Lauf zeigt das Log je Suche eine Zeile
+`decision_layer_authoritative … provider=jev … fallback_chain=['jev']`.
+`provider=rule` mit `fallback_chain=['jev', 'rule']` heißt Rückfall; der
+Grund steht in `fallback_reason` (`no_key`, `auth_blocked`, Fehlerklasse).
 
 ## Rückweg
 
-Binden/Löschen des Keys selbst hat keinen Effekt auf
-`AGORA_DECISION_LAYER_MODE` — es gibt für diesen Schritt nichts
-zurückzudrehen außer `--delete` (siehe oben). Für den Decision-Layer-Modus
-selbst (`disabled`/`shadow`, gültige Werte laut
-`backend/app/config.py::DECISION_LAYER_MODES`) gilt wie bei jeder
-Env-Änderung: Wert in der produktiven `.env` anpassen, dann
-`docker compose up -d agora`, damit der Container neu startet und ihn liest.
+`AGORA_DECISION_LAYER_MODE` in der `.env` auf `shadow` oder `disabled`, dann
+`docker compose up -d agora`. Der Key kann gebunden bleiben; im Modus
+`shadow`/`disabled` wird er nicht verwendet. Ohne gebundenen Key fällt
+`authoritative` von selbst auf die Regel zurück.
 
 ## Key-Rotation
 
 Ein erneutes Binden (`bind_decision_secret.py jev`, ohne `--delete`)
 überschreibt den bestehenden Eintrag (`upsert`, `created_at` bleibt
 erhalten). Das reicht für einen reinen API-Key-Wechsel bei gleichbleibendem
-`AGORA_SECRET_KEY` — kein Neustart nötig, weil jeder `get_plaintext`-Aufruf
-frisch entschlüsselt.
+`AGORA_SECRET_KEY`. Im Modus `authoritative` cacht der Backend-Prozess den
+Jev-Client samt Key; danach deshalb `docker compose restart agora`, sonst
+gilt der neue Key erst nach dem nächsten 401 des alten.
 
 Ein Wechsel des **Master-Keys** `AGORA_SECRET_KEY` selbst ist ein anderer
 Vorgang (`scripts/llm-secrets-doctor.py rotate`, re-encryptet alle
