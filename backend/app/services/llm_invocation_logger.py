@@ -4,9 +4,9 @@ Structured JSONL logging of LLM calls, ensuring secret hygiene.
 """
 
 import os
-import json
 import time
 from typing import Optional
+from ..contracts.llm_call_event_contract import LlmCallEvent
 from ..utils.artifact_locator import ArtifactLocator
 from .secret_resolver import SecretResolver
 
@@ -45,29 +45,35 @@ class LlmInvocationLogger:
         ``prompt_tokens``/``completion_tokens`` + Preistabelle zu
         rekonstruieren. ``None`` (Default) aendert nichts am bisherigen
         token-basierten Pfad.
+
+        Codex-Review (PR #1742): die Zeile geht jetzt durch
+        ``contracts.llm_call_event_contract.LlmCallEvent`` statt als
+        handgeschriebenes Dict geschrieben zu werden — ein neues Feld auf
+        dieser exportierten Grenze braucht damit ab sofort einen Vertrag
+        statt eines weiteren ``event.get(...)`` beim Konsumenten.
         """
-        event = {
-            "run_id": self.run_id,
-            "stage": stage,
-            "provider_id": provider_id,
-            "model": model,
-            "base_url_sanitized": self.resolver.sanitize_url(base_url),
-            "routing_version": routing_version,
-            "timestamp": time.time(),
-            "latency_ms": latency_ms,
-            "success": success,
-            "error_type": error_type,
-            "http_status": http_status,
-            "remote_request_id": remote_request_id,
+        event = LlmCallEvent(
+            run_id=self.run_id,
+            stage=stage,
+            provider_id=provider_id,
+            model=model,
+            base_url_sanitized=self.resolver.sanitize_url(base_url),
+            routing_version=routing_version,
+            timestamp=time.time(),
+            latency_ms=latency_ms,
+            success=success,
+            error_type=error_type,
+            http_status=http_status,
+            remote_request_id=remote_request_id,
             # Issue #764: Token-Usage fuer Budget-/Verbrauchsvertraege.
             # None = Provider hat keine Usage geliefert (ehrlich, nicht 0).
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "reported_cost_micros": reported_cost_micros,
-        }
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            reported_cost_micros=reported_cost_micros,
+        )
 
         # Ensure log directory exists
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
 
         with open(self.log_path, "a") as f:
-            f.write(json.dumps(event) + "\n")
+            f.write(event.model_dump_json() + "\n")

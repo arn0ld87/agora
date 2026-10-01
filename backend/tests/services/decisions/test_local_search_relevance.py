@@ -43,7 +43,7 @@ from app.services.decisions.local_search_relevance import (
     resolve_relevance,
 )
 from app.services.decisions.rule_provider import RuleProvider
-from app.services.run_budget import RunBudgetEnforcer, reset_call_reservations
+from app.services.run_budget import RunBudgetEnforcer, load_warnings, reset_call_reservations
 from app.services.run_registry import RunRegistry
 from app.services.run_usage_ledger import (
     aggregate_usage,
@@ -587,7 +587,7 @@ class TestResolveRelevanceAuthoritativeFallback:
         assert "fallback_reason=no_key" in caplog.text
         assert "auth_blocked" not in caplog.text
 
-    def test_rule_fallback_failure_yields_none_and_logs_only_class_names(
+    def test_rule_fallback_failure_yields_unresolved_and_logs_only_class_names(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
@@ -606,7 +606,14 @@ class TestResolveRelevanceAuthoritativeFallback:
                 _QUERY_MARKER, _FACT_MARKER, 100, jev=jev, rule=_FailingRule()
             )
 
-        assert result is None
+        # Erschoepfte Fallback-Kette ist ein eigener, sichtbarer Zustand
+        # (DecisionResult-Vertrag: provider="unresolved") statt eines
+        # ``None``, das von "disabled"/"kein top_fact" nicht unterscheidbar
+        # waere.
+        assert result is not None
+        assert result.provider == "unresolved"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert result.shadow is False
         assert "rule_fallback_failed=RuntimeError" in caplog.text
         assert _QUERY_MARKER not in caplog.text
         assert _FACT_MARKER not in caplog.text
@@ -950,6 +957,91 @@ class TestResolveRelevanceAuthoritativeBudget:
         assert result.provider == "jev"
         assert result.cost_micros == 120
         assert "ledger_write_failed=OSError" in caplog.text
+
+    def test_failed_jev_call_with_run_id_is_booked_as_unsuccessful(
+        self, run_env: Path
+    ) -> None:
+        """Codex-Review (PR #1742, P1): ein gescheiterter Jev-Call muss
+        trotzdem ein Ledger-Event schreiben (``success=False``), sonst
+        zaehlt ``llm_calls`` wiederholte Fehlschlaege nicht mit und ein
+        hartes ``max_llm_calls``-Budget liesse sich darueber umgehen."""
+        run_id = self._create_run()
+        jev = _FakeJevProvider(exc=RuntimeError(f"leak {_QUERY_MARKER}"))
+
+        result = resolve_relevance(_QUERY_MARKER, _FACT_MARKER, 100, jev=jev, run_id=run_id)
+
+        assert result is not None
+        assert result.provider == "rule"
+
+        events = load_call_events(run_id)
+        assert len(events) == 1
+        event = events[0]
+        assert event["provider_id"] == "jev"
+        assert event["success"] is False
+        assert event["error_type"] == "RuntimeError"
+        # Ehrlich unbekannt, nicht 0 — SDK-Exceptions tragen keine Kosten.
+        assert event["reported_cost_micros"] is None
+        assert event["prompt_tokens"] is None
+
+        usage = aggregate_usage(run_id)
+        assert usage.totals.llm_calls == 1
+
+    def test_repeated_jev_failures_exhaust_a_hard_call_budget(
+        self, run_env: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Gegenprobe zum vorigen Test: der gebuchte Fehlschlag zaehlt
+        tatsaechlich gegen ein hartes Call-Budget, nicht nur gegen die
+        Ledger-Statistik."""
+        run_id = self._create_run({"max_llm_calls": 1, "enforcement": "hard"})
+        failing_jev = _FakeJevProvider(exc=RuntimeError("boom"))
+
+        first = resolve_relevance(
+            "Bundeskanzleramt", "Ein Fakt über Berlin", 100, jev=failing_jev, run_id=run_id
+        )
+        assert first is not None
+        assert first.provider == "rule"
+        assert len(load_call_events(run_id)) == 1
+
+        def _fail_if_called(*_args: object, **_kwargs: object) -> DecisionResult:
+            raise AssertionError("Jev darf bei erschoepftem Budget nicht aufgerufen werden")
+
+        second_jev = _FakeJevProvider(result=_jev_result())
+        second_jev.decide = _fail_if_called  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            second = resolve_relevance(
+                _QUERY_MARKER, _FACT_MARKER, 100, jev=second_jev, run_id=run_id
+            )
+
+        assert second is not None
+        assert second.provider == "rule"
+        assert "fallback_reason=budget_exhausted" in caplog.text
+        # Immer noch nur das eine (fehlgeschlagene) Event — der zweite
+        # Versuch wurde vom Budget-Gate abgefangen, bevor Jev lief.
+        assert len(load_call_events(run_id)) == 1
+
+    def test_soft_limit_warning_fires_on_the_call_that_breaches_it(
+        self, run_env: Path
+    ) -> None:
+        """Codex-Review (PR #1742, P2): ``_record_jev_usage`` muss VOR
+        ``_release_jev_reservation`` laufen — sonst liest die
+        Weich-Limit-Pruefung in ``record_after_call()`` den Ledger-Stand,
+        bevor dieser Call selbst darin auftaucht, und die Warnung faellt
+        fuer genau den Call aus, der das Limit erreicht."""
+        run_id = self._create_run({"max_llm_calls": 1, "enforcement": "soft"})
+        jev = _FakeJevProvider(result=_jev_result())
+
+        result = resolve_relevance(
+            "Bundeskanzleramt", "Ein Fakt über Berlin", 100, jev=jev, run_id=run_id
+        )
+
+        assert result is not None
+        assert result.provider == "jev"
+
+        warnings = load_warnings(run_id)
+        assert len(warnings) == 1
+        assert warnings[0].dimension == "calls"
+        assert warnings[0].observed == 1
 
 
 class TestBenchmarkScriptsShareTheAssertionConstant:
