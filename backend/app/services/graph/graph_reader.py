@@ -170,12 +170,20 @@ def search_graph(
         logger.warning(
             "Graph search failed, degrading to local search: %s", str(exc)
         )
+        # f001 (Slice `jev-budget`): run_id faehrt huckepack auf dem ohnehin
+        # uebergebenen ``llm`` mit — ``LLMClient.run_id`` ist bereits das
+        # bestehende SSoT fuer "zu welchem Run gehoert dieser Aufruf"
+        # (``LLMClient._log_invocation_event``/``_budget_enforcer`` lesen
+        # denselben Attributnamen). Kein neuer Propagationsmechanismus noetig
+        # — lediglich bis zur lokalen Fallback-Suche durchgereicht, die die
+        # einzige Aufrufstelle von ``resolve_relevance`` ist.
         return local_search(
             graph_id,
             query,
             storage=storage,
             limit=limit,
             scope=scope,
+            run_id=getattr(llm, "run_id", None),
         )
 
 
@@ -187,6 +195,7 @@ def local_search(
     storage: GraphStorage,
     limit: int = 10,
     scope: str = "edges",
+    run_id: Optional[str] = None,
 ) -> SearchResult:
     """Local keyword-matching search (fallback approach)."""
     logger.info("Using local search: query=%s...", query[:30])
@@ -264,7 +273,7 @@ def local_search(
             # und die Telemetrie paarte einen Score mit einem fremden Fakt.
             if scored_edges:
                 top_score, top_edge = scored_edges[0]
-                resolve_relevance(query, top_edge.get("fact") or None, top_score)
+                resolve_relevance(query, top_edge.get("fact") or None, top_score, run_id=run_id)
 
         if scope in ["nodes", "both"]:
             all_nodes = storage.get_all_nodes(graph_id)

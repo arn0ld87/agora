@@ -112,6 +112,64 @@ class TestAggregation:
         assert usage.totals.cost_micros is not None  # bekannter Anteil ausgewiesen
 
 
+class TestReportedCostMicros:
+    """f001 (Slice `jev-budget`): ein Aufrufer ohne Rohtoken auf seiner
+    Schicht (Jev-Decision über ``DecisionResult.cost_micros``, siehe
+    ``services/decisions/local_search_relevance.py::_record_jev_usage``)
+    liefert die fertige Kostensumme direkt mit ``reported_cost_micros`` statt
+    sie aus Tokens + Preistabelle neu zu berechnen."""
+
+    def test_reported_cost_is_added_without_any_token_data(self, pricing):
+        events = [
+            _event(
+                provider_id="jev",
+                model="jev-1.13.0",
+                prompt_tokens=None,
+                completion_tokens=None,
+                reported_cost_micros=120,
+            )
+        ]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+
+        assert usage.totals.llm_calls == 1
+        assert usage.totals.cost_micros == 120
+        assert usage.totals.tokens_status == "unknown"
+        assert usage.by_provider["jev"].cost_micros == 120
+
+    def test_reported_cost_accumulates_across_multiple_events(self, pricing):
+        events = [
+            _event(
+                provider_id="jev",
+                model="jev-1.13.0",
+                prompt_tokens=None,
+                completion_tokens=None,
+                reported_cost_micros=120,
+            ),
+            _event(
+                provider_id="jev",
+                model="jev-1.13.0",
+                prompt_tokens=None,
+                completion_tokens=None,
+                reported_cost_micros=80,
+            ),
+        ]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+
+        assert usage.totals.llm_calls == 2
+        assert usage.totals.cost_micros == 200
+
+    def test_absent_reported_cost_falls_back_to_token_based_pricing(self, pricing):
+        """Ohne ``reported_cost_micros`` (Default ``None``) ändert sich am
+        bisherigen token-basierten Pfad nichts."""
+        events = [_event()]  # openai/gpt-4o-mini mit prompt/completion tokens
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+
+        assert usage.totals.cost_status == "measured"
+        assert usage.totals.cost_micros == pytest.approx(
+            (1000 * 150000 + 500 * 600000) // 1_000_000
+        )
+
+
 class TestCostStatusAggregation:
     """Issue #764 (Review): partial-token Daten dürfen nicht als 'measured'
     ausgewiesen werden. Kostenaussagen folgen der Token-Messqualität."""

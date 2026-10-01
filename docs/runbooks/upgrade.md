@@ -29,6 +29,7 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Entfernen:** `bind_decision_secret.py jev --delete`, danach zwingend `docker compose restart agora` — der Backend-Prozess cacht den Jev-Client samt Key, das Löschen des Store-Eintrags allein widerruft ihn operativ nicht.
 - **Rollback-Implikation:** Ein Rückweg auf eine Agora-Version ohne Jev-Pilot lässt den `jev`-Eintrag in derselben Store-Datei unberührt zurück (keine Schema-Migration nötig — zusätzliche Ref im selben JSON-Objekt). Ein Master-Key-Wechsel (`AGORA_SECRET_KEY` rotieren) re-encryptet über `llm-secrets-doctor.py rotate` wie jeden anderen Eintrag auch automatisch mit.
 - **Master-Key-Prüfung vor dem Schreiben:** Seit dieser Slice verweigert `bind_decision_secret.py` das Binden/Überschreiben, wenn der aktuelle `AGORA_SECRET_KEY` einen bereits vorhandenen Store-Eintrag nicht entschlüsseln kann (Exit `2`) — ein syntaktisch gültiger, aber falscher Master-Key hätte sonst klaglos überschrieben und den vorherigen Ciphertext unwiederbringlich verloren.
+
 ## Env-Default-Änderungen außerhalb des Versionssprungs
 
 Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).

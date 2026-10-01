@@ -23,8 +23,23 @@ das widerspräche "kleiner, risikoarmer Use Case" (f005-Auftrag, Abschnitt 3,
   enthält nur ``top_score`` — kein Klartext.
 - ``authoritative`` → Jev (TypeSafe) ist Primärprovider, ``RuleProvider``
   ist Rückfall bei jeder Jev-Ausnahme oder wenn kein Jev-Provider verfügbar
-  ist (kein API-Key gebunden oder nach einem Auth-Fehler temporär
-  gesperrt). Scheitert auch der Rückfall, ist das Ergebnis ``None``.
+  ist (kein API-Key gebunden, nach einem Auth-Fehler temporär gesperrt,
+  oder — f001, Slice `jev-budget` — das Run-Budget ist erschöpft). Scheitert
+  auch der Rückfall, ist das Ergebnis ``None``.
+
+Run-Budget (f001, Slice `jev-budget`): ``resolve_relevance`` nimmt optional
+``run_id`` entgegen (durchgereicht von ``graph_reader.py::local_search``,
+dessen eigener ``run_id``-Parameter wiederum am ``LLMClient.run_id`` des
+aufrufenden ``GraphToolsService`` hängt — kein neuer Propagationsmechanismus,
+sondern dasselbe SSoT wie bei jedem LLM-Call). Nur MIT ``run_id`` prüft der
+authoritative-Pfad vor jedem Jev-Call das Run-Budget
+(``RunBudgetEnforcer.check_before_call``, Budget erschöpft →
+``fallback_reason="budget_exhausted"``, Rule-Rückfall statt Abbruch) und
+verbucht einen erfolgreichen Call ins Run-Usage-Ledger
+(``provider="jev"``, ``cost_micros`` direkt aus ``DecisionResult.cost_micros``
+— siehe :func:`_record_jev_usage`). Ohne ``run_id`` (z. B. die
+Tool-Endpunkte in ``app/api/report.py``, die ``GraphToolsService`` ohne
+``llm_client`` bauen) findet weder Check noch Verbuchung statt.
 
 Wirft nie: ein Fehler in diesem Modul darf ``local_search`` nie zum Absturz
 bringen. Die bestehende Keyword-Sortierung und der Rückgabewert von
@@ -48,9 +63,12 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from typesafe_sdk import RetryPolicy, TypeSafeAuthenticationError
+
+if TYPE_CHECKING:
+    from app.services.run_budget import RunBudgetEnforcer
 
 from app.contracts.decision_contract import (
     DecisionQuestion,
@@ -60,6 +78,7 @@ from app.contracts.decision_contract import (
 )
 from app.repositories.decision_provider import DecisionProvider, decision_layer_mode
 from app.services.decisions.jev_provider import (
+    JEV_PINNED_MODEL_VERSION,
     JevDecisionProvider,
     build_jev_client,
     resolve_jev_api_key,
@@ -252,6 +271,109 @@ def _resolve_shadow(
         return None
 
 
+def _jev_budget_enforcer(run_id: str) -> Optional["RunBudgetEnforcer"]:
+    """``RunBudgetEnforcer`` für ``run_id`` — ``None`` ohne Budget-Config oder
+    bei einem Fehler beim Aufbau (fail-open, dieselbe Haltung wie
+    ``LLMClient._budget_enforcer``: ein Budget-Infrastrukturfehler darf den
+    Jev-Call nicht verhindern, er findet dann nur ohne Durchsetzung statt)."""
+    from app.services.run_budget import RunBudgetEnforcer
+
+    try:
+        return RunBudgetEnforcer.for_run(run_id)
+    except Exception as exc:  # noqa: BLE001 - Budget ist Zusatz, kein Hotpath-Risiko
+        logger.warning(
+            "decision_layer_authoritative use_case=%s budget_enforcer_unavailable=%s",
+            _USE_CASE_ID,
+            type(exc).__name__,
+        )
+        return None
+
+
+def _release_jev_reservation(enforcer: "RunBudgetEnforcer") -> None:
+    """Reservierung aus ``check_before_call`` freigeben — Erfolgs- wie
+    Fehlerpfad gepaart, analog ``LLMClient._provider_attempt``. Ein Fehler
+    hier darf ``resolve_relevance`` nie stören."""
+    try:
+        enforcer.record_after_call()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "decision_layer_authoritative use_case=%s budget_record_failed=%s",
+            _USE_CASE_ID,
+            type(exc).__name__,
+        )
+
+
+def _record_jev_usage(run_id: str, result: DecisionResult) -> None:
+    """Erfolgreichen Jev-Call ins Run-Usage-Ledger verbuchen.
+
+    ``provider_id="jev"``, ``cost_micros`` kommt direkt aus
+    ``result.cost_micros`` — ``jev_provider.py::_cost_micros_for`` hat ihn
+    bereits über dieselbe ``PricingRegistry`` aus den Rohtokens der
+    SDK-Antwort berechnet, die ``DecisionResult`` selbst nicht mehr trägt.
+    Token-Felder bleiben deshalb ehrlich ``None`` (nicht rekonstruierbar),
+    ``LlmInvocationLogger``/``run_usage_ledger::_Bucket.add`` übernehmen den
+    gemeldeten Wert direkt statt ihn aus Tokens neu zu berechnen.
+
+    Wirft nie — ein Ledger-Fehler darf weder das Suchergebnis noch
+    ``resolve_relevance`` gefährden; nur der Exception-Klassenname wird
+    geloggt, nie Query/Fakt (die hier ohnehin nicht vorliegen).
+    """
+    try:
+        from app.services.llm_invocation_logger import LlmInvocationLogger
+
+        LlmInvocationLogger(run_id).log_event(
+            stage=_USE_CASE_ID,
+            provider_id="jev",
+            model=result.model_version or "unknown",
+            base_url=None,
+            routing_version=0,
+            latency_ms=float(result.latency_ms),
+            success=True,
+            remote_request_id=result.request_id,
+            reported_cost_micros=result.cost_micros,
+        )
+    except Exception as exc:  # noqa: BLE001 - Ledger-Fehler duerfen resolve_relevance nie stoeren
+        logger.warning(
+            "decision_layer_authoritative use_case=%s ledger_write_failed=%s",
+            _USE_CASE_ID,
+            type(exc).__name__,
+        )
+
+
+def _record_jev_failure(run_id: str, *, error_type: str, elapsed_ms: int) -> None:
+    """Fehlgeschlagenen Jev-Call ins Run-Usage-Ledger verbuchen.
+
+    Codex-Review (PR #1742): ohne diesen Call zaehlt ``llm_calls`` (``run_
+    usage_ledger.py::_Bucket.add``, das ausdruecklich auch fehlgeschlagene
+    Providerattempts mitzaehlen soll) nur erfolgreiche Jev-Aufrufe — ein
+    hartes ``max_llm_calls``-Budget liesse sich dann durch wiederholt
+    scheiternde Jev-Calls (z. B. Netzwerkfehler, abgelaufener Key) beliebig
+    oft umgehen, ohne je als Verbrauch zu zaehlen. ``success=False``,
+    Kosten/Tokens bleiben ehrlich ``None`` (SDK-Exceptions tragen keine
+    Kosteninformation). Wirft nie, aus demselben Grund wie
+    :func:`_record_jev_usage`.
+    """
+    try:
+        from app.services.llm_invocation_logger import LlmInvocationLogger
+
+        LlmInvocationLogger(run_id).log_event(
+            stage=_USE_CASE_ID,
+            provider_id="jev",
+            model=JEV_PINNED_MODEL_VERSION,
+            base_url=None,
+            routing_version=0,
+            latency_ms=float(elapsed_ms),
+            success=False,
+            error_type=error_type,
+        )
+    except Exception as exc:  # noqa: BLE001 - Ledger-Fehler duerfen resolve_relevance nie stoeren
+        logger.warning(
+            "decision_layer_authoritative use_case=%s ledger_write_failed=%s",
+            _USE_CASE_ID,
+            type(exc).__name__,
+        )
+
+
 def _resolve_authoritative(
     query: str,
     top_fact: str,
@@ -259,9 +381,11 @@ def _resolve_authoritative(
     *,
     jev: Optional[DecisionProvider],
     rule: Optional[DecisionProvider],
+    run_id: Optional[str] = None,
 ) -> Optional[DecisionResult]:
     """Jev ist Primärprovider, ``RuleProvider`` ist Rückfall bei jeder
-    Jev-Ausnahme oder fehlender Verfügbarkeit (kein Key / gesperrt)."""
+    Jev-Ausnahme oder fehlender Verfügbarkeit (kein Key / gesperrt / Budget
+    erschöpft)."""
     _started = time.monotonic()
     context_hash = _context_hash(query, top_fact)
     fallback_reason: Optional[str] = None
@@ -273,6 +397,36 @@ def _resolve_authoritative(
         except Exception as exc:  # noqa: BLE001 - Key-Store/Client-Bau-Fehler -> Rule
             # Kein Cache-Eintrag entsteht; der nächste Aufruf versucht es neu.
             active_jev, fallback_reason = None, f"provider_unavailable({type(exc).__name__})"
+
+    # Budget-Gate (f001, Slice `jev-budget`): derselbe check_before_call/
+    # record_after_call-Rhythmus wie ``LLMClient._provider_attempt``, nur
+    # wenn eine run_id vorliegt — ohne run_id existiert kein Run-Ledger, das
+    # geprüft oder beschrieben werden könnte (dieselbe Vorbedingung wie bei
+    # ``LLMClient.run_id``). ``check_before_call`` verlangt KEINE geschätzte
+    # Kosten pro Aufruf: es vergleicht nur den bereits verbrauchten
+    # Ledger-Stand gegen die konfigurierten Limits (run_budget.py) — ein
+    # eigener Kostenschätzwert für den bevorstehenden Jev-Call ist dafür
+    # nicht nötig.
+    enforcer: Optional["RunBudgetEnforcer"] = None
+    if active_jev is not None and run_id:
+        enforcer = _jev_budget_enforcer(run_id)
+        if enforcer is not None:
+            from app.services.run_budget import BudgetExceededError
+
+            try:
+                enforcer.check_before_call()
+            except BudgetExceededError:
+                # Hartes Budget erreicht: kein Jev-Call. check_before_call()
+                # wirft VOR der Reservierung — nichts freizugeben.
+                active_jev = None
+                fallback_reason = "budget_exhausted"
+                enforcer = None
+            except Exception as exc:  # noqa: BLE001 - Budget ist Zusatz, kein Hotpath-Risiko
+                logger.warning(
+                    "decision_layer_authoritative use_case=%s budget_check_failed=%s",
+                    _USE_CASE_ID,
+                    type(exc).__name__,
+                )
 
     if active_jev is not None:
         jev_state = DecisionState(
@@ -295,8 +449,34 @@ def _resolve_authoritative(
                 reason = f"{reason}(request_id={request_id})"
             fallback_reason = reason
             active_jev = None
+            # Die typesafe-sdk-Exceptions tragen nur `.request_id`, keine
+            # Kosteninformation (verifiziert gegen TypeSafeError/
+            # TypeSafeAPIError/TypeSafeAuthenticationError) — ``cost_micros``
+            # bleibt deshalb ehrlich unbekannt (``None``), nicht ``0``. Erst
+            # verbuchen (``success=False``, zaehlt gegen ``max_llm_calls`` —
+            # sonst liesse sich ein hartes Call-Budget durch wiederholt
+            # scheiternde Jev-Calls umgehen), DANN die Reservierung aus
+            # ``check_before_call`` freigeben: ``record_after_call()`` liest
+            # den aktuellen Ledger-Stand fuer die Weich-Limit-Pruefung, und
+            # dieser Call darf darin nicht fehlen (dieselbe Reihenfolge wie
+            # im Erfolgsfall unten).
+            if run_id:
+                elapsed_ms = int((time.monotonic() - _started) * 1000)
+                _record_jev_failure(run_id, error_type=reason, elapsed_ms=elapsed_ms)
+            if enforcer is not None:
+                _release_jev_reservation(enforcer)
         else:
             final = result.model_copy(update={"shadow": False, "fallback_chain": ["jev"]})
+            # Erst den Call verbuchen, DANN die Reservierung freigeben:
+            # ``record_after_call()`` (in ``_release_jev_reservation``) liest
+            # den aktuellen Ledger-Stand, um ein weiches Limit zu pruefen —
+            # geschaehe das vor dem Verbuchen, saehe genau DIESER Call sein
+            # eigenes weiches Limit nie erreicht, selbst wenn er es ist, der
+            # es ueberschreitet (Codex-Review PR #1742).
+            if run_id:
+                _record_jev_usage(run_id, final)
+            if enforcer is not None:
+                _release_jev_reservation(enforcer)
             _log_authoritative(
                 provider=final.provider,
                 probability_yes=final.probability_yes,
@@ -374,11 +554,20 @@ def resolve_relevance(
     *,
     jev: Optional[DecisionProvider] = None,
     rule: Optional[DecisionProvider] = None,
+    run_id: Optional[str] = None,
 ) -> Optional[DecisionResult]:
     """Trifft GENAU EINE Relevanz-Entscheidung über das bestbewertete
     ``local_search``-Ergebnis, abhängig von ``AGORA_DECISION_LAYER_MODE``
     (siehe Moduldocstring für die drei Modi). Default ``disabled`` — dann
     tut diese Funktion nichts.
+
+    ``run_id`` (f001, Slice `jev-budget`): ohne ihn findet im
+    authoritative-Modus weder ein Budget-Check noch eine Ledger-Verbuchung
+    statt — dieselbe Vorbedingung wie bei ``LLMClient.run_id``. Mit ``run_id``
+    prüft ``_resolve_authoritative`` das Run-Budget vor jedem Jev-Call und
+    verbucht einen erfolgreichen Call ins Run-Usage-Ledger (siehe
+    :func:`_record_jev_usage`). Der shadow-Pfad bleibt unverändert (kein
+    Jev-Call, keine Kosten).
 
     Wirft nie: ein Fehler in der Decision Layer darf die eigentliche Suche
     nicht beeinflussen. ``jev``/``rule`` sind injizierbar für Tests; ohne
@@ -399,7 +588,7 @@ def resolve_relevance(
         # Klassenname wird geloggt — keine Message, kein Traceback, weil
         # beides Query/Fakt spiegeln kann.
         try:
-            return _resolve_authoritative(query, top_fact, top_score, jev=jev, rule=rule)
+            return _resolve_authoritative(query, top_fact, top_score, jev=jev, rule=rule, run_id=run_id)
         except Exception as exc:  # noqa: BLE001 - darf local_search nie stoeren
             logger.error(
                 "decision_layer_authoritative use_case=%s unexpected_error=%s",
