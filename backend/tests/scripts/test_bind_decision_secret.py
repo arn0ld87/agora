@@ -151,6 +151,51 @@ class TestBindRejections:
         assert rc == 2
         assert "AGORA_SECRET_KEY" in caplog.text
 
+    def test_wrong_master_key_against_existing_store_is_rejected_before_writing(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        """Codex-Review (PR #1741): ein syntaktisch gültiger, aber FALSCHER
+        Master-Key darf einen bereits bestehenden Store-Eintrag nicht
+        überschreiben — sonst bestätigt der Roundtrip (derselbe falsche Key)
+        fälschlich Erfolg, und der zuvor korrekt verschlüsselte Ciphertext ist
+        verloren, sobald die Umgebung später korrigiert wird."""
+        correct_key = Fernet.generate_key().decode("utf-8")
+        monkeypatch.setenv("AGORA_SECRET_KEY", correct_key)
+        seeded_store = LlmProviderSecretsStore(data_dir=tmp_path)
+        seeded_store.upsert("openai", api_key="sk-original-openai-value-0123")
+
+        wrong_key = Fernet.generate_key().decode("utf-8")
+        monkeypatch.setenv("AGORA_SECRET_KEY", wrong_key)
+        store_with_wrong_key = LlmProviderSecretsStore(data_dir=tmp_path)
+        caplog.set_level(logging.ERROR, logger="agora.scripts.bind_decision_secret")
+        _set_stdin(monkeypatch, _MARKER)
+
+        rc = _BIND.main(["jev"], store=store_with_wrong_key)
+
+        assert rc == 2
+        assert "AGORA_SECRET_KEY" in caplog.text
+        assert store_with_wrong_key.get_entry("jev") is None
+
+        # Mit dem korrekten Key wiederhergestellt: weder der vorhandene
+        # ``openai``-Eintrag noch das Fehlen von ``jev`` wurden beschädigt.
+        monkeypatch.setenv("AGORA_SECRET_KEY", correct_key)
+        store_with_correct_key = LlmProviderSecretsStore(data_dir=tmp_path)
+        assert store_with_correct_key.get_plaintext("openai") == "sk-original-openai-value-0123"
+        assert store_with_correct_key.get_entry("jev") is None
+
+    def test_matching_master_key_still_allows_binding_a_new_ref(
+        self, store, monkeypatch
+    ):
+        """Gegenprobe: ein zum Store passender Master-Key darf weiterhin eine
+        neue Ref binden, auch wenn der Store bereits andere Einträge hat."""
+        store.upsert("openai", api_key="sk-original-openai-value-0123")
+        _set_stdin(monkeypatch, _MARKER)
+
+        rc = _BIND.main(["jev"], store=store)
+
+        assert rc == 0
+        assert store.get_plaintext("jev") == _MARKER
+
 
 class TestBindDelete:
     def test_delete_removes_a_bound_secret(self, store, caplog):

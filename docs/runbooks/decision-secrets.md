@@ -52,6 +52,13 @@ docker compose exec -T agora sh -c \
   'cd /app/backend && .venv/bin/python scripts/bind_decision_secret.py jev --delete'
 ```
 
+Danach **immer** `docker compose restart agora`: im Modus `authoritative`
+cacht der Backend-Prozess den Jev-Client samt Key (siehe Abschnitt
+„Key-Rotation“ unten) — das Löschen entfernt nur den persistierten Eintrag,
+der laufende Prozess sendet mit dem gelöschten Key weiter, bis er neu
+startet. Ohne Neustart ist der Key operativ noch nicht widerrufen, auch
+wenn der Store ihn nicht mehr enthält.
+
 ## Prüfen, dass der Key ankommt
 
 Zuerst ohne Umschalten, über das Benchmark-Skript (echte Aufrufe gegen

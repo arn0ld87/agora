@@ -36,7 +36,8 @@ Exit-Codes
 
 * 0 — Erfolg (gebunden, gelöscht, oder nichts zu löschen)
 * 2 — Konfigurations-/Eingabefehler (unbekannte Ref, leerer Key, Key zu
-  kurz, ``AGORA_SECRET_KEY`` fehlt oder ist ungültig)
+  kurz, ``AGORA_SECRET_KEY`` fehlt oder ist ungültig, oder passt nicht zum
+  bestehenden Store-Inhalt — siehe Abschnitt Master-Key-Prüfung unten)
 * 1 — Roundtrip-Prüfung nach dem Schreiben ist fehlgeschlagen (interner
   Store-Defekt, sollte praktisch nie auftreten)
 """
@@ -52,6 +53,7 @@ from typing import Optional
 from app.services.decisions.jev_provider import JEV_SECRET_REF
 from app.services.llm_provider_secrets_store import (
     LlmProviderSecretsStore,
+    SecretDecryptionError,
     get_llm_provider_secrets_store,
 )
 
@@ -160,6 +162,31 @@ def main(
                 "Kein Key gelesen (stdin war leer). Es wurde nichts gespeichert."
             )
             return 2
+
+        # Der Master-Key (AGORA_SECRET_KEY) gilt für den gesamten Store, nicht
+        # pro Eintrag. Ein syntaktisch gültiger, aber FALSCHER Master-Key würde
+        # upsert() trotzdem klaglos verschlüsseln lassen, und der anschließende
+        # Roundtrip (entschlüsselt mit demselben falschen Key) bestätigt das
+        # fälschlich. Erst wenn die Umgebung später korrigiert wird, zeigt
+        # sich: der neu gebundene Key ist mit dem echten Master-Key nicht mehr
+        # entschlüsselbar, UND ein eventuell vorher vorhandener Ciphertext für
+        # diese Ref wurde bereits überschrieben — unwiederbringlich. Deshalb
+        # vor jedem Schreiben an einem bereits existierenden Eintrag prüfen,
+        # ob der aktuelle Master-Key den Store überhaupt entschlüsseln kann.
+        existing_entries = active_store.list_entries()
+        if existing_entries:
+            probe_ref = existing_entries[0].provider_id
+            try:
+                active_store.get_plaintext(probe_ref)
+            except SecretDecryptionError:
+                logger.error(
+                    "AGORA_SECRET_KEY passt nicht zum bestehenden Store-Inhalt "
+                    "(Probe-Eintrag %r ist damit nicht entschlüsselbar). Es "
+                    "wurde nichts geschrieben, um vorhandene Secrets nicht mit "
+                    "einem falschen Master-Key zu überschreiben.",
+                    probe_ref,
+                )
+                return 2
 
         active_store.upsert(store_ref, api_key=key)
 
