@@ -2,7 +2,7 @@
 name: agora-refactor-worker
 description: MUST BE USED for Python refactors in backend/app/services and backend/app/api, and for Ops-Shell-Skripte unter scripts/ mit ihren pytest-Tests. Use proactively when changes span 2+ files, when extracting helpers, when migrating from @dataclass to pydantic.BaseModel, or when modifying llm_client/report_agent/evidence_binder. Does NOT touch frontend or OASIS-Source.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 maxTurns: 150
 background: true

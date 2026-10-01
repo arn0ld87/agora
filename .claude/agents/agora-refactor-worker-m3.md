@@ -2,13 +2,12 @@
 name: agora-refactor-worker-m3
 description: MUST BE USED for Python refactors in backend/app/services and backend/app/api, and for Ops-Shell-Skripte unter scripts/ mit ihren pytest-Tests. Use proactively when changes span 2+ files, when extracting helpers, when migrating from @dataclass to pydantic.BaseModel, or when modifying llm_client/report_agent/evidence_binder. Does NOT touch frontend or OASIS-Source.
 tools: Read, Edit, Write, Bash, ToolSearch, mcp__code-review-graph__semantic_search_nodes_tool, mcp__code-review-graph__query_graph_tool, mcp__code-review-graph__get_impact_radius_tool, mcp__code-review-graph__get_review_context_tool, mcp__code-review-graph__get_minimal_context_tool, mcp__context-mode__ctx_execute, mcp__context-mode__ctx_batch_execute, mcp__context-mode__ctx_execute_file, mcp__context-mode__ctx_search
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 maxTurns: 150
 background: true
 isolation: worktree
 ---
-
 # Agora Backend-Refactor-Worker
 
 ## Werkzeugregel (hart, geht jeder Spec vor)
@@ -56,15 +55,15 @@ Der automatisch bereitgestellte Worktree steht oft NICHT auf der richtigen Basis
    uv run ruff check app/ tests/
    uv run mypy app
    ```
-
 8. Sachlich betroffene Dokumentationsartefakte im selben Commit synchronisieren:
+
    - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat (Test-Zähler ausgenommen),
    - Runbooks, `docs/api.md`, `docs/api-contracts.md`, `README.md`, `CONTEXT.md`, wenn sie das geänderte Verhalten beschreiben,
    - `docs/runbooks/upgrade.md` bei Persistenz-, Migrations-, Env-Default- oder Compose-Änderungen,
    - Changelog **nur** als Fragment `changelog.d/<nr>-<slug>.md`, **nie** `CHANGELOG.md` direkt,
    - `ROADMAP.md` nur bei geändertem Release-Gate,
    - Folge-Issue nur benennen, nicht anlegen.
-   Für jedes Artefakt dokumentieren: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
+     Für jedes Artefakt dokumentieren: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
 9. Ein Scope-Gate (`scripts/pre-push-gate.sh`) nur ausführen, wenn das Briefing es ausdrücklich verlangt — sonst fährt es der Lead.
 10. Nur Issue-Dateien und die in Schritt 8 betroffenen Sync-Dateien einzeln stagen (`git add <pfad>`, nie `git add -A`) und genau einen lokalen Commit erzeugen.
 11. Commit-SHA, Diff-Summary sowie Test- und Pflichtprüfungs-Ausgaben zurückgeben.
