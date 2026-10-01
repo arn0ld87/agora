@@ -18,6 +18,7 @@ Kernanforderungen:
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
 import sys
 import time
@@ -42,6 +43,13 @@ from app.services.decisions.local_search_relevance import (
     resolve_relevance,
 )
 from app.services.decisions.rule_provider import RuleProvider
+from app.services.run_budget import RunBudgetEnforcer, reset_call_reservations
+from app.services.run_registry import RunRegistry
+from app.services.run_usage_ledger import (
+    aggregate_usage,
+    load_call_events,
+    reset_usage_cache,
+)
 
 #: Auffällige Marker statt echter Query-/Fakttexte in den Rückfall-Tests —
 #: so kann geprüft werden, dass der Text in KEINEM Logpfad landet, auch
@@ -768,6 +776,180 @@ class TestRealSdkClientPath:
         # nach dem ersten Timeout aufgebraucht, ein zweiter Versuch startet nicht.
         assert elapsed < 1.5, f"authoritative path blocked for {elapsed:.2f}s"
         assert len(accepted) <= 2
+
+
+class TestResolveRelevanceAuthoritativeBudget:
+    """f001 (Slice `jev-budget`): Budget-Gate + Ledger-Verbuchung des
+    authoritative-Pfads. Läuft gegen die ECHTEN Ledger-/Registry-Funktionen
+    mit einem isolierten ``tmp_path``-Run-Verzeichnis, nicht nur gegen Mocks
+    — ``run_env`` spiegelt exakt die Fixture aus
+    ``tests/services/test_run_budget.py``."""
+
+    @pytest.fixture()
+    def run_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        registry_dir = tmp_path / "run_registry"
+        registry_dir.mkdir()
+        monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", str(registry_dir))
+        RunRegistry._instance = None
+        run_dirs = tmp_path / "runs"
+        run_dirs.mkdir()
+        monkeypatch.setattr(
+            "app.services.run_usage_ledger.ArtifactLocator.run_dir",
+            staticmethod(lambda run_id: str(run_dirs / run_id)),
+        )
+        monkeypatch.setattr(
+            "app.services.run_budget.ArtifactLocator.run_dir",
+            staticmethod(lambda run_id: str(run_dirs / run_id)),
+        )
+        monkeypatch.setattr(
+            "app.services.llm_invocation_logger.ArtifactLocator.run_dir",
+            staticmethod(lambda run_id: str(run_dirs / run_id)),
+        )
+        reset_usage_cache()
+        reset_call_reservations()
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.decisions.local_search_relevance"), "propagate", True
+        )
+        monkeypatch.setattr(Config, "DECISION_LAYER_MODE", "authoritative")
+        yield run_dirs
+        RunRegistry._instance = None
+        reset_usage_cache()
+        reset_call_reservations()
+
+    @staticmethod
+    def _create_run(budget: dict | None = None) -> str:
+        manifest = RunRegistry().create_run(
+            "simulation_run", "sim_1", metadata={"budget": budget} if budget else None
+        )
+        return manifest["run_id"]
+
+    @staticmethod
+    def _write_events(run_dirs: Path, run_id: str, events: list[dict]) -> None:
+        run_dir = run_dirs / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with open(run_dir / "llm_call_events.jsonl", "w", encoding="utf-8") as handle:
+            for event in events:
+                handle.write(json.dumps(event) + "\n")
+        reset_usage_cache()
+
+    def test_successful_jev_call_with_run_id_is_booked_to_the_ledger(
+        self, run_env: Path
+    ) -> None:
+        run_id = self._create_run()
+        jev = _FakeJevProvider(result=_jev_result())
+
+        result = resolve_relevance(
+            "Bundeskanzleramt", "Ein Fakt über Berlin", 100, jev=jev, run_id=run_id
+        )
+
+        assert result is not None
+        assert result.provider == "jev"
+        assert result.fallback_chain == ["jev"]
+
+        events = load_call_events(run_id)
+        assert len(events) == 1
+        event = events[0]
+        assert event["provider_id"] == "jev"
+        assert event["model"] == "jev-1.13.0"
+        assert event["success"] is True
+        assert event["remote_request_id"] == "req-jev-1"
+        assert event["reported_cost_micros"] == 120
+
+        usage = aggregate_usage(run_id)
+        assert usage.totals.llm_calls == 1
+        assert usage.totals.cost_micros == 120
+        assert usage.by_provider["jev"].cost_micros == 120
+
+    def test_budget_exhausted_blocks_jev_call_and_falls_back_to_rule(
+        self, run_env: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run_id = self._create_run({"max_llm_calls": 1, "enforcement": "hard"})
+        # Budget bereits ausgeschoepft: ein frueherer Call liegt schon im Ledger.
+        self._write_events(
+            run_env,
+            run_id,
+            [
+                {
+                    "run_id": run_id,
+                    "stage": "report_generation",
+                    "provider_id": "openai",
+                    "model": "gpt-4o-mini",
+                    "base_url_sanitized": "https://api.openai.com",
+                    "timestamp": 1_700_000_000.0,
+                    "latency_ms": 100.0,
+                    "success": True,
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                }
+            ],
+        )
+
+        def _fail_if_called(*_args: object, **_kwargs: object) -> DecisionResult:
+            raise AssertionError("Jev darf bei erschoepftem Budget nicht aufgerufen werden")
+
+        jev = _FakeJevProvider(result=_jev_result())
+        jev.decide = _fail_if_called  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.INFO, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(
+                _QUERY_MARKER, _FACT_MARKER, 100, jev=jev, run_id=run_id
+            )
+
+        assert result is not None
+        assert result.provider == "rule"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert "fallback_reason=budget_exhausted" in caplog.text
+
+        # Kein zweites Event: der Jev-Call hat nie stattgefunden.
+        events = load_call_events(run_id)
+        assert len(events) == 1
+        assert events[0]["provider_id"] == "openai"
+
+    def test_without_run_id_skips_budget_check_and_ledger_write(
+        self, run_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _fail_if_called(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("ohne run_id darf kein Budget-Enforcer gebaut werden")
+
+        monkeypatch.setattr(RunBudgetEnforcer, "for_run", staticmethod(_fail_if_called))
+        jev = _FakeJevProvider(result=_jev_result())
+
+        result = resolve_relevance("Bundeskanzleramt", "Ein Fakt über Berlin", 100, jev=jev)
+
+        assert result is not None
+        assert result.provider == "jev"
+        # Keine run_id => kein Run-Verzeichnis, also auch kein Event zu lesen —
+        # der eigentliche Beweis ist, dass ``RunBudgetEnforcer.for_run`` oben
+        # nie aufgerufen wurde (sonst hätte die Assertion das gesamte
+        # authoritative try/except in lauter `unexpected_error` verwandelt,
+        # was die Provider-Zuordnung unten sichtbar bräche).
+
+    def test_ledger_write_failure_does_not_affect_the_result(
+        self,
+        run_env: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        run_id = self._create_run()
+        jev = _FakeJevProvider(result=_jev_result())
+
+        def _boom(*_args: object, **_kwargs: object) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(
+            "app.services.llm_invocation_logger.LlmInvocationLogger.log_event", _boom
+        )
+
+        with caplog.at_level(logging.WARNING, logger="agora.decisions.local_search_relevance"):
+            result = resolve_relevance(
+                "Bundeskanzleramt", "Ein Fakt über Berlin", 100, jev=jev, run_id=run_id
+            )
+
+        assert result is not None
+        assert result.provider == "jev"
+        assert result.cost_micros == 120
+        assert "ledger_write_failed=OSError" in caplog.text
 
 
 class TestBenchmarkScriptsShareTheAssertionConstant:
