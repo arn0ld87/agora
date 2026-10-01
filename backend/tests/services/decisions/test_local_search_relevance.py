@@ -579,7 +579,7 @@ class TestResolveRelevanceAuthoritativeFallback:
         assert "fallback_reason=no_key" in caplog.text
         assert "auth_blocked" not in caplog.text
 
-    def test_rule_fallback_failure_yields_none_and_logs_only_class_names(
+    def test_rule_fallback_failure_yields_unresolved_and_logs_only_class_names(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
@@ -598,7 +598,14 @@ class TestResolveRelevanceAuthoritativeFallback:
                 _QUERY_MARKER, _FACT_MARKER, 100, jev=jev, rule=_FailingRule()
             )
 
-        assert result is None
+        # Erschoepfte Fallback-Kette ist ein eigener, sichtbarer Zustand
+        # (DecisionResult-Vertrag: provider="unresolved") statt eines
+        # ``None``, das von "disabled"/"kein top_fact" nicht unterscheidbar
+        # waere.
+        assert result is not None
+        assert result.provider == "unresolved"
+        assert result.fallback_chain == ["jev", "rule"]
+        assert result.shadow is False
         assert "rule_fallback_failed=RuntimeError" in caplog.text
         assert _QUERY_MARKER not in caplog.text
         assert _FACT_MARKER not in caplog.text
