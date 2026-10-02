@@ -860,6 +860,47 @@ jobs:
           subject-digest: ${{ steps.build_proxy.outputs.digest }}
           push-to-registry: true
 
+      - name: Generate GHCR proxy SBOM
+        # agora-proxy wird genauso oeffentlich publiziert wie agora; ohne
+        # eigene SBOM waere das Freigabekriterium "Release-Artefakte,
+        # Checksummen und SBOM vorhanden" nur fuer ein Image erfuellt (#1661).
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/agora-proxy@${{ steps.build_proxy.outputs.digest }}
+          format: spdx-json
+          output-file: agora-proxy-image.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Release-Checksummen erzeugen (SHA256SUMS)
+        # Die Images selbst sind ueber ihren Manifest-Digest adressiert; die
+        # Digest-Datei haelt fest, welche zwei Digests zu diesem Lauf gehoeren.
+        # SHA256SUMS deckt Digest-Datei und beide SBOMs ab. Verifikation:
+        # docs/runbooks/release-artefakte-pruefen.md (#1661).
+        env:
+          OWNER: ${{ github.repository_owner }}
+          AGORA_DIGEST: ${{ steps.build_ghcr.outputs.digest }}
+          PROXY_DIGEST: ${{ steps.build_proxy.outputs.digest }}
+        run: |
+          set -euo pipefail
+          printf 'ghcr.io/%s/agora@%s\nghcr.io/%s/agora-proxy@%s\n' \
+            "$OWNER" "$AGORA_DIGEST" "$OWNER" "$PROXY_DIGEST" > agora-image-digests.txt
+          sha256sum agora-image.spdx.json agora-proxy-image.spdx.json agora-image-digests.txt > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          { echo '```'; cat SHA256SUMS; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release-Artefakte hochladen
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agora-release-artifacts
+          path: |
+            SHA256SUMS
+            agora-image.spdx.json
+            agora-proxy-image.spdx.json
+            agora-image-digests.txt
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Extract Docker Hub metadata (optional mirror)
         id: meta_dockerhub
         # Der Mirror laeuft nur auf Release-Pfaden. Auf jedem main-Push die
@@ -891,3 +932,60 @@ jobs:
           # mode=min — siehe Begründung im build-only-Job weiter oben (#994).
           cache-from: type=gha,scope=prod
           cache-to: type=gha,mode=min,scope=prod
+
+  release-assets:
+    # Schritt 4 (#1661): SHA256SUMS, Digest-Datei und beide SBOMs ans GitHub
+    # Release haengen — nur bei v*-Tags. Eigener Job, damit das Schreibrecht auf
+    # Repository-Inhalte nicht im Build-/Push-Pfad liegt. always() haelt den Break-glass-Pfad
+    # offen: ein per force_publish erfolgreicher publish bekommt ebenfalls
+    # seine Checksummen, obwohl der Smoke in der Kette rot war.
+    #
+    # Existiert das Release noch nicht (Tag gepusht, `gh release create` aus
+    # docs/release-process.md §9 noch nicht gelaufen), legt der Job einen
+    # Draft an. Der Maintainer veroeffentlicht ihn dann mit `gh release edit`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [publish]
+    if: ${{ always() && needs.publish.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            uploads.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - name: Release-Artefakte herunterladen
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agora-release-artifacts
+          path: release-artifacts
+
+      - name: Checksummen pruefen
+        working-directory: release-artifacts
+        run: sha256sum -c SHA256SUMS
+
+      - name: An GitHub Release anhaengen
+        working-directory: release-artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag \
+              --title "Agora $TAG" \
+              --notes "Entwurf aus docker-image.yml. Release Notes folgen nach docs/release-process.md §9."
+          fi
+          gh release upload "$TAG" --clobber \
+            SHA256SUMS \
+            agora-image.spdx.json \
+            agora-proxy-image.spdx.json \
+            agora-image-digests.txt
