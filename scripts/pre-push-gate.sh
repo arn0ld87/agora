@@ -69,6 +69,17 @@ run_backend() {
   (cd backend && uv run python scripts/check_mypy_debt.py) \
     || fail "mypy debt gate — neue Typfehler; siehe backend/mypy-debt-baseline.txt"
 
+  # Issue #1671: Ratchet und Schönungs-Check gegen v0.9.6 (Spiegel des
+  # backend-pr-gate). Braucht den Tag lokal und ein Git-Repo; ein rsync-Spiegel
+  # ohne .git (z. B. remote-backend.sh) ueberspringt mit Warnung, CI prueft.
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    step "Backend: Coverage-Ratchet und Schönungs-Check (Issue #1671)"
+    (cd backend && uv run python scripts/check_coverage.py --integrity) \
+      || fail "coverage integrity — Scope/Schwellen gegenueber v0.9.6 geschoent; siehe backend/coverage-baseline.json"
+  else
+    warn "Coverage-Ratchet uebersprungen (kein Git-Repo; CI faehrt ihn auf jedem PR)"
+  fi
+
   if [ "${GATE_FULL:-0}" = "1" ]; then
     step "Backend: mypy app/ (GATE_FULL=1)"
     (cd backend && uv run mypy app) || fail "mypy"

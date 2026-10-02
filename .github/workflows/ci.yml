@@ -304,6 +304,18 @@ jobs:
         # welche von beiden gefallen ist.
         run: uv run python scripts/check_coverage.py
 
+      # Issue #1671: dieselbe Pruefung wie im backend-pr-gate, damit auch
+      # Direkt-Pushes auf main gegen v0.9.6 laufen.
+      - name: Referenz-Tag v0.9.6 und main holen
+        run: >-
+          git fetch --no-tags --depth=1 origin
+          +refs/tags/v0.9.6:refs/tags/v0.9.6
+          +refs/heads/main:refs/remotes/origin/main
+
+      - name: Coverage-Ratchet und Schönungs-Check gegen v0.9.6 (Issue #1671)
+        working-directory: backend
+        run: uv run python scripts/check_coverage.py --integrity
+
       - name: Upload coverage report
         # CI-Welle 2026-05-16: Coverage-Artifact-Upload nur auf push:main —
         # PRs sehen Coverage-Werte im pytest-Output, Trend-Tracking läuft
@@ -480,6 +492,21 @@ jobs:
       - name: Pytest contracts (fast subset)
         working-directory: backend
         run: uv run pytest tests/contracts/ -q
+
+      # Issue #1671 (Entscheidung #1667): Ratchet und Schönungs-Check gegen
+      # v0.9.6. Braucht keinen Coverage-Lauf und laeuft deshalb auf jedem PR,
+      # nicht erst im Coverage-Job auf push:main. Der Checkout ist flach und
+      # ohne Tags; Referenz-Tag und main (zweiter Ratchet-Boden) werden gezielt
+      # nachgeholt (Repo ist public, keine Credentials noetig).
+      - name: Referenz-Tag v0.9.6 und main holen
+        run: >-
+          git fetch --no-tags --depth=1 origin
+          +refs/tags/v0.9.6:refs/tags/v0.9.6
+          +refs/heads/main:refs/remotes/origin/main
+
+      - name: Coverage-Ratchet und Schönungs-Check gegen v0.9.6 (Issue #1671)
+        working-directory: backend
+        run: uv run python scripts/check_coverage.py --integrity
 
       # 2026-08-03 (Issue #1055): Pre-Merge-Backend-Tests. Ohne Coverage-Gate
       # und ohne DB-abhängige Marker -- die sind in hermetic fixtures gemockt.
