@@ -21,6 +21,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0013](0013-seed-corpus-document-anchor.md) | Verifizierter Dokument-Anker für seed_corpus-Evidence | Accepted (2026-08-09) | #1086 |
 | [0018](0018-multi-user-before-1-0.md) | Multi-User vor 1.0: Workspaces, Supabase Auth, RLS, Realtime (löst 0001 ab) | Zeitpunkt abgelöst durch 0019 | #1610 |
 | [0019](0019-multi-user-after-1-0.md) | Multi-User erst nach 1.0; gemergter Code bleibt inaktiv | Accepted (2026-09-25) | #1610 |
+| [0021](0021-kompatibilitaet-ab-1-0.md) | Kompatibilitäts- und Deprecation-Policy ab 1.0 | Accepted (2026-10-02, Entscheidung #1657) | #1664 |
 
 ## Geplante ADRs
 

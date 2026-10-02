@@ -16,6 +16,7 @@ Diese Datei ist eine **Domänenübersicht**, keine handgepflegte vollständige R
 - **SSE/Downloads:** nutzen dort, wo Browser-APIs keine Custom-Header erlauben, signierte kurzlebige Tickets statt Klartext-Mastertokens in URLs.
 - **JSON-Envelopes:** reguläre API-Endpunkte verwenden strukturierte Success-/Error-Envelopes; Streams und Datei-Exporte sind bewusst Ausnahmen.
 - **Contracts-first:** neue oder geänderte JSON-Grenzen bekommen Pydantic-v2-Vertrag, Zod-Spiegel und JSON-Schema im selben Slice.
+- **Versionierung und Kompatibilität:** Die API hat keinen URL-Präfix, ihre Version ist die App-Version (SemVer). Ab `v1.0.0` gibt es kein Breaking in `1.x` an den hier dokumentierten Endpunkten und an persistierten Formaten. Eine Deprecation wird im Changelog angekündigt, im Log gewarnt und in der Antwort über die Header `Deprecation` und `Link: rel="successor-version"` gekennzeichnet. Entfernt wird frühestens in `2.0.0`. Details, Breaking-Definition und offene Einzelfälle: [ADR-0021](decisions/0021-kompatibilitaet-ab-1-0.md).
 
 ---
 

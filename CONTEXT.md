@@ -276,7 +276,7 @@ Die verbindliche Priorisierung steht in [`docs/STATUS.md`](docs/STATUS.md) und [
 | Role Leakage: Markierung statt Verwerfen, keine vollständige Erkennung zugesagt | #1323 geschlossen |
 | Evaluation-Leakage/Gegenlauf | #1240 |
 | Replay ohne Determinismusgarantie, `random_seed=null` | #763 / #1274 geschlossen |
-| Kompatibilitäts- und Deprecation-Policy (`schema_version` für Dokument-Manifest und Personasatz ist eingeführt, Altbestand gilt als Version 1) | #1664 (#1663 geschlossen) |
+| Kompatibilität ab 1.0: Die Policy steht in ADR-0021 und gilt erst ab `v1.0.0`. Offene Einzelfälle sind bis `1.0.0-rc.1` zu entscheiden, ein automatischer Breaking-Change-Check fehlt | ADR-0021 (#1664) |
 | Test-Isolation vom echten Datenbestand: Schreibsperre gilt nur im Testprozess, nicht für Kindprozesse | #1632 geschlossen |
 | Fresh-Host-Install/Restore/Upgrade-Nachweis | #766 |
 | AURORA-Produktvergleich / volle Kalibrierung nach 1.0 | #1662 / #765 |
