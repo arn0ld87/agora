@@ -81,6 +81,8 @@ Drei Baseline-Gates halten Bestandsschuld sichtbar und am Wachsen gehindert. Sie
 
 Zum Coverage-Gate: der Istwert auf dem Messstand war **83,82 % Line** (26661/31806 Statements) und **71,94 % Branch** (6571/9134 Branches) über die vollständige Backend-Suite. Die Schwellen liegen je einen Punkt darunter — Puffer für Umgebungsunterschiede, kein Spielraum zum Absinken. Die vorherige Schwelle `--cov-fail-under=60` ohne Branch-Messung lag 24 Punkte unter dem Ist und konnte deshalb keine Regression erkennen ([#1495](https://github.com/arn0ld87/agora/issues/1495)).
 
+Ratchet und Schönungs-Check ([#1671](https://github.com/arn0ld87/agora/issues/1671)): `check_coverage.py --integrity` läuft auf jedem PR (Backend PR smoke gate), im `backend`-Job und im Pre-Push-Gate gegen den Tag `v0.9.6`. `line_min`/`branch_min` sinken nur mit `lowering_approval` (Freigabe des Maintainers samt Grund); neue `omit`-/`exclude`-Einträge, engeres `source`/`include` und eine `.coveragerc` sind gesperrt; die Zahl der No-Cover-Pragmas und Test-Skips unter `backend/` wächst nur mit begründetem Eintrag in `scope_allowlist`. Stand der Einführung: 40 Pragmas (36 bei `v0.9.6`) und 44 Skips (35), die Differenz steht als zehn begründete Allowlist-Einträge in `backend/coverage-baseline.json`.
+
 Zum Typ-Gate: `pyproject.toml` schaltet mypy für `app`, `app.config`, `app.container`, `app.models.*`, `app.services.*`, `app.storage.*`, `app.utils.*` und `app.llm.*` per `ignore_errors` ab. `mypy app` ist deshalb grün, obwohl in genau diesen Bereichen die eigentliche Arbeit liegt. Die 266 Fehler sind **nicht behoben**, sondern gemessen und gedeckelt; die `ignore_errors`-Modulliste selbst darf ebenfalls nicht wachsen.
 
 ## Produktive Architektur
