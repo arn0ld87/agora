@@ -330,7 +330,7 @@ Ein Teil-Rückweg ist möglich, solange die Reihenfolge stimmt (Reports allein z
 Noch nicht festgelegt, Eingaben für den Abschnitt:
 
 - Ob und wie sich die Code-Defaults der Metadaten-Schalter ändern und wie der 1.0-Install-Pfad mit vollem Supabase-Stack aussieht ([#1654](https://github.com/arn0ld87/agora/issues/1654)).
-- Die Kompatibilitäts- und Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)). `schema_version` für Dateiartefakte ist mit [#1663](https://github.com/arn0ld87/agora/issues/1663) eingeführt, siehe „Persistenz-Änderungen außerhalb des Versionssprungs“.
+- Die Entscheidungen zu den offenen Einzelfällen aus [ADR-0021](../decisions/0021-kompatibilitaet-ab-1-0.md) §5, Stichtag `1.0.0-rc.1`: was davon vor 1.0 entfernt wird und was bis `2.0.0` bleibt. Die Policy selbst steht im ADR ([#1664](https://github.com/arn0ld87/agora/issues/1664)). `schema_version` für Dateiartefakte ist mit [#1663](https://github.com/arn0ld87/agora/issues/1663) eingeführt, siehe „Persistenz-Änderungen außerhalb des Versionssprungs“.
 - Der Fresh-Host-Install/Restore als Nachweis ([#766](https://github.com/arn0ld87/agora/issues/766), [#1659](https://github.com/arn0ld87/agora/issues/1659)).
 
 ---
