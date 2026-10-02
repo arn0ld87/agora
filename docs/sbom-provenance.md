@@ -1,9 +1,11 @@
 # SBOM und Build-Provenance prüfen
 
-**Stand:** 2026-06-10
+**Stand:** 2026-10-02
 
 Seit Issue #633 erzeugt `docker-image.yml` für jeden Workflow-Run SBOM-Artefakte
 und für jeden Registry-Push eine kryptographische Build-Provenance-Attestation.
+Seit #1661 kommen `SHA256SUMS` und eine Digest-Datei dazu; bei `v*`-Tags hängen
+sie zusammen mit beiden SBOMs am GitHub Release.
 
 ## Was CI erzeugt
 
@@ -12,6 +14,8 @@ und für jeden Registry-Push eine kryptographische Build-Provenance-Attestation.
 | `build-only` | `agora-image-sbom-spdx` | SPDX-JSON | SBOM des lokal gebauten Images (vor Smoke-Gate) |
 | `publish` | `agora-ghcr-sbom-spdx` | SPDX-JSON | SBOM des tatsächlich gepushten GHCR-Images |
 | `publish` | GHCR-Attestation | Sigstore/Rekor | Build-Provenance (in-registry, via `actions/attest-build-provenance`) für `agora` und `agora-proxy` |
+| `publish` | `agora-release-artifacts` | SPDX-JSON, Text | `agora-image.spdx.json`, `agora-proxy-image.spdx.json`, `agora-image-digests.txt` (beide Manifest-Digests) und `SHA256SUMS` über diese drei Dateien |
+| `release-assets` | GitHub-Release-Assets | wie oben | dieselben vier Dateien, nur bei `v*`-Tags; Prüfung: [`runbooks/release-artefakte-pruefen.md`](runbooks/release-artefakte-pruefen.md) |
 
 Seit #1708 publiziert `publish` auch auf jedem grünen `main`-Push (Tags `sha-<7>`, `edge`), nicht mehr nur auf Release-Pfaden. `latest` zeigt auf das letzte Release mit grünem Smoke. Für Prüfungen einen festen Tag (`sha-<7>` oder `vX.Y.Z`) verwenden — `edge` und `latest` bewegen sich.
 
@@ -125,4 +129,5 @@ syft-Lauf den Job explizit fehlschlagen lässt.
 
 - [`docs/ci-egress-allowlist.md`](ci-egress-allowlist.md) — Netzwerk-Endpunkte, die syft/anchore braucht
 - [`docs/release-process.md`](release-process.md) — Container-Release-Workflow
+- [`docs/runbooks/release-artefakte-pruefen.md`](runbooks/release-artefakte-pruefen.md) — Checksummen und Digests eines Releases prüfen
 - [`docs/dependency-risk-register.md`](dependency-risk-register.md) — Tracked CVEs und Risiken
