@@ -282,8 +282,9 @@ def _get_ollama_status():
 
 def _get_disk_status():
     """Check disk usage for uploads directory."""
-    uploads_path = os.path.join(os.path.dirname(__file__), '../../uploads')
-    uploads_path = os.path.abspath(uploads_path)
+    # ``Config.UPLOAD_FOLDER`` statt eines eigenen ``__file__``-Pfads: dieselbe
+    # Ablage, die Projekte, Runs und Reports beschreiben (#1632).
+    uploads_path = os.path.abspath(Config.UPLOAD_FOLDER)
 
     try:
         usage = shutil.disk_usage(uploads_path)
