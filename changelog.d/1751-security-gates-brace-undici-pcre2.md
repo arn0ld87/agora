@@ -5,7 +5,9 @@
   `frontend/package.json`. Beide kommen nur transitiv: über `minimatch` (eslint,
   typescript-eslint, `@vue/test-utils`) bzw. über jsdom. `bun audit --audit-level=high`
   im Job `Security scans` ist damit wieder grün. (#1751)
-- **Proxy-Image:** `nginx:alpine`-Digest auf den aktuellen Stand. Der alte Pin hielt den
-  GHA-Layer-Cache der `apk upgrade`-Schicht fest, sodass `pcre2` 10.48-r0 (CVE-2026-103111, high)
-  im Image blieb, obwohl Alpine 3.24 bereits 10.49-r0 ausliefert. Der Trivy-Proxy-Scan in
-  `build-only` schlug deshalb fehl. (#1751)
+- **Proxy-Image:** Der GHA-Layer-Cache hielt die `apk upgrade`-Schicht der `proxy`-Stage fest,
+  sodass `pcre2` 10.48-r0 (CVE-2026-103111, high) im Image blieb, obwohl Alpine 3.24 bereits
+  10.49-r0 ausliefert. Der Trivy-Proxy-Scan in `build-only` schlug deshalb fehl. Beide
+  Proxy-Builds in `docker-image.yml` laufen jetzt mit `no-cache-filters: proxy`; die
+  `frontend-build`-Stage bleibt gecacht. Der `nginx:alpine`-Digest ist auf dem aktuellen Stand,
+  enthält aber selbst noch 10.48-r0. (#1751)
