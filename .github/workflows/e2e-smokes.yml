@@ -71,12 +71,17 @@ jobs:
         run: |
           set -euo pipefail
           docs_only=false
-          if files=$(git diff --name-only HEAD^1 HEAD) && [[ -n "$files" ]]; then
+          # --no-renames: sonst listet git bei `git mv code -> docs/` nur den
+          # Zielpfad, und ein entfernter Code-Pfad saehe wie Doku aus.
+          if files=$(git diff --no-renames --name-only HEAD^1 HEAD) && [[ -n "$files" ]]; then
             # Erlaubt: alles unter docs/ oder changelog.d/, sowie *.md direkt
             # im Repo-Root (kein Slash im Pfad). Jede andere geaenderte Datei
             # schaltet docs_only wieder aus.
             allowed_regex='^(docs/|changelog\.d/|[^/]+\.md$)'
-            if printf '%s\n' "$files" | grep -vE "$allowed_regex" | grep -q .; then
+            # Here-String statt Pipe: unter pipefail koennte ein SIGPIPE bei
+            # grossen Diffs die Bedingung kippen und faelschlich docs_only=true
+            # setzen.
+            if grep -qvE "$allowed_regex" <<<"$files"; then
               docs_only=false
             else
               docs_only=true

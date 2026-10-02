@@ -65,7 +65,7 @@ Jeder der sieben Playwright-Jobs baut die beiden E2E-Images (`agora`: Stage
 mittels `docker/bake-action`, aus denselben vier Compose-Dateien wie
 `scripts/e2e-compose.sh`. Der Build liest den GHA-Build-Cache
 (`cache-from: type=gha`, Scopes `prod`/`proxy`), den `docker-image.yml` auf
-jedem grünen `main`-Lauf befüllt — kein `cache-to` hier, `main` bleibt
+jedem `main`-Lauf im Build-Schritt befüllt (unabhängig vom späteren Trivy-Ergebnis) — kein `cache-to` hier, `main` bleibt
 alleiniger Cache-Schreiber. Gemessen in Run `36961875187` (Health-Smoke):
 von 147 s Gesamtlaufzeit entfielen ~98 s auf den ungecachten
 `docker compose up -d --build`; der Playwright-Test selbst dauert ~21 s.

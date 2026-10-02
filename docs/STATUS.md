@@ -68,7 +68,7 @@ Geprüft wurde `main@4cbf0eb849502472e4107fdd947559d417842b90`, nicht eine neue 
 
 [PR #1748](https://github.com/arn0ld87/agora/pull/1748) aktualisiert pypdf gezielt auf 6.19.0, ist beim Abgleich aber **offen und nicht Teil dieser Main-Baseline**. Sein lokaler Audit-Nachweis ist im PR dokumentiert; die dortige Verifikation ersetzt keinen grünen Audit auf dem finalen Main-/Release-Commit. Der Python-Audit läuft laut `ci.yml` nur auf `push:main` und `workflow_dispatch`, nicht auf gewöhnlichen PR-Läufen. Der rote Schritt beendet den Security-Job vor den nachfolgenden Audit-/Secret-Schritten; deshalb wird dieser Job nicht insgesamt als bestanden gewertet.
 
-CI-Überarbeitung (ci-e2e-audit, Stand dieser Zeile): `ci.yml::security` führt pip-audit/bun-audit seitdem auch auf PRs aus, sobald `backend/uv.lock`/`backend/pyproject.toml` bzw. `frontend/bun.lock`/`frontend/package.json` geändert sind; der doppelte Schema-Drift-Check in `backend-pr-gate` ist entfernt; `e2e-smokes.yml` überspringt reine Doku-PRs und baut die beiden E2E-Images per `docker/bake-action` aus dem GHA-Cache vor — Details in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
+CI-Überarbeitung (ci-e2e-audit, Stand dieser Zeile; ersetzt die Trigger-Aussage zum Python-Audit im Absatz oben): `ci.yml::security` führt pip-audit/bun-audit seitdem auch auf PRs aus, sobald `backend/uv.lock`/`backend/pyproject.toml` bzw. `frontend/bun.lock`/`frontend/package.json` geändert sind; der doppelte Schema-Drift-Check in `backend-pr-gate` ist entfernt; `e2e-smokes.yml` überspringt reine Doku-PRs und baut die beiden E2E-Images per `docker/bake-action` aus dem GHA-Cache vor — Details in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
 
 ### Qualitäts-Gates
 

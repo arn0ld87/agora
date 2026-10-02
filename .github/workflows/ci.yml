@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           python_changed=false
           frontend_changed=false
-          if git diff --name-only HEAD^1 HEAD > /tmp/agora-pr-diff.txt; then
+          if git diff --no-renames --name-only HEAD^1 HEAD > /tmp/agora-pr-diff.txt; then
             if grep -qE '^backend/(uv\.lock|pyproject\.toml)$' /tmp/agora-pr-diff.txt; then
               python_changed=true
             fi
@@ -193,6 +193,9 @@ jobs:
         run: bun audit --audit-level=high
 
       - name: Run Gitleaks secret scan
+        # Laeuft auch, wenn ein vorheriger Dependency-Audit rot ist — sonst
+        # faellt der Secret-Scan genau dann still weg (CI-Welle 2026-10-02).
+        if: ${{ !cancelled() }}
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

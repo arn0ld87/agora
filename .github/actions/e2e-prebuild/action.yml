@@ -63,6 +63,10 @@ runs:
         targets: |
           agora
           nginx
+        # source: . — ohne dieses Input nutzt bake-action (ab v6) den
+        # Git-Kontext und klont die PR-Merge-Ref neu, statt den bereits
+        # ausgecheckten Stand zu bauen, gegen den Playwright testet.
+        source: .
         load: true
         set: |
           agora.cache-from=type=gha,scope=prod
