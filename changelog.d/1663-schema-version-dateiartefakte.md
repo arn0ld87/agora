@@ -1,0 +1,3 @@
+### Added (schema_version für dateibasierte Verträge — 2026-10-02)
+
+- **Dokument-Manifest und Personasatz tragen `schema_version`:** `extracted_documents.json` (`DocumentManifest`) sowie jeder Eintrag von `reddit_profiles.json` und jede Zeile von `twitter_profiles.csv` (`PersonaModel`, `InterviewAgentProfile`) schreiben jetzt `schema_version: 1`, auch manuell angelegte Personas. Altbestand ohne das Feld wird unverändert als Version 1 gelesen. Eine unbekannte Version wird abgelehnt statt still verarbeitet: Der Graph-Build bricht ab, Dokument-Rollen und Interviewpfad degradieren mit Warnung im Log. JSON-Schemas `document-manifest` und `persona` neu gerendert. (#1663)

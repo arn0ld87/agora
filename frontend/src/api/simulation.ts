@@ -123,6 +123,13 @@ export interface ProfileRecord {
   persona?: string
   platform?: SimulationPlatform
   review_status?: string
+  /**
+   * Seit #1663: Formatversion des persistierten Eintrags
+   * (`backend/app/contracts/persona_contract.py::PERSONA_SCHEMA_VERSION`).
+   * Fehlt bei Altbestand, das bedeutet Version 1. Aus `twitter_profiles.csv`
+   * kommt der Wert als String, weil die CSV ungetypt gelesen wird.
+   */
+  schema_version?: 1 | '1'
   [key: string]: unknown
 }
 
