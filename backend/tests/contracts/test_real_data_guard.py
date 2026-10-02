@@ -147,6 +147,50 @@ def test_swallowed_write_is_still_recorded() -> None:
     assert not target.exists()
 
 
+def test_rmtree_of_tmp_tree_with_data_and_uploads_entries_is_allowed(
+    tmp_path, monkeypatch
+) -> None:
+    """``shutil.rmtree`` löscht per ``dir_fd`` mit relativen Namen.
+
+    Läuft die Suite mit cwd ``backend/``, darf ein ``data``- oder
+    ``uploads``-Eintrag im tmp-Baum nicht als ``backend/data`` gelten.
+    """
+    import shutil
+
+    monkeypatch.chdir(BACKEND_DIR)
+    tree = tmp_path / "tree" / "x"
+    (tree / "data").mkdir(parents=True)
+    (tree / "data" / "file.json").write_text("{}", encoding="utf-8")
+    (tree / "uploads").write_text("not a dir", encoding="utf-8")
+    guard = active_guard()
+    mark = guard.mark()
+
+    shutil.rmtree(tmp_path / "tree")
+
+    assert guard.violations_since(mark) == []
+    assert not (tmp_path / "tree").exists()
+
+
+def test_symlink_into_real_uploads_may_be_removed_but_not_written_through(tmp_path) -> None:
+    """``unlink`` trifft den Link, ``open(..., "w")`` sein Ziel."""
+    link = tmp_path / "link-into-uploads"
+    link.symlink_to(REAL_UPLOADS / f"{PROBE_NAME}.json")
+    target = REAL_UPLOADS / f"{PROBE_NAME}.json"
+    guard = active_guard()
+
+    mark = guard.mark()
+    with pytest.raises(RealDataWriteError, match="#1632"):
+        with open(link, "w", encoding="utf-8") as handle:
+            handle.write("{}")
+    assert [path for _event, path, _thread in guard.discard_since(mark)] == [os.fspath(link)]
+    assert not target.exists()
+
+    mark = guard.mark()
+    link.unlink()
+    assert guard.violations_since(mark) == []
+    assert not link.is_symlink()
+
+
 def test_reads_and_tmp_writes_stay_allowed(tmp_path) -> None:
     assert (BACKEND_DIR / "pyproject.toml").read_text(encoding="utf-8")
     (tmp_path / "ok.txt").write_text("ok", encoding="utf-8")

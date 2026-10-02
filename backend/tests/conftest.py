@@ -107,6 +107,9 @@ _REAL_DATA_DIR_ENV = os.environ.get("AGORA_DATA_DIR") or next(
 _REAL_DATA_GUARD = _real_data_guard.install(
     _real_data_guard.default_protected_roots(_REAL_DATA_DIR_ENV)
 )
+# Bis hierhin geprüfte Verstöße; was danach außerhalb eines Tests auflief,
+# meldet der nächste Test (siehe ``_real_data_write_guard``).
+_GUARD_CHECKED = _REAL_DATA_GUARD.mark()
 
 
 @pytest.fixture(autouse=True)
@@ -117,9 +120,25 @@ def _real_data_write_guard():
     ``RealDataWriteError``. Fängt der Anwendungscode die Ausnahme ab und läuft
     weiter, bliebe der Verstoß sonst unsichtbar.
     """
+    global _GUARD_CHECKED
+    # Verstöße seit dem letzten Test stammen aus dem Sammeln, aus Fixtures
+    # höherer Scopes oder aus Threads früherer Tests. Unter xdist gehen sie im
+    # ``pytest_sessionfinish`` des Workers verloren; hier landen sie als ERROR
+    # beim nächsten Test.
     mark = _REAL_DATA_GUARD.mark()
+    if mark > _GUARD_CHECKED:
+        stray = _REAL_DATA_GUARD.violations_since(_GUARD_CHECKED)
+        _GUARD_CHECKED = mark
+        pytest.fail(
+            "Schreibversuch in ein echtes Datenverzeichnis außerhalb eines Tests "
+            "(Sammeln, Fixture höheren Scopes oder Thread eines früheren Tests, "
+            "#1632):\n" + _REAL_DATA_GUARD.describe(stray),
+            pytrace=False,
+        )
+    _GUARD_CHECKED = mark
     yield
     violations = _REAL_DATA_GUARD.violations_since(mark)
+    _GUARD_CHECKED = _REAL_DATA_GUARD.mark()
     if violations:
         pytest.fail(
             "Test hat versucht, in ein echtes Datenverzeichnis zu schreiben "

@@ -10,7 +10,8 @@
   Manifeste für die Fixture `sim_abcdef012345` auf armserver. Ein Graph-Build-Test ließ zudem
   seinen Job-Thread über das Testende hinaus weiterlaufen. (#1632)
 - **Schreibsperre als Regressionsschutz:** Ein Audit-Hook (`tests/_real_data_guard.py`)
-  blockiert in der Suite jedes Schreiben, Anlegen, Umbenennen oder Löschen unter
+  blockiert in der Suite Schreiben, Anlegen, Umbenennen, Verlinken oder Löschen über
+  Python-Dateioperationen unter
   `backend/uploads`, `backend/data` und dem beim Start gesetzten `AGORA_DATA_DIR`. Er lässt
   den Test auch dann scheitern, wenn der Code die Ausnahme verschluckt; eine
   Subprozess-Gegenprobe belegt das. (#1632)
