@@ -188,7 +188,20 @@ echo "[e2e-up] starting compose stack on port ${PROXY_PORT}..." >&2
 #
 # Compose-Invocation liegt seit Issue #989 in scripts/e2e-compose.sh, damit
 # up, down und der Log-Dump im Playwright-Teardown nicht auseinanderlaufen.
-"$SCRIPT_DIR/e2e-compose.sh" up -d --build
+#
+# CI-Welle 2026-10-02: AGORA_E2E_PREBUILT=1 (von .github/actions/e2e-prebuild
+# gesetzt) ueberspringt den Image-Build hier — beide Images (agora, nginx)
+# wurden bereits per docker/bake-action mit GHA-Cache-Hit gebaut und unter
+# denselben Default-Tags (<project>-agora / <project>-nginx) lokal geladen.
+# `up --no-build` ist dann identisch zum bisherigen `--build`, nur ohne den
+# ~100s-Rebuild, der ohne Cache-Hit auf jedem Smoke-Lauf anfiel. Lokale Laeufe
+# ohne die Variable bauen unveraendert wie bisher.
+if [[ "${AGORA_E2E_PREBUILT:-}" == "1" ]]; then
+  echo "[e2e-up] AGORA_E2E_PREBUILT=1 — reusing images prebuilt via docker/bake-action (--no-build)" >&2
+  "$SCRIPT_DIR/e2e-compose.sh" up -d --no-build
+else
+  "$SCRIPT_DIR/e2e-compose.sh" up -d --build
+fi
 
 wait_for() {
   local url="$1"

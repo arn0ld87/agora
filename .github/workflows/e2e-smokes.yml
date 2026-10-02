@@ -24,10 +24,77 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # CI-Welle 2026-10-02: Reine Doku-PRs (nur docs/, changelog.d/ oder Root-
+  # *.md) brauchen keinen 20-30-min-Docker-Stack-Boot. Weder Dockerfile noch
+  # Frontend/Backend lesen docs/ oder Root-Markdown zur Build- oder Laufzeit
+  # (geprueft: Dockerfile-COPY-Ziele, frontend/src-Importe, backend/app-Reads)
+  # — ein Skip veraendert also kein getestetes Verhalten.
+  #
+  # `if`-Skips auf den 7 Playwright-Jobs statt Workflow-Level `paths`: ein per
+  # `paths` nie gestarteter Workflow meldet gar keinen Status fuer seine
+  # Required Checks und haelt den PR auf "Expected — Waiting for status to be
+  # reported" fest (siehe docker-image.yml-Kommentar zum selben Fallstrick).
+  # Ein per `if` uebersprungener Job meldet laut GitHub-Doku Success und
+  # erfuellt den Required Check mit unveraendertem `name:`.
+  #
+  # Fail-open: schlaegt dieser Job fehl (z. B. Diff nicht ermittelbar), bleibt
+  # `docs_only` leer/false und alle 7 Smokes laufen regulaer — ein Fehler hier
+  # darf nie heimlich Tests ausblenden.
+  changes:
+    name: E2E-Relevanz ermitteln
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.docs-only.outputs.docs_only }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # push:main, schedule und workflow_dispatch laufen immer voll — nur auf
+      # pull_request wird ueberhaupt geprueft (Step laeuft sonst nicht, Output
+      # bleibt leer -> von den Consumern als "nicht docs_only" gewertet).
+      - name: Nur-Doku-PR erkennen
+        id: docs-only
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          docs_only=false
+          # --no-renames: sonst listet git bei `git mv code -> docs/` nur den
+          # Zielpfad, und ein entfernter Code-Pfad saehe wie Doku aus.
+          if files=$(git diff --no-renames --name-only HEAD^1 HEAD) && [[ -n "$files" ]]; then
+            # Erlaubt: alles unter docs/ oder changelog.d/, sowie *.md direkt
+            # im Repo-Root (kein Slash im Pfad). Jede andere geaenderte Datei
+            # schaltet docs_only wieder aus.
+            allowed_regex='^(docs/|changelog\.d/|[^/]+\.md$)'
+            # Here-String statt Pipe: unter pipefail koennte ein SIGPIPE bei
+            # grossen Diffs die Bedingung kippen und faelschlich docs_only=true
+            # setzen.
+            if grep -qvE "$allowed_regex" <<<"$files"; then
+              docs_only=false
+            else
+              docs_only=true
+            fi
+          fi
+          echo "docs_only=${docs_only}" >> "$GITHUB_OUTPUT"
+
   health-smoke:
     name: Playwright Health-Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
@@ -38,6 +105,10 @@ jobs:
       # (Issue #276): nur die statische KNOWN_EMBEDDING_DIMS-Validation
       # läuft, der Live-HTTP-Probe-Call entfällt.
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
+      # CI-Welle 2026-10-02: Images kommen aus .github/actions/e2e-prebuild
+      # (docker/bake-action, GHA-Cache) statt aus `docker compose --build` in
+      # scripts/e2e-up.sh. Siehe dort fuer die --no-build-Weiche.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -98,6 +169,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile
@@ -133,6 +214,8 @@ jobs:
     name: Playwright Upload+Graph-Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
@@ -142,6 +225,8 @@ jobs:
       # ohne Ollama. Aktiviert ausschließlich via Env-Var — Prod-Verhalten
       # bleibt unverändert (backend/app/utils/llm_e2e_stub.py + llm_client.py:386).
       AGORA_E2E_LLM_MODE: 'stub'
+      # CI-Welle 2026-10-02: siehe health-smoke-Job weiter oben.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -200,6 +285,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile
@@ -229,6 +324,8 @@ jobs:
     name: Playwright Minimalreport-Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
@@ -242,6 +339,8 @@ jobs:
       #   chat()                   → e2e_stub_chat_response() → Tool-Calls + Final Answer
       #   (backend/app/utils/llm_e2e_stub.py + llm_client.py)
       AGORA_E2E_LLM_MODE: 'stub'
+      # CI-Welle 2026-10-02: siehe health-smoke-Job weiter oben.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -299,6 +398,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile
@@ -328,12 +437,16 @@ jobs:
     name: Playwright Report-Modes-Smoke (P4.4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
       # Stub-Modus: deterministisch für alle drei Modi (strict/balanced/explorative)
       AGORA_E2E_LLM_MODE: 'stub'
+      # CI-Welle 2026-10-02: siehe health-smoke-Job weiter oben.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -390,6 +503,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile
@@ -419,6 +542,8 @@ jobs:
     name: Playwright Golden-Gate-Accessibility-Smoke (Slice 7.3.1)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
@@ -429,6 +554,8 @@ jobs:
       # gültiger projectId/simulationId gaten zu können. Ohne den Stub
       # antwortet POST /api/graph/ontology/generate mit 500 (kein Ollama).
       AGORA_E2E_LLM_MODE: 'stub'
+      # CI-Welle 2026-10-02: siehe health-smoke-Job weiter oben.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -486,6 +613,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile
@@ -522,11 +659,15 @@ jobs:
     name: Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
       # Embedding-Probe wie im health-smoke überspringen (Issue #276)
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
+      # CI-Welle 2026-10-02: siehe health-smoke-Job weiter oben.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -586,6 +727,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile
@@ -624,6 +775,8 @@ jobs:
     name: Playwright Run-Budget-Smoke (Issue #764 / #978)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     env:
       AGORA_PROXY_PORT: '80'
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
@@ -633,6 +786,8 @@ jobs:
       # und ohne kostenpflichtige Calls ausgeloest werden. e2e-up.sh appendet
       # diesen Wert in die Container-Env (Job-Level-env allein reicht nicht).
       AGORA_E2E_LLM_MODE: 'stub'
+      # CI-Welle 2026-10-02: siehe health-smoke-Job weiter oben.
+      AGORA_E2E_PREBUILT: '1'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -692,6 +847,16 @@ jobs:
             echo "SECRET_KEY=$(openssl rand -hex 32)"
             echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
           } >> "$GITHUB_ENV"
+      # CI-Welle 2026-10-02: baut agora+nginx per docker/bake-action aus dem
+      # GHA-Cache, den docker-image.yml auf main befuellt — spart den
+      # ungecachten ~100s-Image-Build, den scripts/e2e-up.sh sonst beim
+      # Playwright-globalSetup ausloest. Muss NACH dem Credentials-Step oben
+      # laufen: docker-compose.yml verlangt NEO4J_PASSWORD (${VAR:?...}), das
+      # hier aus der Prozess-Umgebung kommt, weil die .env-Datei erst
+      # scripts/e2e-up.sh anlegt. AGORA_E2E_PREBUILT=1 (Job-env oben) schaltet
+      # e2e-up.sh danach auf `--no-build`.
+      - name: E2E-Images vorbauen (Bake + GHA-Cache)
+        uses: ./.github/actions/e2e-prebuild
       - name: Install frontend deps
         working-directory: frontend
         run: bun install --frozen-lockfile

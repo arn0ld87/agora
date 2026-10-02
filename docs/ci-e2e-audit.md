@@ -295,6 +295,19 @@ Vorher hatten 7 Jobs eine Zeitgrenze, jetzt alle 27. Werte an den gemessenen Lau
 | E8 | **pytest-Warnungsrauschen eindämmen** — 24 980 `DeprecationWarning` aus `pytest_asyncio`/`neo4j` verdecken echte Warnungen. Ein gezielter `filterwarnings`-Eintrag in `pyproject.toml` für genau diese Upstream-Quellen. | Nicht Teil des CI-/E2E-Auftrags; als Beobachtung festgehalten. |
 | E9 | **`run-budget`-Defekt 2** (§5): klären, ob das harte Budget im In-Process-Report-Pfad überhaupt ausgewertet wird, oder ob dem `LLMClient` dort die Run-Bindung fehlt. **Höchste Priorität** — es geht um Kostenkontrolle. Danach `run-budget.spec.ts` als eigenen Job verdrahten. | Erfordert eine Untersuchung im Produktivcode und ggf. eine Produktänderung. Beides liegt außerhalb eines CI-/Test-Audits, und ein Test darf nicht dadurch grün werden, dass man Produktivcode passend macht. |
 
+### Nachtrag 2026-10-02 (PR #1752)
+
+Folge-Audit auf Basis von `main@cafb54fe`: 1500 Runs (2026-09-25 bis 10-02), Job-Ebene je 60 Runs, 100 gemergte PRs.
+
+- **E2E:** Die 7 Jobs brauchen je ~3,3 min (Median). Laut Run `36961875187` sind davon ~98 s Image-Build ohne Cache und nur ~21 s Testlaufzeit. Die einzigen Fehler waren 3 Browser-Installationen, echte Flakes gab es nicht. Alle 9 Specs decken bestehende Features ab.
+- **Umgesetzt:**
+  - Die Images werden jetzt per `.github/actions/e2e-prebuild` aus dem GHA-Cache gebaut.
+  - Die 7 Playwright-Jobs werden bei reinen Doku-PRs übersprungen (25 % der PRs). Das geschieht per Job-`if`, die Required Checks bleiben unverändert.
+  - pip-audit und bun audit laufen auf PRs mit Lockfile- oder Manifest-Änderung.
+  - Gitleaks läuft auch bei rotem Audit.
+  - Der doppelte `dump_schemas --check` in `backend-pr-gate` ist entfernt.
+- **E9:** `run-budget-smoke` läuft inzwischen als eigener Job, ist aber weiterhin kein Required Check. Ob er aufgenommen wird, entscheidet der Owner.
+
 ---
 
 ## 10. Siehe auch

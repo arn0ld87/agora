@@ -50,6 +50,9 @@ This document tracks the expected egress targets for GitHub Action workflows usi
 ### E2E Smokes (`e2e-smokes.yml`)
 - `registry.npmjs.org:443`
 - `playwright.azureedge.net:443` (Browser downloads)
+- `results-receiver.actions.githubusercontent.com:443`, `*.blob.core.windows.net:443` — GHA-Actions-Cache-Service. Schon vor CI-Welle 2026-10-02 in allen 7 Jobs vorhanden (Bun-/Playwright-Chromium-Cache via `actions/cache`); deckt seitdem zusätzlich `cache-from: type=gha` der neuen `.github/actions/e2e-prebuild`-Composite-Action (Docker-Image-Build per `docker/bake-action`) ab — keine neuen Endpunkte nötig.
+- Alle übrigen Docker-/Paket-Registry-Endpunkte (siehe Job-YAML) deckten den impliziten `docker compose up --build` in `scripts/e2e-up.sh` bereits vorher ab. Seit CI-Welle 2026-10-02 baut `.github/actions/e2e-prebuild` dieselben zwei Images (`agora`: Stage `prod`, `nginx`: Stage `proxy`) explizit per Bake, bevor Playwright startet — identischer Build, nur vorgezogen; die Allowlist musste dafür nicht wachsen.
+- Neuer vorgelagerter Job `changes` (Doku-Only-Erkennung, CI-Welle 2026-10-02) braucht nur die vier Common-Endpoints aus dem Kopf dieser Datei — reiner `actions/checkout`, kein Build.
 
 ### Docker Image (`docker-image.yml`)
 - `auth.docker.io:443`
