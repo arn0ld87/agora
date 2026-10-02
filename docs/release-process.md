@@ -193,7 +193,7 @@ Empfohlene Struktur:
 6. **Bekannte Grenzen** — ehrlich und konkret.
 7. **Rollback** — falls release-spezifische Besonderheiten existieren.
 
-Keine Marketingbehauptung „reproduzierbar“, solange #763/#1274 nicht abgenommen sind. Keine Behauptung „Production Ready“, solange die entsprechenden 1.0-Gates offen sind.
+#763/#1274 sind abgenommen; das erlaubt keine Behauptung identischer Replay-Ausgaben. `random_seed` bleibt laut Maintainer-Entscheidung bewusst `null`; Referenzläufe dokumentieren Eingaben, Prompts, Route und Grenzen statt Determinismus zu behaupten. Keine Behauptung „Production Ready“, solange die entsprechenden 1.0-Gates offen sind.
 
 ---
 

@@ -1,8 +1,8 @@
 # Agora Roadmap
 
-**Stand:** 26.09.2026
+**Stand:** 02.10.2026
 
-**Geprüfte Main-Baseline:** `cde0919f6`
+**Geprüfte Main-Baseline:** `4cbf0eb849502472e4107fdd947559d417842b90` (GitHub-Issue-/CI-Abgleich vom 02.10.2026; keine neue lokale Vollsuite)
 
 **Aktuelle Produktversion:** `0.9.6` (getaggt, Stability Beta) — nächster Schnitt `0.10.0-rc.1`
 **Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
@@ -74,7 +74,7 @@ Die verbleibenden Punkte werden nicht durch weitere 0.9-Featureflächen verdeckt
 - **Vier LLM-Provider** inklusive der beiden neuen CLI-/Session-Transporte `codex_cli` (ChatGPT-Abo, #1406/#1423/#1424) und `claude_cli` (Claude-Abo statt Pay-per-Token-API, #1531) sowie Amazon Bedrock als OpenAI-kompatibler Provider (#1282).
 - **PostgreSQL-Schicht zum Zeitpunkt des Tags parallel zu JSON-/SQLite-Stores**: Supabase-Compose als eigene Infrastruktur (#1504), SQLAlchemy-/Alembic-Grundlage (#1505) und Repository-Adapter (ADR-0014). Seit dem Tag sind auf armserver alle fünf Metadaten-Domänen produktiv auf PostgreSQL umgeschaltet; die Code-Defaults bleiben Legacy und müssen für den unterstützten 1.0-Install-Pfad angeglichen werden ([#1592](https://github.com/arn0ld87/agora/issues/1592), [#1654](https://github.com/arn0ld87/agora/issues/1654)). Details in [`docs/STATUS.md`](docs/STATUS.md).
 - **UI-Redesign über zehn PRs** (#1427–#1449) plus Nachlese (#1459): Design-Tokens, Shell-Chrome, Ablage, Controls, Report-Leseumgebung, Simulations-Vollbildansicht, Runs-Tabelle, Settings-Overlay, Löschen unerreichbarer Legacy-Views.
-- **Run-Manifest und Replay** (#1273): atomar geschriebene Manifeste, kanonischer `AiModelRef` im Replay-Override, strukturierte Fehler-Envelopes. Das ist eine Manifest-/Replay-**Grundlage**, keine Reproduzierbarkeits-**Garantie** — siehe P1 „Reproduzierbare Runs" unten und [`docs/agents/release-priority.md`](docs/agents/release-priority.md).
+- **Run-Manifest und Replay** (#1273): atomar geschriebene Manifeste, kanonischer `AiModelRef` im Replay-Override, strukturierte Fehler-Envelopes. Das ist eine Manifest-/Replay-**Grundlage**, keine Reproduzierbarkeits-**Garantie** — aktuelle Abschlüsse und Grenzen stehen unter „Geschlossene Slices“ und in [`docs/agents/release-priority.md`](docs/agents/release-priority.md).
 - **Evidence- und Report-Härtung**: satzgenaue Fließtext-Faktenprüfung statt satzweiter Bündelung (#1492), Budget-Guard/Ledger für Tool-, Vision- und Interview-Pfade inklusive `ParallelIPCHandler` (#1478/#1527), SIGTERM-Terminalisierung für In-Process-Jobs (Slice 1.1 aus #1472), Embedding-Index-Auflösung und korruptionssicherer Cutover (#1417, Slices 2.1/2.2), Restore-Drill mit Zielschutz und Migrationsbaseline (#1514).
 
 ### Was `0.9.6` nicht behauptet
@@ -105,22 +105,27 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 - [x] Twitter-Recommender ohne zufällig initialisierten Pooler ([#1236](https://github.com/arn0ld87/agora/issues/1236)).
 - [x] Quantor-gestützte Evidence-Prüfung ([#1345](https://github.com/arn0ld87/agora/issues/1345)).
 - [x] Single-Source-Confidence und Claim-Typen ([#1301](https://github.com/arn0ld87/agora/issues/1301), [#1400](https://github.com/arn0ld87/agora/issues/1400)).
-- [x] Manifest-/Replay-Grundlage ([#763](https://github.com/arn0ld87/agora/issues/763)); echte Reproduzierbarkeitslücken bleiben in [#1274](https://github.com/arn0ld87/agora/issues/1274).
+- [x] Manifest-/Replay-Grundlage ([#763](https://github.com/arn0ld87/agora/issues/763)) und Platzhalter-/Replay-Fixes ([#1274](https://github.com/arn0ld87/agora/issues/1274)). `random_seed=null` ist die beschlossene Grenze; deterministische LLM-Ergebnisse werden nicht garantiert.
 - [x] Observation im Single-Platform-Tool-Loop als untrusted Input behandeln ([#1224](https://github.com/arn0ld87/agora/issues/1224)); native OASIS-Fallbacks sind damit nicht pauschal abgedeckt.
 - [x] Hauptdomänen-Drift erkennen und korrigieren ([#1471](https://github.com/arn0ld87/agora/issues/1471)).
+- [x] Neo4j-Offline-Backup ([#1633](https://github.com/arn0ld87/agora/issues/1633)); der Fresh-Host-Drill [#766](https://github.com/arn0ld87/agora/issues/766) bleibt ein eigener Nachweis.
+- [x] Alias-/Entitätsklassen vor dem Persona-Cap ([#1470](https://github.com/arn0ld87/agora/issues/1470)) und lesende Role-Leakage-Markierung ([#1323](https://github.com/arn0ld87/agora/issues/1323)). LLM-Koreferenz ist außerhalb des Scopes; ein verwerfendes Subprozess-Gate ist nicht vorgesehen.
+- [x] Supavisor-Start ([#1634](https://github.com/arn0ld87/agora/issues/1634)), Integration-CI-Fix ([#1660](https://github.com/arn0ld87/agora/issues/1660)), Embedding-Runtime-SSoT ([#1417](https://github.com/arn0ld87/agora/issues/1417)) und CodeQL-High-Triage ([#1669](https://github.com/arn0ld87/agora/issues/1669)).
+- [x] Upgrade-Runbook 0.9.x → 0.10 und Pflegeregel ([#1673](https://github.com/arn0ld87/agora/issues/1673)); der 1.0-Abschnitt wird im Freeze ergänzt.
 
 ## Vor `0.10.0-rc.1` — Feature-Freeze
 
-- [ ] **P0:** Neo4j-Backup im Restore-Drill reparieren ([#1633](https://github.com/arn0ld87/agora/issues/1633)).
+- [x] **Früherer P0:** Neo4j-Backup repariert ([#1633](https://github.com/arn0ld87/agora/issues/1633)). Ein neuer P0 stoppt den RC-Schnitt; die reale Restore-Abnahme bleibt [#766](https://github.com/arn0ld87/agora/issues/766).
 - [ ] **Verträge und Persistenz:** `schema_version` für Dateiartefakte ([#1663](https://github.com/arn0ld87/agora/issues/1663)), Kompatibilitäts-/Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)), Cutover-Nachweise ([#1592](https://github.com/arn0ld87/agora/issues/1592)) und Release-Checksummen ([#1661](https://github.com/arn0ld87/agora/issues/1661)).
-- [ ] **Trust und Testbarkeit:** Alias-/Koreferenz-Rest ([#1470](https://github.com/arn0ld87/agora/issues/1470)), Role-Leakage-Rest ([#1323](https://github.com/arn0ld87/agora/issues/1323)) und Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)).
-- [ ] **Release-Gates:** Supabase-Image-Scan und Ausnahmeregister ([#1670](https://github.com/arn0ld87/agora/issues/1670)), Backend-Ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671)), Frontend-Coverage ([#1672](https://github.com/arn0ld87/agora/issues/1672)) und Upgrade-Runbook ([#1673](https://github.com/arn0ld87/agora/issues/1673)).
+- [ ] **Trust und Testbarkeit:** Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)).
+- [ ] **Release-Gates:** Supabase-Image-Scan und Ausnahmeregister ([#1670](https://github.com/arn0ld87/agora/issues/1670)), Backend-Ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671)), Frontend-Coverage ([#1672](https://github.com/arn0ld87/agora/issues/1672)).
 
 ## Bis `0.10.0` stabil — P1-Fixes
 
-- [ ] Rote Integration-CI ([#1660](https://github.com/arn0ld87/agora/issues/1660)), Supavisor-Start ([#1634](https://github.com/arn0ld87/agora/issues/1634)), Embedding-Runtime-SSoT ([#1417](https://github.com/arn0ld87/agora/issues/1417)), Eval-Seed-Leakage ([#1240](https://github.com/arn0ld87/agora/issues/1240)), vollständige Manifest-Werte/Replay-Parameter ([#1274](https://github.com/arn0ld87/agora/issues/1274)) und CodeQL-High-Triage ([#1669](https://github.com/arn0ld87/agora/issues/1669)).
+- [ ] Eval-Seed-Leakage und bereinigter Gegenlauf ([#1240](https://github.com/arn0ld87/agora/issues/1240)).
+- [ ] Alle erforderlichen Gates auf dem finalen Release-Commit grün belegen. Auf `main@4cbf0eb8` ist die Integration-CI grün, der Python-Dependency-Audit jedoch rot; [PR #1748](https://github.com/arn0ld87/agora/pull/1748) ist der offene pypdf-Fix. Das ist kein Wiederaufleben von [#1660](https://github.com/arn0ld87/agora/issues/1660).
 
-Der `random_seed`-Eintrag allein belegt keinen reproduzierbaren Lauf. Bis #1274 geschlossen ist, bleibt „gleicher Seed = gleiches Ergebnis“ unzulässig.
+Offene P0/P1 im 0.10-Milestone verhindern den stabilen Tag. Geschlossene Manifest-Tickets begründen keine Determinismuszusage: `random_seed` bleibt bewusst `null`, Modellantworten bleiben nicht-deterministisch.
 
 ## Im Freeze vor `1.0.0-rc.1`
 
