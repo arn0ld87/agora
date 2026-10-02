@@ -212,6 +212,17 @@ class TestExclusionsCannotGrowSilently:
 
         assert _check(gate, reference, current) == 1
 
+    def test_removed_old_pragma_does_not_pay_for_a_new_one(self, gate, tmp_path) -> None:
+        """Die Allowlist gilt pro Datei: faellt anderswo eine Altlast weg,
+        bleibt eine neue Ausnahme trotzdem begruendungspflichtig."""
+        reference = _tree(tmp_path / "reference", pragma=True)
+        current = _tree(tmp_path / "current")
+        (current / "app" / "extra.py").write_text(
+            "def unused() -> None:" + _PRAGMA + "\n    pass\n", encoding="utf-8"
+        )
+
+        assert _check(gate, reference, current) == 1
+
     def test_stale_allowlist_entry_fails(self, gate, reference, tmp_path) -> None:
         """Ein Eintrag fuer eine Ausnahme, die es nicht mehr gibt, waere
         Freibetrag fuer die naechste — er muss mit der Ausnahme verschwinden."""
@@ -252,11 +263,55 @@ class TestThresholdRatchet:
                 "lowering_approval": {
                     "approved_by": "arn0ld87",
                     "reason": "Grosse Neumodule ohne Altlast-Tests, Plan in #9999",
+                    "line_min": 80.0,
                 }
             },
         )
 
         assert _check(gate, reference, current) == 0
+
+    def test_approval_does_not_cover_a_further_lowering(self, gate, reference, tmp_path) -> None:
+        """Eine stehengebliebene Freigabe ist kein Blankoscheck fuer die
+        naechste Absenkung: sie gilt nur bis zum freigegebenen Wert."""
+        current = _tree(
+            tmp_path / "current",
+            line_min=78.0,
+            baseline_extra={
+                "lowering_approval": {
+                    "approved_by": "arn0ld87",
+                    "reason": "Absenkung auf 80 freigegeben",
+                    "line_min": 80.0,
+                }
+            },
+        )
+
+        assert _check(gate, reference, current) == 1
+
+    def test_lowering_against_main_fails_even_above_the_tag(
+        self, gate, reference, tmp_path
+    ) -> None:
+        """Entscheidung #1667: die Schwellen duerfen nur steigen. Was main
+        einmal angehoben hat, gilt als neuer Boden — nicht nur v0.9.6."""
+        current = _tree(tmp_path / "current", line_min=83.5)
+        main_baseline = tmp_path / "main-baseline.json"
+        main_baseline.write_text(
+            json.dumps({"line_min": 84.0, "branch_min": 70.9}), encoding="utf-8"
+        )
+
+        assert (
+            gate.main(
+                [
+                    "--integrity",
+                    "--root",
+                    str(current),
+                    "--reference-dir",
+                    str(reference),
+                    "--base-baseline",
+                    str(main_baseline),
+                ]
+            )
+            == 1
+        )
 
     def test_lowering_approval_without_reason_fails(self, gate, reference, tmp_path) -> None:
         current = _tree(
@@ -275,6 +330,7 @@ class TestWiring:
 
         assert "scripts/check_coverage.py --integrity" in pr_gate
         assert "refs/tags/v0.9.6" in pr_gate
+        assert "refs/remotes/origin/main" in pr_gate
 
     def test_pre_push_gate_runs_the_integrity_check(self) -> None:
         assert "check_coverage.py --integrity" in PRE_PUSH_GATE.read_text(encoding="utf-8")

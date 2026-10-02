@@ -20,9 +20,10 @@ Eine Quote laesst sich auch heben, indem man weniger misst. ``--integrity``
 vergleicht deshalb den Iststand mit dem Referenz-Tag ``v0.9.6``, ohne einen
 Coverage-Lauf zu brauchen:
 
-* ``line_min``/``branch_min`` in ``coverage-baseline.json`` sinken nicht.
-  Eine Absenkung braucht ``lowering_approval`` mit ``approved_by`` und
-  ``reason`` (Freigabe des Maintainers).
+* ``line_min``/``branch_min`` in ``coverage-baseline.json`` sinken weder
+  unter ``v0.9.6`` noch unter den Stand auf ``origin/main``. Eine Absenkung
+  braucht ``lowering_approval`` mit ``approved_by``, ``reason`` und dem
+  freigegebenen Wert je Schwelle (Freigabe des Maintainers).
 * Die Coverage-Konfiguration (``[tool.coverage.*]`` in ``pyproject.toml``)
   bekommt keine neuen ``omit``-/``exclude``-Eintraege, ``source``/``include``
   werden nicht enger, und es kommt keine ``.coveragerc`` hinzu.
@@ -62,6 +63,9 @@ _SLACK_HINT = 2.0
 #: Referenzstand der Entscheidung #1667. Bewusst im Skript statt in der
 #: Baseline-Datei: wer ihn verschiebt, aendert sichtbar das Gate selbst.
 REFERENCE_TAG = "v0.9.6"
+#: Zweiter Boden fuer die Schwellen: was main einmal angehoben hat, gilt
+#: weiter (Entscheidung #1667: "duerfen bis 1.0 nur steigen").
+BASE_REF = "origin/main"
 
 #: Dieselbe Erkennung wie coverage.py' Default-Ausschluss.
 _PRAGMA = re.compile(r"#\s*(?:pragma|PRAGMA)[:\s]?\s*(?:no|NO)\s*(?:cover|COVER)")
@@ -160,8 +164,14 @@ def _count_exclusions(root: Path) -> dict[str, Counter[str]]:
 
 def _check_exclusions(reference: Path, current: Path, allowlist: list[Any]) -> list[str]:
     ref_counts, cur_counts = _count_exclusions(reference), _count_exclusions(current)
+
+    def growth(kind: str, file: str) -> int:
+        return max(0, cur_counts[kind][file] - ref_counts[kind][file])
+
     failures: list[str] = []
-    allowed: Counter[str] = Counter()
+    # Pro Datei, nicht als Summe: eine weggefallene Altlast anderswo bezahlt
+    # keine neue Ausnahme ohne eigenen Grund.
+    allowed: Counter[tuple[str, str]] = Counter()
     for entry in allowlist:
         if not isinstance(entry, dict):
             failures.append(f"  - scope_allowlist: ungueltiger Eintrag {entry!r}")
@@ -174,54 +184,64 @@ def _check_exclusions(reference: Path, current: Path, allowlist: list[Any]) -> l
                 f"({'/'.join(_KINDS)}), count >= 1 und einen Grund"
             )
             continue
-        if cur_counts[kind][file] < count:
+        if growth(kind, file) < count:
             failures.append(
-                f"  - scope_allowlist: {file} hat nur {cur_counts[kind][file]} {kind}, "
-                f"der Eintrag erlaubt {count} — veralteten Eintrag kuerzen oder entfernen"
+                f"  - scope_allowlist: {file} hat nur +{growth(kind, file)} {kind} gegenueber "
+                f"{REFERENCE_TAG}, der Eintrag erlaubt {count} — veralteten Eintrag kuerzen "
+                "oder entfernen"
             )
             continue
-        allowed[kind] += count
+        allowed[(kind, file)] += count
 
     for kind in _KINDS:
-        ref_total = sum(ref_counts[kind].values())
-        cur_total = sum(cur_counts[kind].values())
-        if cur_total <= ref_total + allowed[kind]:
-            continue
-        failures.append(
-            f"  - {kind}: {cur_total} statt hoechstens {ref_total} ({REFERENCE_TAG}) "
-            f"+ {allowed[kind]} (Allowlist)"
-        )
         for file in sorted(cur_counts[kind]):
-            grown = cur_counts[kind][file] - ref_counts[kind][file]
-            if grown > 0:
-                failures.append(f"      {file}: +{grown}")
+            excess = growth(kind, file) - allowed[(kind, file)]
+            if excess > 0:
+                failures.append(
+                    f"  - {kind}: {file} +{growth(kind, file)} gegenueber {REFERENCE_TAG}, "
+                    f"davon {excess} ohne Eintrag in scope_allowlist"
+                )
     return failures
 
 
-def _check_ratchet(ref_baseline: dict[str, Any], cur_baseline: dict[str, Any]) -> list[str]:
+def _check_ratchet(
+    floors: list[tuple[str, dict[str, Any]]], cur_baseline: dict[str, Any]
+) -> list[str]:
+    """Die Schwellen duerfen gegenueber keinem Boden sinken (Tag und main).
+
+    ``lowering_approval`` gilt nur bis zu den Werten, die sie selbst nennt —
+    eine stehengebliebene Freigabe deckt keine weitere Absenkung.
+    """
     approval = cur_baseline.get("lowering_approval") or {}
     approved = isinstance(approval, dict) and all(
         str(approval.get(field) or "").strip() for field in ("approved_by", "reason")
     )
     failures: list[str] = []
     for key in ("line_min", "branch_min"):
-        ref_value, cur_value = float(ref_baseline[key]), float(cur_baseline[key])
-        if cur_value >= ref_value:
+        cur_value = float(cur_baseline[key])
+        source, floor = max(
+            ((label, float(baseline[key])) for label, baseline in floors),
+            key=lambda item: item[1],
+        )
+        if cur_value >= floor:
             continue
-        if approved:
+        approved_value = approval.get(key) if approved else None
+        if isinstance(approved_value, int | float) and cur_value >= float(approved_value):
             print(
-                f"Hinweis: {key} {cur_value:.2f} < {ref_value:.2f} ({REFERENCE_TAG}), "
+                f"Hinweis: {key} {cur_value:.2f} < {floor:.2f} ({source}), "
                 f"freigegeben von {approval['approved_by']}: {approval['reason']}"
             )
             continue
         failures.append(
-            f"  - {key} {cur_value:.2f} < {ref_value:.2f} ({REFERENCE_TAG}) ohne "
-            "lowering_approval (approved_by + reason)"
+            f"  - {key} {cur_value:.2f} < {floor:.2f} ({source}) ohne passende "
+            f"lowering_approval (approved_by, reason, {key} >= {cur_value:.2f})"
         )
     return failures
 
 
-def _check_integrity(reference: Path, current: Path) -> int:
+def _check_integrity(
+    reference: Path, current: Path, base_baseline: dict[str, Any] | None = None
+) -> int:
     def baseline_of(root: Path) -> dict[str, Any]:
         data: dict[str, Any] = json.loads(
             (root / "coverage-baseline.json").read_text(encoding="utf-8")
@@ -229,8 +249,11 @@ def _check_integrity(reference: Path, current: Path) -> int:
         return data
 
     cur_baseline = baseline_of(current)
+    floors = [(REFERENCE_TAG, baseline_of(reference))]
+    if base_baseline is not None:
+        floors.append((BASE_REF, base_baseline))
     failures = [
-        *_check_ratchet(baseline_of(reference), cur_baseline),
+        *_check_ratchet(floors, cur_baseline),
         *_check_config(reference, current),
         *_check_exclusions(reference, current, cur_baseline.get("scope_allowlist", [])),
     ]
@@ -265,6 +288,23 @@ def _export_reference(target: Path) -> Path:
     return target / "backend"
 
 
+def _base_baseline_from_git() -> dict[str, Any]:
+    """Liest ``coverage-baseline.json`` vom Stand ``origin/main``."""
+    result = subprocess.run(
+        ["git", "show", f"{BASE_REF}:backend/coverage-baseline.json"],
+        cwd=REPO_ROOT.parent,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            f"{BASE_REF} nicht lesbar ({result.stderr.decode().strip()}). Holen mit: "
+            "git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main"
+        )
+    data: dict[str, Any] = json.loads(result.stdout)
+    return data
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
@@ -280,13 +320,23 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"Backend-Referenzstand als Verzeichnis (Default: git archive {REFERENCE_TAG})",
     )
+    parser.add_argument(
+        "--base-baseline",
+        type=Path,
+        default=None,
+        help=f"coverage-baseline.json des Basisstands (Default: git show {BASE_REF})",
+    )
     args = parser.parse_args(argv)
 
     if args.integrity:
+        base: dict[str, Any] | None = None
+        if args.base_baseline is not None:
+            base = json.loads(args.base_baseline.read_text(encoding="utf-8"))
         if args.reference_dir is not None:
-            return _check_integrity(args.reference_dir, args.root)
+            return _check_integrity(args.reference_dir, args.root, base)
         with tempfile.TemporaryDirectory() as tmp:
-            return _check_integrity(_export_reference(Path(tmp)), args.root)
+            reference = _export_reference(Path(tmp))
+            return _check_integrity(reference, args.root, base or _base_baseline_from_git())
 
     if not args.report.exists():
         raise SystemExit(
