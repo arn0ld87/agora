@@ -107,6 +107,19 @@ class TestSuccessfulPrepare:
         assert len(rows) == 1
         assert rows[0]["username"] == "alice"
 
+    def test_written_profiles_carry_schema_version(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        """#1663: auch der Bibliothekspfad schreibt die Formatversion."""
+        persona_prepare_service.prepare_from_personas(
+            manager, created_id, [{**MINIMAL_PERSONA, "schema_version": 99}]
+        )
+        reddit = manager._store.read_json(created_id, "reddit_profiles")
+        assert [profile["schema_version"] for profile in reddit] == [1]
+        csv_path = os.path.join(manager._get_simulation_dir(created_id), "twitter_profiles.csv")
+        with open(csv_path, "r", encoding="utf-8") as handle:
+            assert [row["schema_version"] for row in csv.DictReader(handle)] == ["1"]
+
     def test_run_registry_gets_completed_prepare_run(
         self, manager: SimulationManager, created_id: str
     ) -> None:
