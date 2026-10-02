@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..config import Config
 from ..contracts.ai_provider_contract import AiModelRef
+from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 from ..repositories.report_repository import get_report_repository
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
@@ -277,6 +278,7 @@ def _apply_persona_overrides(
     auf der Platte editiert.
     """
     twitter_path = os.path.join(sim_dir, "twitter_profiles.csv")
+    persona_additions = _with_schema_version(persona_additions)
 
     if manager._store.exists(simulation_id, "reddit_profiles"):
         reddit_profiles = manager._store.read_json(
@@ -315,6 +317,15 @@ def _apply_persona_overrides(
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(twitter_profiles)
+
+
+def _with_schema_version(additions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Issue #1663: Additions sind neu geschriebene Einträge.
+
+    Sie tragen die aktuelle Formatversion, ein mitgeschickter Wert wird
+    überschrieben. Kopierte Bestandseinträge bleiben, wie sie sind.
+    """
+    return [{**addition, "schema_version": PERSONA_SCHEMA_VERSION} for addition in additions]
 
 
 __all__ = ["list_branches", "create_branch"]

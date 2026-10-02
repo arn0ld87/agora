@@ -306,6 +306,24 @@ class TestOverrideTakesEffect:
         profiles = manager._store.read_json(branch.simulation_id, "reddit_profiles", default=[])
         assert [p["username"] for p in profiles] == ["alice", "carol"]
 
+    def test_persona_additions_carry_schema_version(
+        self, manager: SimulationManager, source_id: str
+    ) -> None:
+        """#1663: Additions tragen die Formatversion, Altbestand bleibt unverändert."""
+        manager._store.write_json(source_id, "reddit_profiles", [{"username": "alice"}])
+        branch = branching_service.create_branch(
+            manager,
+            source_id,
+            "b",
+            overrides={
+                "persona_additions": [
+                    {"platform": "reddit", "username": "carol", "schema_version": 99}
+                ]
+            },
+        )
+        profiles = manager._store.read_json(branch.simulation_id, "reddit_profiles", default=[])
+        assert [p.get("schema_version") for p in profiles] == [None, 1]
+
     def test_ai_model_ref(self, manager: SimulationManager, source_id: str) -> None:
         """Issue #886: die kanonische Referenz landet vollständig in der Config
         UND setzt das Legacy-Anzeigefeld ``llm_model`` auf ihre ``model_id``."""
