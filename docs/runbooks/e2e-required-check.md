@@ -26,6 +26,55 @@ Diese Job-Namen sind Teil der konfigurierten Required Checks:
 
 Der vollständige, per `gh api` erhobene Satz an Required Checks für `main` umfasst darüber hinaus (Stand 2026-08-08): `CodeQL (javascript-typescript)`, `CodeQL (python)`, `Dependency Review`, `Schema-Drift verhindern`, `Pydantic-Contract-Tests`, `Evidence-Quality-Gate`, `Frontend-Zod muss Backend-Schema spiegeln`, `Version-Drift-Check`, `Security scans`, `Backend PR smoke gate (ruff + mypy + pytest-contracts)`, `Frontend PR smoke gate (lint + typecheck + test + build)`. Dieses Runbook fokussiert auf die sechs Playwright-Smokes; die übrigen Checks werden von anderen Workflows definiert und sind hier nicht im Detail beschrieben.
 
+## Doku-only-PRs überspringen die Smokes (CI-Welle 2026-10-02)
+
+Ein vorgelagerter Job `changes` ("E2E-Relevanz ermitteln") prüft bei
+`pull_request`, ob **jede** geänderte Datei unter `docs/`, `changelog.d/`
+liegt oder eine `*.md`-Datei direkt im Repo-Root ist (kein Slash im Pfad).
+Trifft das zu, setzt er `docs_only=true`; alle sieben Playwright-Jobs
+(inkl. der sechs Required Checks oben) tragen
+`if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}` und
+werden dann übersprungen.
+
+Wichtig für die Required-Check-Bindung: Ein per `if` übersprungener Job
+meldet GitHub als `success`, **nicht** als "fehlend" — der Required Check
+ist damit erfüllt, obwohl der Job nicht gelaufen ist. Deshalb filtert diese
+Regel ausschließlich über das Job-`if`, nie über ein Workflow-Level
+`on.pull_request.paths`: ein per `paths` nie gestarteter Workflow meldet gar
+keinen Status und hält den PR dauerhaft auf "Expected — Waiting for status
+to be reported" fest (dieselbe Falle, die `docker-image.yml` im Kommentar zu
+seinem `pull_request.paths`-Block dokumentiert).
+
+**Fail-open:** Schlägt der `changes`-Job fehl oder ist die Diff-Ermittlung
+nicht möglich (z. B. `git diff HEAD^1 HEAD` bricht ab), bleibt sein Output
+leer bzw. `false` — die Smokes laufen dann regulär. Ein Fehler in der
+Erkennung darf nie dazu führen, dass Tests heimlich ausfallen.
+`push:main`, `schedule` und `workflow_dispatch` laufen immer vollständig;
+`changes` prüft nur auf `pull_request`.
+
+Geprüft vor Einführung dieser Regel: weder Dockerfile (`COPY`-Ziele) noch
+Frontend- oder Backend-Quellcode lesen `docs/` oder Root-Markdown zur Build-
+oder Laufzeit — ein Skip verändert also kein getestetes Verhalten.
+
+## Image-Vorbau per Bake + GHA-Cache (CI-Welle 2026-10-02)
+
+Jeder der sieben Playwright-Jobs baut die beiden E2E-Images (`agora`: Stage
+`prod`, `nginx`: Stage `proxy`) jetzt **vor** dem Playwright-Lauf explizit
+über die neue Composite-Action
+[`.github/actions/e2e-prebuild`](../../.github/actions/e2e-prebuild/action.yml)
+mittels `docker/bake-action`, aus denselben vier Compose-Dateien wie
+`scripts/e2e-compose.sh`. Der Build liest den GHA-Build-Cache
+(`cache-from: type=gha`, Scopes `prod`/`proxy`), den `docker-image.yml` auf
+jedem `main`-Lauf im Build-Schritt befüllt (unabhängig vom späteren Trivy-Ergebnis) — kein `cache-to` hier, `main` bleibt
+alleiniger Cache-Schreiber. Gemessen in Run `36961875187` (Health-Smoke):
+von 147 s Gesamtlaufzeit entfielen ~98 s auf den ungecachten
+`docker compose up -d --build`; der Playwright-Test selbst dauert ~21 s.
+
+`scripts/e2e-up.sh` startet den Stack danach mit `AGORA_E2E_PREBUILT=1`
+(von den Playwright-Jobs per Job-`env` gesetzt) über `--no-build` statt
+`--build` — die vorgebauten Images werden unverändert weiterverwendet.
+Lokale Läufe ohne diese Variable bauen wie bisher selbst.
+
 ## Konfiguration via GitHub UI
 
 1. `Settings` → `Branches`

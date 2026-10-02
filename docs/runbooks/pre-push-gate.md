@@ -24,6 +24,13 @@ entfernt wird. Die Required-Statuschecks sind die harte Absicherung; das
 lokale Gate fängt nur die häufigsten "lokal grün, CI rot"-Fälle in
 Sekunden statt Minuten.
 
+Seit 2026-10-02 läuft `dump_schemas --check` in der CI nur noch im Required
+Check `Schema-Drift verhindern` (`contract-gates.yml`), nicht mehr zusätzlich
+im `Backend PR smoke gate`. Dependency-Audits (`pip-audit`, `bun audit`) sind
+nicht Teil des lokalen Gates: sie laufen im Required Check `Security scans`
+auf `push:main` und auf PRs, die `backend/uv.lock`/`backend/pyproject.toml`
+bzw. `frontend/bun.lock`/`frontend/package.json` ändern.
+
 **Vollmodus:** `GATE_FULL=1` stellt das alte Verhalten wieder her und
 fährt zusätzlich `mypy`, das Backend-Test-Subset und die
 Frontend-Tests. Empfohlen vor Contract-/Migrations-Änderungen und bei
@@ -71,8 +78,11 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 12 | Routing-Check (`scripts/check_llm_endpoint_localhost.sh`) | keiner — lokale `.env`-Prüfung, ohne `.env` Skip mit Warnung | ja (Scope `all`/`routing`) |
 | 13 | Komplexitäts-Gate (`scripts/check_complexity.py`) | contract-gates-Workflow (`push:main`) | ja (Scope `backend`/`all`) |
 | 14 | Leak-Gate (`scripts/check_pandaos_managed_leak.sh`) | Backend PR smoke gate | ja (jeder Scope) |
+| 15 | Coverage-Ratchet und Schönungs-Check (`check_coverage.py --integrity`, #1671) | Backend PR smoke gate + `backend`-Job | ja (Scope `backend`/`all`; ohne `.git` Skip mit Warnung) |
 
-Das Schema-Gate prüft zusätzlich Versionsdrift über `backend/scripts/check_version_drift.py`. Das Backend-Gate enthält auch `check_mypy_debt.py`. Generierte Testzähler bleiben im normalen Pre-Push-Lauf unverändert; gezielte Counter-Refreshes laufen separat. Backend-Coverage-Schwellen stehen in `backend/coverage-baseline.json`; Ratchet/Schönungs-Check #1671 und die gemessene Frontend-Baseline #1672 bleiben offene Release-Gates.
+Das Schema-Gate prüft zusätzlich Versionsdrift über `backend/scripts/check_version_drift.py`. Das Backend-Gate enthält auch `check_mypy_debt.py`. Generierte Testzähler bleiben im normalen Pre-Push-Lauf unverändert; gezielte Counter-Refreshes laufen separat. Backend-Coverage-Schwellen stehen in `backend/coverage-baseline.json`; die gemessene Frontend-Baseline #1672 bleibt ein offenes Release-Gate.
+
+**Gate 15 im Detail.** Vergleicht `backend/` mit dem Tag `v0.9.6` (per `git archive`, kein Coverage-Lauf nötig) und die Schwellen zusätzlich mit `origin/main`. Fehlt eins davon lokal: `git fetch --no-tags --depth=1 origin +refs/tags/v0.9.6:refs/tags/v0.9.6 +refs/heads/main:refs/remotes/origin/main`. Rot wird das Gate bei gesunkenem `line_min`/`branch_min` ohne passende `lowering_approval` (`approved_by`, `reason`, freigegebener Wert), bei neuen `omit`-/`exclude`-Einträgen oder engerem `source`/`include`, bei einer neuen `.coveragerc` und wenn No-Cover-Pragmas oder Test-Skips (Marken, Skip-Aufrufe, unittest-Skips) in einer Datei über den Referenzstand plus deren `scope_allowlist`-Eintrag wachsen. Neue Ausnahme: Eintrag mit `file`, `kind` (`pragma`/`skip`), `count` und `reason` in `backend/coverage-baseline.json`; fällt sie weg, muss der Eintrag mit, sonst ist das Gate rot.
 
 **Gate 14 im Detail.** PandaOS schreibt lokal einen Block zwischen
 `<!-- >>> pandaos-managed (do not edit) >>> -->` und

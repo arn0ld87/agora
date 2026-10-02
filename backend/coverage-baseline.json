@@ -22,8 +22,88 @@
     "pruefen. Die Zahl gehoert angehoben, wenn echte Tests sie anheben.",
     "",
     "Steigt die Coverage, meldet das Gate einen Hinweis (kein Fail) — die",
-    "Schwelle gehoert dann nachgezogen."
+    "Schwelle gehoert dann nachgezogen.",
+    "",
+    "Ratchet und Schoenungs-Check (Issue #1671, Entscheidung #1667), geprueft von",
+    "  uv run python scripts/check_coverage.py --integrity",
+    "gegen den Tag v0.9.6:",
+    "- line_min/branch_min sinken weder unter v0.9.6 noch unter origin/main.",
+    "  Eine Absenkung braucht lowering_approval = {approved_by, reason,",
+    "  line_min und/oder branch_min} mit Freigabe des Maintainers; sie gilt nur",
+    "  bis zu den genannten Werten.",
+    "- Keine neuen omit-/exclude-Eintraege, kein engeres source/include, keine",
+    "  .coveragerc.",
+    "- Die Zahl der No-Cover-Pragmas und Test-Skips unter backend/ waechst nur",
+    "  mit Eintrag in scope_allowlist (file, kind pragma|skip, count, reason),",
+    "  und zwar pro Datei: eine weggefallene Altlast anderswo zaehlt nicht.",
+    "  Faellt eine Ausnahme weg, muss ihr Eintrag mit — veraltete Eintraege",
+    "  lassen das Gate rot werden.",
+    "Die Allowlist-Eintraege unten sind die Zugaenge zwischen v0.9.6 und der",
+    "Einfuehrung des Checks (2026-10-02)."
   ],
   "line_min": 82.8,
-  "branch_min": 70.9
+  "branch_min": 70.9,
+  "lowering_approval": null,
+  "scope_allowlist": [
+    {
+      "file": "scripts/bind_decision_secret.py",
+      "kind": "pragma",
+      "count": 1,
+      "reason": "CLI-Einstieg if __name__ == '__main__' (#1741); die Logik dahinter ist getestet"
+    },
+    {
+      "file": "scripts/sim_runtime/claude_cli_model.py",
+      "kind": "pragma",
+      "count": 1,
+      "reason": "Unerreichbarer Zweig: max_attempts >= 1, die Retry-Schleife setzt last_exc immer (#1531)"
+    },
+    {
+      "file": "scripts/sim_runtime/codex_cli_model.py",
+      "kind": "pragma",
+      "count": 1,
+      "reason": "Unerreichbarer Zweig: max_attempts >= 1, die Retry-Schleife setzt last_exc immer (#1423)"
+    },
+    {
+      "file": "tests/services/test_report_meta_via_repository.py",
+      "kind": "pragma",
+      "count": 1,
+      "reason": "Testdouble-Methode, die der Test bewusst nicht aufruft (#1588); kein Produktionscode"
+    },
+    {
+      "file": "tests/contracts/test_real_data_guard.py",
+      "kind": "skip",
+      "count": 3,
+      "reason": "Subprozess-Probe (#1632): zwei Probes laufen nur im Kindprozess, der Treiber nur ausserhalb — kein Test faellt weg"
+    },
+    {
+      "file": "tests/integration/test_jev_provider_integration.py",
+      "kind": "skip",
+      "count": 2,
+      "reason": "Echter Jev-Provider-Aufruf (#1723) nur mit TYPESAFE_API_KEY; ohne Key gibt es nichts zu pruefen"
+    },
+    {
+      "file": "tests/scripts/test_platform_runner_action_log.py",
+      "kind": "skip",
+      "count": 1,
+      "reason": "importorskip sim_runtime.platform_runner (#1713): braucht OASIS/CAMEL, das in schlanken Umgebungen fehlt"
+    },
+    {
+      "file": "tests/scripts/test_platform_runner_observation.py",
+      "kind": "skip",
+      "count": 1,
+      "reason": "importorskip sim_runtime.platform_runner: braucht OASIS/CAMEL, das in schlanken Umgebungen fehlt"
+    },
+    {
+      "file": "tests/scripts/test_platform_runner_twitter_feed.py",
+      "kind": "skip",
+      "count": 1,
+      "reason": "importorskip sim_runtime.platform_runner: braucht OASIS/CAMEL, das in schlanken Umgebungen fehlt"
+    },
+    {
+      "file": "tests/services/test_process_environment_secret_pipe.py",
+      "kind": "skip",
+      "count": 1,
+      "reason": "Plattform-Guard (#1688): /dev/fd fehlt ausserhalb von Linux/macOS"
+    }
+  ]
 }

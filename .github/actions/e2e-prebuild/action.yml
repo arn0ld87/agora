@@ -1,0 +1,90 @@
+name: 'E2E-Images vorbauen (Bake + GHA-Cache)'
+description: >-
+  Baut beide E2E-Images (Service "agora" -> Dockerfile-Stage "prod", Service
+  "nginx" -> Stage "proxy") per docker/bake-action aus genau denselben vier
+  Compose-Dateien wie scripts/e2e-compose.sh, BEVOR Playwright/global-setup.ts
+  den Stack ueber scripts/e2e-up.sh startet. Liest den GHA-Build-Cache, den
+  docker-image.yml auf dem main-Branch befuellt (scope=prod / scope=proxy) —
+  kein cache-to hier, main bleibt alleiniger Cache-Schreiber (CI-Welle
+  2026-10-02).
+#
+# Voraussetzung: dieser Schritt muss NACH dem Schritt laufen, der
+# NEO4J_PASSWORD (und die anderen E2E-Credentials) per $GITHUB_ENV exportiert
+# ("Generate ephemeral E2E credentials" in jedem der 7 Playwright-Jobs).
+# docker-compose.yml verlangt NEO4J_PASSWORD ueber die ${VAR:?...}-Syntax —
+# ohne gesetzten Wert bricht schon das reine Einlesen/Mergen der vier
+# Compose-Dateien ab, unabhaengig davon, welche Bake-Targets angefordert
+# werden. Compose/Bake lesen den Wert direkt aus der Prozess-Umgebung, die
+# der Credentials-Step gesetzt hat.
+#
+# .env: docker-compose.yml deklariert `env_file: - .env` am agora-Service.
+# Bake bricht beim Einlesen ab, wenn die Datei fehlt ("env file .env not
+# found"), und im CI-Checkout ist sie per .gitignore nicht vorhanden. Der
+# erste Schritt unten seedet sie deshalb exakt wie scripts/e2e-up.sh aus
+# .env.example. e2e-up.sh findet sie danach vor, ueberspringt das Seeding und
+# traegt wie gehabt die echten Credentials ein; der Stack startet mit
+# `--no-build` (AGORA_E2E_PREBUILT=1) auf den hier gebauten Images.
+#
+# Image-Namen: keines der beiden Services setzt ein explizites `image:` in
+# den Compose-Dateien, Compose taggt dann per Default `<project>-<service>`
+# (Bindestrich-Schema, siehe docker-image.yml-Kommentar "Compose erwartet das
+# Image unter 'agora-agora:latest'" fuer das Projekt "agora"). docker/bake-
+# action kennt kein `--project-name`-Input und uebernimmt den Projektnamen
+# nicht automatisch aus `scripts/e2e-compose.sh --project-name`. Die Tags
+# werden deshalb hier EXPLIZIT per `set …tags=` erzwungen, damit sie exakt zu
+# dem Namen passen, den `docker compose --project-name "$AGORA_E2E_PROJECT"
+# up --no-build` erwartet (Default "agora-e2e", siehe
+# scripts/e2e-compose.sh).
+runs:
+  using: 'composite'
+  steps:
+    - name: .env aus .env.example seeden (env_file-Pflicht fuer Bake)
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ ! -f .env ]]; then
+          if [[ ! -f .env.example ]]; then
+            echo "::error::[e2e-prebuild] neither .env nor .env.example present" >&2
+            exit 1
+          fi
+          cp .env.example .env
+        fi
+
+    - name: Compose-Projektname aufloesen
+      id: project
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "name=${AGORA_E2E_PROJECT:-agora-e2e}" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Docker Buildx
+      # Pin identisch zu docker-image.yml::build-only — derselbe Builder-Typ
+      # (docker-container-Driver) wird fuer `cache-from: type=gha` benoetigt;
+      # der GitHub-Runner-Default-Builder (Driver "docker") unterstuetzt das
+      # nicht.
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+    - name: Bake agora + nginx (GHA-Cache lesen, lokal laden)
+      uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+      with:
+        # Dieselbe Datei-Liste und Reihenfolge wie scripts/e2e-compose.sh:
+        # relative build-Kontexte ("context: .") loesen beide Tools relativ
+        # zum Verzeichnis der ERSTEN Datei auf (hier Repo-Root).
+        files: |
+          docker-compose.yml
+          docker-compose.prod.yml
+          deploy/compose/docker-compose.prod-with-proxy.yml
+          deploy/compose/docker-compose.e2e.override.yml
+        targets: |
+          agora
+          nginx
+        # source: . — ohne dieses Input nutzt bake-action (ab v6) den
+        # Git-Kontext und klont die PR-Merge-Ref neu, statt den bereits
+        # ausgecheckten Stand zu bauen, gegen den Playwright testet.
+        source: .
+        load: true
+        set: |
+          agora.cache-from=type=gha,scope=prod
+          agora.tags=${{ steps.project.outputs.name }}-agora:latest
+          nginx.cache-from=type=gha,scope=proxy
+          nginx.tags=${{ steps.project.outputs.name }}-nginx:latest
