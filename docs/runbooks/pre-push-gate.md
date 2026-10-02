@@ -24,6 +24,13 @@ entfernt wird. Die Required-Statuschecks sind die harte Absicherung; das
 lokale Gate fängt nur die häufigsten "lokal grün, CI rot"-Fälle in
 Sekunden statt Minuten.
 
+Seit 2026-10-02 läuft `dump_schemas --check` in der CI nur noch im Required
+Check `Schema-Drift verhindern` (`contract-gates.yml`), nicht mehr zusätzlich
+im `Backend PR smoke gate`. Dependency-Audits (`pip-audit`, `bun audit`) sind
+nicht Teil des lokalen Gates: sie laufen im Required Check `Security scans`
+auf `push:main` und auf PRs, die `backend/uv.lock`/`backend/pyproject.toml`
+bzw. `frontend/bun.lock`/`frontend/package.json` ändern.
+
 **Vollmodus:** `GATE_FULL=1` stellt das alte Verhalten wieder her und
 fährt zusätzlich `mypy`, das Backend-Test-Subset und die
 Frontend-Tests. Empfohlen vor Contract-/Migrations-Änderungen und bei
