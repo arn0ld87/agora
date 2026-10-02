@@ -4,7 +4,7 @@ Verbindliche Regeln fuer Codex, Claude Code und jede andere Agent-Runtime in die
 
 ## Projekt
 
-Agora: lokale Multi-Agent-Analyseplattform fuer simulierte DACH-Stakeholder-Reaktionen. Flask/Python 3.14, Pydantic v2, Vue 3/TypeScript, Neo4j, Redis. Single User, `0.9.5` Stability Beta, Ziel `1.0.0`.
+Agora: lokale Multi-Agent-Analyseplattform fuer simulierte DACH-Stakeholder-Reaktionen. Flask/Python 3.14, Pydantic v2, Vue 3/TypeScript, Neo4j, Redis. Single User, `0.9.6` Stability Beta, naechster Schnitt `0.10.0-rc.1`, Ziel `1.0.0`. Produktversion verbindlich in `VERSION`, Release-Stand in `docs/STATUS.md`.
 
 ## Contracts-first
 

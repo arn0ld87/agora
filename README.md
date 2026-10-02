@@ -101,7 +101,7 @@ Supported transport classes are:
 
 `codex_cli` (ChatGPT subscription) is a first-class session transport: no HTTP base URL and no API key are expected. `claude_cli` (Claude subscription, [#1531](https://github.com/arn0ld87/agora/issues/1531)) runs the local Claude Code CLI in a subprocess with an isolated `HOME` per call and authenticates via a long-lived `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`) held in the encrypted secret store. Amazon Bedrock ([#1282](https://github.com/arn0ld87/agora/issues/1282)) talks the OpenAI-compatible Bedrock Mantle endpoint (region `eu-central-1` by default) via a bearer API key, not boto3/SigV4. See [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md) for the current routing model.
 
-Embedding configuration is intentionally separate from chat routing. Read/write paths now resolve their index and property names canonically through the store, and the migration cutover only activates a new index version after a verified re-embedding pass; [#1417](https://github.com/arn0ld87/agora/issues/1417) is not fully closed yet (remaining: a `VECTOR_DIM` SSoT slice, a legacy view for existing graphs, and a frontend Zod mirror for the new `building` status).
+Embedding configuration is intentionally separate from chat routing. Read/write paths resolve their index and property names canonically through the store; migration activates a new index version only after verified re-embedding and an index check. [#1417](https://github.com/arn0ld87/agora/issues/1417) is closed: operational dimensions, the legacy bootstrap view, the frontend `building` mirror, Env/store divergence warnings and pre-write dimension checks are implemented. A real model-switch drill against the production Neo4j and embedding backend remains an operational verification item in [#1592](https://github.com/arn0ld87/agora/issues/1592).
 
 ## Architecture
 
@@ -234,19 +234,20 @@ Run `bun run build` for the frontend production build. The [pre-push gate](./doc
 
 The exact verified state, recent test evidence, known gaps, and current baseline are maintained in [`docs/STATUS.md`](./docs/STATUS.md). Release priorities and 0.10/1.0 gates are maintained in [`ROADMAP.md`](./ROADMAP.md). This README deliberately avoids embedding fast-aging test counters.
 
-The main pre-1.0 work is currently concentrated on:
+Release-state check on **2 October 2026**, against `main@4cbf0eb8`: recovery for Prepare/Report/Graph jobs, embedding runtime SSoT, alias/entity handling, role-leakage marking, the Twitter recommender, quantifier gates and manifest/replay fixes are closed. Their remaining limits are documented in `docs/STATUS.md`; closing these tickets does not establish empirical product validity.
 
-- restart-safe long-running Prepare/Report/Graph jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
-- closing the remaining embedding runtime SSoT pieces — `VECTOR_DIM`, a legacy view, the frontend `building`-status mirror ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
-- persona/entity coherence and role consistency ([#1470](https://github.com/arn0ld87/agora/issues/1470), [#1471](https://github.com/arn0ld87/agora/issues/1471), [#1323](https://github.com/arn0ld87/agora/issues/1323)),
-- simulation fidelity and recommender reproducibility ([#1236](https://github.com/arn0ld87/agora/issues/1236)),
-- stronger evidence semantics and clean evaluation fixtures ([#1345](https://github.com/arn0ld87/agora/issues/1345), [#1240](https://github.com/arn0ld87/agora/issues/1240)),
-- complete manifests/replay and reproducibility ([#763](https://github.com/arn0ld87/agora/issues/763), [#1274](https://github.com/arn0ld87/agora/issues/1274)),
-- proven backup/restore/upgrade/rollback and baseline evaluation ([#766](https://github.com/arn0ld87/agora/issues/766), [#765](https://github.com/arn0ld87/agora/issues/765)).
+The remaining release work is concentrated on:
+
+- the failing Python dependency audit; the pypdf fix is proposed in open [PR #1748](https://github.com/arn0ld87/agora/pull/1748),
+- file-artifact versioning, compatibility policy, checksums and test isolation ([#1663](https://github.com/arn0ld87/agora/issues/1663), [#1664](https://github.com/arn0ld87/agora/issues/1664), [#1661](https://github.com/arn0ld87/agora/issues/1661), [#1632](https://github.com/arn0ld87/agora/issues/1632)),
+- the Supabase image scan/exception register and coverage gates ([#1670](https://github.com/arn0ld87/agora/issues/1670), [#1671](https://github.com/arn0ld87/agora/issues/1671), [#1672](https://github.com/arn0ld87/agora/issues/1672)),
+- clean evaluation fixtures and a documented counter-run ([#1240](https://github.com/arn0ld87/agora/issues/1240)),
+- formal cutover and fresh-host install/restore evidence ([#1592](https://github.com/arn0ld87/agora/issues/1592), [#766](https://github.com/arn0ld87/agora/issues/766)),
+- the AURORA comparison against single-prompt and static-persona baselines and visible product limits ([#1662](https://github.com/arn0ld87/agora/issues/1662), [#1674](https://github.com/arn0ld87/agora/issues/1674)). The full calibration suite [#765](https://github.com/arn0ld87/agora/issues/765) is scheduled after 1.0.
 
 ### Reproducibility boundary
 
-A structural `RunManifest` and a replay dialog exist, and reports and simulations record seed-related fields. That is not the same as a guarantee: the manifest is not yet a complete reproduction anchor. Prompt snapshots, seed-document hashing, real RNG wiring, and full replay parameters are still open ([#1274](https://github.com/arn0ld87/agora/issues/1274)). The current system **does not yet guarantee that the same stored seed reproduces the same experiment**. Full reproducibility requires all relevant random sources, prompts, inputs, routes, model responses, and feature flags to be frozen or recorded ([#763](https://github.com/arn0ld87/agora/issues/763)). That is 0.10 work, not a claim made by 0.9.6.
+[#1274](https://github.com/arn0ld87/agora/issues/1274) is closed. Manifests capture prompt templates, input hashes where available and strict route snapshots; replay preserves the original simulation parameters, permits a model-route override and records deviations. Unrecoverable legacy values remain `null`, and incomplete legacy manifests can be rejected. By the maintainer decision of 26 September 2026, `random_seed` is deliberately `null`; end-to-end RNG wiring was rejected rather than claimed as unfinished release work. **Replay does not guarantee identical model outputs or the same experiment result.** The boundary is traceable inputs and configuration, not deterministic simulation.
 
 ## Reference run
 

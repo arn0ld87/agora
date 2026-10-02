@@ -2,7 +2,7 @@
 
 Orientierung für Agenten und Maintainer, die mit Agora-Code, Laufartefakten oder Reports arbeiten.
 
-> **Stand:** 20.09.2026. **Verifiziert gegen:** `main@b62aea62`, Produktversion `0.9.6`.  
+> **Stand:** 02.10.2026. **Abgeglichen gegen:** `main@4cbf0eb8`, Produktversion `0.9.6`.
 > Für den verifizierten Projekt-Iststand ist [`docs/STATUS.md`](docs/STATUS.md) führend. Diese Datei erklärt Begriffe, Datenflüsse und die wichtigsten Invarianten.
 
 ---
@@ -86,7 +86,7 @@ Wichtige Invarianten:
 - Upload-Provenance wird über Dokument- und Chunk-IDs weitergetragen (ADR-0013).
 - Episode- und Relation-Writes sind gegen Retry-after-commit idempotent (#1460).
 - `entity_type` ist kein garantiert stabiles Label zwischen unterschiedlichen Modellläufen.
-- Alias-/Koreferenzauflösung und semantische Entitätsklassen vor dem Persona-Cap sind noch nicht vollständig gelöst (#1470).
+- Regelbasierte Alias-Auflösung, semantische Entitätsklassen und NER-Chunk-Kontext vor dem Persona-Cap sind umgesetzt (#1470 geschlossen). Mehrdeutige Identitäten bleiben getrennt; LLM-Koreferenz liegt außerhalb des Scopes.
 
 ### Phase 2 — Prepare und Personas
 
@@ -165,7 +165,7 @@ Transportpfade:
 - lebender Worker: IPC zum OASIS-Prozess,
 - terminaler Lauf: Direct-Client im Backend.
 
-Seit #1478 werden auch Interview-Providercalls dem Report-Budget zugeordnet und Budgetabbrüche strukturiert zurückpropagiert. Der separate `ParallelIPCHandler` des Default-Parallelrunners besitzt noch eine bekannte Attribution-Lücke.
+Seit #1478 werden auch Interview-Providercalls dem Report-Budget zugeordnet und Budgetabbrüche strukturiert zurückpropagiert. Der separate `ParallelIPCHandler` des Default-Parallelrunners wurde durch #1527 ebenfalls in die Budgetattribution einbezogen.
 
 ### Evidence-API
 
@@ -173,10 +173,10 @@ Seit #1478 werden auch Interview-Providercalls dem Report-Budget zugeordnet und 
 
 ### Bekannte Trust-Grenzen
 
-- Quantifizierte Aussagen können noch stärker formuliert sein als die aggregierte Evidence trägt (#1345).
+- Quantor-gestützte Evidence-Prüfung ist umgesetzt (#1345 geschlossen); sie ersetzt keine empirische Kalibrierung.
 - Evaluation-Seeds können erwartete Antworten enthalten und dadurch einen vermeintlichen Erkenntnisgewinn vortäuschen (#1240).
-- Rollenwechsel/Role Leakage in Simulationsaktionen wird noch nicht hart gegatet (#1323).
-- Confidence-/Claim-Typisierung ist noch nicht vollständig kalibriert (#1301/#1400).
+- Role Leakage wird lesend markiert; markierte Aktionen fallen aus der Report-Stichprobe (#1323 geschlossen). `actions.jsonl` bleibt unverändert, ein Repair-/Verwerf-Gate im Subprozess ist bewusst nicht vorgesehen.
+- Confidence-/Claim-Typen sind konsolidiert (#1301/#1400 geschlossen); eine externe Kalibrierungszusage ergibt sich daraus nicht.
 
 ---
 
@@ -232,7 +232,7 @@ Transportarten:
 
 `codex_cli` fragt seinen Modellkatalog seit #1416 laufzeitseitig über `codex debug models` ab (`discover_codex_cli_models()`) statt einen einzelnen Platzhalter (`codex-cli-default`) zu zeigen; der Katalog ist account-/planabhängig, der Sentinel bleibt als Fallback bei jedem Discovery-Fehlschlag erhalten.
 
-Embedding-Konfiguration ist davon getrennt. Lese- und Schreibpfad lösen Index- und Property-Namen inzwischen kanonisch über den Store auf (`resolve_active_entity_index()`/`resolve_active_fact_index()`, Slice 2.1), und `EmbeddingMigrationService` schaltet eine neue Index-Version erst nach geprüftem Re-Embedding und Index-Check gegen Neo4j atomar frei (Slice 2.2). **#1417 ist damit noch nicht vollständig geschlossen:** offen bleiben eine `VECTOR_DIM`-SSoT (Slice 2.3), eine Legacy-View für Bestandsgraphen (Slice 2.4) und der Frontend-Zod-Spiegel für den neuen `building`-Status.
+Embedding-Konfiguration ist bewusst vom Chat-Routing getrennt. Lese- und Schreibpfad lösen Index- und Property-Namen kanonisch über den Store auf; der Cutover aktiviert eine neue Index-Version erst nach geprüftem Re-Embedding und Index-Check. [#1417](https://github.com/arn0ld87/agora/issues/1417) ist geschlossen: Betriebsdimensionen, Legacy-Bootstrap-Sicht, Frontend-`building`-Spiegel, Env-/Store-Divergenzwarnung und Dimensionsprüfung vor dem Schreiben sind umgesetzt. Ein echter Modellwechsel gegen das produktive Neo4j-/Embedding-Backend bleibt ein operativer Nachweis in [#1592](https://github.com/arn0ld87/agora/issues/1592).
 
 ---
 
@@ -246,19 +246,9 @@ Seit #1478 werden Text-, Tool-, Vision- und Interview-Pfade pro physischem Provi
 
 ## 8. Reproduzierbarkeit
 
-Ein gespeichertes `random_seed`-Feld bedeutet **nicht**, dass ein Agora-Lauf bereits reproduzierbar ist. Ein strukturelles `RunManifest` und ein Replay-Dialog existieren (#763/#1273); das Manifest wird atomar geschrieben, referenziert den kanonischen `AiModelRef` bei Modell-Overrides und übernimmt `runtime.usage_summary` beim Finalisieren. Es ist damit noch kein vollständiger Reproduktionsanker.
+[#1274](https://github.com/arn0ld87/agora/issues/1274) ist geschlossen. Manifeste erfassen Prompt-Templates, verfügbare Input-Hashes und strikte Route-Snapshots; Replay übernimmt die ursprünglichen Simulationsparameter, erlaubt ein Modellrouten-Override und dokumentiert Abweichungen. Nicht rekonstruierbare Altwerte bleiben `null`; unvollständige Alt-Manifeste können abgewiesen werden. Nach der Maintainer-Entscheidung vom 26.09.2026 bleibt `random_seed` bewusst `null`; durchgängiges RNG-Wiring wurde verworfen und ist keine unerledigte Release-Zusage. **Replay garantiert weder identische Modellantworten noch dasselbe Experimentergebnis.** Nachvollziehbar sind Eingaben und Konfiguration, keine deterministische Simulation.
 
-Für einen belastbaren Replay müssen mindestens kontrolliert oder aufgezeichnet werden:
-
-- rohe Inputs inklusive Hash/Dateiname,
-- Prompt-Snapshots,
-- tatsächlich verwendete RNG-Seeds und deren Wiring,
-- Provider-/Connection-/Modell-/Routing-Snapshots,
-- relevante Feature Flags und Limits,
-- Graph-/Embedding-Versionen,
-- gegebenenfalls Modellantworten für einen deterministischen Replay.
-
-Diese Arbeit ist in #763/#1274 offen. Deshalb nicht dokumentieren oder kommunizieren: „same seed = same run“.
+Manifest-/Replay-Verträge und die detaillierten Capture-/Legacy-Grenzen stehen in [STATUS](docs/STATUS.md). Feature Flags, externe Modellversionen und Graphzustand sind bei Referenzläufen weiterhin zu dokumentieren.
 
 ---
 
@@ -280,16 +270,16 @@ Die verbindliche Priorisierung steht in [`docs/STATUS.md`](docs/STATUS.md) und [
 
 | Thema | Referenz |
 |---|---|
-| Webprozess-Jobs nach Restart | #1472 |
-| Embedding Runtime SSoT | #1417 |
-| Entitätsauflösung | #1470 |
-| Role Leakage | #1323 |
-| Twitter-Recommender / Reproduzierbarkeit | #1236 |
-| Quantoren vs. Evidence | #1345 |
-| Evaluation-Leakage | #1240 |
-| vollständiges Manifest / Replay | #763 / #1274 |
-| Backup/Restore/Upgrade-Nachweis | #766 |
-| Baseline-/Produktvalidierung | #765 |
-| Prompt Injection aus untrusted Observation — teilweise adressiert: Single-Platform-Tool-Loop kapselt und neutralisiert seit #1224, paralleler Simulationspfad und Fallback-Runden (natives CAMEL-`LLMAction()`) nicht | #1224 |
+| Out-of-Process-Worker / Report-Parallelität | #1551 (Recovery #1472 geschlossen) |
+| Echter Embedding-Modellwechsel und Cutover-Nachweise | #1592 (Embedding-Code #1417 geschlossen) |
+| LLM-Koreferenz außerhalb des abgenommenen Alias-Scopes | #1470 geschlossen |
+| Role Leakage: Markierung statt Verwerfen, keine vollständige Erkennung zugesagt | #1323 geschlossen |
+| Evaluation-Leakage/Gegenlauf | #1240 |
+| Replay ohne Determinismusgarantie, `random_seed=null` | #763 / #1274 geschlossen |
+| Dateiartefakt-Versionierung / Kompatibilität | #1663 / #1664 |
+| Test-Isolation vom echten Datenbestand | #1632 |
+| Fresh-Host-Install/Restore/Upgrade-Nachweis | #766 |
+| AURORA-Produktvergleich / volle Kalibrierung nach 1.0 | #1662 / #765 |
+| Prompt Injection: Single-Platform-Tool-Loop gekapselt, native CAMEL-Pfade und Fallback-Runden nicht pauschal abgedeckt | #1224 geschlossen |
 
 Historische Referenzläufe und Audits sind Belege ihres damaligen Zustands. Sie dürfen nicht als automatische Aussage über den aktuellen `main` gelesen werden.
