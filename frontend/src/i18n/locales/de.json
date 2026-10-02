@@ -2222,7 +2222,11 @@
       "forgotPassword": "Passwort vergessen?",
       "toRegister": "Noch kein Konto? Jetzt registrieren",
       "errorGeneric": "Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.",
-      "resetDone": "Passwort geändert. Bitte melde dich neu an."
+      "resetDone": "Passwort geändert. Bitte melde dich neu an.",
+      "tokenTitle": "Zugang zum Betreiberbereich",
+      "tokenLabel": "Zugangstoken",
+      "tokenHint": "Das Token ist der Wert von AGORA_AUTH_TOKEN deiner Installation.",
+      "tokenInvalid": "Das Token wurde abgelehnt. Bitte prüfe den Wert."
   },
   "workspaceProviderKeys": {
     "title": "Eigene Anbieter-Keys",

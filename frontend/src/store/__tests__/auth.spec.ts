@@ -70,6 +70,8 @@ vi.mock('../../api/index', () => ({
   hasCredentials: vi.fn(() => false),
   authHeaders: vi.fn(() => ({})),
   register401SignOutCallback: vi.fn(),
+  registerAuthRequiredCallback: vi.fn(),
+  authFetch: vi.fn(),
   requestWithRetry: vi.fn(),
 }))
 
@@ -681,5 +683,35 @@ describe('Codex-Runde 8 (#1617)', () => {
 
     expect(mocks._clearPersisted).not.toHaveBeenCalled()
     expect(store.session).toBeNull()
+  })
+})
+
+describe('signInWithToken (Betreiber-Token)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('setzt das Token und prüft es per geschützter Anfrage', async () => {
+    const api = await import('../../api/index')
+    vi.mocked(api.authFetch).mockResolvedValueOnce(new Response('{}', { status: 200 }))
+    const { useAuthStore } = await import('../auth')
+    const store = useAuthStore()
+
+    await store.signInWithToken('test-token')
+
+    expect(api.setAgoraToken).toHaveBeenCalledWith('test-token')
+    expect(api.authFetch).toHaveBeenCalledWith('/api/status')
+    expect(api.setAgoraToken).not.toHaveBeenLastCalledWith(null)
+  })
+
+  it('verwirft das Token bei 401 und wirft', async () => {
+    const api = await import('../../api/index')
+    vi.mocked(api.authFetch).mockResolvedValueOnce(new Response('{}', { status: 401 }))
+    const { useAuthStore } = await import('../auth')
+    const store = useAuthStore()
+
+    await expect(store.signInWithToken('test-token')).rejects.toThrow()
+
+    expect(api.setAgoraToken).toHaveBeenLastCalledWith(null)
   })
 })
