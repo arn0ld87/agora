@@ -95,13 +95,13 @@ Unterstützte Transportklassen:
 
 | Transport | Bedeutung | Beispiel |
 |---|---|---|
-| `http` | externer oder lokaler HTTP-Endpunkt | OpenAI, Anthropic, Gemini, MiniMax, Amazon Bedrock (Mantle) |
+| `http` | externer oder lokaler HTTP-Endpunkt | OpenAI, Gemini, MiniMax, Amazon Bedrock (Mantle; auch Claude). Anthropic: nur Modell-Discovery, native Chat-Aufrufe werden abgewiesen (#1284) |
 | `local` | lokaler HTTP-Dienst ohne API-Key-Auth | Ollama |
 | `cli` | lokal authentifizierter CLI-Subprozess | Codex CLI, Claude Code CLI |
 
 `codex_cli` (ChatGPT-Abo) ist ein echter Session-Transport: Es werden weder HTTP-Base-URL noch API-Key erwartet. `claude_cli` (Claude-Abo, [#1531](https://github.com/arn0ld87/agora/issues/1531)) spricht die lokal installierte Claude-Code-CLI per Subprozess mit isoliertem `HOME` pro Aufruf an und authentifiziert über einen langlebigen `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`) im verschlüsselten Secret-Store. Amazon Bedrock ([#1282](https://github.com/arn0ld87/agora/issues/1282)) spricht den OpenAI-kompatiblen Bedrock-Mantle-Endpunkt (Default-Region `eu-central-1`) über einen Bearer-API-Key an, nicht über boto3/SigV4. Details stehen in [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md).
 
-Embedding-Konfiguration ist bewusst vom Chat-Routing getrennt. Lese- und Schreibpfad lösen Index- und Property-Namen inzwischen kanonisch über den Store auf, und der Migrations-Cutover schaltet erst nach geprüftem Re-Embedding auf eine neue Index-Version um; [#1417](https://github.com/arn0ld87/agora/issues/1417) ist damit noch nicht vollständig geschlossen (offen: `VECTOR_DIM`-SSoT, Legacy-View für Bestandsgraphen, Frontend-Zod-Spiegel für den neuen `building`-Status).
+Embedding-Konfiguration ist bewusst vom Chat-Routing getrennt. Lese- und Schreibpfad lösen Index- und Property-Namen kanonisch über den Store auf; der Cutover aktiviert eine neue Index-Version erst nach geprüftem Re-Embedding und Index-Check. [#1417](https://github.com/arn0ld87/agora/issues/1417) ist geschlossen: Betriebsdimensionen, Legacy-Bootstrap-Sicht, Frontend-`building`-Spiegel, Env-/Store-Divergenzwarnung und Dimensionsprüfung vor dem Schreiben sind umgesetzt. Ein echter Modellwechsel gegen das produktive Neo4j-/Embedding-Backend bleibt ein operativer Nachweis in [#1592](https://github.com/arn0ld87/agora/issues/1592).
 
 ## Architektur
 
@@ -131,7 +131,7 @@ graph TD
 | LLM-Schicht | ProviderConnection, AiRoute/LlmRoute, `LLMClient` |
 | Report | Evidence-Sammlung, Claim-Gates, Degradationsmodell, Exporte |
 
-Produktions-Gunicorn läuft bewusst mit **einem Web-Worker**, solange prozesslokale Job-/Monitor-Zustände existieren — in ADR-0015 beziffert: Der nicht verschiebbare Anteil sind Betriebssystem-Handles (`Popen`-Objekte, In-Prozess-Queues, offene Dateideskriptoren) im `SimulationRunner`, die nur eine persistente Job-Queue mit eigenen Workern ([#1472](https://github.com/arn0ld87/agora/issues/1472)) auflösen kann. Mehr Worker sind hier kein kostenloser Performance-Regler.
+Produktions-Gunicorn läuft bewusst mit **einem Web-Worker**, solange prozesslokale Job-/Monitor-Zustände existieren — in ADR-0015 beziffert: Der nicht verschiebbare Anteil sind Betriebssystem-Handles (`Popen`-Objekte, In-Prozess-Queues, offene Dateideskriptoren) im `SimulationRunner`, die nur eine persistente Job-Queue mit eigenen Workern ([#1551](https://github.com/arn0ld87/agora/issues/1551)) auflösen kann. Mehr Worker sind hier kein kostenloser Performance-Regler.
 
 Parallel zu den Datei-/JSON-/SQLite-Stores existiert eine SQLAlchemy-/Alembic-gestützte PostgreSQL-Schicht; self-hosted Supabase ist ein optionales Compose-Overlay. Repository-Adapter decken **Projekt-, Simulations-, Job-, Report- und LLM-Profil-Metadaten** ab; für Workspaces gibt es einen PostgreSQL-only-Adapter. Jeder migrierte Metadaten-Store behält seinen Datei-/SQLite-Default und hat eine eigene `AGORA_*_BACKEND`-Einstellung. Provider-Secrets bleiben im dateibasierten Fernet-Store; Projektdokumente, Simulationsartefakte und Berichtsinhalte bleiben Dateien. Der ausgelieferte Default benötigt kein PostgreSQL. Adapter und Aktivierung sind in [`docs/STATUS.md`](./docs/STATUS.md) beschrieben.
 
@@ -234,19 +234,20 @@ cd frontend && bun run typecheck  # Vue/TypeScript
 
 Der exakt verifizierte Stand, aktuelle Testnachweise, bekannte Grenzen und die geprüfte Baseline werden in [`docs/STATUS.md`](./docs/STATUS.md) gepflegt. Release-Prioritäten und die Gates für 0.10/1.0 stehen in [`ROADMAP.md`](./ROADMAP.md). Diese README enthält bewusst keine schnell alternden Testzähler.
 
-Die wichtigsten Arbeiten vor 1.0 liegen derzeit bei:
+Release-Abgleich vom **02.10.2026**, gegen `main@4cbf0eb8`: Recovery für Prepare-/Report-/Graph-Jobs, Embedding-Runtime-SSoT, Alias-/Entitätsbehandlung, Role-Leakage-Markierung, Twitter-Recommender, Quantor-Gates und Manifest-/Replay-Fixes sind abgeschlossen. Verbleibende Grenzen stehen in `docs/STATUS.md`; geschlossene Tickets sind kein empirischer Produktnachweis.
 
-- restart-sicheren langlaufenden Prepare-/Report-/Graph-Jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
-- den verbleibenden Embedding-Runtime-SSoT-Teilen — `VECTOR_DIM`, Legacy-View, Frontend-`building`-Status-Spiegel ([#1417](https://github.com/arn0ld87/agora/issues/1417)),
-- Persona-/Entitätskohärenz und Rollenkonsistenz ([#1470](https://github.com/arn0ld87/agora/issues/1470), [#1471](https://github.com/arn0ld87/agora/issues/1471), [#1323](https://github.com/arn0ld87/agora/issues/1323)),
-- Simulationstreue und Recommender-Reproduzierbarkeit ([#1236](https://github.com/arn0ld87/agora/issues/1236)),
-- stärkerer Evidenzsemantik und sauberen Evaluationsfixtures ([#1345](https://github.com/arn0ld87/agora/issues/1345), [#1240](https://github.com/arn0ld87/agora/issues/1240)),
-- vollständigen Manifest-/Replay-Daten und Reproduzierbarkeit ([#763](https://github.com/arn0ld87/agora/issues/763), [#1274](https://github.com/arn0ld87/agora/issues/1274)),
-- nachgewiesenem Backup/Restore/Upgrade/Rollback und Baseline-Evaluation ([#766](https://github.com/arn0ld87/agora/issues/766), [#765](https://github.com/arn0ld87/agora/issues/765)).
+Die verbleibende Release-Arbeit konzentriert sich auf:
+
+- den roten Python-Dependency-Audit; der pypdf-Fix liegt als offener [PR #1748](https://github.com/arn0ld87/agora/pull/1748) vor,
+- Dateiartefakt-Versionierung, Kompatibilitätsregeln, Checksummen und Test-Isolation ([#1663](https://github.com/arn0ld87/agora/issues/1663), [#1664](https://github.com/arn0ld87/agora/issues/1664), [#1661](https://github.com/arn0ld87/agora/issues/1661), [#1632](https://github.com/arn0ld87/agora/issues/1632)),
+- Supabase-Image-Scan/Ausnahmeregister und Coverage-Gates ([#1670](https://github.com/arn0ld87/agora/issues/1670), [#1671](https://github.com/arn0ld87/agora/issues/1671), [#1672](https://github.com/arn0ld87/agora/issues/1672)),
+- saubere Evaluation-Fixtures und einen dokumentierten Gegenlauf ([#1240](https://github.com/arn0ld87/agora/issues/1240)),
+- formale Cutover- und Fresh-Host-Install-/Restore-Nachweise ([#1592](https://github.com/arn0ld87/agora/issues/1592), [#766](https://github.com/arn0ld87/agora/issues/766)),
+- den AURORA-Vergleich gegen Single-Prompt- und statische Persona-Baseline sowie sichtbare Produktgrenzen ([#1662](https://github.com/arn0ld87/agora/issues/1662), [#1674](https://github.com/arn0ld87/agora/issues/1674)). Die volle Kalibrierungssuite [#765](https://github.com/arn0ld87/agora/issues/765) folgt nach 1.0.
 
 ### Grenze der Reproduzierbarkeit
 
-Ein strukturelles `RunManifest` und ein Replay-Dialog existieren, Reports und Simulationen führen seed-bezogene Felder. Das ist keine Garantie: Das Manifest ist noch kein vollständiger Reproduktionsanker. Prompt-Snapshots, Seed-Dokument-Hashing, echtes RNG-Wiring und vollständige Replay-Parameter sind weiterhin offen ([#1274](https://github.com/arn0ld87/agora/issues/1274)). Das System garantiert aktuell **noch nicht**, dass derselbe gespeicherte Seed dasselbe Experiment reproduziert. Dafür müssen alle relevanten Zufallsquellen, Prompts, Inputs, Routen, Modellantworten und Feature Flags eingefroren oder aufgezeichnet werden ([#763](https://github.com/arn0ld87/agora/issues/763)). Das ist 0.10-Arbeit, keine Behauptung von 0.9.6.
+[#1274](https://github.com/arn0ld87/agora/issues/1274) ist geschlossen. Manifeste erfassen Prompt-Templates, verfügbare Input-Hashes und strikte Route-Snapshots; Replay übernimmt die ursprünglichen Simulationsparameter, erlaubt ein Modellrouten-Override und dokumentiert Abweichungen. Nicht rekonstruierbare Altwerte bleiben `null`; unvollständige Alt-Manifeste können abgewiesen werden. Nach der Maintainer-Entscheidung vom 26.09.2026 bleibt `random_seed` bewusst `null`; durchgängiges RNG-Wiring wurde verworfen und ist keine unerledigte Release-Zusage. **Replay garantiert weder identische Modellantworten noch dasselbe Experimentergebnis.** Nachvollziehbar sind Eingaben und Konfiguration, keine deterministische Simulation.
 
 ## Referenzlauf
 

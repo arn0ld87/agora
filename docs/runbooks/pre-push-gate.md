@@ -1,6 +1,6 @@
 # Pre-Push-Gate
 
-Datei: `docs/runbooks/pre-push-gate.md` · Stand: 2026-08-08 · Eingeführt mit: Onboarding Slice 4.3.3 Maintenance
+Datei: `docs/runbooks/pre-push-gate.md` · Stand: 2026-10-02 · Eingeführt mit: Onboarding Slice 4.3.3 Maintenance
 
 ## Zweck
 
@@ -13,8 +13,8 @@ Default nur noch in der CI. Auf jedem normalen PR fahren die beiden
 Required-Smoke-Gates diese Prüfungen: `Backend PR smoke gate` führt
 `mypy app` und das Backend-Test-Subset (ohne Coverage) aus,
 `Frontend PR smoke gate` führt `bun run test` und `vite build` aus.
-Die vollen Coverage-Gates (`pytest --cov --cov-fail-under=60`,
-`bun run test:coverage`) laufen in den Jobs `Backend tests + lint` /
+Die vollen Coverage-Gates (`pytest --cov=app --cov-branch` mit nachfolgendem
+`scripts/check_coverage.py`, `bun run test:coverage`) laufen in den Jobs `Backend tests + lint` /
 `Frontend build + lint`, die auf PRs label-gated sind
 (`needs-backend-ci` / `needs-frontend-ci`) und außerhalb von PRs immer
 laufen. Das Label gilt seit 13.09.2026 für den gesamten PR und nicht mehr
@@ -62,7 +62,7 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 3 | `pytest tests/contracts/ -x -q` | Backend PR smoke gate + Pydantic-Contract-Tests | ja |
 | 4 | Backend-Test-Subset (`pytest -n 4`) | Backend tests + lint (volle Suite) | nur mit `GATE_FULL=1` |
 | 5 | `dump_schemas --check` | Schema-Drift verhindern | ja |
-| 6 | `sync-status.sh --check` | STATUS.md Drift | ja |
+| 6 | `sync-status.sh --check --skip-counts` | STATUS.md Drift | ja |
 | 7 | `eslint .` (frontend) | Frontend PR smoke gate | ja |
 | 8 | `vue-tsc --noEmit` | Frontend PR smoke gate | ja |
 | 9 | `vitest run` | Frontend PR smoke gate (`test:coverage`) | nur mit `GATE_FULL=1` |
@@ -71,6 +71,8 @@ Exit-Codes: `0` = alle Gates grün · `1` = mind. ein Gate rot · `2` = falscher
 | 12 | Routing-Check (`scripts/check_llm_endpoint_localhost.sh`) | keiner — lokale `.env`-Prüfung, ohne `.env` Skip mit Warnung | ja (Scope `all`/`routing`) |
 | 13 | Komplexitäts-Gate (`scripts/check_complexity.py`) | contract-gates-Workflow (`push:main`) | ja (Scope `backend`/`all`) |
 | 14 | Leak-Gate (`scripts/check_pandaos_managed_leak.sh`) | Backend PR smoke gate | ja (jeder Scope) |
+
+Das Schema-Gate prüft zusätzlich Versionsdrift über `backend/scripts/check_version_drift.py`. Das Backend-Gate enthält auch `check_mypy_debt.py`. Generierte Testzähler bleiben im normalen Pre-Push-Lauf unverändert; gezielte Counter-Refreshes laufen separat. Backend-Coverage-Schwellen stehen in `backend/coverage-baseline.json`; Ratchet/Schönungs-Check #1671 und die gemessene Frontend-Baseline #1672 bleiben offene Release-Gates.
 
 **Gate 14 im Detail.** PandaOS schreibt lokal einen Block zwischen
 `<!-- >>> pandaos-managed (do not edit) >>> -->` und
