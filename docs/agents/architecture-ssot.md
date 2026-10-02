@@ -1,6 +1,6 @@
 # Architektur — Single Sources of Truth
 
-> Laden bei Architektur-, Vertrags- oder Routing-Fragen. Stand 20.09.2026, geprüfte Main-Baseline `b62aea62`; Details und bekannte Ausnahmen in [`../architecture.md`](../architecture.md) und [`../STATUS.md`](../STATUS.md).
+> Laden bei Architektur-, Vertrags- oder Routing-Fragen. Stand 02.10.2026, abgeglichen gegen Main-Baseline `4cbf0eb8`; Details und bekannte Ausnahmen in [`../architecture.md`](../architecture.md) und [`../STATUS.md`](../STATUS.md).
 
 | Konzept | Kanonischer Pfad |
 |---------|-----------------|
@@ -36,7 +36,7 @@
 | LLM-Profil-Repository, PostgreSQL-Adapter | `backend/app/infrastructure/postgres/repositories/llm_profile_repository.py::PostgresLlmProfileRepository` (Tabelle `agora.llm_profiles`; API-Keys bleiben im Fernet-`LlmProfileSecretsStore`, keine `api_key`-Spalte) |
 | PostgreSQL-Grundlage (SQLAlchemy/Alembic) | `backend/app/infrastructure/postgres/` (`Database.session()`), Migrationen unter `backend/migrations/` (Alembic), Default `AGORA_METADATA_BACKEND=legacy` |
 
-## Bekannte SSoT-Ausnahme
+## Embedding-SSoT und Bootstrap-Grenzen
 
 **Embedding #1417:** Der `EmbeddingConfigurationStore` ist die alleinige Wahrheit für die aktive Embedding-Konfiguration. `Config.EMBEDDING_*`/`VECTOR_DIM` (Env) bleiben ausschließlich Bootstrap:
 
@@ -48,9 +48,11 @@
 
 Chat-Routing und Embedding-Konfiguration bleiben strukturell getrennt.
 
-## PostgreSQL ist ein zweiter Adapter, keine Ablösung
+## PostgreSQL: produktiver Cutover, Legacy-Code-Defaults
 
-Projekt- und LLM-Profil-Metadaten haben seit `docs/plans/supabase.md` je einen Repository-Port mit zwei Implementierungen: dem bestehenden JSON-/SQLite-Adapter (Default) und einem PostgreSQL-Adapter. Beide Umschalter (`AGORA_PROJECT_BACKEND`, `AGORA_LLM_PROFILE_BACKEND`) stehen im Default auf dem Datei-/SQLite-Pfad; `AGORA_METADATA_BACKEND=postgres` erzeugt ohne einen dieser Umschalter noch keine einzige Verbindung. Nicht behaupten, PostgreSQL habe die Dateiablage oder SQLite abgelöst — es ist ein paralleler, migrierbarer Adapter hinter demselben Port.
+Repository-Adapter existieren für Projekt-, Simulations-, Job-/Run-, Report- und LLM-Profil-Metadaten. Die jeweiligen `AGORA_*_BACKEND`-Schalter bleiben im Code auf Datei-/SQLite-Defaults; `AGORA_METADATA_BACKEND=postgres` allein aktiviert nicht alle Ports.
+
+Auf armserver sind seit dem dokumentierten Cutover vom 25.09.2026 alle fünf Metadaten-Domänen produktiv auf PostgreSQL umgeschaltet (#1592). Projektquellen, Simulationsartefakte und Report-Inhalte bleiben Dateien. Formale Cutover-/Drill-Nachweise sind weiterhin offen; der unterstützte 1.0-Install-Pfad soll PostgreSQL und den vollen Supabase-Stack kanonisch verwenden (#1654). Details und aktueller Nachweisumfang: [STATUS](../STATUS.md), [Upgrade](../runbooks/upgrade.md).
 
 ## Grundregel
 
