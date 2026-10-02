@@ -277,7 +277,7 @@ Die verbindliche Priorisierung steht in [`docs/STATUS.md`](docs/STATUS.md) und [
 | Evaluation-Leakage/Gegenlauf | #1240 |
 | Replay ohne Determinismusgarantie, `random_seed=null` | #763 / #1274 geschlossen |
 | Dateiartefakt-Versionierung / Kompatibilität | #1663 / #1664 |
-| Test-Isolation vom echten Datenbestand | #1632 |
+| Test-Isolation vom echten Datenbestand: Schreibsperre gilt nur im Testprozess, nicht für Kindprozesse | #1632 geschlossen |
 | Fresh-Host-Install/Restore/Upgrade-Nachweis | #766 |
 | AURORA-Produktvergleich / volle Kalibrierung nach 1.0 | #1662 / #765 |
 | Prompt Injection: Single-Platform-Tool-Loop gekapselt, native CAMEL-Pfade und Fallback-Runden nicht pauschal abgedeckt | #1224 geschlossen |

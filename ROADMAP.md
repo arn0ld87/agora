@@ -117,7 +117,7 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 
 - [x] **Früherer P0:** Neo4j-Backup repariert ([#1633](https://github.com/arn0ld87/agora/issues/1633)). Ein neuer P0 stoppt den RC-Schnitt; die reale Restore-Abnahme bleibt [#766](https://github.com/arn0ld87/agora/issues/766).
 - [ ] **Verträge und Persistenz:** `schema_version` für Dateiartefakte ([#1663](https://github.com/arn0ld87/agora/issues/1663)), Kompatibilitäts-/Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)), Cutover-Nachweise ([#1592](https://github.com/arn0ld87/agora/issues/1592)) und Release-Checksummen ([#1661](https://github.com/arn0ld87/agora/issues/1661)).
-- [ ] **Trust und Testbarkeit:** Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)).
+- [x] **Trust und Testbarkeit:** Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)): tmp-Isolation der Upload-Pfade, abgemeldete Shutdown-Hooks und Schreibsperre für echte Datenverzeichnisse in der Suite.
 - [ ] **Release-Gates:** Supabase-Image-Scan und Ausnahmeregister ([#1670](https://github.com/arn0ld87/agora/issues/1670)), Backend-Ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671)), Frontend-Coverage ([#1672](https://github.com/arn0ld87/agora/issues/1672)).
 
 ## Bis `0.10.0` stabil — P1-Fixes
