@@ -15,6 +15,7 @@ from . import simulation_bp
 from ..config import Config
 from ..contracts import PersonaEntityContext
 from ..contracts.branch_request_contract import BranchOverrides
+from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 from ..services.llm_routing_seed import prevalidate_ai_model_ref_with_discovery
 from ..services.persona_entity_context_service import PersonaEntityContextService
 from ..services.persona_library import PersonaLibrary
@@ -350,6 +351,9 @@ def add_simulation_profile(simulation_id: str):
     # — '%Y-%m-%d', kein Zeit-Anteil. Schema-Parity zwischen manuellen und
     # generierten Profilen. (Gemini-Code-Assist Finding, PR #226.)
     new_profile = {
+        # Issue #1663: dieselbe Formatversion wie generierte Profile. Der
+        # Schluessel steht schon im Dict, daher ueberschreibt der Request ihn nicht.
+        'schema_version': PERSONA_SCHEMA_VERSION,
         'user_id': next_id,
         'username': username,
         'name': display_name,

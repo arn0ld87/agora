@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..config import Config
+from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from .llm_routing_seed import workspace_credential_metadata
@@ -146,6 +147,9 @@ def _translate_persona(
     )
 
     profile: Dict[str, Any] = {
+        # Issue #1663: Formatversion des geschriebenen Eintrags, nie aus dem
+        # Bibliothekseintrag übernommen.
+        "schema_version": PERSONA_SCHEMA_VERSION,
         "user_id": user_id,
         "username": username,
         "name": display_name,

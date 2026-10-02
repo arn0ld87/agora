@@ -226,6 +226,16 @@ service.interceptors.response.use(
       }
     }
 
+    // Betreiber-Token fehlt (Hybrid/Legacy ohne Session): zur Anmeldung leiten.
+    // Nur bei explizitem auth_required; ein offener Modus liefert keine 401.
+    if (
+      axiosError?.response?.status === 401 &&
+      axiosError.response.data?.['code'] === 'auth_required' &&
+      !getSessionToken()
+    ) {
+      _onAuthRequired?.()
+    }
+
     // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
     const data = axiosError?.response?.data
     if (data && data['success'] === false) {
@@ -266,6 +276,13 @@ service.interceptors.response.use(
 
 // Callback registered by the auth store for 401-triggered signOut+redirect.
 let _on401SignOut: (() => void) | null = null
+
+// Callback des Auth-Stores: 401 auth_required ohne Session -> Login-Seite.
+let _onAuthRequired: (() => void) | null = null
+
+export function registerAuthRequiredCallback(cb: (() => void) | null): void {
+  _onAuthRequired = cb
+}
 
 export function register401SignOutCallback(cb: (() => void) | null): void {
   _on401SignOut = cb

@@ -241,6 +241,12 @@ jobs:
           tags: agora-nginx:ci-${{ github.sha }}
           cache-from: type=gha,scope=proxy
           cache-to: type=gha,mode=min,scope=proxy
+          # Die proxy-Stage selbst nie aus dem Layer-Cache: ihr ``apk upgrade``
+          # soll bei jedem Build die aktuellen Alpine-Fixes holen. Mit Cache
+          # blieb pcre2 10.48-r0 (CVE-2026-103111) im Image, obwohl Alpine 3.24
+          # 10.49-r0 auslieferte; der Trivy-Proxy-Scan schlug deshalb fehl.
+          # Die teure frontend-build-Stage bleibt gecacht.
+          no-cache-filters: proxy
           outputs: type=docker,dest=/tmp/proxy-image.tar
 
       - name: Trivy container scan
@@ -641,6 +647,8 @@ jobs:
           outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/agora-proxy,push-by-name=true,name-canonical=true,push=true
           cache-from: type=gha,scope=proxy${{ matrix.cache_suffix }}
           cache-to: type=gha,mode=min,scope=proxy${{ matrix.cache_suffix }}
+          # Wie in build-only: die proxy-Stage (apk upgrade) nie aus dem Cache.
+          no-cache-filters: proxy
 
       - name: Export digests
         env:

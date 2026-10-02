@@ -30,6 +30,11 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Rollback-Implikation:** Ein Rückweg auf eine Agora-Version ohne Jev-Pilot lässt den `jev`-Eintrag in derselben Store-Datei unberührt zurück (keine Schema-Migration nötig — zusätzliche Ref im selben JSON-Objekt). Ein Master-Key-Wechsel (`AGORA_SECRET_KEY` rotieren) re-encryptet über `llm-secrets-doctor.py rotate` wie jeden anderen Eintrag auch automatisch mit.
 - **Master-Key-Prüfung vor dem Schreiben:** Seit dieser Slice verweigert `bind_decision_secret.py` das Binden/Überschreiben, wenn der aktuelle `AGORA_SECRET_KEY` einen bereits vorhandenen Store-Eintrag nicht entschlüsseln kann (Exit `2`) — ein syntaktisch gültiger, aber falscher Master-Key hätte sonst klaglos überschrieben und den vorherigen Ciphertext unwiederbringlich verloren.
 
+**`schema_version` in Dokument-Manifest und Personasatz** ([#1663](https://github.com/arn0ld87/agora/issues/1663)). `uploads/projects/<id>/extracted_documents.json` bekommt ein Feld `schema_version: 1` auf oberster Ebene. Jeder Eintrag von `uploads/simulations/<id>/reddit_profiles.json` bekommt dasselbe Feld, `twitter_profiles.csv` eine zusätzliche Spalte `schema_version`.
+
+- **Upgrade:** Es ist kein Schritt nötig. Altbestand ohne Feld liest die neue Version als Version 1 und schreibt ihn nicht um. Das Feld kommt erst dazu, wenn die Datei ohnehin neu geschrieben wird, etwa beim nächsten Graph-Build oder bei der nächsten Persona-Bearbeitung.
+- **Rollback-Implikation:** Ältere Versionen lehnen ein Manifest **mit** `schema_version` ab, weil `DocumentManifest` dort `extra="forbid"` ist. Die Folgen nach einem Rückweg: Der Graph-Build eines solchen Projekts bricht ab, und Dokument-Rollen fallen mit Warnung weg. Abhilfe ist, `schema_version` aus `extracted_documents.json` zu entfernen. Der Personasatz ist nicht betroffen: Ältere Leser akzeptieren Zusatzfelder, und OASIS greift auf CSV-Spalten über den Namen zu.
+
 ## Env-Default-Änderungen außerhalb des Versionssprungs
 
 Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).
@@ -325,7 +330,7 @@ Ein Teil-Rückweg ist möglich, solange die Reihenfolge stimmt (Reports allein z
 Noch nicht festgelegt, Eingaben für den Abschnitt:
 
 - Ob und wie sich die Code-Defaults der Metadaten-Schalter ändern und wie der 1.0-Install-Pfad mit vollem Supabase-Stack aussieht ([#1654](https://github.com/arn0ld87/agora/issues/1654)).
-- `schema_version` für Dateiartefakte ([#1663](https://github.com/arn0ld87/agora/issues/1663)) und die Kompatibilitäts- und Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)).
+- Die Kompatibilitäts- und Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)). `schema_version` für Dateiartefakte ist mit [#1663](https://github.com/arn0ld87/agora/issues/1663) eingeführt, siehe „Persistenz-Änderungen außerhalb des Versionssprungs“.
 - Der Fresh-Host-Install/Restore als Nachweis ([#766](https://github.com/arn0ld87/agora/issues/766), [#1659](https://github.com/arn0ld87/agora/issues/1659)).
 
 ---

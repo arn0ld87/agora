@@ -17,6 +17,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 _STRICT = ConfigDict(extra="forbid")
 
 
+#: Aktuelle Version des persistierten Persona-Formats (#1663). Der Personasatz
+#: liegt als ``reddit_profiles.json`` (Liste) und ``twitter_profiles.csv`` vor.
+#: Beide Formate liest OASIS direkt, eine Hülle um die Liste gibt es nicht.
+#: Deshalb steht die Version an jedem Eintrag bzw. als eigene CSV-Spalte.
+PERSONA_SCHEMA_VERSION: Literal[1] = 1
+
+
 # DACH-Voice-Register (für Layer 2)
 VoiceRegister = Literal["formal-de", "neutral-de", "technical-de", "skeptisch-de"]
 
@@ -24,6 +31,11 @@ VoiceRegister = Literal["formal-de", "neutral-de", "technical-de", "skeptisch-de
 class PersonaModel(BaseModel):
     """1:1-Spiegel von OasisAgentProfile, aber typsicher."""
     model_config = _STRICT
+
+    # Issue #1663: Formatversion des persistierten Eintrags. Profile von vor
+    # #1663 tragen das Feld nicht und gelten als Version 1. Eine unbekannte
+    # Version wird abgelehnt, statt still als Version 1 durchzulaufen.
+    schema_version: Literal[1] = PERSONA_SCHEMA_VERSION
 
     # Pflichtfelder aus OasisAgentProfile
     user_id: int = Field(ge=1)

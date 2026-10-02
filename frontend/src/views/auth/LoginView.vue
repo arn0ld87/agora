@@ -13,6 +13,8 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 
+const tokenMode = !auth.jwtEnabled
+const token = ref('')
 const email = ref('')
 const password = ref('')
 const pending = ref(false)
@@ -24,10 +26,15 @@ async function submit(): Promise<void> {
   errorMsg.value = ''
   pending.value = true
   try {
+    if (tokenMode) {
+      await auth.signInWithToken(token.value.trim())
+      await router.replace(safeNext(route.query.next))
+      return
+    }
     await auth.signIn(email.value, password.value)
     await router.replace(safeNext(route.query.next))
   } catch {
-    errorMsg.value = t('auth.login.errorGeneric')
+    errorMsg.value = tokenMode ? t('auth.login.tokenInvalid') : t('auth.login.errorGeneric')
   } finally {
     pending.value = false
   }
@@ -37,10 +44,25 @@ async function submit(): Promise<void> {
 <template>
   <div class="auth-layout">
     <main class="auth-card" aria-labelledby="login-heading">
-      <h1 id="login-heading" class="auth-title">{{ t('auth.login.title') }}</h1>
+      <h1 id="login-heading" class="auth-title">{{ tokenMode ? t('auth.login.tokenTitle') : t('auth.login.title') }}</h1>
 
       <form @submit.prevent="submit" novalidate>
-        <div class="form-group">
+        <div v-if="tokenMode" class="form-group">
+          <label for="login-token">{{ t('auth.login.tokenLabel') }}</label>
+          <input
+            id="login-token"
+            v-model="token"
+            type="password"
+            autocomplete="current-password"
+            required
+            :disabled="pending"
+            :aria-invalid="errorMsg ? 'true' : 'false'"
+            :aria-describedby="errorMsg ? 'login-token-error' : 'login-token-hint'"
+          />
+          <p id="login-token-hint" class="auth-hint">{{ t('auth.login.tokenHint') }}</p>
+        </div>
+
+        <div v-if="!tokenMode" class="form-group">
           <label for="login-email">{{ t('auth.login.emailLabel') }}</label>
           <input
             id="login-email"
@@ -52,7 +74,7 @@ async function submit(): Promise<void> {
           />
         </div>
 
-        <div class="form-group">
+        <div v-if="!tokenMode" class="form-group">
           <label for="login-password">{{ t('auth.login.passwordLabel') }}</label>
           <input
             id="login-password"
@@ -70,6 +92,7 @@ async function submit(): Promise<void> {
 
         <div
           v-if="errorMsg"
+          id="login-token-error"
           class="auth-error"
           role="alert"
           aria-live="assertive"
@@ -87,7 +110,7 @@ async function submit(): Promise<void> {
         </button>
       </form>
 
-      <nav class="auth-links">
+      <nav v-if="!tokenMode" class="auth-links">
         <router-link :to="{ name: 'PasswordReset' }">{{ t('auth.login.forgotPassword') }}</router-link>
         <router-link :to="{ name: 'Register' }">{{ t('auth.login.toRegister') }}</router-link>
       </nav>
@@ -143,6 +166,11 @@ async function submit(): Promise<void> {
 
 .form-group input:focus-visible {
   outline: 2px solid var(--color-accent, #89b4fa);
+}
+
+.auth-hint {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #a6adc8);
 }
 
 .auth-info {

@@ -14,7 +14,7 @@ vi.mock('../../auth/supabaseClient', () => ({
   clearPersistedSession: clearPersisted,
 }))
 
-import service, { authFetch, register401SignOutCallback } from '../index'
+import service, { authFetch, register401SignOutCallback, registerAuthRequiredCallback } from '../index'
 import { getSessionToken, setSessionToken } from '../../auth/sessionState'
 
 type Rejected = (error: unknown) => Promise<unknown>
@@ -210,5 +210,32 @@ describe('Abmeldung ohne registrierten Store', () => {
 
     expect(sb.signOut).toHaveBeenCalledTimes(1)
     expect(clearPersisted).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('401 auth_required ohne Session', () => {
+  const authRequired = { response: { status: 401, data: { success: false, error: 'x', code: 'auth_required' } }, config: { url: '/api/status' } }
+
+  it('ruft den Anmelde-Callback auf', async () => {
+    setSessionToken(null)
+    const cb = vi.fn()
+    registerAuthRequiredCallback(cb)
+
+    await expect(rejectedHandler()(authRequired)).rejects.toBeTruthy()
+
+    expect(cb).toHaveBeenCalledTimes(1)
+    registerAuthRequiredCallback(null)
+  })
+
+  it('ignoriert andere 401-Codes', async () => {
+    setSessionToken(null)
+    const cb = vi.fn()
+    registerAuthRequiredCallback(cb)
+    const other = { ...authRequired, response: { status: 401, data: { success: false, code: 'invalid_token' } } }
+
+    await expect(rejectedHandler()(other)).rejects.toBeTruthy()
+
+    expect(cb).not.toHaveBeenCalled()
+    registerAuthRequiredCallback(null)
   })
 })

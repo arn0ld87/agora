@@ -98,6 +98,18 @@ def test_manual_profile_has_karma(client, store):
     assert manual["karma"] >= 0
 
 
+def test_manual_profile_carries_schema_version(client, store):
+    """#1663: auch eine manuell angelegte Persona trägt ``schema_version``."""
+    resp = client.post(
+        f"/api/simulation/{SIM_ID}/profiles",
+        json={"username": "manual_max", "name": "Max Muster", "schema_version": 99},
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    manual = next(p for p in _get_profiles(store) if p.get("username") == "manual_max")
+    assert manual["schema_version"] == 1
+
+
 def test_manual_profile_has_created_at(client, store):
     """Persistiertes manuelles Profil muss ``created_at`` besitzen."""
     resp = client.post(

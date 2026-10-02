@@ -202,6 +202,8 @@ Details: [`secret-key-lifecycle.md`](secret-key-lifecycle.md).
 
 Das Browser-Frontend muss für das Single-User-Master-Token einen Client-seitigen Zustand halten, solange kein serverseitiger Session-/HttpOnly-Cookie-Login existiert.
 
+Eingegeben wird das Token auf der Anmeldeseite (`/auth/login`, Feld „Zugangstoken“), sobald JWT nicht aktiv ist. Das Frontend prüft es mit einer geschützten Anfrage (`GET /api/status`) und speichert es nur bei Erfolg; eine `401`-Antwort mit `code: auth_required` leitet zur Anmeldung.
+
 Sicherheitsgrenze:
 
 - Jeder Token im JavaScript-Kontext kann durch eine erfolgreiche XSS im selben Origin kompromittiert werden.
