@@ -55,7 +55,9 @@ from app.llm.providers.claude_cli import (
     build_tool_prompt,
     claude_cli_scratch_dir_prefix,
     claude_cli_timeout_seconds,
+    extract_claude_cli_model,
     interpret_claude_cli_result,
+    log_resolved_claude_cli_model,
     parse_tool_calls,
     strip_tool_calls,
 )
@@ -184,6 +186,11 @@ class ClaudeCliModel(BaseModelBackend):
         )
         self._model_slug = str(model_type)
         self._oauth_token = api_key or ""
+        # Zuletzt von der CLI gemeldete Modell-ID (``modelUsage``). Pro
+        # Instanz genuegt: alle Aufrufe einer Instanz teilen dasselbe
+        # ``--model`` — einzig der Sentinel kann zwischen Aufrufen schwanken,
+        # dann zeigt ``model`` den juengsten Stand.
+        self._resolved_model: Optional[str] = None
 
     @property
     def token_counter(self) -> BaseTokenCounter:
@@ -249,7 +256,7 @@ class ClaudeCliModel(BaseModelBackend):
             id=f"claudecli-{uuid.uuid4().hex[:12]}",
             object="chat.completion",
             created=int(time.time()),
-            model=self._model_slug,
+            model=self._resolved_model or self._model_slug,
             choices=[
                 Choice(
                     index=0,
@@ -269,13 +276,17 @@ class ClaudeCliModel(BaseModelBackend):
     def _invoke(self, prompt: str) -> str:
         """Synchroner Pfad — nur fuer Nicht-Runden-Aufrufer, nicht im
         Rundenbetrieb genutzt (siehe ``_arun``)."""
-        from app.llm.providers.claude_cli import _run_claude_cli
+        from app.llm.providers.claude_cli import _run_claude_cli_with_model
 
         model = self._model_slug or None
         try:
-            return _run_claude_cli(prompt, model=model, oauth_token=self._oauth_token)
+            text, resolved = _run_claude_cli_with_model(
+                prompt, model=model, oauth_token=self._oauth_token
+            )
         except ClaudeCliUnavailableError as exc:
             raise RuntimeError(f"claude_cli: {exc}") from exc
+        self._resolved_model = resolved or self._resolved_model
+        return text
 
     def _run(
         self,
@@ -324,11 +335,16 @@ class ClaudeCliModel(BaseModelBackend):
             except asyncio.CancelledError:
                 await _terminate(proc)
                 raise
-        return interpret_claude_cli_result(
+        stdout_text = stdout.decode("utf-8", errors="replace")
+        text = interpret_claude_cli_result(
             proc.returncode or 0,
-            stdout.decode("utf-8", errors="replace"),
+            stdout_text,
             stderr.decode("utf-8", errors="replace"),
         )
+        resolved = extract_claude_cli_model(stdout_text)
+        log_resolved_claude_cli_model(requested=self._model_slug or None, resolved=resolved)
+        self._resolved_model = resolved or self._resolved_model
+        return text
 
     async def _ainvoke(self, prompt: str) -> str:
         """``claude -p`` mit Concurrency-Limit und Retry (Issue #1713 S3).

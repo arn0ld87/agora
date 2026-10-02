@@ -17,6 +17,7 @@ from app.llm.providers import claude_cli as claude_cli_mod
 from app.llm.providers.claude_cli import (
     ClaudeCliClient,
     claude_cli_fallback_models,
+    extract_claude_cli_model,
     interpret_claude_cli_result,
     is_claude_cli_available,
 )
@@ -42,12 +43,57 @@ def test_is_claude_cli_available_false_when_which_finds_nothing(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_fallback_models_sentinel_first_then_documented_aliases():
-    models = claude_cli_fallback_models()
-    assert models[0] == claude_cli_mod.CLAUDE_CLI_DEFAULT_MODEL_ID
-    assert "sonnet" in models
-    assert "opus" in models
-    assert "fable" in models
+def test_fallback_models_sentinel_first_then_full_model_ids():
+    assert claude_cli_fallback_models() == (
+        claude_cli_mod.CLAUDE_CLI_DEFAULT_MODEL_ID,
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-5-5",
+        "claude-opus-5-5",
+        "claude-fable-5-1",
+    )
+
+
+def test_every_fallback_model_has_display_name():
+    for model_id in claude_cli_fallback_models():
+        assert claude_cli_mod.CLAUDE_CLI_MODEL_DISPLAY_NAMES[model_id]
+
+
+def test_build_command_passes_full_model_id_and_omits_sentinel(monkeypatch):
+    _mock_available(monkeypatch)
+    cmd = claude_cli_mod.build_claude_cli_command(model="claude-haiku-4-5-20251001")
+    assert cmd[-2:] == ["--model", "claude-haiku-4-5-20251001"]
+    sentinel_cmd = claude_cli_mod.build_claude_cli_command(
+        model=claude_cli_mod.CLAUDE_CLI_DEFAULT_MODEL_ID
+    )
+    assert "--model" not in sentinel_cmd
+
+
+# ---------------------------------------------------------------------------
+# extract_claude_cli_model() — aufgeloestes Modell aus ``modelUsage``
+# ---------------------------------------------------------------------------
+
+
+def test_extract_model_single_entry():
+    stdout = _json_result(modelUsage={"claude-sonnet-5-5": {"outputTokens": 12}})
+    assert extract_claude_cli_model(stdout) == "claude-sonnet-5-5"
+
+
+def test_extract_model_picks_entry_with_most_output_tokens():
+    stdout = _json_result(
+        modelUsage={
+            "claude-haiku-4-5-20251001": {"outputTokens": 3},
+            "claude-opus-5-5": {"outputTokens": 400},
+        }
+    )
+    assert extract_claude_cli_model(stdout) == "claude-opus-5-5"
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    ["", "kein json", '{"result": "x"}', '{"result": "x", "modelUsage": {}}'],
+)
+def test_extract_model_returns_none_without_usable_model_usage(stdout):
+    assert extract_claude_cli_model(stdout) is None
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +165,39 @@ def test_create_success_returns_openai_shaped_message(monkeypatch):
 
     assert completion.choices[0].message.content == "antwort text"
     mock_run.assert_called_once()
+
+
+def test_create_reports_resolved_model_from_model_usage(monkeypatch):
+    """Sentinel angefragt -> ``model`` zeigt, was die CLI tatsaechlich fuhr."""
+    _mock_available(monkeypatch)
+    stdout = _json_result(result="ok", modelUsage={"claude-opus-5-5": {"outputTokens": 5}})
+    monkeypatch.setattr(
+        claude_cli_mod.subprocess,
+        "run",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=stdout, stderr="")),
+    )
+
+    completion = ClaudeCliClient(oauth_token="tok_abc").chat.completions.create(
+        model=claude_cli_mod.CLAUDE_CLI_DEFAULT_MODEL_ID,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert completion.model == "claude-opus-5-5"
+
+
+def test_create_falls_back_to_requested_model_without_model_usage(monkeypatch):
+    _mock_available(monkeypatch)
+    monkeypatch.setattr(
+        claude_cli_mod.subprocess,
+        "run",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=_json_result(), stderr="")),
+    )
+
+    completion = ClaudeCliClient(oauth_token="tok_abc").chat.completions.create(
+        model="claude-sonnet-5-5", messages=[{"role": "user", "content": "hi"}]
+    )
+
+    assert completion.model == "claude-sonnet-5-5"
 
 
 def test_create_without_oauth_token_raises_invalid_credentials_without_subprocess(monkeypatch):
