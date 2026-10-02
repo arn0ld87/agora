@@ -186,11 +186,11 @@ class ClaudeCliModel(BaseModelBackend):
         )
         self._model_slug = str(model_type)
         self._oauth_token = api_key or ""
-        # Zuletzt von der CLI gemeldete Modell-ID (``modelUsage``). Pro
-        # Instanz genuegt: alle Aufrufe einer Instanz teilen dasselbe
-        # ``--model`` — einzig der Sentinel kann zwischen Aufrufen schwanken,
-        # dann zeigt ``model`` den juengsten Stand.
-        self._resolved_model: Optional[str] = None
+        # Die von der CLI gemeldete Modell-ID (``modelUsage``) wird bewusst
+        # NICHT als Instanz-State gehalten, sondern pro Aufruf an
+        # ``_to_completion`` durchgereicht: beim Sentinel kann sie zwischen
+        # Aufrufen schwanken, und parallele Aufrufer duerfen sich die
+        # Zuordnung nicht gegenseitig ueberschreiben.
 
     @property
     def token_counter(self) -> BaseTokenCounter:
@@ -225,8 +225,13 @@ class ClaudeCliModel(BaseModelBackend):
                 logger.warning("response_format nicht serialisierbar: %s", exc)
         return prompt
 
-    def _to_completion(self, text: str) -> ChatCompletion:
+    def _to_completion(
+        self, text: str, resolved_model: Optional[str] = None
+    ) -> ChatCompletion:
         """CLI-Rohtext -> ``ChatCompletion``.
+
+        ``model`` ist die Modell-ID, die DIESER Aufruf laut ``modelUsage``
+        gefahren hat; fehlt sie, gilt der angefragte Slug dieses Aufrufs.
 
         ``usage`` bleibt auf Null wie bei codex_cli_model — das reale
         Token-Usage liegt im ``--output-format json``-Result, wird hier aber
@@ -256,7 +261,7 @@ class ClaudeCliModel(BaseModelBackend):
             id=f"claudecli-{uuid.uuid4().hex[:12]}",
             object="chat.completion",
             created=int(time.time()),
-            model=self._resolved_model or self._model_slug,
+            model=resolved_model or self._model_slug,
             choices=[
                 Choice(
                     index=0,
@@ -273,9 +278,9 @@ class ClaudeCliModel(BaseModelBackend):
             ),
         )
 
-    def _invoke(self, prompt: str) -> str:
+    def _invoke(self, prompt: str) -> tuple[str, Optional[str]]:
         """Synchroner Pfad — nur fuer Nicht-Runden-Aufrufer, nicht im
-        Rundenbetrieb genutzt (siehe ``_arun``)."""
+        Rundenbetrieb genutzt (siehe ``_arun``). Liefert ``(text, modell_id)``."""
         from app.llm.providers.claude_cli import _run_claude_cli_with_model
 
         model = self._model_slug or None
@@ -285,8 +290,7 @@ class ClaudeCliModel(BaseModelBackend):
             )
         except ClaudeCliUnavailableError as exc:
             raise RuntimeError(f"claude_cli: {exc}") from exc
-        self._resolved_model = resolved or self._resolved_model
-        return text
+        return text, resolved
 
     def _run(
         self,
@@ -295,10 +299,12 @@ class ClaudeCliModel(BaseModelBackend):
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> ChatCompletion:
         prompt = self._build_prompt(messages, tools, response_format)
-        return self._to_completion(self._invoke(prompt))
+        text, resolved = self._invoke(prompt)
+        return self._to_completion(text, resolved)
 
-    async def _ainvoke_once(self, prompt: str) -> str:
+    async def _ainvoke_once(self, prompt: str) -> tuple[str, Optional[str]]:
         """Ein einzelner ``claude -p``-Subprozess-Versuch — kein Retry.
+        Liefert ``(text, modell_id)``; die ID fehlt, wenn ``modelUsage`` fehlt.
 
         Isoliertes ``HOME`` UND ``cwd`` (siehe Modul-Docstring): ohne das
         haengt die CLI ~190K Tokens des interaktiven Host-Setups an jeden
@@ -343,10 +349,9 @@ class ClaudeCliModel(BaseModelBackend):
         )
         resolved = extract_claude_cli_model(stdout_text)
         log_resolved_claude_cli_model(requested=self._model_slug or None, resolved=resolved)
-        self._resolved_model = resolved or self._resolved_model
-        return text
+        return text, resolved
 
-    async def _ainvoke(self, prompt: str) -> str:
+    async def _ainvoke(self, prompt: str) -> tuple[str, Optional[str]]:
         """``claude -p`` mit Concurrency-Limit und Retry (Issue #1713 S3).
 
         Begrenzt gleichzeitige Subprozesse ueber die prozessweite Semaphore
@@ -390,10 +395,10 @@ class ClaudeCliModel(BaseModelBackend):
         """Async-Pfad — der einzige, den OASIS im Rundenbetrieb nutzt."""
         prompt = self._build_prompt(messages, tools, response_format)
         try:
-            text = await self._ainvoke(prompt)
+            text, resolved = await self._ainvoke(prompt)
         except ClaudeCliUnavailableError as exc:
             raise RuntimeError(f"claude_cli: {exc}") from exc
-        return self._to_completion(text)
+        return self._to_completion(text, resolved)
 
     @property
     def stream(self) -> bool:
