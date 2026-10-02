@@ -18,11 +18,16 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 _STRICT = ConfigDict(extra="forbid")
+
+#: Aktuelle Version des Sidecar-Formats ``extracted_documents.json`` (#1663).
+#: Eine Formatänderung hebt diese Zahl und bringt einen Lesepfad für die
+#: Vorgängerversion mit.
+DOCUMENT_MANIFEST_SCHEMA_VERSION: Literal[1] = 1
 
 
 class DocumentRole(str, Enum):
@@ -133,10 +138,24 @@ class DocumentManifest(BaseModel):
     deren Extraktion fehlgeschlagen ist, tragen keinen Eintrag — der
     Platzhaltertext im Blob ist kein Dokumentinhalt und kann daher auch
     keinen Anker liefern.
+
+    ``schema_version`` (#1663): Jedes neu geschriebene Manifest trägt das Feld,
+    weil ``model_dump_json`` den Default mitschreibt. Ein Sidecar von vor
+    #1663 hat es nicht und gilt über den Default als Version 1, das war
+    sein Format. Eine unbekannte Version lehnt das ``Literal`` ab. Der Leser
+    entscheidet dann, ob er abbricht (Graph-Build) oder sichtbar degradiert
+    (Dokument-Rollen, mit Warnung im Log).
     """
 
     model_config = _STRICT
 
+    schema_version: Literal[1] = Field(
+        default=DOCUMENT_MANIFEST_SCHEMA_VERSION,
+        description=(
+            "Version des Sidecar-Formats (#1663). Fehlt das Feld im "
+            "Altbestand, gilt die Datei als Version 1."
+        ),
+    )
     documents: list[DocumentManifestEntry] = Field(default_factory=list)
 
 

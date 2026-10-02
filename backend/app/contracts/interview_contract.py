@@ -33,7 +33,7 @@ siehe die Begruendung an den jeweiligen Validatoren.
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, List, Literal
 
 from pydantic import (
     BaseModel,
@@ -84,6 +84,11 @@ class InterviewAgentProfile(BaseModel):
     bio: str = ""
     persona: str = ""
     interested_topics: List[Any] = Field(default_factory=list)
+    # Issue #1663: siehe ``PersonaModel.schema_version``. Ohne Feld ist ein
+    # Bestandsprofil Version 1. Eine unbekannte Version fällt in denselben
+    # geloggten CSV-/Leer-Pfad wie eine unlesbare Datei, statt unter
+    # ``extra="allow"`` unbemerkt durchzugehen.
+    schema_version: Literal[1] = 1
 
 
 class PersistedAgentProfiles(RootModel[List[InterviewAgentProfile]]):

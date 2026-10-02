@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import oasis_profile_generator as _legacy
+from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 import json
 from typing import List, Optional
 from .oasis_profile_models import OasisAgentProfile
@@ -77,7 +78,10 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
         writer =csv .writer (f )
 
         # Write OASIS required header
-        headers =['user_id','name','username','user_char','description']
+        # Issue #1663: ``schema_version`` als zusätzliche Spalte. OASIS liest
+        # die CSV per ``pd.read_csv`` und greift über Spaltennamen zu, eine
+        # weitere Spalte stört dort nicht.
+        headers =['user_id','name','username','user_char','description','schema_version']
         writer .writerow (headers )
 
         # Write data rows
@@ -97,7 +101,8 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
             profile .name ,# name: Real name
             profile .user_name ,# username: Username
             user_char ,# user_char: Complete persona (internal LLM use)
-            description # description: Short bio (external display)
+            description ,# description: Short bio (external display)
+            PERSONA_SCHEMA_VERSION ,# schema_version: Formatversion (#1663)
             ]
             writer .writerow (row )
 

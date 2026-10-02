@@ -57,7 +57,7 @@
   "$id": "https://alexle135.de/schemas/document-manifest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Sidecar-Manifest f\u00fcr einen ``extracted_text.txt``-Blob.\n\nPersistiert neben dem Blob als ``extracted_documents.json``. Dokumente,\nderen Extraktion fehlgeschlagen ist, tragen keinen Eintrag \u2014 der\nPlatzhaltertext im Blob ist kein Dokumentinhalt und kann daher auch\nkeinen Anker liefern.",
+  "description": "Sidecar-Manifest f\u00fcr einen ``extracted_text.txt``-Blob.\n\nPersistiert neben dem Blob als ``extracted_documents.json``. Dokumente,\nderen Extraktion fehlgeschlagen ist, tragen keinen Eintrag \u2014 der\nPlatzhaltertext im Blob ist kein Dokumentinhalt und kann daher auch\nkeinen Anker liefern.\n\n``schema_version`` (#1663): Jedes neu geschriebene Manifest tr\u00e4gt das Feld,\nweil ``model_dump_json`` den Default mitschreibt. Ein Sidecar von vor\n#1663 hat es nicht und gilt \u00fcber den Default als Version 1, das war\nsein Format. Eine unbekannte Version lehnt das ``Literal`` ab. Der Leser\nentscheidet dann, ob er abbricht (Graph-Build) oder sichtbar degradiert\n(Dokument-Rollen, mit Warnung im Log).",
   "properties": {
     "documents": {
       "items": {
@@ -65,6 +65,13 @@
       },
       "title": "Documents",
       "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "description": "Version des Sidecar-Formats (#1663). Fehlt das Feld im Altbestand, gilt die Datei als Version 1.",
+      "title": "Schema Version",
+      "type": "integer"
     }
   },
   "title": "DocumentManifest",

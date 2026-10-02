@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
-from ..contracts.persona_contract import VoiceRegister
+from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION, VoiceRegister
 # Codex-Finding F1 auf PR #1573: die Drift-Korrektur ist eine LLM-Antwort und
 # gehoert nach Repo-Regel "Contracts-first" in ``app/contracts/``, nicht in
 # dieses Service-Modul. Reexportiert, damit bestehende Importe (dieses Modul
@@ -240,6 +240,8 @@ class OasisAgentProfile:
     def to_reddit_format(self) -> Dict[str, Any]:
         """Convert to Reddit platform format"""
         profile = {
+            # Issue #1663: Formatversion je Eintrag, siehe PERSONA_SCHEMA_VERSION.
+            "schema_version": PERSONA_SCHEMA_VERSION,
             "user_id": self.user_id,
             "username": self.user_name,  # OASIS library requires field name as username (no underscore)
             "name": self.name,
@@ -296,6 +298,8 @@ class OasisAgentProfile:
     def to_twitter_format(self) -> Dict[str, Any]:
         """Convert to Twitter platform format"""
         profile = {
+            # Issue #1663: Formatversion je Eintrag, siehe PERSONA_SCHEMA_VERSION.
+            "schema_version": PERSONA_SCHEMA_VERSION,
             "user_id": self.user_id,
             "username": self.user_name,  # OASIS library requires field name as username (no underscore)
             "name": self.name,
