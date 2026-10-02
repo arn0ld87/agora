@@ -62,6 +62,7 @@ This document tracks the expected egress targets for GitHub Action workflows usi
 - `production.cloudflare.docker.com:443`
 - `toolbox-data.anchore.io:443` — syft/sbom-action lädt Tool-Binaries (Issue #633)
 - `fulcio.sigstore.dev:443`, `rekor.sigstore.dev:443`, `tuf-repo-cdn.sigstore.dev:443` — nur `publish`: `attest-build-provenance` signiert über Public-Good-Sigstore (#1708)
+- `release-assets` (nur `v*`-Tags) hat eine eigene, enge Liste: `api.github.com`, `github.com`, `uploads.github.com` (Release-Asset-Upload), `results-receiver.actions.githubusercontent.com` und `*.blob.core.windows.net` (Artefakt-Download) (#1661)
 
 `prod-proxy-smoke` hat bewusst eine engere Liste ohne Paketquellen (`dl-cdn.alpinelinux.org`, `deb.debian.org`, `registry.npmjs.org`). Deshalb darf dort nichts gebaut werden: Der Job startet beide Images aus `build-only` mit `compose up --no-build`. Ein impliziter Compose-Build hing hinter dieser Liste bis zum Job-Timeout (#1708).
 

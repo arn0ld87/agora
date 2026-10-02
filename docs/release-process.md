@@ -239,6 +239,15 @@ gh release create "v$NEW" \
   --notes-file "docs/<datum>-v<NEW>-release-notes.md"
 ```
 
+Der Tag-Push startet `docker-image.yml`. Dessen Job `release-assets` hängt `SHA256SUMS`, `agora-image-digests.txt` und beide SBOMs an das Release (#1661). Existiert das Release zu dem Zeitpunkt noch nicht, legt der Job einen Draft an. `gh release create` scheitert dann mit „already exists"; stattdessen den Draft befüllen und veröffentlichen:
+
+```bash
+gh release edit "v$NEW" \
+  --title "Agora v$NEW" \
+  --notes-file "docs/<datum>-v<NEW>-release-notes.md" \
+  --draft=false
+```
+
 Bei bereits veröffentlichtem Tag niemals still den Tag auf einen anderen Commit bewegen. Korrekturen erfolgen als neues Patch-Release.
 
 ---
@@ -274,7 +283,7 @@ Mindestens:
 | `/api/status.backend.version` | entspricht `VERSION` |
 | README EN/DE | beide zeigen dieselbe Version |
 | Container-Image | Digest/Tag entspricht Release |
-| SBOM/Checksummen | vorhanden, wenn Release-Gate verlangt |
+| SBOM/Checksummen | `SHA256SUMS`, `agora-image-digests.txt` und beide SBOMs am Release; `sha256sum -c` und Digest-Abgleich nach [`runbooks/release-artefakte-pruefen.md`](runbooks/release-artefakte-pruefen.md) |
 | Fresh-/Upgrade-Smokes | gemäß Release-Linie dokumentiert |
 
 ---
