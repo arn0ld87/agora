@@ -14,13 +14,16 @@ description: >-
 # docker-compose.yml verlangt NEO4J_PASSWORD ueber die ${VAR:?...}-Syntax —
 # ohne gesetzten Wert bricht schon das reine Einlesen/Mergen der vier
 # Compose-Dateien ab, unabhaengig davon, welche Bake-Targets angefordert
-# werden. Zu diesem Zeitpunkt existiert noch KEINE .env-Datei (die legt erst
-# scripts/e2e-up.sh an, siehe dort) — Compose/Bake lesen den Wert deshalb
-# direkt aus der Prozess-Umgebung, die der Credentials-Step gesetzt hat. Kein
-# eigener .env-Vorbereitungsschritt noetig: sobald scripts/e2e-up.sh spaeter
-# .env aus .env.example seedet und die echten Credentials eintraegt, startet
-# es den Stack ohnehin nur noch mit `--no-build` (AGORA_E2E_PREBUILT=1), die
-# hier gebauten Images werden dafuer unveraendert weiterverwendet.
+# werden. Compose/Bake lesen den Wert direkt aus der Prozess-Umgebung, die
+# der Credentials-Step gesetzt hat.
+#
+# .env: docker-compose.yml deklariert `env_file: - .env` am agora-Service.
+# Bake bricht beim Einlesen ab, wenn die Datei fehlt ("env file .env not
+# found"), und im CI-Checkout ist sie per .gitignore nicht vorhanden. Der
+# erste Schritt unten seedet sie deshalb exakt wie scripts/e2e-up.sh aus
+# .env.example. e2e-up.sh findet sie danach vor, ueberspringt das Seeding und
+# traegt wie gehabt die echten Credentials ein; der Stack startet mit
+# `--no-build` (AGORA_E2E_PREBUILT=1) auf den hier gebauten Images.
 #
 # Image-Namen: keines der beiden Services setzt ein explizites `image:` in
 # den Compose-Dateien, Compose taggt dann per Default `<project>-<service>`
@@ -35,6 +38,18 @@ description: >-
 runs:
   using: 'composite'
   steps:
+    - name: .env aus .env.example seeden (env_file-Pflicht fuer Bake)
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ ! -f .env ]]; then
+          if [[ ! -f .env.example ]]; then
+            echo "::error::[e2e-prebuild] neither .env nor .env.example present" >&2
+            exit 1
+          fi
+          cp .env.example .env
+        fi
+
     - name: Compose-Projektname aufloesen
       id: project
       shell: bash
