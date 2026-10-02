@@ -445,10 +445,17 @@ CMD ["/app/backend/.venv/bin/gunicorn", \
      "wsgi:app"]
 
 # ---------- proxy (nginx-Sidecar mit eingebackenem Frontend-Bundle) ----------
-FROM nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3 AS proxy
+FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2 AS proxy
 # Alpine-Pakete auf Repo-Stand heben, solange das Base-Image hinterherhinkt:
 # CVE-2026-33630 (c-ares < 1.34.8-r0), CVE-2026-56407/-56408/-56131
-# (libexpat < 2.8.2-r0) — Trivy-Gate scannt HIGH/CRITICAL mit exit-code 1.
+# (libexpat < 2.8.2-r0), CVE-2026-103111 (pcre2 < 10.49-r0) — Trivy-Gate
+# scannt HIGH/CRITICAL mit exit-code 1.
+#
+# Der Digest-Pin ist zugleich der Cache-Schlüssel dieser Schicht: Solange er
+# gleich bleibt, liefert der GHA-Layer-Cache (scope=proxy) das alte
+# ``apk upgrade``-Ergebnis, auch wenn Alpine längst einen Fix ausliefert. So
+# blieb pcre2 10.48-r0 im Image, obwohl 10.49-r0 im Repo lag. Einen neuen
+# Alpine-Fix holt deshalb ein Digest-Bump, nicht ein erneuter Lauf.
 #
 # Resilienz: GitHub-Runner-Netzwerk liefert zu dl-cdn.alpinelinux.org gelegentlich
 # persistente I/O-Errors (APKINDEX fetch exit 99 "stale/unavailable repositories"),
