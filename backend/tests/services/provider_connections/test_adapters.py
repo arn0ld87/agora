@@ -238,6 +238,9 @@ def test_claude_cli_probe_available_lists_fallback_models_when_token_present(
     assert result.status_message is None
     model_ids = [m.model_id for m in result.models]
     assert model_ids == list(LlmProviderRegistry.connection_definition("claude_cli").fallback_models)
+    display_names = {m.model_id: m.display_name for m in result.models}
+    assert display_names["claude-haiku-4-5-20251001"] == "Claude Haiku 4.5"
+    assert display_names["claude-cli-default"] == "Abo-Default (nicht deterministisch)"
 
 
 @pytest.mark.parametrize(

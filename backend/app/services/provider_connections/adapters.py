@@ -209,7 +209,10 @@ class _ClaudeCliProbeAdapter:
     def probe(
         self, connection: ProviderConnection, api_key: str | None
     ) -> ProviderProbeResult:
-        from app.llm.providers.claude_cli import is_claude_cli_available
+        from app.llm.providers.claude_cli import (
+            CLAUDE_CLI_MODEL_DISPLAY_NAMES,
+            is_claude_cli_available,
+        )
         from app.services.llm_provider_registry import LlmProviderRegistry
 
         if not is_claude_cli_available():
@@ -230,7 +233,14 @@ class _ClaudeCliProbeAdapter:
         return ProviderProbeResult(
             status="available",
             status_message=None,
-            models=tuple(_ai_model(connection, model_id) for model_id in fallback_models),
+            models=tuple(
+                _ai_model(
+                    connection,
+                    model_id,
+                    display_name=CLAUDE_CLI_MODEL_DISPLAY_NAMES.get(model_id),
+                )
+                for model_id in fallback_models
+            ),
         )
 
 
@@ -273,11 +283,13 @@ def _model_ids(
     )
 
 
-def _ai_model(connection: ProviderConnection, model_id: str) -> AiModel:
+def _ai_model(
+    connection: ProviderConnection, model_id: str, *, display_name: str | None = None
+) -> AiModel:
     return AiModel(
         provider_connection_id=connection.id,
         model_id=model_id,
-        display_name=model_id,
+        display_name=display_name or model_id,
         source="live",
         status="available",
         local_or_cloud="local" if connection.provider_kind == "ollama" else "cloud",

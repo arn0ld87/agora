@@ -1,0 +1,4 @@
+### Changed
+
+- **`claude_cli`-Modellauswahl mit festen Modell-IDs:** Neben dem Abo-Default-Sentinel `claude-cli-default` (Anzeige „Abo-Default (nicht deterministisch)“) stehen jetzt `claude-haiku-4-5-20251001`, `claude-sonnet-5-5`, `claude-opus-5-5` und `claude-fable-5-1` zur Wahl, statt der Aliase `sonnet`/`opus`/`fable`. Haiku fehlte bisher, und die Aliase löst die CLI versionsabhängig auf. Bereits gespeicherte Routen mit Alias laufen weiter, stehen aber nicht mehr in der Auswahl. (#1758)
+- **Tatsächlich gelaufenes Modell sichtbar:** `extract_claude_cli_model()` liest die Modell-ID aus `modelUsage` im JSON-Result der CLI. `ClaudeCliClient` und das OASIS-Backend `ClaudeCliModel` geben sie als `model` der jeweiligen Antwort zurück. Fehlt `modelUsage`, gilt der angefragte Slug dieses Aufrufs. Weicht das gelaufene vom angefragten Modell ab, wird das auf INFO geloggt. (#1758)

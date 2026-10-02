@@ -35,9 +35,15 @@ Binary verifiziert:
 ``--model`` ohne explizite Angabe waehlt die CLI ihr eigenes Default-Modell —
 verifiziert NICHT deterministisch (zwei Aufrufe direkt hintereinander lieferten
 ``claude-sonnet-5`` bzw. ``claude-opus-5[1m]``). ``claude_cli_fallback_models()``
-nennt deshalb den Sentinel zuerst, aber auch konkrete, aus ``claude --help``
-zitierte Alias-Namen (``sonnet``/``opus``/``fable``) fuer wer feste Routing-
-Erwartungen braucht.
+nennt deshalb den Sentinel zuerst, danach feste, volle Modell-IDs statt
+Aliasen (``sonnet``/``opus`` loest die CLI selbst und versionsabhaengig auf —
+welche Version lief, war so nicht nachvollziehbar). Volle IDs via ``--model``
+live verifiziert am 02.10.2026 (CLI 2.1.287).
+
+Welches Modell tatsaechlich lief, steht im JSON-Result unter ``modelUsage``
+(Schluessel = aufgeloeste Modell-ID). ``extract_claude_cli_model`` liest es
+aus; der Shim gibt es als ``model`` zurueck und loggt Abweichungen vom
+angefragten Modell — insbesondere fuer den Sentinel relevant.
 
 ``_flatten_messages``/``build_tool_prompt``/``parse_tool_calls``/
 ``strip_tool_calls`` sind provider-agnostische Prompt-Shims (kein
@@ -83,9 +89,11 @@ __all__ = [
     "CLAUDE_CLI_DEFAULT_MODEL_ID",
     "ClaudeCliClient",
     "ClaudeCliUnavailableError",
+    "CLAUDE_CLI_MODEL_DISPLAY_NAMES",
     "build_claude_cli_command",
     "claude_cli_binary",
     "claude_cli_fallback_models",
+    "extract_claude_cli_model",
     "claude_cli_timeout_seconds",
     "interpret_claude_cli_result",
     "is_claude_cli_available",
@@ -116,14 +124,50 @@ explizit statt sie hinter einem erratenen Modellnamen zu verstecken.
 """
 
 
+CLAUDE_CLI_MODEL_DISPLAY_NAMES: Dict[str, str] = {
+    CLAUDE_CLI_DEFAULT_MODEL_ID: "Abo-Default (nicht deterministisch)",
+    "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
+    "claude-sonnet-5-5": "Claude Sonnet 5.5",
+    "claude-opus-5-5": "Claude Opus 5.5",
+    "claude-fable-5-1": "Claude Fable 5.1",
+}
+"""Anzeigenamen der Modellauswahl, in Auswahl-Reihenfolge (Sentinel zuerst)."""
+
+
 def claude_cli_fallback_models() -> tuple[str, ...]:
-    """Sentinel zuerst, danach die in ``claude --help`` dokumentierten Alias-
-    Namen (``--model``-Beispiele: "fable", "opus", "sonnet"). Keine geratenen
-    vollen Modellnamen — die CLI kennt keinen Discovery-Befehl analog zu
-    ``codex debug models``, und ein hier gepflegter Modellname waere sowohl
-    veraltungs- als auch account-anfaellig.
+    """Sentinel zuerst, danach feste, volle Modell-IDs der aktuellen Claude-
+    Generation. Die CLI kennt keinen Discovery-Befehl analog zu ``codex debug
+    models`` — die Liste wird hier gepflegt und muss bei neuen Modellen
+    nachgezogen werden. Bewusst volle IDs statt Aliasen: ein Alias wie
+    ``sonnet`` wandert mit der CLI-Version mit, ein Lauf waere dann nicht mehr
+    reproduzierbar.
     """
-    return (CLAUDE_CLI_DEFAULT_MODEL_ID, "sonnet", "opus", "fable")
+    return tuple(CLAUDE_CLI_MODEL_DISPLAY_NAMES)
+
+
+def extract_claude_cli_model(stdout: Optional[str]) -> Optional[str]:
+    """Tatsaechlich genutzte Modell-ID aus einem ``--output-format json``-Result.
+
+    ``modelUsage`` ist ein Dict ``{modell_id: {outputTokens, ...}}``. Mehrere
+    Eintraege sind moeglich, wenn die CLI intern ein Hilfsmodell nutzt — dann
+    zaehlt das Modell mit den meisten ``outputTokens`` (das hat die Antwort
+    geschrieben). ``None`` bei fehlendem/kaputtem JSON — rein informativ, nie
+    ein Fehlergrund.
+    """
+    try:
+        payload = json.loads((stdout or "").strip() or "null")
+    except ValueError:
+        return None
+    usage = payload.get("modelUsage") if isinstance(payload, dict) else None
+    if not isinstance(usage, dict) or not usage:
+        return None
+
+    def _output_tokens(item: tuple[str, Any]) -> int:
+        stats = item[1]
+        value = stats.get("outputTokens") if isinstance(stats, dict) else None
+        return value if isinstance(value, int) else 0
+
+    return max(usage.items(), key=_output_tokens)[0]
 
 
 def is_claude_cli_available() -> bool:
@@ -206,6 +250,13 @@ def _isolated_home(scratch_dir: str, oauth_token: str) -> Dict[str, str]:
 
 
 def _run_claude_cli(prompt: str, *, model: Optional[str], oauth_token: str) -> str:
+    return _run_claude_cli_with_model(prompt, model=model, oauth_token=oauth_token)[0]
+
+
+def _run_claude_cli_with_model(
+    prompt: str, *, model: Optional[str], oauth_token: str
+) -> tuple[str, Optional[str]]:
+    """Wie ``_run_claude_cli``, liefert zusaetzlich die aufgeloeste Modell-ID."""
     cmd = build_claude_cli_command(model=model)
     timeout = claude_cli_timeout_seconds()
     with tempfile.TemporaryDirectory(prefix=claude_cli_scratch_dir_prefix()) as scratch_dir:
@@ -232,7 +283,22 @@ def _run_claude_cli(prompt: str, *, model: Optional[str], oauth_token: str) -> s
             ) from exc
         except OSError as exc:
             raise ClaudeCliUnavailableError(f"claude -p konnte nicht gestartet werden: {exc}") from exc
-    return interpret_claude_cli_result(result.returncode, result.stdout, result.stderr)
+    text = interpret_claude_cli_result(result.returncode, result.stdout, result.stderr)
+    resolved = extract_claude_cli_model(result.stdout)
+    log_resolved_claude_cli_model(requested=model, resolved=resolved)
+    return text, resolved
+
+
+def log_resolved_claude_cli_model(*, requested: Optional[str], resolved: Optional[str]) -> None:
+    """Macht sichtbar, welches Modell die CLI tatsaechlich gefahren hat.
+
+    INFO nur bei Abweichung (Sentinel oder Alias aufgeloest), sonst DEBUG —
+    sonst flutet eine Simulation mit Dutzenden Turns das Log.
+    """
+    if resolved and resolved != requested:
+        logger.info("claude_cli: angefragt=%s, gelaufen=%s", requested or "-", resolved)
+    else:
+        logger.debug("claude_cli: Modell=%s", resolved or requested or "-")
 
 
 def interpret_claude_cli_result(
@@ -320,6 +386,7 @@ class _ShimUsage:
 class _ShimChatCompletion:
     choices: List[_ShimChoice] = field(default_factory=list)
     usage: _ShimUsage = field(default_factory=_ShimUsage)
+    model: Optional[str] = None
 
 
 class _ClaudeCliCompletions:
@@ -365,7 +432,9 @@ class _ClaudeCliCompletions:
                 )
             )
         try:
-            text = _run_claude_cli(prompt, model=model, oauth_token=oauth_token)
+            text, resolved_model = _run_claude_cli_with_model(
+                prompt, model=model, oauth_token=oauth_token
+            )
         except ClaudeCliUnavailableError as exc:
             raise LlmProviderError(
                 NormalizedLlmError(
@@ -375,7 +444,10 @@ class _ClaudeCliCompletions:
                     retryable=False,
                 )
             ) from exc
-        return _ShimChatCompletion(choices=[_ShimChoice(message=build_shim_message(text))])
+        return _ShimChatCompletion(
+            choices=[_ShimChoice(message=build_shim_message(text))],
+            model=resolved_model or model,
+        )
 
 
 def build_shim_message(text: str) -> _ShimMessage:
