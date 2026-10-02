@@ -11,7 +11,7 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (k: string) => k }) }))
 
-const auth = vi.hoisted(() => ({ signIn: vi.fn() }))
+const auth = vi.hoisted(() => ({ signIn: vi.fn(), signInWithToken: vi.fn(), jwtEnabled: true }))
 vi.mock('../../../store/auth', () => ({ useAuthStore: () => auth }))
 
 import LoginView from '../LoginView.vue'
@@ -30,6 +30,8 @@ beforeEach(() => {
   nav.replace.mockClear()
   nav.query = {}
   auth.signIn.mockReset()
+  auth.signInWithToken.mockReset()
+  auth.jwtEnabled = true
 })
 
 describe('LoginView', () => {
@@ -83,5 +85,47 @@ describe('LoginView', () => {
     finish()
     await flushPromises()
     expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('LoginView ohne JWT (Betreiber-Token)', () => {
+  beforeEach(() => {
+    auth.jwtEnabled = false
+  })
+
+  it('zeigt das Token-Feld und kein E-Mail-Feld', () => {
+    const wrapper = render()
+    const input = wrapper.find('#login-token')
+    expect(input.exists()).toBe(true)
+    expect(input.attributes('type')).toBe('password')
+    expect(wrapper.find('#login-email').exists()).toBe(false)
+    expect(wrapper.find('#login-password').exists()).toBe(false)
+    expect(wrapper.find('.auth-links').exists()).toBe(false)
+  })
+
+  it('übergibt das getrimmte Token und leitet auf next weiter', async () => {
+    auth.signInWithToken.mockResolvedValue(undefined)
+    nav.query = { next: '/runs/abc' }
+    const wrapper = render()
+
+    await wrapper.find('#login-token').setValue('  test-token  ')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(auth.signInWithToken).toHaveBeenCalledWith('test-token')
+    expect(nav.replace).toHaveBeenCalledWith('/runs/abc')
+  })
+
+  it('zeigt bei abgelehntem Token einen Alert am Feld', async () => {
+    auth.signInWithToken.mockRejectedValue(new Error('token_rejected'))
+    const wrapper = render()
+
+    await wrapper.find('#login-token').setValue('test-token')
+    await wrapper.find('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toBe('auth.login.tokenInvalid')
+    expect(wrapper.find('#login-token').attributes('aria-invalid')).toBe('true')
+    expect(nav.replace).not.toHaveBeenCalled()
   })
 })

@@ -372,6 +372,12 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
         routing_version=4,
     )
 
+    # Der Build-Job laeuft inline statt im Daemon-Thread. Vorher lief der
+    # Thread nach dem ``with``-Block weiter, also ohne die Patches unten, und
+    # schrieb Projekt und Run-Manifest in das echte ``backend/uploads`` (#1632).
+    def run_inline(self):
+        self.run()
+
     # After PR #562 the build logic lives in app.services.graph_build. Patches
     # on function symbols (seed_run_stage_routing, NERExtractor) must target
     # the service module — Class-attribute patches still work everywhere via
@@ -391,6 +397,7 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
         patch("app.services.graph_build.NERExtractor", return_value=MagicMock(name="NEROverride")),
         patch("app.services.graph_build.LLMClient.from_route", return_value=MagicMock(name="LLMClient", model="stub")),
         patch("app.services.graph_build.resolve_route_api_key", return_value="sk-stub"),
+        patch("app.jobs.threading.Thread.start", run_inline),
     ):
         flask_app = Flask(__name__)
         flask_app.config["AGORA_AUTH_TOKEN"] = ""

@@ -2222,7 +2222,11 @@
       "forgotPassword": "Forgot password?",
       "toRegister": "No account yet? Register now",
       "errorGeneric": "Sign-in failed. Please check your credentials.",
-      "resetDone": "Password changed. Please sign in again."
+      "resetDone": "Password changed. Please sign in again.",
+      "tokenTitle": "Operator access",
+      "tokenLabel": "Access token",
+      "tokenHint": "The token is the AGORA_AUTH_TOKEN value of your installation.",
+      "tokenInvalid": "The token was rejected. Please check the value."
   },
   "workspaceProviderKeys": {
     "title": "Your provider keys",

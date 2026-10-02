@@ -11,6 +11,7 @@ Stellt sicher dass:
 from __future__ import annotations
 
 import os
+import sys
 
 # ``nltk`` >= 3.10 installiert beim Import einen Meta-Path-Finder
 # (``nltk/inisec.py``), der jeden von nltk ausgelösten Import blockiert, dessen
@@ -81,6 +82,153 @@ except ImportError:  # torch ist optional — Suiten ohne Recsys laufen ohne
 
 import pytest
 from cryptography.fernet import Fernet
+from dotenv import dotenv_values
+
+from tests import _real_data_guard
+
+# Schreibsperre für die echten Datenverzeichnisse (#1632). Sie wird hier auf
+# Modulebene installiert, also vor dem Import der ersten Testdatei, damit auch
+# Schreibzugriffe beim Sammeln und in modulweiten Fixtures auffallen.
+# ``AGORA_DATA_DIR`` wird gelesen, bevor ``_global_fernet_env`` es je Test auf
+# ``tmp_path`` setzt; der ``.env``-Wert zählt mit, weil ``app/config.py`` ihn
+# beim Import in die Umgebung zieht.
+_REAL_DATA_DIR_ENV = os.environ.get("AGORA_DATA_DIR") or next(
+    (
+        value
+        for env_file in (
+            _real_data_guard.BACKEND_DIR.parent / ".env",
+            _real_data_guard.BACKEND_DIR / ".env",
+        )
+        if env_file.is_file()
+        and (value := dotenv_values(env_file).get("AGORA_DATA_DIR"))
+    ),
+    None,
+)
+_REAL_DATA_GUARD = _real_data_guard.install(
+    _real_data_guard.default_protected_roots(_REAL_DATA_DIR_ENV)
+)
+# Bis hierhin geprüfte Verstöße; was danach außerhalb eines Tests auflief,
+# meldet der nächste Test (siehe ``_real_data_write_guard``).
+_GUARD_CHECKED = _REAL_DATA_GUARD.mark()
+
+
+@pytest.fixture(autouse=True)
+def _real_data_write_guard():
+    """Lässt jeden Test scheitern, der in ein echtes Datenverzeichnis schrieb.
+
+    Der Audit-Hook blockiert den Schreibzugriff bereits mit
+    ``RealDataWriteError``. Fängt der Anwendungscode die Ausnahme ab und läuft
+    weiter, bliebe der Verstoß sonst unsichtbar.
+    """
+    global _GUARD_CHECKED
+    # Verstöße seit dem letzten Test stammen aus dem Sammeln, aus Fixtures
+    # höherer Scopes oder aus Threads früherer Tests. Unter xdist gehen sie im
+    # ``pytest_sessionfinish`` des Workers verloren; hier landen sie als ERROR
+    # beim nächsten Test.
+    mark = _REAL_DATA_GUARD.mark()
+    if mark > _GUARD_CHECKED:
+        stray = _REAL_DATA_GUARD.violations_since(_GUARD_CHECKED)
+        _GUARD_CHECKED = mark
+        pytest.fail(
+            "Schreibversuch in ein echtes Datenverzeichnis außerhalb eines Tests "
+            "(Sammeln, Fixture höheren Scopes oder Thread eines früheren Tests, "
+            "#1632):\n" + _REAL_DATA_GUARD.describe(stray),
+            pytrace=False,
+        )
+    _GUARD_CHECKED = mark
+    yield
+    violations = _REAL_DATA_GUARD.violations_since(mark)
+    _GUARD_CHECKED = _REAL_DATA_GUARD.mark()
+    if violations:
+        pytest.fail(
+            "Test hat versucht, in ein echtes Datenverzeichnis zu schreiben "
+            "(#1632):\n" + _REAL_DATA_GUARD.describe(violations),
+            pytrace=False,
+        )
+
+
+# Klassenkonstanten, die ihr Verzeichnis beim Import einmal berechnen — aus
+# ``Config.UPLOAD_FOLDER`` oder direkt aus ``__file__``. Ein Patch auf
+# ``Config`` allein erreicht sie nicht mehr.
+_UPLOAD_DIR_CONSTANTS = (
+    ("app.services.run_registry", "RunRegistry", "REGISTRY_DIR", "run_registry"),
+    ("app.models.project", "ProjectManager", "PROJECTS_DIR", "projects"),
+    ("app.services.report_agent.manager", "ReportManager", "REPORTS_DIR", "reports"),
+    ("app.services.simulation_manager", "SimulationManager", "SIMULATION_DATA_DIR", "simulations"),
+    ("app.services.simulation_runner", "SimulationRunner", "RUN_STATE_DIR", "simulations"),
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upload_dirs(monkeypatch, tmp_path_factory):
+    """Lenkt das Upload-Verzeichnis je Test in ein eigenes tmp-Verzeichnis um (#1632).
+
+    ``AGORA_DATA_DIR`` isoliert ``_global_fernet_env``; ``Config.UPLOAD_FOLDER``
+    zeigte dagegen in jedem Test auf das echte ``backend/uploads``. Tests, die
+    Runs, Projekte, Simulationen oder Reports anlegten, ohne selbst zu
+    patchen, schrieben dorthin — auf armserver blieben so Run-Manifeste mit
+    der Fixture-ID ``sim_abcdef012345`` im Bestand.
+
+    Die Module werden hier importiert statt nur gepatcht, falls schon geladen:
+    ``SimulationManager`` und ``SimulationRunner`` rechnen ihr Verzeichnis aus
+    ``__file__``, ein erst im Testkörper importiertes Modul zeigte sonst auf
+    den echten Pfad. Tests, die einen eigenen Pfad brauchen, patchen danach
+    wie bisher; ihr ``monkeypatch`` überschreibt diesen.
+    """
+    import importlib
+
+    from app.config import Config
+
+    # Eigenes Verzeichnis neben ``tmp_path`` statt ``tmp_path/uploads``: viele
+    # Tests legen sich dort selbst ein ``uploads`` an. Es existiert wie im
+    # Betrieb; ``/api/status`` misst den Plattenplatz darauf.
+    uploads = tmp_path_factory.mktemp("uploads")
+    monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(uploads))
+    monkeypatch.setattr(Config, "OASIS_SIMULATION_DATA_DIR", str(uploads / "simulations"))
+    for module_name, class_name, attr, subdir in _UPLOAD_DIR_CONSTANTS:
+        owner = getattr(importlib.import_module(module_name), class_name)
+        monkeypatch.setattr(owner, attr, str(uploads / subdir))
+    return uploads
+
+
+def _unregister_shutdown_hooks() -> None:
+    """Meldet die ``atexit``-Hooks der Job-Terminalisierung ab.
+
+    ``create_app()`` und ``SimulationRunner.register_cleanup()`` registrieren
+    sie einmal pro Prozess. Beim Interpreter-Ende markieren sie alle noch
+    laufenden Runs als ``failed`` ("Prozess-Neustart während des Runs") und
+    schreiben die Manifeste — zu diesem Zeitpunkt sind alle Patches
+    zurückgenommen, ``RunRegistry.REGISTRY_DIR`` zeigt wieder auf das echte
+    ``backend/uploads/run_registry``. Genau so entstanden auf armserver die
+    Manifeste ``run_464b7d592af6``/``run_ee21298bba18`` für die Fixture
+    ``sim_abcdef012345`` (#1632).
+    """
+    import atexit
+
+    shutdown = sys.modules.get("app.services.sim.process_shutdown")
+    callback = getattr(shutdown, "_shutdown_atexit_callback", None)
+    if callback is not None:
+        atexit.unregister(callback)
+    runner = sys.modules.get("app.services.simulation_runner")
+    if runner is not None:
+        atexit.unregister(runner.SimulationRunner.cleanup_all_simulations)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _no_shutdown_hooks_after_suite():
+    yield
+    _unregister_shutdown_hooks()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Verstöße außerhalb eines Tests (Sammeln, modulweite Fixtures) melden."""
+    if _REAL_DATA_GUARD.mark() and session.exitstatus == 0:
+        violations = _REAL_DATA_GUARD.violations_since(0)
+        sys.stderr.write(
+            "\nReal-Data-Guard (#1632): Schreibversuche in echte "
+            "Datenverzeichnisse:\n" + _REAL_DATA_GUARD.describe(violations) + "\n"
+        )
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 @pytest.fixture(autouse=True)

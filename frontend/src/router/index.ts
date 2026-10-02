@@ -380,7 +380,12 @@ router.beforeEach(async (to) => {
     return true
   }
 
-  // Ohne JWT gibt es keine Anmeldung, Registrierung oder Bestätigung.
+  // Ohne JWT bleibt nur die Token-Anmeldung; mit Token geht es direkt weiter.
+  if (to.name === 'Login') {
+    return getAgoraToken() ? safeNext(to.query.next) : true
+  }
+
+  // Ohne JWT gibt es keine Registrierung oder Bestätigung.
   if (to.meta?.public && String(to.name ?? '') in AUTH_ONLY_ROUTES) return '/'
 
   // Legacy-Guard: requiresAuth-Routen ohne Token auf das Dashboard.

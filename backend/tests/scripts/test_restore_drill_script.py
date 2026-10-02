@@ -540,7 +540,11 @@ class TestGuardRestoreTarget:
         """Der Pfadstring liegt ausserhalb, das Ziel nicht — ohne Aufloesung
         waere das der bequemste Weg am Guard vorbei."""
         link = tmp_path / "sieht-harmlos-aus"
-        link.symlink_to(REPO_ROOT / "backend" / "uploads")
+        # ``backend/`` statt ``backend/uploads``: das Upload-Verzeichnis
+        # existiert in einem frischen Checkout nicht, seit die Suite es nicht
+        # mehr anlegt (#1632). Auf ein fehlendes Ziel zeigt der Link ins Leere,
+        # und ``resolve_path`` loest ihn dann nicht auf.
+        link.symlink_to(REPO_ROOT / "backend")
         protocol = tmp_path / "drill.log"
 
         result = _run(

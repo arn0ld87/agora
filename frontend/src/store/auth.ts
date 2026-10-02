@@ -11,7 +11,13 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Session, User } from '@supabase/supabase-js'
 
-import { getAgoraToken, register401SignOutCallback } from '../api/index'
+import {
+  authFetch,
+  getAgoraToken,
+  register401SignOutCallback,
+  registerAuthRequiredCallback,
+  setAgoraToken,
+} from '../api/index'
 import { bootstrapWorkspace, fetchAuthConfig, listWorkspaces } from '../api/workspaces'
 import { setSessionToken, setActiveWorkspaceId } from '../auth/sessionState'
 import { initSupabaseClient, getSupabaseClient, clearPersistedSession } from '../auth/supabaseClient'
@@ -69,6 +75,9 @@ export const useAuthStore = defineStore('auth', () => {
   // Supabase meldet PASSWORD_RECOVERY beim Einlesen des Reset-Links, also
   // schon beim Init — vor dem Mount der Reset-View. Deshalb hält der Store es.
   const passwordRecovery = ref(false)
+  // localStorage ist nicht reaktiv: Zähler stößt isAuthenticated nach einer
+  // Token-Eingabe neu an.
+  const tokenVersion = ref(0)
 
   // --- Computed ---
   const jwtEnabled = computed(() => config.value?.jwt_enabled ?? false)
@@ -81,6 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Im Modus `supabase` lehnt das Backend den Master-Token ab: dort zählt
   // nur eine Session. `hybrid`/`legacy` akzeptieren weiter den Token.
   const isAuthenticated = computed(() => {
+    void tokenVersion.value
     if (session.value) return true
     if (config.value?.auth_backend === 'supabase') return false
     return !!getAgoraToken()
@@ -176,6 +186,11 @@ export const useAuthStore = defineStore('auth', () => {
       }
     }
 
+    // Ohne JWT: 401 auth_required führt zur Token-Eingabe im Login.
+    if (!jwtEnabled.value) {
+      registerAuthRequiredCallback(() => { void goToLogin() })
+    }
+
     try {
       await loadWorkspaces()
     } catch {
@@ -245,6 +260,21 @@ export const useAuthStore = defineStore('auth', () => {
       // Ohne Workspace keine halbe Anmeldung zurücklassen: Session und
       // Supabase-Speicher verwerfen, dann den Fehler an die View geben.
       await signOut()
+      throw err
+    }
+  }
+
+  /** Betreiber-Token (Hybrid/Legacy): setzen, per geschützter Probe prüfen. */
+  async function signInWithToken(token: string): Promise<void> {
+    setAgoraToken(token)
+    tokenVersion.value++
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || ''
+      const res = await authFetch(`${base}/api/status`)
+      if (!res.ok) throw new Error('token_rejected')
+    } catch (err) {
+      setAgoraToken(null)
+      tokenVersion.value++
       throw err
     }
   }
@@ -377,6 +407,7 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     ensureInit,
     signIn,
+    signInWithToken,
     signUp,
     signOut,
     requestPasswordReset,
