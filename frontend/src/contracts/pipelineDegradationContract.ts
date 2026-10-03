@@ -21,6 +21,13 @@ export const DEGRADATION_KINDS = [
   'embedding_unavailable',
   'graph_below_threshold',
   'persona_rule_based_fallback',
+  'person_represents_organization_merged',
+  'persona_name_identity_rejected',
+  'persona_role_implausible',
+  'ontology_topic_type_missing',
+  'stance_position_unrepresented',
+  'initial_post_stance_conflict',
+  'entity_selection_actors_omitted',
 ] as const;
 
 export const DegradationKindSchema = z.enum(DEGRADATION_KINDS);

@@ -3,7 +3,12 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import DegradationNotice from '../DegradationNotice.vue'
 import de from '@/i18n/locales/de.json'
-import type { PipelineDegradationReport } from '@/contracts/pipelineDegradationContract'
+import en from '@/i18n/locales/en.json'
+import {
+  DEGRADATION_KINDS,
+  PipelineDegradationSchema,
+  type PipelineDegradationReport,
+} from '@/contracts/pipelineDegradationContract'
 
 /**
  * Issue #1029 — der Hinweis, der aus einem still degradierten Lauf einen
@@ -12,8 +17,8 @@ import type { PipelineDegradationReport } from '@/contracts/pipelineDegradationC
  * der Test wäre trotzdem grün.
  */
 
-function mountWith(report: PipelineDegradationReport) {
-  const i18n = createI18n({ legacy: false, locale: 'de', messages: { de } })
+function mountWith(report: PipelineDegradationReport, locale: 'de' | 'en' = 'de') {
+  const i18n = createI18n({ legacy: false, locale, messages: { de, en } })
   return mount(DegradationNotice, { props: { report }, global: { plugins: [i18n] } })
 }
 
@@ -90,18 +95,24 @@ describe('DegradationNotice', () => {
     expect(notice.attributes('aria-live')).toBe('polite')
   })
 
-  it('hat für jede Art einen übersetzten Text', () => {
+  it.each([...DEGRADATION_KINDS])('hat für die Art %s einen übersetzten Text (de und en)', (kind) => {
     // Ohne diesen Test fällt eine neue Art erst im Betrieb als roher
     // i18n-Schlüssel auf.
-    const kinds = ['embedding_unavailable', 'graph_below_threshold', 'persona_rule_based_fallback'] as const
-    for (const kind of kinds) {
+    for (const locale of ['de', 'en'] as const) {
       const wrapper = mountWith({
         schema_version: 1,
         events: [{ ...warningEvent, kind }],
-      })
+      }, locale)
       const text = wrapper.text()
       expect(text).not.toContain(`degradation.kind.${kind}`)
       expect(text).not.toContain(`degradation.action.${kind}`)
+      expect(wrapper.find('.degradation-notice__kind').text().length).toBeGreaterThan(0)
+      expect(wrapper.find('.degradation-notice__action').text().length).toBeGreaterThan(0)
     }
+  })
+
+  it('lehnt eine unbekannte Art im Schema weiter ab', () => {
+    const result = PipelineDegradationSchema.safeParse({ ...warningEvent, kind: 'was_neues' })
+    expect(result.success).toBe(false)
   })
 })

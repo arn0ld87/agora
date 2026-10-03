@@ -78,6 +78,8 @@ export interface TaskStatusData {
     current_stage?: string
     [key: string]: unknown
   }
+  /** Task-Ergebnis; trägt `degradations` (Issue #1759), validiert via `parseDegradationReport`. */
+  result?: unknown
   [key: string]: unknown
 }
 

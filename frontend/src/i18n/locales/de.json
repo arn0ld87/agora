@@ -1498,12 +1498,26 @@
     "kind": {
       "embedding_unavailable": "Semantische Suche nicht verfügbar",
       "graph_below_threshold": "Graph unter der Qualitätsschwelle",
-      "persona_rule_based_fallback": "Personas als Platzhalter erzeugt"
+      "persona_rule_based_fallback": "Personas als Platzhalter erzeugt",
+      "person_represents_organization_merged": "Person und Organisation zu einem Agenten zusammengelegt",
+      "persona_name_identity_rejected": "Persona mit widersprüchlicher Identität abgelehnt",
+      "persona_role_implausible": "Persona mit unplausiblem Alter für die Rolle abgelehnt",
+      "ontology_topic_type_missing": "Kein Streitgegenstand-Typ in der Ontologie",
+      "stance_position_unrepresented": "Belegte Position von keinem Agenten vertreten",
+      "initial_post_stance_conflict": "Startpost widerspricht der Haltung seines Absenders",
+      "entity_selection_actors_omitted": "Belegte Akteure ohne Persona-Platz"
     },
     "action": {
       "embedding_unavailable": "Embedding-Dienst starten und den Graphen neu aufbauen, sonst bleibt die Vektorsuche wirkungslos.",
       "graph_below_threshold": "Mit einem stärkeren Modell neu aufbauen oder ein ergiebigeres Dokument verwenden.",
-      "persona_rule_based_fallback": "Aussagen der Platzhalterprofile prüfen oder die Personas mit einem stärkeren Modell neu erzeugen."
+      "persona_rule_based_fallback": "Aussagen der Platzhalterprofile prüfen oder die Personas mit einem stärkeren Modell neu erzeugen.",
+      "person_represents_organization_merged": "Prüfen, ob die zusammengelegte Entität im Personasatz als einzelner Akteur ausreicht.",
+      "persona_name_identity_rejected": "Der Personasatz enthält dieses Profil nicht; Persona neu erzeugen oder manuell ergänzen.",
+      "persona_role_implausible": "Der Personasatz enthält dieses Profil nicht; Persona neu erzeugen oder manuell ergänzen.",
+      "ontology_topic_type_missing": "Positionen bleiben an den Akteuren; die Ontologie neu erzeugen, wenn der Graph Positionskanten braucht.",
+      "stance_position_unrepresented": "Die Simulation läuft weiter, bildet diese Position aber nicht ab; den Personasatz um einen passenden Akteur ergänzen.",
+      "initial_post_stance_conflict": "Startpost und Absender im Personasatz prüfen, bevor der Lauf startet.",
+      "entity_selection_actors_omitted": "Agentenlimit erhöhen oder die fehlenden Akteure manuell ergänzen, sonst fehlen sie im Lauf."
     },
     "occurrences": "{count}× aufgetreten"
   },
