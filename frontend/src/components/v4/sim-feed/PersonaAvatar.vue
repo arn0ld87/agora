@@ -19,6 +19,9 @@ const registerColor: Record<VoiceRegister, string> = {
   'neutral-de': 'var(--status-green)',
   'technical-de': 'var(--status-orange)',
   'skeptisch-de': 'var(--status-purple)',
+  'betroffen-de': 'var(--status-coral)',
+  'emotional-de': 'var(--status-red)',
+  'umgangssprachlich-de': 'var(--status-gray)',
 }
 </script>
 

@@ -136,6 +136,18 @@ describe('PostCreatedEventSchema', () => {
     expect(VoiceRegisterSchema.options).toContain('skeptisch-de')
   })
 
+  it('VoiceRegisterSchema kennt die Betroffenen-Register (#1759)', () => {
+    expect(VoiceRegisterSchema.options).toEqual([
+      'formal-de',
+      'neutral-de',
+      'technical-de',
+      'skeptisch-de',
+      'betroffen-de',
+      'emotional-de',
+      'umgangssprachlich-de',
+    ])
+  })
+
   it('lehnt Legacy-voice_register-Werte ab (Anti-Dekorations-Linie #1216)', () => {
     for (const v of ['formal', 'casual', 'jugendsprache']) {
       const result = PostCreatedEventSchema.safeParse({
