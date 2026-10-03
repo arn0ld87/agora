@@ -343,14 +343,10 @@ def _organ_target_index(
     return next(iter(targets)) if len(targets) == 1 else None
 
 
-def _union_entity_variants(
-    entities: "List[EntityNode]", org_indices: List[int]
-) -> "tuple[_UnionFind, set[int]]":
-    """Verbindet Organisations-Varianten; liefert Union-Find und aufgehende Organe."""
-    tokens = {i: _variant_tokens(entities[i].name) for i in org_indices}
-    uf = _UnionFind(len(entities))
-    absorbed: set[int] = set()
-
+def _union_name_variants(
+    uf: "_UnionFind", org_indices: List[int], tokens: Dict[int, tuple[str, ...]]
+) -> None:
+    """Verbindet Organisationen mit gleicher Tokenmenge oder eindeutiger Obermenge."""
     for pos, i in enumerate(org_indices):
         if not tokens[i]:
             continue
@@ -372,18 +368,34 @@ def _union_entity_variants(
         if len(supersets) == 1:
             uf.union(i, supersets[0])
 
+
+def _organ_base_index(
+    i: int, rest: tuple[str, ...], org_indices: List[int], tokens: Dict[int, tuple[str, ...]]
+) -> Optional[int]:
+    """Index der einen Organisation, die der Organ-Name eindeutig enthaelt."""
+    bases = [
+        j
+        for j in org_indices
+        if j != i and tokens[j] and set(tokens[j]) == set(rest) and not _organ_split(tokens[j])[0]
+    ]
+    return bases[0] if len(bases) == 1 else None
+
+
+def _union_entity_variants(
+    entities: "List[EntityNode]", org_indices: List[int]
+) -> "tuple[_UnionFind, set[int]]":
+    """Verbindet Organisations-Varianten; liefert Union-Find und aufgehende Organe."""
+    tokens = {i: _variant_tokens(entities[i].name) for i in org_indices}
+    uf = _UnionFind(len(entities))
+    absorbed: set[int] = set()
+    _union_name_variants(uf, org_indices, tokens)
+
     for i in org_indices:
         organ_words, rest = _organ_split(tokens[i])
         if not organ_words:
             continue
         if rest:
-            # Der Name enthaelt die Organisation eindeutig.
-            bases = [
-                j
-                for j in org_indices
-                if j != i and tokens[j] and set(tokens[j]) == set(rest) and not _organ_split(tokens[j])[0]
-            ]
-            target = bases[0] if len(bases) == 1 else None
+            target = _organ_base_index(i, rest, org_indices, tokens)
         else:
             target = _organ_target_index(entities[i], org_indices, entities, i)
         if target is not None:
