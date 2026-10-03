@@ -63,6 +63,15 @@ class DegradationKind(str, Enum):
     statt es still unter zwei Identitaeten in die Simulation zu geben. Der
     Ablehnungsgrund steht in ``detail``."""
 
+    STANCE_POSITION_UNREPRESENTED = "stance_position_unrepresented"
+    """Eine im Graph belegte Position zum Streitgegenstand wird von keinem
+    Agenten der Simulation vertreten (Issue #1759, A6). Die Simulation läuft
+    weiter, bildet die Position aber nicht ab."""
+
+    INITIAL_POST_STANCE_CONFLICT = "initial_post_stance_conflict"
+    """Ein Startpost widerspricht der Stance seines Absenders und konnte nicht
+    auf einen passenden Agenten umgelegt werden (Issue #1759, A6)."""
+
 
 class DegradationSeverity(str, Enum):
     """Wie schwer der Ausfall wiegt.

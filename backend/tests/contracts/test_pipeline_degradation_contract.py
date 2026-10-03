@@ -139,6 +139,8 @@ class TestEnumValues:
             "persona_rule_based_fallback",
             "person_represents_organization_merged",
             "persona_name_identity_rejected",
+            "stance_position_unrepresented",
+            "initial_post_stance_conflict",
         }
 
     def test_severity_values_are_stable(self):
