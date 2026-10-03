@@ -141,6 +141,7 @@ class TestEnumValues:
             "persona_name_identity_rejected",
             "stance_position_unrepresented",
             "initial_post_stance_conflict",
+            "entity_selection_actors_omitted",
         }
 
     def test_severity_values_are_stable(self):

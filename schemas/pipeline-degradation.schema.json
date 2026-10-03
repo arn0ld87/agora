@@ -9,7 +9,8 @@
         "person_represents_organization_merged",
         "persona_name_identity_rejected",
         "stance_position_unrepresented",
-        "initial_post_stance_conflict"
+        "initial_post_stance_conflict",
+        "entity_selection_actors_omitted"
       ],
       "title": "DegradationKind",
       "type": "string"

@@ -50,6 +50,7 @@ from . import prepare_llm as _prepare_llm
 from . import prepare_entities as _prepare_entities
 from . import prepare_quota as _prepare_quota
 from . import prepare_checkpoint as _prepare_checkpoint
+from .prepare_requirement_selection import requirement_hash as _requirement_hash
 
 logger = get_logger("agora.prepare")
 
@@ -103,8 +104,35 @@ def _cap_entities_across_types(entities: 'List[EntityNode]', max_agents: int) ->
     return _prepare_entities._cap_entities_across_types(entities, max_agents)
 
 
-def _phase_read_entities(state: SimulationState, storage: Any, defined_entity_types: Optional[List[str]], max_agents: Optional[int], progress_callback: Optional[Callable]=None, degradations: Optional[DegradationCollector]=None):
-    return _prepare_entities._phase_read_entities(state, storage, defined_entity_types, max_agents, progress_callback, degradations)
+def _phase_read_entities(
+    state: SimulationState,
+    storage: Any,
+    defined_entity_types: Optional[List[str]],
+    max_agents: Optional[int],
+    progress_callback: Optional[Callable] = None,
+    degradations: Optional[DegradationCollector] = None,
+    *,
+    simulation_requirement: Optional[str] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
+    llm_model: Optional[str] = None,
+    run_id: Optional[str] = None,
+    use_llm_for_profiles: bool = True,
+    has_quota_plan: bool = False,
+):
+    return _prepare_entities._phase_read_entities(
+        state,
+        storage,
+        defined_entity_types,
+        max_agents,
+        progress_callback,
+        degradations,
+        simulation_requirement=simulation_requirement,
+        llm_runtime=llm_runtime,
+        llm_model=llm_model,
+        run_id=run_id,
+        use_llm_for_profiles=use_llm_for_profiles,
+        has_quota_plan=has_quota_plan,
+    )
 
 
 def _phase_read_entities_from_checkpoint(
@@ -145,6 +173,12 @@ def _entity_uuids_or_none(entities: List[Any]) -> Optional[List[str]]:
     return uuids
 
 
+def _selection_reasons_or_empty(filtered: Any) -> List[Any]:
+    """Auswahlbegruendungen (#1759 A5) aus ``filtered``; Test-Doubles liefern ``[]``."""
+    reasons = getattr(filtered, "selection_decisions", None)
+    return list(reasons) if isinstance(reasons, list) else []
+
+
 def _build_profile_checkpoint_hooks(
     *,
     state: SimulationState,
@@ -160,6 +194,7 @@ def _build_profile_checkpoint_hooks(
     generator: OasisProfileGenerator,
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
+    requirement_hash: Optional[str] = None,
 ) -> Tuple[
     Optional[Dict[int, OasisAgentProfile]],
     Optional[Callable[[int, OasisAgentProfile], None]],
@@ -252,6 +287,8 @@ def _build_profile_checkpoint_hooks(
                     _prepare_checkpoint.demographic_slot_to_dict(slot)
                     for slot in demographic_slots
                 ],
+                requirement_hash=requirement_hash,
+                selection_reasons=_selection_reasons_or_empty(filtered),
             )
         ]
         already_done = None
@@ -294,6 +331,7 @@ def _phase_generate_profiles(
     defined_entity_types: Optional[List[str]] = None,
     resume_checkpoint: Optional[_prepare_checkpoint.PreparePersonaCheckpoint] = None,
     precomputed_entities: Optional[List[Any]] = None,
+    requirement_hash: Optional[str] = None,
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
@@ -411,6 +449,7 @@ def _phase_generate_profiles(
         generator=generator,
         llm_model=llm_model,
         language=language,
+        requirement_hash=requirement_hash,
     )
 
     profiles = generator.generate_profiles_from_entities(
@@ -621,6 +660,9 @@ def _resolve_phase1_result(
     degradations: Optional[DegradationCollector],
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
+    simulation_requirement: Optional[str] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
+    run_id: Optional[str] = None,
 ) -> Tuple[Any, Optional["_prepare_checkpoint.PreparePersonaCheckpoint"], Optional[List[Any]]]:
     """Phase 1 oder deren Resume-Variante (Issue #1472c).
 
@@ -646,6 +688,7 @@ def _resolve_phase1_result(
         effective_quota_plan=effective_quota_plan_snapshot,
         llm_model=llm_model,
         language=language,
+        requirement_hash=_requirement_hash(simulation_requirement),
     )
 
     if resumable:
@@ -694,6 +737,12 @@ def _resolve_phase1_result(
         max_agents,
         progress_callback=progress_callback,
         degradations=degradations,
+        simulation_requirement=simulation_requirement,
+        llm_runtime=llm_runtime,
+        llm_model=llm_model,
+        run_id=run_id,
+        use_llm_for_profiles=use_llm_for_profiles,
+        has_quota_plan=effective_quota_plan_snapshot is not None,
     )
     return filtered, None, None
 
@@ -821,6 +870,9 @@ def prepare_simulation(
             degradations=degradations,
             llm_model=llm_model,
             language=language,
+            simulation_requirement=simulation_requirement,
+            llm_runtime=llm_runtime,
+            run_id=run_id,
         )
 
         if filtered.filtered_count == 0:
@@ -858,6 +910,7 @@ def prepare_simulation(
             defined_entity_types=defined_entity_types,
             resume_checkpoint=resume_checkpoint,
             precomputed_entities=precomputed_entities,
+            requirement_hash=_requirement_hash(simulation_requirement),
         )
 
         # Review-Finding (PR #1371, Befund 2): der Cancel-Check MUSS vor der

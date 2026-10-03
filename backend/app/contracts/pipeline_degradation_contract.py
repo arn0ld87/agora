@@ -71,6 +71,12 @@ class DegradationKind(str, Enum):
     INITIAL_POST_STANCE_CONFLICT = "initial_post_stance_conflict"
     """Ein Startpost widerspricht der Stance seines Absenders und konnte nicht
     auf einen passenden Agenten umgelegt werden (Issue #1759, A6)."""
+    ENTITY_SELECTION_ACTORS_OMITTED = "entity_selection_actors_omitted"
+    """Der ``max_agents``-Cap hat im Dokument belegte Akteure ohne Persona-Platz
+    gelassen (Issue #1759, A5). ``detail`` nennt sie; ``context`` traegt
+    ``selection_mode`` (``requirement_hybrid`` = fragebezogene Auswahl,
+    ``round_robin_fallback`` = Auswahl ohne Bezug zur Simulationsfrage, Grund
+    steht in ``detail``). Ohne diesen Eintrag fehlte ein Akteur still."""
 
 
 class DegradationSeverity(str, Enum):
