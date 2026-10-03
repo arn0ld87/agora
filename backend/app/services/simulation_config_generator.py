@@ -183,6 +183,19 @@ class SimulationConfigGenerator:
             allow_api_key_fallback=not tenant_scoped,
         )
 
+    def _persisted_llm_base_url(self) -> str:
+        """Basis-URL, die in ``simulation_config.json`` landet (#1759 C4).
+
+        Eine ``cli``-Route (codex_cli/claude_cli) hat keinen HTTP-Endpoint. Der
+        ``.env``-Fallback in ``__init__`` (``Config.LLM_BASE_URL``) darf dort
+        nicht als ``llm_base_url`` persistiert werden: das Modell der CLI-Route
+        stünde sonst neben ``https://api.openai.com/v1`` im selben Objekt, und
+        Interview/Preflight lösen darüber die falsche Connection auf.
+        """
+        if self.provider_type in (PROVIDER_CODEX_CLI, PROVIDER_CLAUDE_CLI):
+            return ""
+        return self.base_url
+
     @staticmethod
     def _resolve_agents_per_batch() -> int:
         """Löst AGENTS_PER_BATCH aus ENV ``AGORA_AGENTS_PER_BATCH`` (Default 8).
@@ -391,7 +404,7 @@ class SimulationConfigGenerator:
             twitter_config=twitter_config,
             reddit_config=reddit_config,
             llm_model=self.model_name,
-            llm_base_url=self.base_url,
+            llm_base_url=self._persisted_llm_base_url(),
             language=self.language,
             enable_agent_tools=getattr(Config, "ENABLE_AGENT_TOOLS", False),
             max_tool_calls_per_action=getattr(Config, "MAX_TOOL_CALLS_PER_ACTION", 2),

@@ -162,6 +162,22 @@ class SimulationRunState:
     role_conflict_count: int = 0
     role_conflicts_by_reason: Dict[ConflictReason, int] = field(default_factory=dict)
 
+    # #1759 C1: Live-Zaehlung der Aktionen aus den OASIS-DBs. ``actions.jsonl``
+    # wird erst am Rundenende geschrieben, die Trace-Tabellen fuellen sich
+    # waehrend der Runde. Der Monitor haelt hier den DB-Stand; die Anzeige nimmt
+    # ``max(protokolliert, live)``. Mit Prozessende wird der Wert auf 0
+    # zurueckgesetzt — danach zaehlt nur noch das Aktionsprotokoll.
+    twitter_live_actions: int = 0
+    reddit_live_actions: int = 0
+
+    @property
+    def displayed_twitter_actions(self) -> int:
+        return max(self.twitter_actions_count, self.twitter_live_actions)
+
+    @property
+    def displayed_reddit_actions(self) -> int:
+        return max(self.reddit_actions_count, self.reddit_live_actions)
+
     def add_action(self, action: AgentAction) -> None:
         """Add action to recent actions list"""
         self.recent_actions.insert(0, action)
@@ -193,9 +209,9 @@ class SimulationRunState:
             "reddit_running": self.reddit_running,
             "twitter_completed": self.twitter_completed,
             "reddit_completed": self.reddit_completed,
-            "twitter_actions_count": self.twitter_actions_count,
-            "reddit_actions_count": self.reddit_actions_count,
-            "total_actions_count": self.twitter_actions_count + self.reddit_actions_count,
+            "twitter_actions_count": self.displayed_twitter_actions,
+            "reddit_actions_count": self.displayed_reddit_actions,
+            "total_actions_count": self.displayed_twitter_actions + self.displayed_reddit_actions,
             "started_at": self.started_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,

@@ -39,6 +39,10 @@ from . import neo4j_schema
 
 logger = logging.getLogger('agora.neo4j_storage')
 
+# Nach einem Fork im Kind abgelegte, vom Parent geerbte Driver. Nur als
+# Referenz-Halter: siehe ``Neo4jStorage._reset_driver_after_fork``.
+_ABANDONED_DRIVERS: list = []
+
 
 class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStorage):
     """Neo4j CE implementation of the GraphStorage interface."""
@@ -183,7 +187,19 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         maintainers recommend for forking servers; the parent keeps its
         pool, the child rebuilds its own on first use via
         :meth:`_get_session`.
+
+        Das blosse Nullen von ``_driver`` reicht nicht (#1759 C3): es war oft
+        die letzte Referenz, und ``Driver.__del__`` (neo4j 5.23) ruft dann
+        ``close()`` auf. Jeder ``subprocess.run`` (claude_cli/codex_cli,
+        unter gevent ueber ``os.fork``) fuehrt den At-fork-Handler im Kind
+        aus; das Kind schickte so GOODBYE ueber die mit dem Parent geteilten
+        Bolt-Sockets, und der Parent sah ``Failed to write data to connection``
+        (serverseitig ``Increase in network aborts``). Die abgelegte
+        Referenz in ``_ABANDONED_DRIVERS`` haelt den Driver im Kind am Leben,
+        sodass ``__del__`` nie laeuft; die Liste existiert nur im Kind-Prozess.
         """
+        if self._driver is not None:
+            _ABANDONED_DRIVERS.append(self._driver)
         self._driver = None
         self._is_connected = False
         # Re-init the lock: if the parent process happened to be holding it

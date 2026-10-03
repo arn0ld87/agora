@@ -544,8 +544,14 @@ def _phase_generate_config(
     use_llm: bool = True,
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
+    degradations: Optional[DegradationCollector] = None,
 ) -> None:
     """Phase 3: Simulation-Config per LLM erzeugen + atomar persistieren.
+
+    ``degradations`` (#1759 A6): Sammler des Prepare-Laufs. Der Generator
+    meldet darüber ``stance_position_unrepresented`` und
+    ``initial_post_stance_conflict`` sichtbar im Task-Ergebnis, statt nur ins
+    Log zu schreiben.
 
     Aktualisiert ``state.config_generated`` und ``state.config_reasoning``
     als Seiteneffekt; speichert die Config über den ``ArtifactStore``.
@@ -593,6 +599,7 @@ def _phase_generate_config(
         entities=expanded_entities,
         enable_twitter=state.enable_twitter,
         enable_reddit=state.enable_reddit,
+        degradations=degradations,
     )
 
     if progress_callback:
@@ -944,6 +951,7 @@ def prepare_simulation(
             progress_callback=progress_callback,
             quota_plan=quota_plan,
             run_id=run_id,
+            degradations=degradations,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to

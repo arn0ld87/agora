@@ -271,3 +271,35 @@ class TestSimulationConfigGeneratorCodexCliProviderType:
         generator = SimulationConfigGenerator(provider_type="codex_cli", model_name="gpt-5.6-luna")
 
         assert generator.base_url == "https://api.minimax.io/v1"
+
+
+class TestPersistedLlmBaseUrlForCliRoutes:
+    """#1759 C4: Modell, Transport und Basis-URL in ``simulation_config.json``
+    müssen zusammenpassen — eine cli-Route steht nie neben einem HTTP-Endpoint
+    (beobachtet: ``claude-sonnet-5-5`` neben ``https://api.openai.com/v1``)."""
+
+    @pytest.mark.parametrize("provider_type", ["claude_cli", "codex_cli"])
+    @patch("app.services.simulation_config_generator.LLMClient")
+    def test_cli_route_persists_no_http_base_url(
+        self, _mock_llm_client_cls, provider_type, monkeypatch
+    ):
+        from app.config import Config
+
+        monkeypatch.setattr(Config, "LLM_BASE_URL", "https://api.openai.com/v1")
+
+        generator = SimulationConfigGenerator(
+            api_key="cli-token", provider_type=provider_type, model_name="claude-sonnet-5-5"
+        )
+
+        assert generator._persisted_llm_base_url() == ""
+
+    @patch("app.services.simulation_config_generator.LLMClient")
+    def test_http_route_keeps_its_base_url(self, _mock_llm_client_cls):
+        generator = SimulationConfigGenerator(
+            api_key="sk-test",
+            base_url="https://api.minimax.io/v1",
+            provider_type="minimax",
+            model_name="MiniMax-M2",
+        )
+
+        assert generator._persisted_llm_base_url() == "https://api.minimax.io/v1"

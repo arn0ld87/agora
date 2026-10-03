@@ -19,11 +19,14 @@ import pytest
 def _clear_registered_storages():
     """Module-level Registries und at-fork-Guard zwischen Tests isolieren."""
     from app import extensions
+    from app.storage import neo4j_storage
 
     extensions._REGISTERED_NEO4J_STORAGES.clear()
     extensions._REGISTERED_EVENT_BUSES.clear()
     extensions._FORK_HANDLER_REGISTERED = False
+    neo4j_storage._ABANDONED_DRIVERS.clear()
     yield
+    neo4j_storage._ABANDONED_DRIVERS.clear()
     extensions._REGISTERED_NEO4J_STORAGES.clear()
     extensions._REGISTERED_EVENT_BUSES.clear()
     extensions._FORK_HANDLER_REGISTERED = False
@@ -47,6 +50,49 @@ def test_reset_driver_after_fork_drops_reference_without_close():
     mock_driver.close.assert_not_called()
     assert storage._driver is None
     assert storage._is_connected is False
+
+
+def test_reset_driver_after_fork_keeps_driver_alive_so_del_cannot_close():
+    """#1759 C3: ``Driver.__del__`` (neo4j 5.23) ruft ``close()`` auf.
+
+    War der genullte ``_driver`` die letzte Referenz, schickte das Kind eines
+    ``subprocess.run``-Forks (claude_cli/codex_cli) GOODBYE ueber die mit dem
+    Parent geteilten Bolt-Sockets -> ``Failed to write data to connection``
+    im Parent. Die Referenz muss deshalb im Kind erhalten bleiben.
+    """
+    import gc
+
+    from app.storage import neo4j_storage
+    from app.storage.neo4j_storage import Neo4jStorage
+
+    closed: list[int] = []
+
+    class _DelClosingDriver:
+        armed = True
+
+        def close(self) -> None:
+            if self.armed:
+                closed.append(1)
+
+        def __del__(self) -> None:
+            self.close()
+
+    storage = Neo4jStorage.__new__(Neo4jStorage)
+    driver = _DelClosingDriver()
+    storage._driver = driver
+    storage._is_connected = True
+    del driver
+
+    try:
+        storage._reset_driver_after_fork()
+        gc.collect()
+
+        assert closed == [], "Driver.__del__ hat die geerbten Bolt-Sockets geschlossen"
+        assert storage._driver is None
+        assert len(neo4j_storage._ABANDONED_DRIVERS) == 1
+    finally:
+        _DelClosingDriver.armed = False
+        neo4j_storage._ABANDONED_DRIVERS.clear()
 
 
 def test_reset_driver_after_fork_handles_none_driver():
