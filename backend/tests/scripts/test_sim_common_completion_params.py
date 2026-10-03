@@ -175,6 +175,25 @@ class TestSupportsReasoningEffortNone:
     @pytest.mark.parametrize(
         "model",
         [
+            "gpt-6",
+            "gpt-6-luna",
+            "gpt-6-sol",
+            "GPT-6-LUNA",
+            "gpt-6.1-mini",
+            "gpt-7",
+        ],
+    )
+    def test_gpt6_plus_supports_none(self, model: str) -> None:
+        """Ab Major 6 gilt ``"none"`` auch ohne Minor-Version."""
+        assert supports_reasoning_effort_none(model) is True
+
+    @pytest.mark.parametrize("model", ["gpt-60", "gpt-500", "gpt-6o"])
+    def test_gpt6_lookalikes_do_not_support_none(self, model: str) -> None:
+        assert supports_reasoning_effort_none(model) is False
+
+    @pytest.mark.parametrize(
+        "model",
+        [
             "gpt-5",
             "gpt-5-mini",
             "gpt-5-turbo",
@@ -201,7 +220,7 @@ class TestSupportsReasoningEffortNone:
 class TestBuildCamelCompletionParamsReasoningEffort:
     """``build_camel_completion_params`` setzt ``reasoning_effort`` gezielt."""
 
-    @pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-5.1"])
+    @pytest.mark.parametrize("model", ["gpt-5.6-luna", "gpt-5.1", "gpt-6-luna", "gpt-6-sol"])
     def test_gpt51_plus_sets_reasoning_effort_none(self, model: str) -> None:
         params = build_camel_completion_params(
             model=model,

@@ -331,7 +331,7 @@ def uses_max_completion_tokens(model: str) -> bool:
     return False
 
 
-_GPT5_MODEL_RE = re.compile(r"^gpt-5(?:\.(\d+))?(?:-|$)")
+_GPT_REASONING_NONE_RE = re.compile(r"^gpt-([5-9])(?:\.(\d+))?(?:-|$)")
 
 
 def supports_reasoning_effort_none(model: str) -> bool:
@@ -350,15 +350,21 @@ def supports_reasoning_effort_none(model: str) -> bool:
     (``gpt-5``, ``gpt-5-mini``, ``gpt-5-turbo``) gelten als 5.0 und
     bekommen den Parameter NICHT gesetzt.
 
+    Ab Major-Version 6 (``gpt-6``, ``gpt-6-luna``, ``gpt-6-sol``) gilt
+    ``"none"`` auch ohne Minor-Version — die Familie hat denselben
+    serverseitigen Reasoning-Default und liefert denselben Tools-400.
+
     Heuristik: Modellname (case-insensitiv, getrimmt) matched
-    ``gpt-5``, optional gefolgt von ``.<minor>``, danach ``-`` oder Ende.
-    Minor-Version muss vorhanden und ``>= 1`` sein.
+    ``gpt-<5..9>``, optional gefolgt von ``.<minor>``, danach ``-`` oder
+    Ende. Bei Major 5 muss die Minor-Version vorhanden und ``>= 1`` sein.
     """
     lowered = model.strip().lower()
-    match = _GPT5_MODEL_RE.match(lowered)
+    match = _GPT_REASONING_NONE_RE.match(lowered)
     if match is None:
         return False
-    minor = match.group(1)
+    if int(match.group(1)) >= 6:
+        return True
+    minor = match.group(2)
     if minor is None:
         return False
     return int(minor) >= 1
