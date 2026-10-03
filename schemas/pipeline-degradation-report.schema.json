@@ -6,7 +6,8 @@
         "embedding_unavailable",
         "graph_below_threshold",
         "persona_rule_based_fallback",
-        "person_represents_organization_merged"
+        "person_represents_organization_merged",
+        "persona_name_identity_rejected"
       ],
       "title": "DegradationKind",
       "type": "string"

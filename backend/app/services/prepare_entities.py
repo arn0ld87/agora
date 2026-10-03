@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from . import prepare_service as _legacy
 from .degradation_collector import DegradationCollector
-from .entity_alias_resolution import resolve_aliases
+from .entity_alias_resolution import _attach_aliases, _UnionFind, resolve_aliases
 from .entity_reader import FilteredEntities
 from .persona_domain_coherence import is_collective_entity_type
 
@@ -25,10 +27,34 @@ if TYPE_CHECKING:
 # Personen- oder Organisationsnamen. Vergleich case-insensitiv, weil
 # projektspezifische Ontologien den Relationsnamen leicht abweichend
 # schreiben koennen (z. B. "works_for").
-# Nur REPRESENTS: WORKS_FOR/AFFILIATED_WITH belegen Zugehoerigkeit, keine
-# Vertretung. Sonst wuerde z. B. eine Betriebsraetin, die fuer die Klinik
-# arbeitet, die Klinik als Akteur ersetzen und "fuer sie sprechen".
-_REPRESENTATION_RELATION_TYPES = frozenset({"REPRESENTS"})
+# REPRESENTS und LEADS belegen Vertretung (#1759 A4: der im Dokument genannte
+# Vorsitzende fuehrt den Betriebsrat, der Graph hatte dafuer LEADS statt
+# REPRESENTS — die Zusammenlegung griff deshalb nicht). WORKS_FOR/
+# AFFILIATED_WITH belegen nur Zugehoerigkeit, keine Vertretung. Sonst wuerde
+# z. B. eine Betriebsraetin, die fuer die Klinik arbeitet, die Klinik als
+# Akteur ersetzen und "fuer sie sprechen".
+_REPRESENTATION_RELATION_TYPES = frozenset({"REPRESENTS", "LEADS"})
+
+# Issue #1759 (A4): Namensvarianten derselben Organisation belegten mehrere
+# Persona-Plaetze. Die Vergleichsschluessel sind bewusst konservativ.
+_logger = logging.getLogger("agora.prepare_entities")
+_VARIANT_FUNCTION_WORDS = frozenset(
+    {"der", "die", "das", "des", "dem", "den", "von", "vom", "fuer", "für",
+     "im", "in", "am", "und", "zu", "zur", "zum"}
+)
+_VARIANT_LEGAL_FORMS = frozenset(
+    {"gmbh", "ggmbh", "mbh", "ag", "kg", "ug", "gbr", "ohg", "se", "ev", "e.v"}
+)
+# Organe, die die Organisation nach aussen vertreten. Betriebsrat/Aufsichtsrat
+# sind bewusst NICHT enthalten: Sie sind eigene Stakeholder.
+_ORGAN_WORDS = frozenset(
+    {"geschäftsführung", "geschäftsleitung", "vorstand", "leitung",
+     "direktion", "präsidium"}
+)
+# Belegkanten, die ein Organ (ohne Organisationsnamen) an seine Organisation binden.
+_ORGAN_RELATION_TYPES = frozenset(
+    {"PART_OF", "ORGAN_OF", "BELONGS_TO", "LEADS", "MANAGES"}
+)
 
 def _strip_leading_article (tokens :list [str ])->list [str ]:
     """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
@@ -262,6 +288,236 @@ def _apply_collective_affiliation(persons: "List[EntityNode]", org: "EntityNode"
     )
 
 
+def _genitive_stem(token: str) -> str:
+    """Streicht ein Genitiv-s/-es ("landkreises" -> "landkreis"), konservativ."""
+    if token.endswith("es") and len(token) >= 7:
+        return token[:-2]
+    if len(token) >= 6 and token.endswith("s") and not token.endswith(("ss", "us", "is")):
+        return token[:-1]
+    return token
+
+
+def _variant_tokens(name: str) -> tuple[str, ...]:
+    """Vergleichstokens eines Organisationsnamens (#1759 A4).
+
+    Casefold, Klammerinhalt, Satzzeichen, Artikel/Funktionswoerter und
+    Rechtsformen entfallen, Genitiv-s wird angeglichen. Die Reihenfolge bleibt
+    erhalten: das erste Token ist das Kopf-Nomen ("Hebammenverband, ...").
+    """
+    cleaned = re.sub(r"\([^)]*\)", " ", name or "")
+    tokens: list[str] = []
+    for raw in re.split(r"[\s,;/]+", cleaned):
+        token = raw.strip(".:\"'()[]").casefold()
+        if not token or token in _VARIANT_FUNCTION_WORDS or token in _VARIANT_LEGAL_FORMS:
+            continue
+        tokens.append(_genitive_stem(token))
+    return tuple(tokens)
+
+
+def _organ_split(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Trennt fuehrende Organ-Woerter ("Geschaeftsfuehrung ...") vom Rest."""
+    organ_end = 0
+    while organ_end < len(tokens) and tokens[organ_end] in _ORGAN_WORDS:
+        organ_end += 1
+    return tokens[:organ_end], tokens[organ_end:]
+
+
+def _organ_target_index(
+    organ: "EntityNode", org_indices: List[int], entities: "List[EntityNode]", self_index: int
+) -> Optional[int]:
+    """Index der einen Organisation, an die eine Belegkante das Organ bindet."""
+    uuid_to_index = {entities[i].uuid: i for i in org_indices if i != self_index}
+    targets: set[int] = set()
+    for edge in organ.related_edges or []:
+        if edge.get("direction") != "outgoing":
+            continue
+        if str(edge.get("edge_name") or "").strip().upper() not in _ORGAN_RELATION_TYPES:
+            continue
+        target_uuid = edge.get("target_node_uuid")
+        if isinstance(target_uuid, str) and target_uuid in uuid_to_index:
+            targets.add(uuid_to_index[target_uuid])
+    return next(iter(targets)) if len(targets) == 1 else None
+
+
+def _union_entity_variants(
+    entities: "List[EntityNode]", org_indices: List[int]
+) -> "tuple[_UnionFind, set[int]]":
+    """Verbindet Organisations-Varianten; liefert Union-Find und aufgehende Organe."""
+    tokens = {i: _variant_tokens(entities[i].name) for i in org_indices}
+    uf = _UnionFind(len(entities))
+    absorbed: set[int] = set()
+
+    for pos, i in enumerate(org_indices):
+        if not tokens[i]:
+            continue
+        # Namensvariante: gleiche Tokenmenge nach Normalisierung.
+        for j in org_indices[pos + 1 :]:
+            if tokens[j] and set(tokens[i]) == set(tokens[j]):
+                uf.union(i, j)
+        # Teilmenge/Obermenge: nur mit gleichem Kopf-Nomen und genau einer
+        # Obermenge ("Betriebsrat Kliniken X" ist keine Variante von
+        # "Kliniken X"); mehrdeutige Kurzformen bleiben getrennt.
+        supersets = [
+            j
+            for j in org_indices
+            if j != i
+            and tokens[j]
+            and tokens[j][0] == tokens[i][0]
+            and set(tokens[i]) < set(tokens[j])
+        ]
+        if len(supersets) == 1:
+            uf.union(i, supersets[0])
+
+    for i in org_indices:
+        organ_words, rest = _organ_split(tokens[i])
+        if not organ_words:
+            continue
+        if rest:
+            # Der Name enthaelt die Organisation eindeutig.
+            bases = [
+                j
+                for j in org_indices
+                if j != i and tokens[j] and set(tokens[j]) == set(rest) and not _organ_split(tokens[j])[0]
+            ]
+            target = bases[0] if len(bases) == 1 else None
+        else:
+            target = _organ_target_index(entities[i], org_indices, entities, i)
+        if target is not None:
+            uf.union(i, target)
+            absorbed.add(i)
+    return uf, absorbed
+
+
+def _absorb_variants(survivor: "EntityNode", aliases: "List[EntityNode]") -> None:
+    """Uebernimmt Aliase und Attribute in ``survivor`` (in place).
+
+    Der Survivor behaelt bei Konflikten seinen Wert; jeder Konflikt wird
+    protokolliert (Logger ``agora.prepare_entities``).
+    """
+    merged = _attach_aliases(survivor, aliases)
+    attrs = merged.attributes
+    carried = list(attrs.get("_agora_aliases", []))
+    for alias in aliases:
+        for earlier in alias.attributes.get("_agora_aliases", []):
+            if earlier not in carried:
+                carried.append(earlier)
+        for key, value in alias.attributes.items():
+            if key.startswith("_agora_"):
+                continue
+            if key not in attrs or attrs[key] in (None, "", [], {}):
+                attrs[key] = value
+            elif attrs[key] != value and value not in (None, "", [], {}):
+                _logger.info(
+                    "Entity-Merge-Attributkonflikt (#1759): survivor=%s verworfen_aus=%s "
+                    "attribut=%s survivor_wert=%r verworfener_wert=%r",
+                    survivor.name,
+                    alias.name,
+                    key,
+                    attrs[key],
+                    value,
+                )
+    attrs["_agora_aliases"] = carried
+    if not survivor.summary:
+        for alias in aliases:
+            if alias.summary:
+                survivor.summary = alias.summary
+                summaries = attrs.get("_agora_alias_summaries", [])
+                if alias.summary in summaries:
+                    summaries.remove(alias.summary)
+                if not summaries:
+                    attrs.pop("_agora_alias_summaries", None)
+                break
+    survivor.attributes = attrs
+    survivor.related_edges = merged.related_edges
+    survivor.related_nodes = merged.related_nodes
+
+
+def _pick_variant_survivor(
+    cluster: List[int], absorbed: set[int], entities: "List[EntityNode]"
+) -> int:
+    """Informativster Name (meiste Tokens, dann laengster), Organe gehen auf."""
+    candidates = [i for i in cluster if i not in absorbed] or cluster
+    return max(
+        candidates,
+        key=lambda i: (len(_variant_tokens(entities[i].name)), len(entities[i].name), -i),
+    )
+
+
+def _remap_edge_targets(
+    entities: "List[EntityNode]", remap: Dict[str, str]
+) -> None:
+    """Zeigt Kanten auf zusammengefuehrte UUIDs auf den Survivor um."""
+    for entity in entities:
+        edges = []
+        for edge in entity.related_edges or []:
+            target = edge.get("target_node_uuid")
+            if isinstance(target, str) and target in remap:
+                edge = {**edge, "target_node_uuid": remap[target]}
+            if edge.get("target_node_uuid") == entity.uuid:
+                continue
+            edges.append(edge)
+        entity.related_edges = edges
+
+
+def _merge_entity_variants(entities: "List[EntityNode]") -> "List[EntityNode]":
+    """Fuehrt Namensvarianten derselben Organisation vor der Persona-Auswahl zusammen.
+
+    Issue #1759 (A4): "Hebammenverband" und "Hebammenverband, Kreisvertretung
+    Hollerau", "Rettungsdienst des Landkreises" und "Rettungsdienst Landkreis
+    Hollerau" oder "Kliniken Hollerau gGmbH" und deren "Geschaeftsfuehrung"
+    belegten im Referenzlauf je zwei Persona-Plaetze. ``resolve_aliases``
+    greift nicht, weil Kommata und Flexion die Tokenmengen verschieben.
+
+    Regeln (nur Organisationen, nie Person+Organisation allein ueber den Namen):
+
+    - gleiche Tokenmenge nach Normalisierung → eine Entitaet;
+    - Teilmenge/Obermenge mit gleichem Kopf-Nomen und genau einer Obermenge;
+    - Organ ("Geschaeftsfuehrung ...") geht in die Organisation auf, wenn der
+      Name sie eindeutig enthaelt oder genau eine Belegkante sie bindet. Ein
+      Organ ohne eindeutigen Bezug bleibt eigener Agent.
+
+    Der Survivor behaelt seine Attribute, fehlende werden ergaenzt, Konflikte
+    geloggt. Kanten anderer Entitaeten werden auf den Survivor umgezeigt.
+    """
+    org_indices = [i for i, e in enumerate(entities) if _is_organization_entity(e)]
+    if len(org_indices) < 2:
+        return entities
+
+    uf, absorbed = _union_entity_variants(entities, org_indices)
+    clusters = [c for c in uf.clusters(len(entities)).values() if len(c) > 1]
+    if not clusters:
+        return entities
+
+    replacements: Dict[int, Optional["EntityNode"]] = {}
+    remap: Dict[str, str] = {}
+    for cluster in clusters:
+        cluster = sorted(cluster)
+        survivor_index = _pick_variant_survivor(cluster, absorbed, entities)
+        survivor = entities[survivor_index]
+        aliases = [entities[i] for i in cluster if i != survivor_index]
+        _absorb_variants(survivor, aliases)
+        _logger.info(
+            "Entity-Varianten-Merge (#1759): %d Entitaeten zu '%s' zusammengefasst "
+            "(Aliase=%s)",
+            len(cluster),
+            survivor.name,
+            [a.name for a in aliases],
+        )
+        for alias in aliases:
+            remap[alias.uuid] = survivor.uuid
+        for i in cluster:
+            replacements[i] = None
+        replacements[cluster[0]] = survivor
+
+    merged: "List[EntityNode]" = []
+    for i, entity in enumerate(entities):
+        kept = replacements.get(i, entity)
+        if kept is not None:
+            merged.append(kept)
+    _remap_edge_targets(merged, remap)
+    return merged
+
+
 def _merge_persons_with_organizations(
     entities: "List[EntityNode]",
     degradations: Optional[DegradationCollector] = None,
@@ -395,6 +651,13 @@ degradations :Optional [DegradationCollector ]=None ,
     # einem Agenten zusammenlegen, bevor dedupliziert/gecappt wird — sonst
     # belegen beide getrennt Persona-Plaetze, obwohl sie im Bericht
     # dieselbe Stimme sind.
+    #
+    # Issue #1759 (A4): Vorher Namensvarianten derselben Organisation
+    # (Teilmenge/Obermenge, Genitiv, Organ einer Organisation) zusammenfuehren
+    # und Kanten auf den Survivor umzeigen, sonst geht eine Vertretungs-Kante
+    # auf eine bereits aufgegangene UUID ins Leere.
+    variant_merged = _merge_entity_variants(filtered.entities)
+    _replace_filtered_entities_if_reduced(filtered, variant_merged)
     merged_entities = _merge_persons_with_organizations(
         filtered.entities, degradations=degradations
     )

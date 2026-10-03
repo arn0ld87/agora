@@ -40,6 +40,7 @@ def _build_individual_persona_prompt (
     context :str ,
     detail_level :Optional [dict ]=None ,
     demographic_slot :Optional [PersonaDemographicSlot ]=None ,
+    taken_names :Optional [List [str ]]=None ,
     )->str :
         """Build detailed persona prompt for individual entities — language-aware."""
 
@@ -68,6 +69,24 @@ def _build_individual_persona_prompt (
         if demographic_slot is not None
         else ""
         )
+        # Issue #1759 (A1): Das Modell vergibt wiederholt dieselben Namen
+        # ("Hoffmann"/"Hartmann"). Kollisionen zwingen den nachgelagerten
+        # Dedup zur Umbenennung — und genau die erzeugte den Identitaetsbruch
+        # (Handle vs. Freitextname). Namen, die schon vergeben sind, kennt
+        # der Prompt jetzt VOR der Generierung.
+        _taken_names_block =""
+        if taken_names :
+            _names_csv =", ".join (taken_names [:40 ])
+            if self .language =="de":
+                _taken_names_block =(
+                "Bereits vergebene Anzeigenamen — NICHT erneut verwenden, "
+                f"wähle einen eigenen, davon verschiedenen Namen: {_names_csv }"
+                )
+            else :
+                _taken_names_block =(
+                "Already taken display names — do NOT reuse them, pick a "
+                f"different, fresh name: {_names_csv }"
+                )
 
         if self .language =="de":
             return f"""Erzeuge eine detaillierte Social-Media-Persona für die folgende Entität. Bleibe nah an der bekannten Realität.
@@ -85,6 +104,8 @@ Kontext:
 {_industry_block_de }
 
 {_slot_block }
+
+{_taken_names_block }
 
 Antworte als JSON mit folgenden Feldern:
 
@@ -142,6 +163,8 @@ Context Information:
 {_industry_block_en }
 
 {_slot_block }
+
+{_taken_names_block }
 
 Please generate JSON containing the following fields:
 

@@ -23,6 +23,9 @@ from ...contracts.role_leakage_contract import (
     RoleLeakagePlatformSummary,
     RoleLeakageSummary,
 )
+from ...utils.logger import get_logger
+
+_logger = get_logger("agora.role_leakage")
 
 # ---------------------------------------------------------------------------
 # Muster für Selbstreferenzen
@@ -438,7 +441,25 @@ def detect_role_conflict(
         own_persona=_resolve_persona(profiles, agent_id),
         all_personas=profiles,
     )
-    return conflict.reason if conflict is not None else None
+    if conflict is None:
+        return None
+    # Issue #1759 (C2): ``role_conflict_count`` allein ist nicht auswertbar —
+    # jeder Konflikt wird mit Agent, Plattform, Runde, Art und Textstelle
+    # protokolliert.
+    _logger.info(
+        "Role conflict: platform=%s round=%s agent_id=%s agent_name=%s "
+        "action_type=%s reason=%s matched_role=%s self_reference=%r excerpt=%r",
+        conflict.platform,
+        conflict.round,
+        conflict.agent_id,
+        conflict.agent_name,
+        conflict.action_type,
+        conflict.reason,
+        conflict.matched_role,
+        conflict.self_reference,
+        conflict.excerpt,
+    )
+    return conflict.reason
 
 
 # ---------------------------------------------------------------------------

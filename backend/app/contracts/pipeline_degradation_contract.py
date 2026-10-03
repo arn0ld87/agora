@@ -57,6 +57,12 @@ class DegradationKind(str, Enum):
     dass eine gezählte Entität den Persona-Pool nicht mehr als eigener Agent
     erreicht."""
 
+    PERSONA_NAME_IDENTITY_REJECTED = "persona_name_identity_rejected"
+    """Anzeigename und Freitextname einer individuellen Persona beschreiben
+    verschiedene Menschen (Issue #1759, A1): Das Profil wurde abgelehnt,
+    statt es still unter zwei Identitaeten in die Simulation zu geben. Der
+    Ablehnungsgrund steht in ``detail``."""
+
 
 class DegradationSeverity(str, Enum):
     """Wie schwer der Ausfall wiegt.

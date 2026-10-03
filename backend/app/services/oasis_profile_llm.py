@@ -27,6 +27,7 @@ entity_summary :str ,
 entity_attributes :Dict [str ,Any ],
 context :str ,
 demographic_slot :Optional [PersonaDemographicSlot ]=None ,
+taken_names :Optional [List [str ]]=None ,
 )->Dict [str ,Any ]:
     """
     Use LLM to generate very detailed persona
@@ -59,6 +60,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         prompt =self ._build_individual_persona_prompt (
         entity_name ,entity_type ,entity_summary ,entity_attributes ,context ,
         detail_level =detail_level ,demographic_slot =demographic_slot ,
+        taken_names =taken_names ,
         )
     else :
         prompt =self ._build_group_persona_prompt (

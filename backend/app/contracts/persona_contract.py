@@ -9,6 +9,7 @@ Ergänzt PersonaQuotaPlan, der heute fehlt — siehe ChatGPT-Audit
 """
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -105,6 +106,44 @@ class PersonaModel(BaseModel):
     # Nur bei einem Ausfall gesetzt, nicht bei bewusst regelbasierter
     # Erzeugung.
     generation_error: Optional[str] = Field(default=None, max_length=200)
+
+
+def persona_name_identity_reason(name: str, persona_text: str) -> Optional[str]:
+    """Liefert den Ablehnungsgrund, wenn der Anzeigename im Freitext fehlt.
+
+    Issue #1759 (A1): Der Generierungs-Dedup benannte kollidierende Profile
+    um, ohne den ``persona``-Fließtext nachzuziehen — im Referenzlauf
+    ``sim_3d3d8b2d8342`` hieß derselbe Agent im Handle ``valentina_ferrari_302``
+    und im eigenen Profiltext ``Maren Hoffmann``. Der Interview-Prompt setzt
+    beides zusammen, die Persona laeuft unter zwei Identitaeten.
+
+    Diese Pruefung ist die letzte Verteidigungslinie NACH der
+    Umbenennungs-Synchronisation im Generator: Taucht der Anzeigename
+    (voll oder als Namensbestandteil ab drei Zeichen, case-insensitiv,
+    wortgrenzgenau) nicht im Freitext auf, wird das Profil abgelehnt statt
+    still durchgewunken. Kollektive nehmen nicht teil — sie sprechen als
+    Träger, nicht als erfundene Person.
+
+    Returns
+    -------
+    Optional[str]
+        ``None``, wenn die Identitaet im Freitext wiedererkennbar ist
+        (oder kein Anzeigename gesetzt ist), sonst ein Grund-String, der
+        den Namen und den Befund traegt und im Prepare-Status sichtbar ist.
+    """
+    normalized = (name or "").strip().casefold()
+    if not normalized:
+        return None
+    text_normalized = (persona_text or "").casefold()
+    if re.search(rf"\b{re.escape(normalized)}\b", text_normalized):
+        return None
+    for part in normalized.split():
+        if len(part) >= 3 and re.search(rf"\b{re.escape(part)}\b", text_normalized):
+            return None
+    return (
+        f"Anzeigename '{name}' fehlt im persona-Freitext: Die simulierte "
+        "Person wuerde unter zwei Namen laufen. Profil abgelehnt (#1759 A1)."
+    )
 
 
 class PersonaQuotaPlan(BaseModel):

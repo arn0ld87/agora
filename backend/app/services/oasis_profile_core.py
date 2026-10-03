@@ -9,7 +9,7 @@ from typing import Any
 
 from . import oasis_profile_generator as _legacy
 import random
-from typing import Optional
+from typing import List, Optional
 from .entity_reader import EntityNode
 from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, PersonaIneligible
 
@@ -19,6 +19,7 @@ entity :EntityNode ,
 user_id :int ,
 use_llm :bool =True ,
 demographic_slot :Optional [PersonaDemographicSlot ]=None ,
+taken_names :Optional [List [str ]]=None ,
 )->OasisAgentProfile :
     """
     Generate OASIS Agent Profile from knowledge graph entity
@@ -62,6 +63,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         entity_attributes =entity .attributes ,
         context =context ,
         demographic_slot =demographic_slot ,
+        taken_names =taken_names ,
         )
     else :
     # Use rules to generate basic persona

@@ -718,3 +718,116 @@ class TestPersonRepresentsOrganizationAffiliation:
         )
         assert result is not None
         assert result.reason == "unmatched_self_reference"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1759 (C2): jeder Konflikt wird mit Details protokolliert
+# ---------------------------------------------------------------------------
+
+
+class TestKonfliktDetailProtokoll:
+    """``role_conflict_count`` ohne Details ist unauswertbar: Im Referenzlauf
+    blieben 11 Konflikte ohne agent_id und ohne Textstelle (#1759 C2)."""
+
+    @pytest.fixture(autouse=True)
+    def _caplog_an_agora_role_leakage(self, caplog: pytest.LogCaptureFixture):
+        """``setup_logger()`` setzt propagate=False auf agora.*-Loggern; caplog
+        hängt am Root-Logger und sähe die Records sonst nicht (Repo-Muster,
+        siehe ``test_jobs_enqueue.py``)."""
+        import logging
+
+        role_logger = logging.getLogger("agora.role_leakage")
+        role_logger.addHandler(caplog.handler)
+        original_level = role_logger.level
+        role_logger.setLevel(logging.DEBUG)
+        yield
+        role_logger.removeHandler(caplog.handler)
+        role_logger.setLevel(original_level)
+
+    def test_konflikt_wird_mit_agent_plattform_runde_und_textstelle_protokolliert(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        from app.services.sim.role_leakage import detect_role_conflict
+
+        persona = _make_persona(
+            name="Max Kaufmann",
+            profession="Kaufmännischer Geschäftsführer",
+            user_id=0,
+        )
+        action_dict = {
+            "agent_id": 0,
+            "agent_name": "Max Kaufmann",
+            "action_type": "CREATE_POST",
+            "action_args": {
+                "content": (
+                    "Aus Sicht des Technischen Dienstes muss der Rollout "
+                    "besser geplant werden."
+                )
+            },
+            "round": 3,
+        }
+
+        with caplog.at_level(logging.INFO, logger="agora.role_leakage"):
+            reason = detect_role_conflict(
+                platform="reddit",
+                action_dict=action_dict,
+                profiles=[persona],
+            )
+
+        assert reason == "unmatched_self_reference"
+        eintraege = [
+            record
+            for record in caplog.records
+            if record.name == "agora.role_leakage" and "Role conflict" in record.getMessage()
+        ]
+        assert eintraege, "Der Konflikt muss strukturiert protokolliert werden"
+        meldung = eintraege[0].getMessage()
+        for fragment in (
+            "platform=reddit",
+            "round=3",
+            "agent_id=0",
+            "agent_name=Max Kaufmann",
+            "reason=unmatched_self_reference",
+        ):
+            assert fragment in meldung, f"Fehlt im Log: {fragment!r}"
+        assert "Technischen Dienstes" in meldung, (
+            "Die betreffende Textstelle muss im Log stehen"
+        )
+
+    def test_kein_konflikt_erzeugt_kein_konfliktlog(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        from app.services.sim.role_leakage import detect_role_conflict
+
+        persona = _make_persona(
+            name="Anna Technik",
+            profession="Technischer Dienst",
+            user_id=0,
+        )
+        action_dict = {
+            "agent_id": 0,
+            "agent_name": "Anna Technik",
+            "action_type": "CREATE_POST",
+            "action_args": {
+                "content": "Aus Sicht des Technischen Dienstes fehlt Personal."
+            },
+            "round": 1,
+        }
+
+        with caplog.at_level(logging.INFO, logger="agora.role_leakage"):
+            reason = detect_role_conflict(
+                platform="reddit",
+                action_dict=action_dict,
+                profiles=[persona],
+            )
+
+        assert reason is None
+        assert not [
+            record
+            for record in caplog.records
+            if record.name == "agora.role_leakage" and "Role conflict" in record.getMessage()
+        ]

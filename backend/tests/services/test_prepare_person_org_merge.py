@@ -25,7 +25,10 @@ import pytest
 from app.contracts.pipeline_degradation_contract import DegradationKind
 from app.services.degradation_collector import DegradationCollector
 from app.services.entity_reader import EntityNode
-from app.services.prepare_entities import _merge_persons_with_organizations
+from app.services.prepare_entities import (
+    _merge_entity_variants,
+    _merge_persons_with_organizations,
+)
 
 
 def _entity(
@@ -171,3 +174,146 @@ class TestUnbeteiligteEntitaetenBleibenUnveraendert:
 
         assert {e.uuid for e in result} == {person.uuid, org.uuid}
         assert person.affiliation is None
+
+
+# ------------------------------------------------------- #1759 (A4)
+
+
+class TestLeadsBelegtVertretung:
+    """Eine LEADS-Kante belegt Vertretung genauso wie REPRESENTS (#1759 A4)."""
+
+    def test_leads_kante_legt_person_und_organisation_zusammen(self) -> None:
+        """Exaktbefund aus dem Lauf: Detlef Brunn ist der im Dokument genannte
+        Vorsitzende des Betriebsrats Kliniken Hollerau — mit belegter Kante
+        bleibt Brunn der Agent, der Betriebsrat belegt keinen eigenen Platz."""
+        org = _entity("Betriebsrat Kliniken Hollerau", "Organization")
+        brunn = _entity(
+            "Detlef Brunn",
+            "Person",
+            related_edges=[_represents_edge(org.uuid, "LEADS")],
+        )
+
+        result = _merge_persons_with_organizations([brunn, org])
+
+        assert [e.uuid for e in result] == [brunn.uuid]
+        assert brunn.affiliation == "Betriebsrat Kliniken Hollerau"
+
+
+class TestEntityVariantenVorDerAuswahl:
+    """Doppelbesetzte Persona-Plätze durch Namensvarianten (#1759 A4)."""
+
+    @pytest.fixture(autouse=True)
+    def _caplog_an_agora_prepare_entities(self, caplog: pytest.LogCaptureFixture):
+        """``setup_logger()`` setzt propagate=False auf agora.*-Loggern; caplog
+        hängt am Root-Logger und sähe die Records sonst nicht (Repo-Muster,
+        siehe ``test_jobs_enqueue.py``)."""
+        import logging
+
+        entity_logger = logging.getLogger("agora.prepare_entities")
+        entity_logger.addHandler(caplog.handler)
+        original_level = entity_logger.level
+        entity_logger.setLevel(logging.DEBUG)
+        yield
+        entity_logger.removeHandler(caplog.handler)
+        entity_logger.setLevel(original_level)
+
+    def test_hebammenverband_und_kreisvertretung_werden_ein_agent(self) -> None:
+        kurz = _entity("Hebammenverband", "Organization")
+        lang = _entity("Hebammenverband, Kreisvertretung Hollerau", "Organization")
+
+        result = _merge_entity_variants([kurz, lang])
+
+        assert [e.uuid for e in result] == [lang.uuid]
+        assert kurz.name in lang.attributes.get("_agora_aliases", [])
+
+    def test_rettungsdienst_flexionsvariante_wird_ein_agent(self) -> None:
+        """„Rettungsdienst des Landkreises“ und „Rettungsdienst Landkreis
+        Hollerau“ unterscheiden sich nur durch Artikel und Genitiv-s."""
+        flexion = _entity("Rettungsdienst des Landkreises", "Organization")
+        voll = _entity("Rettungsdienst Landkreis Hollerau", "Organization")
+
+        result = _merge_entity_variants([flexion, voll])
+
+        assert [e.uuid for e in result] == [voll.uuid]
+
+    def test_geschaeftsfuehrung_geht_in_die_organisation_auf(self) -> None:
+        """Ein Org-Anhang, der die Organisation eindeutig benennt, ist kein
+        eigener Agent („Kliniken Hollerau gGmbH“ vs. deren „Geschäftsführung“)."""
+        org = _entity("Kliniken Hollerau gGmbH", "Organization")
+        organ = _entity(
+            "Geschäftsführung der Kliniken Hollerau gGmbH", "Organization"
+        )
+
+        result = _merge_entity_variants([org, organ])
+
+        assert [e.uuid for e in result] == [org.uuid]
+
+    def test_organ_ohne_eindeutigen_bezug_bleibt_eigener_agent(self) -> None:
+        """„Geschäftsführung“ pur nennt keine Organisation — ohne eindeutigen
+        Bezug wird nicht gemerged (im Zweifel keine Fusion)."""
+        org_a = _entity("Kliniken Hollerau gGmbH", "Organization")
+        org_b = _entity("Klinikum Südstadt gGmbH", "Organization")
+        organ = _entity("Geschäftsführung", "Organization")
+
+        result = _merge_entity_variants([org_a, org_b, organ])
+
+        assert {e.uuid for e in result} == {org_a.uuid, org_b.uuid, organ.uuid}
+
+    def test_attribute_der_zusammengefuehrten_entitaet_bleiben_erhalten(self) -> None:
+        kurz = _entity("Hebammenverband", "Organization")
+        kurz.attributes = {"stance": "kritisch", "summary_source": "doc-7"}
+        kurz.summary = "Interessenvertretung der Hebammen."
+        lang = _entity("Hebammenverband, Kreisvertretung Hollerau", "Organization")
+        lang.attributes = {"position": "aktiv"}
+        lang.summary = ""
+
+        result = _merge_entity_variants([kurz, lang])
+
+        assert len(result) == 1
+        survivor = result[0]
+        assert survivor.attributes["position"] == "aktiv"
+        assert survivor.attributes["stance"] == "kritisch"
+        assert survivor.attributes["summary_source"] == "doc-7"
+        assert survivor.summary == "Interessenvertretung der Hebammen."
+
+    def test_attribut_konflikt_wird_dokumentiert_und_survivor_behaelt_seinen_wert(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        kurz = _entity("Hebammenverband", "Organization")
+        kurz.attributes = {"stance": "kritisch"}
+        lang = _entity("Hebammenverband, Kreisvertretung Hollerau", "Organization")
+        lang.attributes = {"stance": "aktiv"}
+
+        with caplog.at_level(logging.INFO, logger="agora.prepare_entities"):
+            result = _merge_entity_variants([kurz, lang])
+
+        assert len(result) == 1
+        assert result[0].attributes["stance"] == "aktiv"
+        meldungen = [r.getMessage() for r in caplog.records]
+        assert any("stance" in m for m in meldungen)
+
+    def test_person_und_organisation_ohne_kante_werden_nicht_per_name_gefuehrt(
+        self
+    ) -> None:
+        """Dokumentierter Nicht-Griff aus dem Referenzlauf: Der Betriebsrat
+        und Detlef Brunn blieben getrennt, weil der Graph keine belegte
+        Vertretungs-Kante zwischen ihnen enthält. Eine Namensheuristik ist
+        bewusst ausgeschlossen (siehe
+        ``TestOrganisationOhneVertreterinBleibtEigenerAgent``)."""
+        org = _entity("Betriebsrat Kliniken Hollerau", "Organization")
+        brunn = _entity("Detlef Brunn", "Person")
+
+        variants = _merge_entity_variants([brunn, org])
+        merged = _merge_persons_with_organizations(variants)
+
+        assert {e.uuid for e in merged} == {brunn.uuid, org.uuid}
+
+    def test_unbeteiligte_personen_bleiben_unveraendert(self) -> None:
+        person = _entity("Detlef Brunn", "Person")
+        andere = _entity("Mia Weber", "Person")
+
+        result = _merge_entity_variants([person, andere])
+
+        assert {e.uuid for e in result} == {person.uuid, andere.uuid}

@@ -341,8 +341,8 @@ class OasisProfileGenerator:
 
 
     @measure_llm_latency(operation='persona_generation', extract_model=lambda self, *a, **kw: getattr(self, 'model_name', None), extract_prompt_chars=None)
-    def _generate_profile_with_llm(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, demographic_slot: Optional[PersonaDemographicSlot]=None) -> Dict[str, Any]:
-        return _oasis_profile_llm._generate_profile_with_llm(self, entity_name, entity_type, entity_summary, entity_attributes, context, demographic_slot)
+    def _generate_profile_with_llm(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, demographic_slot: Optional[PersonaDemographicSlot]=None, taken_names: Optional[List[str]]=None) -> Dict[str, Any]:
+        return _oasis_profile_llm._generate_profile_with_llm(self, entity_name, entity_type, entity_summary, entity_attributes, context, demographic_slot, taken_names)
 
     def _validate_profile_metadata(self, result: Dict[str, Any], *, is_collective: bool=False) -> List[str]:
         return _oasis_profile_llm._validate_profile_metadata(self, result, is_collective=is_collective)
@@ -356,8 +356,8 @@ class OasisProfileGenerator:
     def _get_system_prompt(self, is_individual: bool) -> str:
         return _oasis_profile_prompts._get_system_prompt(self, is_individual)
 
-    def _build_individual_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> str:
-        return _oasis_profile_prompts._build_individual_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot)
+    def _build_individual_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None, taken_names: Optional[List[str]]=None) -> str:
+        return _oasis_profile_prompts._build_individual_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot, taken_names)
 
     def _build_group_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> str:
         return _oasis_profile_prompts._build_group_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot)

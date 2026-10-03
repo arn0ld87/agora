@@ -336,3 +336,200 @@ class TestPersonaKindImVertrag:
         from app.contracts.persona_contract import PersonaModel
 
         assert "persona_kind" in PersonaModel.model_fields
+
+
+# ---------------------------------------------------------------- #1759 (A1)
+
+
+class TestNamensidentitaetImVertrag:
+    """Der Anzeigename muss im Freitext wiedererkennbar sein (#1759 A1)."""
+
+    def test_name_der_im_freitext_fehlt_liefert_einen_grund(self):
+        from app.contracts.persona_contract import persona_name_identity_reason
+
+        grund = persona_name_identity_reason(
+            "Mia Weber",
+            "Monika Hartmann, 52, ist Hebammenleiterin und mag klare Worte.",
+        )
+
+        assert grund is not None
+        assert "Mia Weber" in grund
+
+    def test_name_im_freitext_liefert_keinen_grund(self):
+        from app.contracts.persona_contract import persona_name_identity_reason
+
+        assert (
+            persona_name_identity_reason(
+                "Mia Weber", "Mia Weber, 52, ist Hebammenleiterin."
+            )
+            is None
+        )
+
+    def test_gross_kleinschreibung_ist_kein_grund(self):
+        from app.contracts.persona_contract import persona_name_identity_reason
+
+        assert (
+            persona_name_identity_reason(
+                "Mia Weber", "Am Steuer sitzt mia weber aus Hollerau."
+            )
+            is None
+        )
+
+    def test_namensbestandteil_im_freitext_liefert_keinen_grund(self):
+        """Nur der Vorname im Text reicht — die Identität ist erkennbar."""
+        from app.contracts.persona_contract import persona_name_identity_reason
+
+        assert (
+            persona_name_identity_reason("Mia Weber", "Mia hält den Verband zusammen.")
+            is None
+        )
+
+    def test_leerer_anzeigename_liefert_keinen_grund(self):
+        from app.contracts.persona_contract import persona_name_identity_reason
+
+        assert persona_name_identity_reason("", "Ein Text ohne Namen.") is None
+
+
+class TestUmbenennungZiehtDenFreitextNach:
+    """Die Dedup-Umbenennung darf den Freitext nicht alt aussehen lassen."""
+
+    def test_sync_stelle_ersetzt_alten_namen_in_freitext_und_bio(self):
+        from app.services.oasis_profile_batch import _apply_identity_rename
+        from app.services.oasis_profile_models import OasisAgentProfile
+
+        profile = OasisAgentProfile(
+            user_id=1,
+            user_name="mia_weber_302",
+            name="Mia Weber",
+            bio="Hebammenleiterin Mia Weber aus Hollerau",
+            persona=(
+                "Monika Hartmann, 52, leitet die Hebammenschule. "
+                "Monika schätzt klare Absprachen. Frau Hartmann meldet sich gern."
+            ),
+        )
+
+        _apply_identity_rename(profile, "Monika Hartmann", "Mia Weber")
+
+        assert profile.name == "Mia Weber"
+        assert "Monika" not in profile.persona
+        assert "Hartmann" not in profile.persona
+        assert profile.persona.startswith("Mia Weber, 52,")
+        assert "Mia schätzt klare Absprachen" in profile.persona
+        assert "Frau Weber meldet sich gern" in profile.persona
+        assert "Monika" not in profile.bio
+        assert "Mia Weber" in profile.bio
+
+    def test_umbenennung_bei_kollision_zieht_freitext_mit(self, generator, monkeypatch):
+        """Zwei Profile mit demselben Namen: das zweite wird umgenannt und
+        sein Freitext muss den neuen Namen tragen (Exaktbefund aus dem Lauf:
+        Profil `valentina_ferrari_302`, Text `Maren Hoffmann`)."""
+        from app.services.oasis_profile_models import OasisAgentProfile
+
+        vorbereitet = [
+            OasisAgentProfile(
+                user_id=0,
+                user_name="mia_weber_1",
+                name="Mia Weber",
+                bio="Klinikleitung",
+                persona="Mia Weber, 44, leitet die Klinik. Mia mag Struktur.",
+            ),
+            OasisAgentProfile(
+                user_id=1,
+                user_name="mia_weber_2",
+                name="Mia Weber",
+                bio="Klinikleitung",
+                persona="Mia Weber, 52, leitet die Hebammenschule. Mia mag Worte.",
+            ),
+        ]
+        reihenfolge = iter(vorbereitet)
+
+        def fake(entity, user_id, use_llm=True, demographic_slot=None):
+            return next(reihenfolge)
+
+        monkeypatch.setattr(generator, "generate_profile_from_entity", fake)
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("A", "Person"), _entity("B", "Person")],
+            use_llm=True,
+            parallel_count=1,
+        )
+
+        assert len(profiles) == 2
+        zweites = profiles[1]
+        assert zweites.name != "Mia Weber"
+        assert "Mia Weber" not in zweites.persona
+        assert zweites.name.split()[0] in zweites.persona
+
+
+class TestAblehnungBeiFehlendemNamen:
+    """Ein Profil, dessen Anzeigename im Freitext fehlt, wird abgelehnt."""
+
+    def test_profil_ohne_namen_im_freitext_wird_abgelehnt(
+        self, generator, monkeypatch
+    ):
+        from app.contracts.pipeline_degradation_contract import DegradationKind
+        from app.services.degradation_collector import DegradationCollector
+        from app.services.oasis_profile_models import OasisAgentProfile
+
+        vorbereitet = [
+            OasisAgentProfile(
+                user_id=0,
+                user_name="mia_weber_1",
+                name="Mia Weber",
+                bio="Klinikleitung",
+                persona=(
+                    "Monika Hartmann, 52, leitet die Hebammenschule. "
+                    "Monika schätzt klare Absprachen."
+                ),
+            ),
+        ]
+        reihenfolge = iter(vorbereitet)
+
+        def fake(entity, user_id, use_llm=True, demographic_slot=None):
+            return next(reihenfolge)
+
+        monkeypatch.setattr(generator, "generate_profile_from_entity", fake)
+        degradations = DegradationCollector()
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("A", "Person")],
+            use_llm=True,
+            parallel_count=1,
+            degradations=degradations,
+        )
+
+        assert profiles == [], "Profil mit fremdem Namen darf nicht durchwinken"
+        events = degradations.report().events
+        passende = [
+            event
+            for event in events
+            if event.kind == DegradationKind.PERSONA_NAME_IDENTITY_REJECTED
+        ]
+        assert passende, "Die Ablehnung muss als sichtbare Degradation erscheinen"
+        assert "Mia Weber" in passende[0].detail
+
+
+class TestVergebeneNamenImPrompt:
+    """Der Generierungs-Prompt kennt die bereits vergebenen Namen."""
+
+    def test_prompt_benannt_bereits_vergebene_namen(self, generator):
+        prompt = generator._build_individual_persona_prompt(
+            "Dozent",
+            "Person",
+            "Dozent im Kontext der Umschulung.",
+            {},
+            "Kein zusätzlicher Kontext",
+            taken_names=["Mia Weber", "Monika Hartmann"],
+        )
+
+        assert "Mia Weber" in prompt
+        assert "Monika Hartmann" in prompt
+
+    def test_ohne_vergebene_namen_bleibt_block_weg(self, generator):
+        prompt = generator._build_individual_persona_prompt(
+            "Dozent",
+            "Person",
+            "Dozent im Kontext der Umschulung.",
+            {},
+            "Kein zusätzlicher Kontext",
+        )
+
+        assert "bereits vergebene" not in prompt.lower()

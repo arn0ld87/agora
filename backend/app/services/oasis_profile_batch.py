@@ -12,11 +12,52 @@ from . import oasis_profile_generator as _legacy
 if TYPE_CHECKING:
     from .degradation_collector import DegradationCollector
 import json
+import re
 from typing import Callable, Dict, List, Optional
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+)
+from ..contracts.persona_contract import persona_name_identity_reason
 from .entity_reader import EntityNode
 from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, PersonaIneligible
 from .run_budget import BudgetExceededError
 from .settings_layer import get_default_service as _get_settings
+
+
+def _apply_identity_rename (
+profile :"OasisAgentProfile" ,
+old_name :str ,
+new_name :str ,
+)->None :
+    """Zieht Freitext und Bio bei einer Dedup-Umbenennung nach (#1759 A1).
+
+    Der Dedup unten benennt kollidierende Profile um (``p.name = new_name``),
+    hat aber früher nur ``name``/``user_name`` angefasst. Der ``persona``-
+    Fließtext behielt den alten Namen — im Referenzlauf ``sim_3d3d8b2d8342``
+    hiess derselbe Agent im Handle ``valentina_ferrari_302`` und im eigenen
+    Profiltext ``Maren Hoffmann``.
+
+    Ersetzt den vollständigen alten Namen und danach seine Einzelteile
+    wortgrenzgenau ("Monika schätzt…" → "Mia schätzt…", "Frau Hartmann" →
+    "Frau Weber"). Steht der Text nicht mit dem Namen ein, bleiben Reste
+    stehen — die Namensidentitäts-Prüfung lehnt solche Profile dann sichtbar
+    ab, statt sie still durchzuwinken.
+    """
+    if not old_name or not new_name or old_name == new_name :
+        return
+    replacements :List [tuple [str ,str ]]=[(old_name ,new_name )]
+    old_parts =old_name .split ()
+    new_parts =new_name .split ()
+    for idx ,part in enumerate (old_parts ):
+        if len (part )<3 :
+            continue
+        target =new_parts [idx ]if idx <len (new_parts )else new_parts [-1 ]
+        replacements .append ((part ,target ))
+    for source ,target in sorted (replacements ,key =lambda pair :-len (pair [0 ])):
+        pattern =re .compile (rf"\b{re .escape (source )}\b",re .IGNORECASE )
+        profile .persona =pattern .sub (target ,profile .persona )
+        profile .bio =pattern .sub (target ,profile .bio )
 
 
 def _resolve_demographic_slots (
@@ -430,8 +471,12 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             )and attempts <30 :
                 new_name =self ._pick_dach_name (p .gender )
                 attempts +=1
+            old_name =p .name or ""
             p .name =new_name
             p .user_name =self ._generate_username (new_name )
+            # Issue #1759 (A1): Freitext und Bio tragen sonst weiter den
+            # alten Namen (Handle und Profiltext zwei verschiedene Menschen).
+            _apply_identity_rename (p ,old_name ,new_name )
         seen_names .add ((p .name or "").strip ().lower ())
         last_name =self ._last_name (p .name or "")
         if last_name :
@@ -443,6 +488,37 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             base =norm_handle .rsplit ("_",1 )[0 ]if "_"in norm_handle else norm_handle
             p .user_name =self ._generate_username (base )
         seen_handles .add ((p .user_name or "").strip ().lower ())
+
+    # Issue #1759 (A1): letzte Verteidigungslinie nach der Umbenennungs-
+    # Synchronisation. Ein individuelles LLM-Profil, dessen Anzeigename im
+    # Freitext gar nicht vorkommt, wird sichtbar abgelehnt (Degradation +
+    # Warnung) statt unter zwei Identitaeten in die Simulation zu gehen.
+    # Kollektive und regelbasierte Notprofile nehmen nicht teil.
+    for identity_idx ,candidate in enumerate (profiles ):
+        if (
+        candidate is None
+        or candidate .persona_kind =="collective"
+        or candidate .generation_source !="llm"
+        ):
+            continue
+        identity_reason =persona_name_identity_reason (
+        candidate .name or "",candidate .persona or ""
+        )
+        if identity_reason is None :
+            continue
+        _legacy .logger .warning (
+        "Persona abgelehnt (#1759 A1): user_id=%s %s",
+        candidate .user_id ,
+        identity_reason ,
+        )
+        if degradations is not None :
+            degradations .record (
+            DegradationKind .PERSONA_NAME_IDENTITY_REJECTED ,
+            DegradationSeverity .WARNING ,
+            identity_reason ,
+            context ={"user_id":candidate .user_id ,"name":candidate .name },
+            )
+        profiles [identity_idx ]=None
 
         # Summenzeile: die einzelnen "[i/n]"-Meldungen oben genuegen nicht als
         # Bilanz, ohne sie nachzuzaehlen — genau daran ist heute eine
