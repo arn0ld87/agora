@@ -281,6 +281,8 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
     rejected :List [PersonaIneligible ]=[]
     # Issue #1759 (A1): vergebene Anzeigenamen dieses Batches, pro Lauf neu.
     self ._taken_display_names =[]
+    # Issue #1759 (A7): Bio-Woerter dieses Batches, gezaehlt je Bio.
+    self ._bio_word_counts ={}
 
     # Helper function for real-time file writing
     def save_profiles_realtime ():

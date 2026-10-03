@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -26,8 +26,22 @@ _STRICT = ConfigDict(extra="forbid")
 PERSONA_SCHEMA_VERSION: Literal[1] = 1
 
 
-# DACH-Voice-Register (für Layer 2)
-VoiceRegister = Literal["formal-de", "neutral-de", "technical-de", "skeptisch-de"]
+# DACH-Voice-Register (für Layer 2). Die ersten vier Werte sind sachlich; die
+# letzten drei (Issue #1759, A7) geben direkt Betroffenen und Privatpersonen
+# eine eigene Stimme, damit ein Personasatz nicht durchgehend nach Gutachten
+# klingt.
+VoiceRegister = Literal[
+    "formal-de",
+    "neutral-de",
+    "technical-de",
+    "skeptisch-de",
+    "betroffen-de",
+    "emotional-de",
+    "umgangssprachlich-de",
+]
+
+#: Laufzeit-Sicht auf :data:`VoiceRegister` für Prüfungen ohne Pydantic.
+VOICE_REGISTER_VALUES: tuple[str, ...] = get_args(VoiceRegister)
 
 
 class PersonaModel(BaseModel):

@@ -23,6 +23,7 @@ from .oasis_profile_models import (
     PersonaIneligible,
     taken_display_names,
 )
+from .persona_voice_register import resolve_voice_register
 
 #: Graph-Attribute, die eine im Dokument belegte Position tragen (Issue #1759, A3).
 _POSITION_ATTRIBUTE_KEYS = ("stance", "position", "position_on_closure", "haltung")
@@ -272,7 +273,12 @@ taken_names :Optional [List [str ]]=None ,
     affiliation =entity .affiliation ,
     segment =segment ,
     persona_kind =persona_kind ,
-    voice_register =profile_data .get ("voice_register"),
+    # Issue #1759 (A7): das Register folgt der Rolle, ein widersprechendes
+    # Modell-Register wird ueberschrieben.
+    voice_register =resolve_voice_register (
+    profile_data .get ("voice_register"),entity_type ,profession ,
+    is_collective =is_collective ,seed =name ,
+    ),
     # Issue #1029: Default "llm" — nur der regelbasierte Pfad setzt
     # den Schlüssel, und er setzt ihn immer.
     generation_source =profile_data .get ("generation_source","llm"),

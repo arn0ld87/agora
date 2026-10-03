@@ -43,7 +43,11 @@ class PersonaDriftCorrectionSchema(BaseModel):
         "", description="Korrigierter Beruf; leerer String, wenn aus der Quelle keiner ableitbar ist"
     )
     voice_register: Optional[VoiceRegister] = Field(
-        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+        None,
+        description=(
+            "One of formal-de/neutral-de/technical-de/skeptisch-de/"
+            "betroffen-de/emotional-de/umgangssprachlich-de"
+        ),
     )
 
 

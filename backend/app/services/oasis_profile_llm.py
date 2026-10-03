@@ -16,6 +16,7 @@ from .oasis_profile_models import (
     PersonaDemographicSlot,
     PersonaProfileSchema,
 )
+from .persona_bio_phrases import avoid_words_prompt_block, overused_bio_words
 from .run_budget import BudgetExceededError
 from .oasis_profile_generator import VOICE_REGISTERS
 
@@ -73,6 +74,12 @@ taken_names :Optional [List [str ]]=None ,
         # zu dem Schema passen, das derselbe Aufruf unten uebergibt
         # (CollectivePersonaSchema kennt keine Personenfelder).
     prompt =f"{prompt }\n\n{self ._build_eligibility_prompt_block (entity_name ,entity_type ,is_collective =not is_individual )}"
+
+    # Issue #1759 (A7): Woerter, die der Batch schon in mehreren Bios verbraucht
+    # hat, stehen als "vermeiden" im Prompt (analog zu den vergebenen Namen).
+    # Hinten angehaengt, damit sie weder den Kontext-Zuschnitt noch die
+    # Branchen-Erkennung der Prompt-Bausteine beruehren.
+    prompt +=avoid_words_prompt_block (overused_bio_words (self ,context ),self .language )
 
     # Try multiple times until successful or max retry attempts reached
     max_attempts =3

@@ -13,18 +13,12 @@ if TYPE_CHECKING:
 import random
 from typing import Dict, List, Optional
 from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot
+from .persona_voice_register import rule_based_voice_register
 from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 
-def _rule_based_voice_register (entity_type :str ,profession :str ="")->str :
-    """Minimale Heuristik: leite voice_register aus entity_type/profession ab."""
-    combined =(entity_type +" "+profession ).lower ()
-    if any (k in combined for k in ("beamt","jurist","lawyer","governmentagency","official","verwalt")):
-        return "formal-de"
-    if any (k in combined for k in ("develop","engineer","devops","software","tech","it_admin","faculty")):
-        return "technical-de"
-    if any (k in combined for k in ("activist","journalist","ngo","redakteur","aktivist")):
-        return "skeptisch-de"
-    return "neutral-de"
+def _rule_based_voice_register (entity_type :str ,profession :str ="",seed :str ="")->str :
+    """Register des Fallbacks — dieselbe rollengebundene Zuordnung wie im LLM-Pfad (#1759, A7)."""
+    return rule_based_voice_register (entity_type ,profession ,seed =seed )
 
 
 def _report_persona_degradation (
@@ -288,6 +282,6 @@ assigned_mbti :Optional [str ],
     "profession":None ,
     "interested_topics":["Allgemein","Gesellschaft"],
     "voice_register":self ._rule_based_voice_register (
-    entity_type .lower (),entity_type
+    entity_type .lower (),entity_type ,seed =dach
     ),
     }

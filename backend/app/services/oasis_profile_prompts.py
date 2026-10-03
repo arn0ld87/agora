@@ -14,6 +14,7 @@ from .oasis_profile_models import PersonaDemographicSlot
 from .persona_demographics import build_name_quota_prompt_block, build_name_quota_prompt_block_en
 from .persona_domain_coherence import has_domain_markers
 from .persona_quota_defaults import build_industry_quota_prompt_block, build_industry_quota_prompt_block_en
+from .persona_voice_register import voice_register_prompt_block
 
 def _get_system_prompt (self: Any ,is_individual :bool )->str :
     """Get system prompt — language-aware (de/en)."""
@@ -88,6 +89,9 @@ def _build_individual_persona_prompt (
                 f"different, fresh name: {_names_csv }"
                 )
 
+        # Issue #1759 (A7): Register, Klang und Rollenhinweis kommen aus einer Quelle.
+        _voice_block =voice_register_prompt_block (self .language ,entity_type )
+
         if self .language =="de":
             return f"""Erzeuge eine detaillierte Social-Media-Persona für die folgende Entität. Bleibe nah an der bekannten Realität.
 
@@ -126,12 +130,7 @@ Antworte als JSON mit folgenden Feldern:
 8. country: ISO-Land in Englisch (z. B. "DE", "AT", "CH")
 9. profession: Beruf (auf Deutsch)
 10. interested_topics: Array deutscher Themen-Strings
-11. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
-    Wähle passend zu Beruf und Bildungsniveau der Persona:
-    - "formal-de": gehoben, Sie-Form, Behörden-/Konzern-Ton, keine Anglizismen (z. B. Beamtin, Juristin).
-    - "neutral-de": alltagssprachlich, Du-Form möglich, keine Werbesprache (z. B. Umschüler, Elternteil).
-    - "technical-de": präzise, Fachvokabular, knapp, kein Marketing (z. B. Senior-Entwicklerin, DevOps-Ingenieur).
-    - "skeptisch-de": kritisch-distanziert, hinterfragend, Anführungszeichen für Buzzwords (z. B. Aktivistin, Journalist).
+11. voice_register: {_voice_block }
 
 Wichtig:
 - Antworte ausschließlich mit JSON, keine zusätzlichen Erklärungen.
@@ -139,7 +138,7 @@ Wichtig:
 - Keine unescapten Zeilenumbrüche in Strings.
 - age muss Ganzzahl, gender muss "male"/"female"/"nonbinary" sein.
 - display_name muss ein echter Personenname sein, nicht der abstrakte Entity-Begriff.
-- voice_register MUSS eines der vier exakten Werte sein.
+- voice_register MUSS eines der oben genannten exakten Werte sein.
 """
 
         _quota_block_en =build_name_quota_prompt_block_en ()
@@ -185,12 +184,7 @@ Please generate JSON containing the following fields:
 8. country: Country ISO code (e.g., "DE", "AT", "CH")
 9. profession: Profession
 10. interested_topics: Array of interested topics
-11. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
-    Choose based on the persona's profession and education:
-    - "formal-de": elevated style, formal address, bureaucratic tone, no anglicisms (e.g. civil servant, lawyer).
-    - "neutral-de": everyday language, casual address, no marketing speak (e.g. trainee, parent).
-    - "technical-de": precise, specialist vocabulary, concise, no marketing (e.g. senior developer, DevOps engineer).
-    - "skeptisch-de": critical, questioning, uses quotation marks for buzzwords (e.g. activist, journalist).
+11. voice_register: {_voice_block }
 
 Important:
 - All field values must be strings or numbers, do not use newlines
@@ -198,7 +192,7 @@ Important:
 - Use English
 - display_name must be a realistic personal name, not the abstract entity label.
 - age must be a valid integer, gender must be "male"/"female"/"nonbinary".
-- voice_register MUST be one of the four exact values listed above.
+- voice_register MUST be one of the exact values listed above.
 """
 
 
@@ -236,6 +230,10 @@ def _build_group_persona_prompt (
         detail =detail_level if detail_level is not None else _legacy ._resolve_persona_detail_level ()
         attrs_str =json .dumps (entity_attributes ,ensure_ascii =False )if entity_attributes else "Keine"
         context_str =context [:detail ['context_limit']]if context else "Keine zusätzlichen Informationen"
+        # Issue #1759 (A7): Kollektive sehen nur die Register, die ihre Rolle erlaubt.
+        _voice_block =voice_register_prompt_block (
+        self .language ,entity_type ,collective =True ,entity_name =entity_name
+        )
 
         if self .language =="de":
             return f"""Beschreibe die folgende Organisation / Gruppe als **kollektive Stimme** im Szenario. Sie äußert sich als Organisation — nicht als erfundene Einzelperson. Erfinde KEINE Person, KEINEN Namen, KEINEN Lebenslauf.
@@ -261,12 +259,7 @@ Antworte als JSON mit folgenden Feldern:
    Schreibe durchgehend über die Organisation ("Der Träger…", "Die Kammer…"), nie über eine Einzelperson.
 3. country: ISO-Land in Englisch (z. B. "DE", "AT", "CH")
 4. interested_topics: Array deutscher Themen-Strings
-5. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
-    Passend zu Auftrag und Kontext von "{entity_name }":
-    - "formal-de": gehoben, Sie-Form, Behörden-/Konzern-Ton, keine Anglizismen.
-    - "neutral-de": alltagssprachlich, Du-Form möglich, keine Werbesprache.
-    - "technical-de": präzise, Fachvokabular, knapp, kein Marketing.
-    - "skeptisch-de": kritisch-distanziert, hinterfragend, Anführungszeichen für Buzzwords.
+5. voice_register: {_voice_block }
 
 Wichtig:
 - Antworte ausschließlich mit JSON.
@@ -274,7 +267,7 @@ Wichtig:
 - Keine unescapten Zeilenumbrüche.
 - KEIN Alter, KEIN Geschlecht, KEIN MBTI-Typ, KEINE Berufsbezeichnung — eine Organisation hat davon nichts.
 - KEIN erfundener Personenname. Die Organisation spricht unter ihrem eigenen Namen.
-- voice_register MUSS eines der vier exakten Werte sein.
+- voice_register MUSS eines der oben genannten exakten Werte sein.
 """
 
         return f"""Describe the following organization/group as a **collective voice** in the scenario. It speaks as an organization — not as an invented individual. Do NOT invent a person, a name, or a biography.
@@ -300,19 +293,14 @@ Please generate JSON containing the following fields:
    Write throughout about the organization, never about an individual.
 3. country: Country ISO code (e.g., "DE", "AT", "CH")
 4. interested_topics: Array of topics
-5. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
-    Choose based on the mandate of "{entity_name }":
-    - "formal-de": elevated style, formal address, bureaucratic tone, no anglicisms.
-    - "neutral-de": everyday language, casual address, no marketing speak.
-    - "technical-de": precise, specialist vocabulary, concise, no marketing.
-    - "skeptisch-de": critical, questioning, uses quotation marks for buzzwords.
+5. voice_register: {_voice_block }
 
 Important:
 - All field values must be strings or arrays, no null values allowed
 - NO age, NO gender, NO MBTI type, NO profession — an organization has none of these.
 - NO invented personal name. The organization speaks under its own name.
 - persona must be coherent, no newlines.
-- voice_register MUST be one of the four exact values listed above.
+- voice_register MUST be one of the exact values listed above.
 - Use English."""
 
 

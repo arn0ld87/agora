@@ -81,7 +81,10 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
         # Issue #1663: ``schema_version`` als zusätzliche Spalte. OASIS liest
         # die CSV per ``pd.read_csv`` und greift über Spaltennamen zu, eine
         # weitere Spalte stört dort nicht.
-        headers =['user_id','name','username','user_char','description','schema_version']
+        # Issue #1759 (A7): ``voice_register`` als weitere Spalte, damit der
+        # Parallel-Runner die Laengengrenze pro Register setzen kann, ohne das
+        # Register aus dem Entitaetstyp zu raten.
+        headers =['user_id','name','username','user_char','description','schema_version','voice_register']
         writer .writerow (headers )
 
         # Write data rows
@@ -103,6 +106,7 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
             user_char ,# user_char: Complete persona (internal LLM use)
             description ,# description: Short bio (external display)
             PERSONA_SCHEMA_VERSION ,# schema_version: Formatversion (#1663)
+            profile .voice_register or "",# voice_register (#1759)
             ]
             writer .writerow (row )
 

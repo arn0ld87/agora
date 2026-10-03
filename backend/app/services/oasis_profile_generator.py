@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Any, List, Optional
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
+from ..contracts.persona_contract import VOICE_REGISTER_VALUES
 from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
 from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
@@ -37,8 +38,8 @@ if TYPE_CHECKING:
 
 logger = get_logger('agora.oasis_profile')
 
-# Erlaubte Voice-Register-Werte (gespiegelt aus VoiceRegister Literal in persona_contract.py)
-VOICE_REGISTERS = ("formal-de", "neutral-de", "technical-de", "skeptisch-de")
+# Erlaubte Voice-Register-Werte (abgeleitet aus dem VoiceRegister Literal in persona_contract.py)
+VOICE_REGISTERS = VOICE_REGISTER_VALUES
 
 
 
@@ -366,8 +367,8 @@ class OasisProfileGenerator:
         return _oasis_profile_prompts._build_drift_correction_prompt(self, entity_name=entity_name, entity_type=entity_type, persona_kind=persona_kind, profession=profession, bio=bio, persona_text=persona_text, drifted_domains=drifted_domains, source_text=source_text)
 
     @staticmethod
-    def _rule_based_voice_register(entity_type: str, profession: str='') -> str:
-        return _oasis_profile_rule_based._rule_based_voice_register(entity_type, profession)
+    def _rule_based_voice_register(entity_type: str, profession: str='', seed: str='') -> str:
+        return _oasis_profile_rule_based._rule_based_voice_register(entity_type, profession, seed)
 
     def _report_persona_degradation(self, profiles: List[Optional[OasisAgentProfile]], degradations: 'DegradationCollector') -> None:
         return _oasis_profile_rule_based._report_persona_degradation(self, profiles, degradations)

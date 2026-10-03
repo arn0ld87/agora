@@ -62,7 +62,15 @@ class Persona(BaseModel):
     model_config = _STRICT
 
     id: str = Field(min_length=1)
-    voice_register: Literal["formal-de", "neutral-de", "technical-de", "skeptisch-de"]
+    voice_register: Literal[
+        "formal-de",
+        "neutral-de",
+        "technical-de",
+        "skeptisch-de",
+        "betroffen-de",
+        "emotional-de",
+        "umgangssprachlich-de",
+    ]
     alter_range: str = Field(min_length=1, description="z. B. '35–50'")
     beruf: str = Field(min_length=1)
     region: str = Field(min_length=1, description="z. B. 'Bayern', 'DACH', 'Nordrhein-Westfalen'")

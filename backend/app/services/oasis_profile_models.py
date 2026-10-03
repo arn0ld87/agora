@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Literal, NamedTuple, Optional
 from pydantic import BaseModel, Field
 
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION, VoiceRegister
+from .persona_bio_phrases import register_bio_words
 # Codex-Finding F1 auf PR #1573: die Drift-Korrektur ist eine LLM-Antwort und
 # gehoert nach Repo-Regel "Contracts-first" in ``app/contracts/``, nicht in
 # dieses Service-Modul. Reexportiert, damit bestehende Importe (dieses Modul
@@ -72,7 +73,11 @@ class PersonaProfileSchema(BaseModel):
     # zulaessig, damit der bestehende neutral-de-Fallback in
     # oasis_profile_llm.py greifen kann, statt drei Versuche zu verbrennen.
     voice_register: Optional[VoiceRegister] = Field(
-        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+        None,
+        description=(
+            "One of formal-de/neutral-de/technical-de/skeptisch-de/"
+            "betroffen-de/emotional-de/umgangssprachlich-de"
+        ),
     )
     # Issue #1247: Ablehnung statt Erfindung. Die Frage "kann diese Entitaet
     # einen menschlichen Traeger haben" haengt am Namen und am Kontext, nicht
@@ -140,6 +145,8 @@ def register_taken_display_name(generator: Any, profile: Optional[Any]) -> None:
     """
     if profile is None or getattr(profile, "persona_kind", None) == "collective":
         return
+    # Issue #1759 (A7): dieselbe Verbuchung fuer wiederkehrende Bio-Woerter.
+    register_bio_words(generator, profile)
     name = (getattr(profile, "name", None) or "").strip()
     names = getattr(generator, "_taken_display_names", None)
     if name and names is not None and name not in names:
@@ -166,7 +173,11 @@ class CollectivePersonaSchema(BaseModel):
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: Optional[VoiceRegister] = Field(
-        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+        None,
+        description=(
+            "One of formal-de/neutral-de/technical-de/skeptisch-de/"
+            "betroffen-de/emotional-de/umgangssprachlich-de"
+        ),
     )
     # Issue #1247: Der Eignungsblock haengt an beiden Prompts, also braucht auch
     # der Kollektiv-Vertrag das Ablehnungsfeld — sonst scheitert eine Ablehnung
