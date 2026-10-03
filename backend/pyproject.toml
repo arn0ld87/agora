@@ -330,6 +330,13 @@ disable_error_code = ["attr-defined"]
 packages = ["app"]
 
 [tool.uv]
+# Supply-Chain-Cooldown: uv loest nur Releases auf, die mindestens 7 Tage alt
+# sind. Frisch kompromittierte Pakete werden meist binnen Stunden bis Tagen
+# zurueckgezogen; die Wartezeit haelt sie aus dem Lockfile. Dringende
+# Security-Fixes, die juenger sind, werden in exclude-newer-package einzeln
+# freigegeben und koennen nach Ablauf der 7 Tage wieder entfernt werden.
+exclude-newer = "7 days"
+exclude-newer-package = { oauthlib = false, virtualenv = false }
 # Unblock Python 3.14 (Issue #199): Multiple dependencies are pinned to old versions
 # without cp314 wheels, and their source builds fail on Python 3.14.
 # Overriding them to newer versions that provide native cp314 wheels.
