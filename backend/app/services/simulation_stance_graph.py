@@ -255,7 +255,8 @@ def _post_conflict(
 ) -> Optional[tuple[str, AgentActivityConfig]]:
     """(Post-Stance, Absender), wenn der Startpost der Absender-Stance widerspricht."""
     post_stance = post.get("stance")
-    sender = agents_by_id.get(post.get("poster_agent_id"))
+    poster_id = post.get("poster_agent_id")
+    sender = agents_by_id.get(poster_id) if isinstance(poster_id, int) else None
     if post_stance not in _POLAR_STANCES or sender is None:
         return None
     if sender.stance in _POLAR_STANCES and sender.stance != post_stance:
@@ -288,7 +289,9 @@ def align_initial_posts_with_stance(
         return []
     agents_by_id = {agent.agent_id: agent for agent in agents}
     load: Counter[int] = Counter(
-        post.get("poster_agent_id") for post in event_config.initial_posts
+        poster_id
+        for post in event_config.initial_posts
+        if isinstance(poster_id := post.get("poster_agent_id"), int)
     )
     warnings: List[str] = []
     for index, post in enumerate(event_config.initial_posts):

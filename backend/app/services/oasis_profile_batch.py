@@ -271,7 +271,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         self .graph_id =graph_id
 
     total =len (entities )
-    profiles =[None ]*total # Pre-allocate list to maintain order
+    profiles :List [Optional ["OasisAgentProfile"]]=[None ]*total # Pre-allocate list to maintain order
     completed_count =[0 ]# Use list for modification in closure
     lock =Lock ()
     demographic_slots =_resolve_demographic_slots (
@@ -280,7 +280,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
     # Issue #1247: abgelehnte Kandidaten, gesammelt fuer die Nachbesetzung.
     rejected :List [PersonaIneligible ]=[]
     # Issue #1759 (A1): vergebene Anzeigenamen dieses Batches, pro Lauf neu.
-    self ._taken_display_names :List [str ]=[]
+    self ._taken_display_names =[]
 
     # Helper function for real-time file writing
     def save_profiles_realtime ():
