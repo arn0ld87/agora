@@ -486,7 +486,8 @@ def test_konflikt_log_enthaelt_keinen_beitragstext(caplog, monkeypatch) -> None:
     monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
     monkeypatch.setattr(logging.getLogger("agora.role_leakage"), "propagate", True)
 
-    secret = "sk-live1234567890abcdefSECRET"
+    # Erfundener Wert, zur Laufzeit zusammengesetzt (kein Literal für den Secret-Scan).
+    secret = "sk-" + "live1234567890" + "abcdefSECRET"
     action = _make_action_dict(
         content=f"Als Betriebsratsvorsitzende {secret} schreibe ich hier. Weitere Details folgen.",
     )
