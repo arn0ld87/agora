@@ -22,7 +22,7 @@ from ..services.llm_routing_seed import (
     workspace_credential_metadata,
 )
 from ..contracts.prepare_status_contract import PrepareStatusResponse
-from ..services.persona_eligibility import filter_eligible_entities
+from ..services.persona_eligibility import filter_eligible_entities, load_project_ontology
 from ..services.prepare_service import compute_persona_target
 from ..services.report_agent import MIN_SIMULATION_AGENTS as MIN_SIMULATION_AGENTS
 from ..services.run_lifecycle import RunLifecycle, RunPersistenceError
@@ -204,6 +204,8 @@ def _preview_entity_counts(state, storage, inputs: _PrepareInputs) -> None:
         eligibility_preview = filter_eligible_entities(
             filtered_preview.entities,
             degradations=None,
+            # Issue #1759 (B2/B3): dieselbe Typ-Definition wie im Laufpfad.
+            ontology=load_project_ontology(getattr(state, "project_id", None)),
         )
         if eligibility_preview.exclusions:
             filtered_preview.entities = eligibility_preview.eligible

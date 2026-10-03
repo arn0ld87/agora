@@ -73,3 +73,38 @@ class TestContestedTopicTypeNames:
             ]
         }
         assert contested_topic_type_names(ontology) == frozenset({"A", "B"})
+
+
+class TestOntologyTypeCatalog:
+    """Issue #1759 (B2/B3): Eignung folgt der Typ-Definition."""
+
+    def test_legacy_ontology_without_metadata_is_not_metadata_driven(self):
+        from app.contracts.ontology_type_contract import ontology_type_catalog
+
+        catalog = ontology_type_catalog({"entity_types": [{"name": "Person"}]})
+        assert catalog.metadata_driven is False
+        assert catalog.non_actor_reason("Person") is None
+
+    def test_broken_structure_yields_empty_catalog(self):
+        from app.contracts.ontology_type_contract import ontology_type_catalog
+
+        assert ontology_type_catalog(None).metadata_driven is False
+        assert ontology_type_catalog({"entity_types": "kaputt"}).metadata_driven is False
+
+    def test_topic_and_non_actor_types_are_reported(self):
+        from app.contracts.ontology_type_contract import ontology_type_catalog
+
+        catalog = ontology_type_catalog(
+            {
+                "entity_types": [
+                    {"name": "Measure", "kind": "contested_topic", "actor_capable": False},
+                    {"name": "Hospital", "kind": "entity", "actor_capable": False},
+                    {"name": "Person", "kind": "entity", "actor_capable": True},
+                ]
+            }
+        )
+        assert catalog.metadata_driven is True
+        assert catalog.declared_types == frozenset({"measure", "hospital", "person"})
+        assert "contested_topic" in (catalog.non_actor_reason("Measure") or "")
+        assert "actor_capable=false" in (catalog.non_actor_reason("hospital") or "")
+        assert catalog.non_actor_reason("Person") is None

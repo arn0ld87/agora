@@ -169,7 +169,7 @@ def test_generate_profiles_rebalances_demographics_when_llm_returns_single_mode(
         "display_name": "Lena Hoffmann",
         "handle": "lena_hoffmann",
         "bio": "Mobilitätsberaterin aus München.",
-        "persona": "Ausführliche Personenbeschreibung.",
+        "persona": "Lena Hoffmann: Ausführliche Personenbeschreibung.",
         "age": 52,
         "gender": "female",
         "mbti": "ISTJ",

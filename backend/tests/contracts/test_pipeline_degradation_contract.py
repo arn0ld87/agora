@@ -141,6 +141,8 @@ class TestEnumValues:
             "persona_name_identity_rejected",
             "stance_position_unrepresented",
             "initial_post_stance_conflict",
+            "persona_role_implausible",
+            "ontology_topic_type_missing",
             "entity_selection_actors_omitted",
         }
 

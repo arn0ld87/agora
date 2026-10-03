@@ -242,8 +242,20 @@ def test_generate_profiles_from_entities_resolves_parallel_count_from_env(
     )
 
     # generate_profile_from_entity ist der eigentliche LLM-Pfad — patchen.
-    fake_profile = MagicMock()
-    generator.generate_profile_from_entity = MagicMock(return_value=fake_profile)  # type: ignore[method-assign]
+    # Echte Profile statt MagicMock: Dedup und Identitaetspruefung des Batches
+    # lesen ``name``/``persona`` als Strings.
+    from app.services.oasis_profile_models import OasisAgentProfile
+
+    def _fake_profile(entity, user_id, **_kwargs):
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name=f'testperson_{user_id}',
+            name=entity.name,
+            bio='Bio',
+            persona=f'{entity.name} ist eine Testperson.',
+        )
+
+    generator.generate_profile_from_entity = MagicMock(side_effect=_fake_profile)  # type: ignore[method-assign]
 
     entities = [
         EntityNode(f'perf-uuid-{i}', f'Testperson {i}', ['Entity', 'Person'], f'Summary {i}', {})

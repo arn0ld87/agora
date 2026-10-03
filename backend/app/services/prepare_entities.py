@@ -13,6 +13,7 @@ from .degradation_collector import DegradationCollector
 from .entity_alias_resolution import _attach_aliases, _UnionFind, resolve_aliases
 from .entity_reader import FilteredEntities
 from .persona_domain_coherence import is_collective_entity_type
+from .persona_eligibility import load_project_ontology
 from .prepare_requirement_selection import select_entities_with_requirement
 
 if TYPE_CHECKING:
@@ -845,7 +846,12 @@ has_quota_plan :bool =False ,
     # Entitäten ohne menschlichen Träger — "USA" (Country), "Agora"
     # (Product) usw. Der Eignungsfilter schließt sie vor dem
     # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
-    eligibility =_legacy .filter_eligible_entities (filtered .entities ,degradations =degradations )
+    # Issue #1759 (B2/B3): die Typ-Definition der Ontologie steuert die Eignung.
+    eligibility =_legacy .filter_eligible_entities (
+    filtered .entities ,
+    degradations =degradations ,
+    ontology =load_project_ontology (getattr (state ,"project_id",None )),
+    )
     _replace_filtered_entities_if_reduced(filtered, eligibility.eligible)
 
     # Issue #1470 (Slice 4.2): Alias-Auflösung vor Dedupe/Cap.

@@ -10,8 +10,80 @@ from typing import Any
 from . import oasis_profile_generator as _legacy
 import random
 from typing import List, Optional
+from collections.abc import Mapping
+from ..contracts.persona_contract import (
+    documented_age,
+    documented_gender,
+    role_corrected_gender,
+)
 from .entity_reader import EntityNode
-from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, PersonaIneligible
+from .oasis_profile_models import (
+    OasisAgentProfile,
+    PersonaDemographicSlot,
+    PersonaIneligible,
+    taken_display_names,
+)
+
+#: Graph-Attribute, die eine im Dokument belegte Position tragen (Issue #1759, A3).
+_POSITION_ATTRIBUTE_KEYS = ("stance", "position", "position_on_closure", "haltung")
+
+
+def _documented_position_block (attributes :Optional [Mapping [str ,Any ]])->str :
+    """Verbindlicher Prompt-Hinweis auf die im Dokument belegte Position."""
+    lines =[
+    f"- {key }: {str (value ).strip ()}"
+    for key ,value in (attributes or {}).items ()
+    if str (key ).casefold ()in _POSITION_ATTRIBUTE_KEYS and str (value or "").strip ()
+    ]
+    if not lines :
+        return ""
+    return (
+    "### Dokumentierte Position (verbindlich)\n"
+    "Die Position dieser Entität ist im Quelldokument belegt. Übernimm sie "
+    "unverändert; erfinde keine abweichende Haltung.\n"+"\n".join (lines )
+    )
+
+
+def _with_position_block (attributes :Optional [Mapping [str ,Any ]],context :str )->str :
+    """Stellt die dokumentierte Position (falls vorhanden) dem Kontext voran (A3)."""
+    block =_documented_position_block (attributes )
+    return f"{block }\n\n{context }"if block else context
+
+
+def _resolve_taken_names (generator :Any ,taken_names :Optional [List [str ]])->Optional [List [str ]]:
+    """Explizit uebergebene Namen gewinnen, sonst die des laufenden Batches (A1)."""
+    return taken_display_names (generator )if taken_names is None else taken_names
+
+
+def _apply_role_gender (
+profile_data :dict [str ,Any ],
+attributes :Optional [Mapping [str ,Any ]],
+profession :Optional [str ],
+bio :Optional [str ],
+)->None :
+    """Gender auf die Berufsbezeichnung korrigieren, sofern nicht im Dokument belegt (A2)."""
+    if documented_gender (attributes )is None :
+        profile_data ["gender"]=role_corrected_gender (profile_data .get ("gender"),profession ,bio )
+
+
+def _apply_documented_demographics (
+profile_data :dict [str ,Any ],
+attributes :Optional [Mapping [str ,Any ]],
+is_collective :bool =False ,
+)->None :
+    """Dokument-Belege (Alter, Geschlecht) schlagen gewuerfelte Slot-Werte (#1759 A2).
+
+    Kollektive tragen keine Demografie und bleiben unberuehrt.
+    """
+    if is_collective :
+        return
+    age =documented_age (attributes )
+    if age is not None :
+        profile_data ["age"]=age
+    gender =documented_gender (attributes )
+    if gender is not None :
+        profile_data ["gender"]=gender
+
 
 def generate_profile_from_entity (
 self: Any ,
@@ -53,6 +125,14 @@ taken_names :Optional [List [str ]]=None ,
         f"Bio und Personenbeschreibung sollen das benennen, z. B. "
         f"„spricht für {entity .affiliation }“.\n\n{context }"
         )
+
+    # Issue #1759 (A3): Eine im Dokument belegte Position der Entität ist
+    # verbindlich und darf nicht durch eine erfundene Haltung ersetzt werden.
+    context =_with_position_block (entity .attributes ,context )
+
+    # Issue #1759 (A1): bereits vergebene Anzeigenamen reichen bis in den
+    # Prompt, damit der Dedup nicht nachtraeglich umbenennen muss.
+    taken_names =_resolve_taken_names (self ,taken_names )
 
     if use_llm :
     # Use LLM to generate detailed persona
@@ -111,6 +191,7 @@ taken_names :Optional [List [str ]]=None ,
         profile_data ["age"]=demographic_slot .age
         profile_data ["gender"]=demographic_slot .gender
         profile_data ["mbti"]=demographic_slot .mbti
+    _apply_documented_demographics (profile_data ,entity .attributes ,is_collective )
 
         # LLM/Rule-based darf display_name (echter Name) + handle (kurzes Social-Handle)
         # überschreiben. So wird aus Entity "GraphRAG" z.B. Person "Lena Hoffmann" mit
@@ -158,6 +239,10 @@ taken_names :Optional [List [str ]]=None ,
     # dieselbe Angleichung wie bei der Erstgenerierung, idempotent wenn
     # sich nichts geaendert hat.
         persona_text =self ._align_persona_identity (persona_text ,name )
+        # Issue #1759 (A2): grammatisches Gender der Berufsbezeichnung
+        # (Chefaerztin/Chefarzt) schlaegt den gewuerfelten Slot-Wert; ein
+        # im Dokument belegtes Geschlecht bleibt unangetastet.
+        _apply_role_gender (profile_data ,entity .attributes ,profession ,bio )
     generation_error =_merge_generation_error (
     profile_data .get ("generation_error"),resolution .generation_error
     )

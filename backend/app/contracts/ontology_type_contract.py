@@ -90,10 +90,86 @@ def contested_topic_type_names(ontology: Optional[Mapping[str, Any]]) -> frozens
     return frozenset(names)
 
 
+class OntologyTypeCatalog(BaseModel):
+    """Lesesicht auf die Typ-Definitionen einer persistierten Ontologie (B2/B3).
+
+    Die Eignungsprüfung folgt damit der Typ-Definition statt einer festen
+    Typliste. Alle Namen sind ``casefold``-normalisiert, damit der Vergleich
+    gegen ``entity_type`` der Graph-Entitäten nicht an der Schreibweise hängt.
+
+    ``metadata_driven`` ist nur wahr, wenn mindestens ein Typ ``kind`` oder
+    ``actor_capable`` ausdrücklich trägt. Ontologien aus der Zeit vor diesem
+    Vertrag haben keines von beidem — für sie bleibt es beim bisherigen
+    Rückfall auf die festen Typlisten.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    metadata_driven: bool = False
+    declared_types: frozenset[str] = Field(default_factory=frozenset)
+    non_actor_types: frozenset[str] = Field(default_factory=frozenset)
+    contested_topic_types: frozenset[str] = Field(default_factory=frozenset)
+
+    def non_actor_reason(self, entity_type: str) -> Optional[str]:
+        """Grund, warum dieser Typ nie Persona wird — ``None``, wenn er es darf."""
+        key = (entity_type or "").strip().casefold()
+        if key in self.contested_topic_types:
+            return "contested_topic (Streitgegenstand des Laufs)"
+        if key in self.non_actor_types:
+            return "actor_capable=false"
+        return None
+
+
+def _entity_type_definitions(ontology: Optional[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    if not isinstance(ontology, Mapping):
+        return []
+    entity_types = ontology.get("entity_types")
+    if not isinstance(entity_types, list):
+        return []
+    return [
+        entity_type
+        for entity_type in entity_types
+        if isinstance(entity_type, Mapping)
+        and isinstance(entity_type.get("name"), str)
+        and entity_type["name"]
+    ]
+
+
+def _carries_metadata(entity_type: Mapping[str, Any]) -> bool:
+    return "kind" in entity_type or "actor_capable" in entity_type
+
+
+def _is_non_actor(entity_type: Mapping[str, Any]) -> bool:
+    if entity_type.get("kind") == ONTOLOGY_KIND_CONTESTED_TOPIC:
+        return True
+    return entity_type.get("actor_capable") is False
+
+
+def ontology_type_catalog(ontology: Optional[Mapping[str, Any]]) -> OntologyTypeCatalog:
+    """Baut den :class:`OntologyTypeCatalog` aus ``Project.ontology``.
+
+    Fehlende oder kaputte Struktur ergibt den leeren, nicht metadatengetriebenen
+    Katalog — die Eignungsprüfung fällt dann auf die festen Typlisten zurück.
+    """
+    definitions = _entity_type_definitions(ontology)
+    if not any(_carries_metadata(definition) for definition in definitions):
+        return OntologyTypeCatalog()
+    return OntologyTypeCatalog(
+        metadata_driven=True,
+        declared_types=frozenset(d["name"].casefold() for d in definitions),
+        non_actor_types=frozenset(d["name"].casefold() for d in definitions if _is_non_actor(d)),
+        contested_topic_types=frozenset(
+            name.casefold() for name in contested_topic_type_names(ontology)
+        ),
+    )
+
+
 __all__ = [
     "ONTOLOGY_KIND_CONTESTED_TOPIC",
     "ONTOLOGY_KIND_ENTITY",
+    "OntologyTypeCatalog",
     "OntologyTypeKind",
     "OntologyTypeMetadata",
     "contested_topic_type_names",
+    "ontology_type_catalog",
 ]

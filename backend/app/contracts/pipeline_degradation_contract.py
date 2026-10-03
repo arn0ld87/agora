@@ -63,6 +63,18 @@ class DegradationKind(str, Enum):
     statt es still unter zwei Identitaeten in die Simulation zu geben. Der
     Ablehnungsgrund steht in ``detail``."""
 
+    PERSONA_ROLE_IMPLAUSIBLE = "persona_role_implausible"
+    """Alter einer individuellen Persona passt nicht zur Rolle (Issue #1759, A2):
+    Mindestalter fuer Leitungs-/Facharztrollen unterschritten oder Rentenalter
+    in einer angestellten Rolle. Das Profil wurde abgelehnt, statt es still in
+    die Simulation zu geben; der Grund steht in ``detail``."""
+
+    ONTOLOGY_TOPIC_TYPE_MISSING = "ontology_topic_type_missing"
+    """Der Ontologie-Generator hat keinen Streitgegenstand-Typ
+    (``kind="contested_topic"``) deklariert (Issue #1759, B1). Positionskanten
+    koennen dann nicht auf einen Topic-Knoten zeigen; die Stance bleibt an den
+    Akteuren."""
+
     STANCE_POSITION_UNREPRESENTED = "stance_position_unrepresented"
     """Eine im Graph belegte Position zum Streitgegenstand wird von keinem
     Agenten der Simulation vertreten (Issue #1759, A6). Die Simulation läuft

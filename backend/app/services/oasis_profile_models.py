@@ -121,6 +121,31 @@ class PersonaIneligible(Exception):
         )
 
 
+def taken_display_names(generator: Any) -> Optional[List[str]]:
+    """Bereits vergebene Anzeigenamen des laufenden Batches (Issue #1759, A1).
+
+    ``None`` ohne vergebene Namen. Die Liste lebt am Generator
+    (``_taken_display_names``) und wird pro Batch zurueckgesetzt.
+    """
+    names = getattr(generator, "_taken_display_names", None)
+    return list(names) if names else None
+
+
+def register_taken_display_name(generator: Any, profile: Optional[Any]) -> None:
+    """Verbucht den Anzeigenamen eines fertigen individuellen Profils (A1).
+
+    Sequentielle Pfade (Nachbesetzung, Regenerierung) und spaetere Tasks des
+    parallelen Pools sehen damit die Namen vorheriger Profile im Prompt.
+    Kollektive tragen ihren Entitaetsnamen und sind nicht betroffen.
+    """
+    if profile is None or getattr(profile, "persona_kind", None) == "collective":
+        return
+    name = (getattr(profile, "name", None) or "").strip()
+    names = getattr(generator, "_taken_display_names", None)
+    if name and names is not None and name not in names:
+        names.append(name)
+
+
 class CollectivePersonaSchema(BaseModel):
     """Antwortvertrag fuer Kollektiv-Personas (Issue #1246, CodeRabbit PR #1257).
 

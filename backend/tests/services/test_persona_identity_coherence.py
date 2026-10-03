@@ -533,3 +533,282 @@ class TestVergebeneNamenImPrompt:
         )
 
         assert "bereits vergebene" not in prompt.lower()
+
+
+# ------------------------------------------------- Issue #1759 · A2 / A3 / A1-Rest
+
+
+def _entity_with(name: str, entity_type: str, attributes: dict | None = None) -> EntityNode:
+    return EntityNode(
+        uuid=f"uuid-{name}",
+        name=name,
+        labels=[entity_type, "Entity"],
+        summary=f"{name} im Kontext der Klinikschliessung.",
+        attributes=attributes or {},
+    )
+
+
+def _stub_llm(generator, display_name: str, profession: str, calls: list | None = None):
+    """Ersetzt den LLM-Aufruf: liefert ein festes Profil, protokolliert die Aufrufe."""
+
+    def fake(**kwargs):
+        if calls is not None:
+            calls.append(kwargs)
+        return {
+            "display_name": display_name,
+            "handle": display_name.lower().replace(" ", "_"),
+            "persona": (
+                f"{display_name} arbeitet als {profession} und äußert sich "
+                "regelmäßig zur Klinikschließung."
+            ),
+            "bio": f"{profession}, Hollerau",
+            "profession": profession,
+            "interested_topics": [],
+        }
+
+    generator._generate_profile_with_llm = fake  # type: ignore[method-assign]
+
+
+class TestRollenPlausibilitaet:
+    """A2: Alter und Gender passen zur Rolle; Dokument-Belege haben Vorrang."""
+
+    @pytest.mark.parametrize(
+        ("age", "profession"),
+        [
+            (28, "Chefärztin der Geburtshilfe"),
+            (25, "Chefarzt der Gynäkologie"),
+            (65, "Betriebsratsvorsitzender"),
+            (25, "Geschäftsführer der Klinikgesellschaft"),
+        ],
+    )
+    def test_unplausibles_alter_hat_einen_ablehnungsgrund(self, age, profession):
+        from app.contracts.persona_contract import persona_role_plausibility_reason
+
+        reason = persona_role_plausibility_reason(age, profession, None)
+
+        assert reason is not None
+        assert str(age) in reason
+        assert "#1759 A2" in reason
+
+    @pytest.mark.parametrize(
+        ("age", "profession"),
+        [
+            (45, "Chefärztin der Geburtshilfe"),
+            (35, "Geschäftsführer der Klinikgesellschaft"),
+            (58, "Betriebsratsvorsitzender"),
+            (68, "Pensionierte Hebamme"),
+            (70, "Betriebsratsvorsitzender im Ruhestand"),
+            (22, "Pflegekraft"),
+        ],
+    )
+    def test_plausibles_alter_wird_nicht_abgelehnt(self, age, profession):
+        from app.contracts.persona_contract import persona_role_plausibility_reason
+
+        assert persona_role_plausibility_reason(age, profession, None) is None
+
+    def test_ohne_alter_oder_rolle_gibt_es_nichts_zu_pruefen(self):
+        from app.contracts.persona_contract import persona_role_plausibility_reason
+
+        assert persona_role_plausibility_reason(None, "Chefarzt", None) is None
+        assert persona_role_plausibility_reason(20, None, None) is None
+
+    @pytest.mark.parametrize(
+        ("profession", "expected"),
+        [
+            ("Chefärztin der Geburtshilfe", "female"),
+            ("Chefarzt der Gynäkologie", "male"),
+            ("Freiberuflicher Hebamme", "female"),
+            ("Betriebsratsvorsitzender", "male"),
+            ("Hebamme und Verbandssprecher", None),  # beide Formen: nicht eindeutig
+            ("Dozent", None),
+            (None, None),
+        ],
+    )
+    def test_gender_aus_der_berufsbezeichnung_nur_wenn_eindeutig(self, profession, expected):
+        from app.contracts.persona_contract import gender_from_role_title
+
+        assert gender_from_role_title(profession) == expected
+
+    def test_falsches_gender_wird_auf_die_berufsbezeichnung_korrigiert(self):
+        from app.contracts.persona_contract import role_corrected_gender
+
+        assert role_corrected_gender("other", "Chefarzt", None) == "male"
+        assert role_corrected_gender("male", "Freiberuflicher Hebamme", None) == "female"
+        assert role_corrected_gender("female", "Chefärztin", None) == "female"
+        assert role_corrected_gender("male", "Hebamme und Verbandssprecher", None) == "male"
+        assert role_corrected_gender(None, "Chefarzt", None) is None
+
+    def test_profil_bekommt_korrigiertes_gender_aus_der_berufsbezeichnung(self, generator):
+        _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe")
+        slot = PersonaDemographicSlot(age=45, gender="male", mbti="INTJ")
+
+        profile = generator.generate_profile_from_entity(
+            _entity_with("Chefärztin Geburtshilfe", "Person"),
+            user_id=1,
+            use_llm=True,
+            demographic_slot=slot,
+        )
+
+        assert profile.gender == "female"
+        assert profile.age == 45
+
+    def test_dokumentierte_werte_schlagen_den_gewuerfelten_slot(self, generator):
+        _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe")
+        slot = PersonaDemographicSlot(age=28, gender="male", mbti="INTJ")
+        entity = _entity_with(
+            "Chefärztin Geburtshilfe", "Person", {"age": 52, "gender": "weiblich"}
+        )
+
+        profile = generator.generate_profile_from_entity(
+            entity, user_id=1, use_llm=True, demographic_slot=slot
+        )
+
+        assert profile.age == 52
+        assert profile.gender == "female"
+
+    def test_unplausibles_alter_wird_im_batch_sichtbar_abgelehnt(self, generator):
+        from app.contracts.pipeline_degradation_contract import DegradationKind
+        from app.services.degradation_collector import DegradationCollector
+
+        _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe")
+        slot = PersonaDemographicSlot(age=28, gender="female", mbti="INTJ")
+        degradations = DegradationCollector()
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity_with("Chefärztin Geburtshilfe", "Person")],
+            use_llm=True,
+            parallel_count=1,
+            degradations=degradations,
+            demographic_slots=[slot],
+        )
+
+        assert profiles == []
+        passende = [
+            e for e in degradations.report().events
+            if e.kind == DegradationKind.PERSONA_ROLE_IMPLAUSIBLE
+        ]
+        assert passende, "Die Ablehnung muss als sichtbare Degradation erscheinen"
+        assert "28" in passende[0].detail
+
+    def test_dokumentiertes_unplausibles_alter_wird_nicht_abgelehnt(self, generator):
+        """Dokument-Beleg schlägt die Rollenregel (Vorrang vor generierten Werten)."""
+        _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe")
+        slot = PersonaDemographicSlot(age=50, gender="female", mbti="INTJ")
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity_with("Chefärztin Geburtshilfe", "Person", {"age": 31})],
+            use_llm=True,
+            parallel_count=1,
+            demographic_slots=[slot],
+        )
+
+        assert [p.age for p in profiles] == [31]
+
+
+class TestKollektivKonsistenz:
+    """A3: Fraktionen, Gremien, Behörden, Kassen bleiben Kollektive."""
+
+    @pytest.mark.parametrize(
+        "entity_type",
+        [
+            "PoliticalFaction",
+            "LocalGovernment",
+            "GovernmentAgency",
+            "HealthInsurer",
+            "Krankenkasse",
+            "Hospital",
+            "PoliticalParty",
+            "NGO",
+        ],
+    )
+    def test_typ_ist_kollektiv_und_in_beiden_pruefungen_gleich(self, generator, entity_type):
+        from app.services.persona_domain_coherence import is_collective_entity_type
+
+        assert is_collective_entity_type(entity_type) is True
+        assert generator._is_group_entity(entity_type) is True
+
+    @pytest.mark.parametrize("entity_type", ["PoliticalFaction", "LocalGovernment", "HealthInsurer"])
+    def test_organisation_wird_kollektiv_ohne_erfundene_einzelperson(self, generator, entity_type):
+        entity = _entity_with("Nordkasse", entity_type)
+        slot = PersonaDemographicSlot(age=34, gender="female", mbti="INFJ")
+
+        profile = generator.generate_profile_from_entity(
+            entity, user_id=1, use_llm=False, demographic_slot=slot
+        )
+
+        assert profile.persona_kind == "collective"
+        assert profile.name == "Nordkasse"
+        assert profile.age is None
+        assert profile.gender is None
+
+    def test_derselbe_typ_wird_im_lauf_immer_gleich_behandelt(self, generator):
+        kinds = {
+            generator.generate_profile_from_entity(
+                _entity_with(name, "LocalGovernment"), user_id=i, use_llm=False
+            ).persona_kind
+            for i, name in enumerate(["Kreistag Hollerau", "Stadtrat Nord", "Gemeinderat Süd"])
+        }
+
+        assert kinds == {"collective"}
+
+    def test_dokumentierte_position_wird_verbindlich_in_den_kontext_gehoben(self, generator):
+        calls: list = []
+        _stub_llm(generator, "Anna Kohl", "Pflegekraft", calls)
+        entity = _entity_with("Fraktion X", "Person", {"stance": "opposing", "position_on_closure": "Schließung ablehnen"})
+
+        generator.generate_profile_from_entity(entity, user_id=1, use_llm=True)
+
+        context = calls[0]["context"]
+        assert "Dokumentierte Position (verbindlich)" in context
+        assert "stance: opposing" in context
+        assert "position_on_closure: Schließung ablehnen" in context
+
+    def test_ohne_dokumentierte_position_bleibt_der_block_weg(self, generator):
+        calls: list = []
+        _stub_llm(generator, "Anna Kohl", "Pflegekraft", calls)
+
+        generator.generate_profile_from_entity(_entity_with("Anna", "Person"), user_id=1, use_llm=True)
+
+        assert "Dokumentierte Position" not in calls[0]["context"]
+
+
+class TestVergebeneNamenWerdenDurchgereicht:
+    """A1-Rest: ``taken_names`` wird aus dem laufenden Batch befüllt."""
+
+    def test_spaetere_generierung_kennt_die_namen_vorheriger_profile(self, generator):
+        calls: list = []
+        names = iter(["Mia Weber", "Jonas Albers"])
+
+        def fake(**kwargs):
+            calls.append(kwargs)
+            name = next(names)
+            return {
+                "display_name": name,
+                "handle": name.lower().replace(" ", "_"),
+                "persona": f"{name} lebt in Hollerau und engagiert sich vor Ort.",
+                "bio": "Hollerau",
+                "profession": "Pflegekraft",
+                "interested_topics": [],
+            }
+
+        generator._generate_profile_with_llm = fake  # type: ignore[method-assign]
+
+        generator.generate_profiles_from_entities(
+            entities=[_entity_with("A", "Person"), _entity_with("B", "Person")],
+            use_llm=True,
+            parallel_count=1,
+        )
+
+        assert calls[0]["taken_names"] is None
+        assert calls[1]["taken_names"] == ["Mia Weber"]
+
+    def test_namensliste_wird_pro_batch_zurueckgesetzt(self, generator):
+        generator._taken_display_names = ["Alter Name"]
+        _stub_llm(generator, "Mia Weber", "Pflegekraft")
+
+        generator.generate_profiles_from_entities(
+            entities=[_entity_with("A", "Person")], use_llm=True, parallel_count=1
+        )
+
+        assert "Alter Name" not in generator._taken_display_names
+        assert generator._taken_display_names == ["Mia Weber"]

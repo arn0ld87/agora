@@ -498,3 +498,78 @@ def test_menschliche_und_kollektive_typen_bleiben_zugelassen(entity_type):
 
     assert result.excluded_count == 0
     assert [e.name for e in result.eligible] == ["Beispiel"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #1759 (B2/B3): Eignung folgt der Typ-Definition der Ontologie
+# ---------------------------------------------------------------------------
+
+_METADATA_ONTOLOGY = {
+    "entity_types": [
+        {"name": "ClosureMeasure", "kind": "contested_topic", "actor_capable": False},
+        {"name": "Hospital", "kind": "entity", "actor_capable": False},
+        {"name": "PoliticalFaction", "kind": "entity", "actor_capable": True},
+        {"name": "Person", "kind": "entity", "actor_capable": True},
+    ]
+}
+
+
+def test_contested_topic_und_nicht_akteursfaehige_typen_werden_nie_persona():
+    entities = [
+        _entity("Schliessungsbeschluss", "ClosureMeasure"),
+        _entity("Klinikum Hollerau-Nord", "Hospital"),
+        _entity("AfD", "PoliticalFaction"),
+        _entity("Maren Hoffmann", "Person"),
+    ]
+
+    result = filter_eligible_entities(entities, ontology=_METADATA_ONTOLOGY)
+
+    assert [e.name for e in result.eligible] == ["AfD", "Maren Hoffmann"]
+    reasons = {exc.entity_name: exc.reason for exc in result.exclusions}
+    assert "contested_topic" in reasons["Schliessungsbeschluss"]
+    assert "actor_capable=false" in reasons["Klinikum Hollerau-Nord"]
+
+
+def test_ohne_ontologie_metadaten_bleibt_der_rueckfall_auf_feste_typlisten():
+    legacy = {"entity_types": [{"name": "Hospital"}, {"name": "Person"}]}
+    entities = [_entity("Klinikum Hollerau-Nord", "Hospital")]
+
+    result = filter_eligible_entities(entities, ontology=legacy)
+
+    assert [e.name for e in result.eligible] == ["Klinikum Hollerau-Nord"]
+    assert result.excluded_count == 0
+
+
+def test_bekannte_typen_folgen_der_typdefinition_nicht_der_festen_liste(caplog):
+    """Mit Metadaten gilt, was die Ontologie deklariert, als bekannt (B3)."""
+    from app.contracts.ontology_type_contract import ontology_type_catalog
+    from app.services.persona_eligibility import _known_entity_types
+
+    catalog = ontology_type_catalog(_METADATA_ONTOLOGY)
+
+    assert _known_entity_types(catalog) == frozenset(
+        {"closuremeasure", "hospital", "politicalfaction", "person"}
+    )
+    assert "student" in _known_entity_types()  # Rückfall ohne Metadaten
+    with caplog.at_level(logging.INFO, logger="agora.persona_eligibility"):
+        filter_eligible_entities([_entity("AfD", "PoliticalFaction")], ontology=_METADATA_ONTOLOGY)
+    assert "ausserhalb der bekannten Liste" not in caplog.text
+
+
+def test_load_project_ontology_ist_fehlerfest(monkeypatch):
+    from app.models.project import ProjectManager
+    from app.services.persona_eligibility import load_project_ontology
+
+    assert load_project_ontology(None) is None
+
+    def _boom(_pid):
+        raise OSError("kaputt")
+
+    monkeypatch.setattr(ProjectManager, "get_project", _boom)
+    assert load_project_ontology("proj_1") is None
+    monkeypatch.setattr(
+        ProjectManager,
+        "get_project",
+        lambda _pid: types.SimpleNamespace(ontology=_METADATA_ONTOLOGY),
+    )
+    assert load_project_ontology("proj_1") == _METADATA_ONTOLOGY

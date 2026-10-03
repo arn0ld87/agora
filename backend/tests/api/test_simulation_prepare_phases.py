@@ -379,7 +379,7 @@ def _patch_entity_preview(monkeypatch, *, count=7, types=("Person",), exclusions
     monkeypatch.setattr(
         mod,
         "filter_eligible_entities",
-        lambda entities, degradations=None: SimpleNamespace(
+        lambda entities, degradations=None, ontology=None: SimpleNamespace(
             eligible=entities, exclusions=list(exclusions)
         ),
     )

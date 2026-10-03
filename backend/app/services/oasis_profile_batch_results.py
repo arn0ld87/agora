@@ -11,7 +11,11 @@ from typing import Any
 from . import oasis_profile_generator as _legacy
 from typing import List, Optional
 from .entity_reader import EntityNode
-from .oasis_profile_models import OasisAgentProfile, PersonaIneligible
+from .oasis_profile_models import (
+    OasisAgentProfile,
+    PersonaIneligible,
+    register_taken_display_name,
+)
 from .run_budget import BudgetExceededError
 
 def _backfill_rejected_slots (
@@ -111,6 +115,7 @@ rejected :List ["PersonaIneligible"],
                 # Die Entity am selben Index mittauschen, damit die
                 # Config-Generierung den Nachruecker beschreibt und nicht die
                 # abgelehnte Entitaet.
+            register_taken_display_name (self ,profiles [slot_idx ])
             if slot_idx <len (entities ):
                 entities [slot_idx ]=candidate
             filled +=1
