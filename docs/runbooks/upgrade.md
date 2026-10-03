@@ -35,6 +35,14 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Upgrade:** Es ist kein Schritt nötig. Altbestand ohne Feld liest die neue Version als Version 1 und schreibt ihn nicht um. Das Feld kommt erst dazu, wenn die Datei ohnehin neu geschrieben wird, etwa beim nächsten Graph-Build oder bei der nächsten Persona-Bearbeitung.
 - **Rollback-Implikation:** Ältere Versionen lehnen ein Manifest **mit** `schema_version` ab, weil `DocumentManifest` dort `extra="forbid"` ist. Die Folgen nach einem Rückweg: Der Graph-Build eines solchen Projekts bricht ab, und Dokument-Rollen fallen mit Warnung weg. Abhilfe ist, `schema_version` aus `extracted_documents.json` zu entfernen. Der Personasatz ist nicht betroffen: Ältere Leser akzeptieren Zusatzfelder, und OASIS greift auf CSV-Spalten über den Namen zu.
 
+**Prepare-Checkpoint, Ontologie-Typen und `state.json` während des Laufs** ([#1759](https://github.com/arn0ld87/agora/issues/1759)). Drei Ablagen bekommen zusätzliche Inhalte, keine braucht eine Migration:
+
+- **`prepare_persona_checkpoint.json`** trägt neu `requirement_hash` (Hash der Simulationsfrage) und `selection_reasons` (Begründung je ausgewählter Entität). Ältere Checkpoints ohne die Felder bleiben lesbar und resumable. Ein Checkpoint, dessen Frage sich geändert hat, gilt nicht mehr als resumable; die Vorbereitung beginnt dann neu.
+- **Persistierte Projekt-Ontologie:** Jeder Entitätstyp trägt neu `kind` (`entity` oder `contested_topic`) und `actor_capable`. Altbestand ohne die Felder liest sich als `entity` und akteursfähig; die Persona-Eignung fällt dann auf die bisherigen festen Typlisten zurück. Die neue, typgesteuerte Eignung und die Stance aus dem Graph greifen erst nach einer neu erzeugten Ontologie.
+- **`uploads/simulations/<id>/state.json`** wird jetzt auch während eines laufenden Simulations-Jobs geschrieben (`current_round`, `twitter_status`, `reddit_status`), nicht erst am Ende. Bei einer CLI-Route steht in der Simulations-Config `llm_base_url` als leerer Wert statt der `.env`-HTTP-URL.
+- **Upgrade:** Es ist kein Schritt nötig.
+- **Rollback-Implikation:** Ältere Versionen lehnen einen Checkpoint **mit** den neuen Feldern ab (`extra="forbid"`) und behandeln ihn als nicht vorhanden; die Vorbereitung startet neu, ohne Abbruch. Die Zusatzfelder der Ontologie ignorieren ältere Versionen.
+
 ## Env-Default-Änderungen außerhalb des Versionssprungs
 
 Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).
