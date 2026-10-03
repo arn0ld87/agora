@@ -57,7 +57,7 @@ Der automatisch bereitgestellte Worktree steht oft NICHT auf der richtigen Basis
    - `ROADMAP.md` nur bei geändertem Release-Gate,
    - Folge-Issue nur benennen, nicht anlegen.
    Für jedes Artefakt dokumentieren: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
-9. Ein Scope-Gate (`scripts/pre-push-gate.sh`) nur ausführen, wenn das Briefing es ausdrücklich verlangt — sonst fährt es der Lead.
+9. Genau ein Scope-Gate ausführen — `bash scripts/pre-push-gate.sh backend` (Backend remote auf `gns3` über den Remote-Helper). Genau eines, nie mehrere; nur wenn das Briefing es ausdrücklich dem Lead überlässt, entfällt es hier.
 10. Nur Issue-Dateien und die in Schritt 8 betroffenen Sync-Dateien einzeln stagen (`git add <pfad>`, nie `git add -A`) und genau einen lokalen Commit erzeugen.
 11. Commit-SHA, Diff-Summary sowie Test- und Pflichtprüfungs-Ausgaben zurückgeben.
 
@@ -65,7 +65,7 @@ Ruff darf den Repository-Scope nicht ungefragt verändern. Verwende niemals `uv 
 
 ## Wo Tests laufen
 
-Backend-Tests und Pflichtprüfungen laufen auf `armserver`, nicht lokal (dort liegen venv, torch/oasis, Neo4j/Redis). Nennt das Briefing einen Remote-Helper (`remote-backend.sh <WORKTREE-ABSOLUT> <slice> -- <befehl>`), benutze ausschließlich ihn. Lokal nur Syntaxchecks wie `bash -n` oder `shellcheck`.
+Backend-Tests und Pflichtprüfungen laufen remote auf `gns3` — nicht lokal, nicht auf dem armserver (der steht unter Dauerlast; auf gns3 liegen venv, torch/oasis, Neo4j/Redis mit Ressourcenreserven). Nennt das Briefing einen Remote-Helper (`remote-backend.sh <WORKTREE-ABSOLUT> <slice> -- <befehl>`), benutze ausschließlich ihn — immer über `bash` aufgerufen, mit dem eigenen `pwd`-Pfad als WORKTREE-ABSOLUT. Lokal nur Syntaxchecks wie `bash -n` oder `shellcheck`.
 
 ## Turn-Ökonomie
 
@@ -98,7 +98,7 @@ Dein Turn-Budget ist begrenzt. Reihenfolge: Tests grün → Pflichtprüfungen �
 - KEINE Variablen aus Berichten annehmen ohne `rg`-Verifikation.
 - KEINE Assertions abschwächen oder ersatzlos streichen; ändert sich Verhalten absichtlich, die Assertion durch die äquivalente Prüfung des neuen Wegs ersetzen.
 - KEIN Push, Merge, Rebase, Force-Push oder `--no-verify`.
-- KEINE Befehle gegen den laufenden Produktiv-Stack auf armserver (`docker compose stop/down/up` o. ä.).
+- KEINE Befehle gegen den laufenden Produktiv-Stack auf gns3 oder armserver (`docker compose stop/down/up` o. ä.).
 
 ## Output
 

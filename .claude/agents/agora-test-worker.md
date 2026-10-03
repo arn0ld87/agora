@@ -2,7 +2,7 @@
 name: agora-test-worker
 description: Schreibt pytest-Tests für Pydantic-Contracts, FSM-Übergänge, Persona-Quoten, Evidence-Dedup und E2E-Regressionen. Use proactively für jeden Layer-0/1-Task und für klar abgegrenzte Test-Slices.
 tools: Read, Edit, Write, Bash, Grep, Glob
-model: claude-sonnet-4-6
+model: claude-sonnet-5-5
 effort: medium
 maxTurns: 100
 background: true
@@ -90,7 +90,7 @@ bash ../scripts/pre-push-gate.sh backend
 
 ```bash
 cd frontend
-bun run test <ISSUE_TEST_PFADE>
+bunx vitest run <ISSUE_TEST_PFADE>
 bun run check
 bash ../scripts/pre-push-gate.sh frontend
 ```
@@ -121,13 +121,17 @@ uv run python -m app.contracts.dump_schemas --check
 uv run ruff check app/ tests/
 uv run mypy app
 cd ../frontend
-bun run test <BETROFFENE_FRONTEND_TESTS>
+bunx vitest run <BETROFFENE_FRONTEND_TESTS>
 bun run check
 cd ..
 bash scripts/pre-push-gate.sh
 ```
 
 Ein fehlender Befehl, ein nicht nachvollziehbarer Exit-Code oder ein Fehler in einer der Prüfungen blockiert den Commit. Der Commit entsteht erst, wenn **alle** für den Scope erforderlichen Prüfungen und das eine Gate Exit 0 geliefert haben. Ist der Gate-Scope im Briefing nicht benannt oder unklar: stoppen und nachfragen, nicht raten. Kein `--no-verify` und kein kosmetisches Grünmachen.
+
+## Wo Tests laufen
+
+Backend-Tests und Pflichtprüfungen laufen remote auf `gns3` — nicht lokal, nicht auf dem armserver (der steht unter Dauerlast; auf gns3 liegen venv, torch/oasis, Neo4j/Redis mit Ressourcenreserven). Nennt das Briefing einen Remote-Helper (`remote-backend.sh <WORKTREE-ABSOLUT> <slice> -- <befehl>`), benutze ausschließlich ihn — immer über `bash` aufgerufen, mit dem eigenen `pwd`-Pfad als WORKTREE-ABSOLUT. Frontend-Prüfungen (`bunx vitest`, `bun run check`) laufen lokal im Worktree.
 
 ## Acceptance pro Test-Commit
 
