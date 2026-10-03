@@ -537,7 +537,7 @@ def _stub_generate_profile_from_entity(rejected_names: set[str]):
             user_name=f"user_{user_id}",
             name=entity.name,
             bio=f"{entity_type}: {entity.name}",
-            persona="Eine Beispielperson.",
+            persona=f"{entity.name} ist eine Beispielperson.",
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
         )

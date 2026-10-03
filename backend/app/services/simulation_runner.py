@@ -25,6 +25,7 @@ from .sim.run_state_store import AgentAction as AgentAction  # noqa: PLC0414
 from .sim.run_state_store import RoundSummary as RoundSummary  # noqa: PLC0414
 from .sim.run_state_store import RunnerStatus as RunnerStatus  # noqa: PLC0414
 from .sim.run_state_store import SimulationRunState as SimulationRunState  # noqa: PLC0414
+from .sim.live_progress import mirror_runtime_progress, runtime_progress_key
 from .sim.run_state_store import load_run_state
 from .sim.run_state_store import save_run_state as _save_run_state_fn
 from .sim.run_state_store import read_console_log
@@ -128,6 +129,8 @@ class SimulationRunner:
     _stdout_files: Dict[str, Any] = {}
     _stderr_files: Dict[str, Any] = {}
     _graph_memory_enabled: Dict[str, bool] = {}  # simulation_id -> enabled
+    # simulation_id -> zuletzt nach state.json gespiegelter Fortschrittsschluessel (#1759 C1)
+    _mirrored_progress: Dict[str, Any] = {}
 
     @classmethod
     def get_console_log(cls, simulation_id: str, from_line: int = 0) -> Dict[str, Any]:
@@ -224,6 +227,37 @@ class SimulationRunner:
         _save_run_state_fn(state, cls.RUN_STATE_DIR, event_bus_publish=_publish, run_registry_sync=_registry_sync)
         # Keep in-memory cache in sync
         cls._run_states[state.simulation_id] = state
+        cls._mirror_runtime_progress(state)
+
+    @classmethod
+    def _mirror_runtime_progress(cls, state: SimulationRunState) -> None:
+        """Fuehrt Runde und Plattformstatus in ``state.json`` mit (#1759 C1).
+
+        Bisher blieb ``state.json`` waehrend und nach dem Lauf auf
+        ``current_round: 0`` / ``not_started``, weil nur ``run_state.json``
+        fortgeschrieben wurde. Geschrieben wird nur bei einem Wechsel des
+        Aenderungsschluessels (Runde, Plattform-/Prozessstatus), nicht bei jedem
+        Monitor-Takt. Ein Fehler hier darf den Monitor nie stoppen.
+        """
+        try:
+            key = runtime_progress_key(state)
+            if cls._mirrored_progress.get(state.simulation_id) == key:
+                return
+            from .simulation_manager import SimulationManager
+
+            written = mirror_runtime_progress(SimulationManager(), state)
+            # ``None`` heisst: es wurde nichts geschrieben (etwa weil
+            # ``get_simulation`` voruebergehend keinen State liefert). Dann
+            # bleibt der Schluessel unveraendert, und der naechste Takt versucht
+            # es erneut, statt den Fortschritt bis zum naechsten Wechsel zu verlieren.
+            if written is not None:
+                cls._mirrored_progress[state.simulation_id] = key
+        except Exception as exc:  # noqa: BLE001 — Spiegelung ist best-effort, Monitor laeuft weiter
+            logger.warning(
+                "state.json-Fortschritt nicht gespiegelt: simulation_id=%s, error=%s",
+                state.simulation_id,
+                exc,
+            )
 
     @classmethod
     def _correct_stale_run_state(

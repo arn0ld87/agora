@@ -1498,12 +1498,26 @@
     "kind": {
       "embedding_unavailable": "Semantic search unavailable",
       "graph_below_threshold": "Graph below the quality threshold",
-      "persona_rule_based_fallback": "Personas generated as placeholders"
+      "persona_rule_based_fallback": "Personas generated as placeholders",
+      "person_represents_organization_merged": "Person and organization merged into one agent",
+      "persona_name_identity_rejected": "Persona with conflicting identity rejected",
+      "persona_role_implausible": "Persona with an implausible age for the role rejected",
+      "ontology_topic_type_missing": "No contested-topic type in the ontology",
+      "stance_position_unrepresented": "Documented position not represented by any agent",
+      "initial_post_stance_conflict": "Initial post contradicts its sender's stance",
+      "entity_selection_actors_omitted": "Documented actors without a persona slot"
     },
     "action": {
       "embedding_unavailable": "Start the embedding service and rebuild the graph, otherwise vector search stays ineffective.",
       "graph_below_threshold": "Rebuild with a stronger model or use a more substantial document.",
-      "persona_rule_based_fallback": "Review the statements from the placeholder profiles or regenerate the personas with a stronger model."
+      "persona_rule_based_fallback": "Review the statements from the placeholder profiles or regenerate the personas with a stronger model.",
+      "person_represents_organization_merged": "Check whether the merged entity is sufficient as a single actor in the persona set.",
+      "persona_name_identity_rejected": "The persona set does not contain this profile; regenerate the persona or add it manually.",
+      "persona_role_implausible": "The persona set does not contain this profile; regenerate the persona or add it manually.",
+      "ontology_topic_type_missing": "Positions stay attached to the actors; regenerate the ontology if the graph needs position edges.",
+      "stance_position_unrepresented": "The simulation continues but does not reflect this position; add a matching actor to the persona set.",
+      "initial_post_stance_conflict": "Check the initial post and its sender in the persona set before the run starts.",
+      "entity_selection_actors_omitted": "Raise the agent limit or add the missing actors manually, otherwise they are absent from the run."
     },
     "occurrences": "occurred {count}×"
   },

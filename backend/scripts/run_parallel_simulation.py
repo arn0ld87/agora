@@ -193,6 +193,7 @@ if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     sys.exit(0)
 
 from app.config import Config
+from app.contracts.persona_contract import VOICE_REGISTER_VALUES
 # Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
 from app.services.simulation_activity_policy import (
     TWITTER_FOLLOWING_POST_COUNT,
@@ -441,10 +442,10 @@ async def _emit_post_created_to_redis(
     persona_id = str(action_data.get("agent_id", ""))
     persona_name = action_data.get("agent_name") or f"Agent {persona_id}"
     # voice_register-Vokabular ist der Profil-Generator-SSoT
-    # (formal-de/neutral-de/technical-de/skeptisch-de); altes Vokabular
+    # (siehe ``persona_contract.VoiceRegister``); altes Vokabular
     # (formal/casual/jugendsprache) war nie an den Generator angebunden.
     voice_register = str(action_args.get("voice_register", "neutral-de"))
-    if voice_register not in ("formal-de", "neutral-de", "technical-de", "skeptisch-de"):
+    if voice_register not in VOICE_REGISTER_VALUES:
         voice_register = "neutral-de"
 
     # Voting-Stand aus der Simulations-DB (fetch_new_actions_from_db reichert

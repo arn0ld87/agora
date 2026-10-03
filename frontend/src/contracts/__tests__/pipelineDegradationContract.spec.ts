@@ -62,7 +62,18 @@ describe('PipelineDegradationSchema', () => {
       'embedding_unavailable',
       'graph_below_threshold',
       'persona_rule_based_fallback',
+      'person_represents_organization_merged',
+      'persona_name_identity_rejected',
+      'persona_role_implausible',
+      'ontology_topic_type_missing',
+      'stance_position_unrepresented',
+      'initial_post_stance_conflict',
+      'entity_selection_actors_omitted',
     ])
+  })
+
+  it.each([...DEGRADATION_KINDS])('akzeptiert die Art %s', (kind) => {
+    expect(PipelineDegradationSchema.safeParse({ ...validEvent, kind }).success).toBe(true)
   })
 })
 

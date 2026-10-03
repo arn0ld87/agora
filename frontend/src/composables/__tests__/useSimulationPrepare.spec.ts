@@ -392,4 +392,55 @@ describe('useSimulationPrepare', () => {
       expect(composable.error.value).toBeNull()
     })
   })
+
+  describe('Case 8 — Degradationen des Prepare-Jobs (#1759)', () => {
+    const degradationResult = {
+      degradations: {
+        schema_version: 1,
+        events: [
+          {
+            kind: 'entity_selection_actors_omitted',
+            severity: 'warning',
+            detail: 'Akteur X ohne Persona-Platz.',
+            occurred_at: '2026-10-03T10:00:00Z',
+            occurrences: 1,
+            context: { selection_mode: 'requirement_hybrid' },
+          },
+        ],
+      },
+    }
+
+    it.each(['completed', 'failed'])('übernimmt result.degradations bei Status %s', async (status) => {
+      mockPrepare.mockResolvedValue(makePrepareEnvelope() as ApiEnvelope<TaskStatusData>)
+      mockGetStatus.mockResolvedValue({
+        success: true,
+        data: { status, progress: 100, message: '', result: degradationResult },
+      } as ApiEnvelope<TaskStatusData>)
+
+      const composable = useSimulationPrepare()
+      await composable.startPrepare({
+        payload: { simulation_id: 'sim-1759' },
+        onLog: vi.fn(),
+        onStatusChange: vi.fn(),
+      })
+      await vi.advanceTimersByTimeAsync(2100)
+
+      expect(composable.degradations.value.events).toHaveLength(1)
+      expect(composable.degradations.value.events[0].kind).toBe('entity_selection_actors_omitted')
+    })
+
+    it('bleibt leer, solange der Job läuft oder das Feld fehlt', async () => {
+      mockPrepare.mockResolvedValue(makePrepareEnvelope() as ApiEnvelope<TaskStatusData>)
+
+      const composable = useSimulationPrepare()
+      await composable.startPrepare({
+        payload: { simulation_id: 'sim-1759b' },
+        onLog: vi.fn(),
+        onStatusChange: vi.fn(),
+      })
+      await vi.advanceTimersByTimeAsync(2100)
+
+      expect(composable.degradations.value.events).toEqual([])
+    })
+  })
 })

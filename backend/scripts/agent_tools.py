@@ -751,6 +751,28 @@ def build_stance_section(
     )
 
 
+def _profile_prompt_sections(
+    platform: str,
+    stance_section: str,
+    voice_register: Optional[str],
+    entity_type: str,
+) -> str:
+    """Haltung plus Beitragslänge für den Profiltext (Issue #1759, A7).
+
+    Die Längengrenze hängt an Plattform und Voice-Register
+    (``persona_post_length``). Trägt das Profil kein Register (Altbestand,
+    Twitter-CSV vor #1759), gilt das Register, das die Rolle des Entitätstyps
+    vorgibt — dieselbe Zuordnung wie bei der Persona-Erzeugung.
+    """
+    from app.services.persona_post_length import build_length_section
+    from app.services.persona_voice_register import rule_based_voice_register
+
+    register = voice_register or rule_based_voice_register(entity_type)
+    return "\n".join(
+        part for part in (stance_section, build_length_section(platform, register)) if part
+    )
+
+
 def _augment_twitter_csv_with_stance(
     profile_path: str, cfg_by_id: Dict[Any, Dict[str, Any]]
 ) -> str:
@@ -780,6 +802,12 @@ def _augment_twitter_csv_with_stance(
             agent_role=str(cfg.get("entity_type") or ""),
             posts_per_hour=cfg.get("posts_per_hour"),
             comments_per_hour=cfg.get("comments_per_hour"),
+        )
+        section = _profile_prompt_sections(
+            "twitter",
+            section,
+            row.get("voice_register") or cfg.get("voice_register"),
+            str(cfg.get("entity_type") or ""),
         )
         if section:
             row["user_char"] = f"{row.get('user_char', '')}\n{section}".strip()
@@ -821,6 +849,12 @@ def _augment_reddit_json_with_stance(
             agent_role=str(item.get("profession") or cfg.get("entity_type") or ""),
             posts_per_hour=cfg.get("posts_per_hour"),
             comments_per_hour=cfg.get("comments_per_hour"),
+        )
+        section = _profile_prompt_sections(
+            "reddit",
+            section,
+            item.get("voice_register") or cfg.get("voice_register"),
+            str(item.get("source_entity_type") or cfg.get("entity_type") or ""),
         )
         if section:
             item["persona"] = f"{item.get('persona', '')}\n{section}".strip()
@@ -869,9 +903,15 @@ def augment_profile_with_stance(
     diese Funktion wird dort bewusst nicht aufgerufen, sonst stünde die
     Haltung zweimal im Kontext des Agenten.
 
-    Ohne ``agent_configs`` (leer/fehlend) oder ohne eine einzige Config mit
-    gesetztem ``stance`` gibt die Funktion den unveränderten ``profile_path``
-    zurück — kein Seiteneffekt, kein Fehler.
+    Ergänzt wird je Persona die Haltung (soweit die Config eine trägt) und
+    die Beitragslängenregel von Plattform und Voice-Register
+    (``_profile_prompt_sections``, #1759 A7). Bei nicht leerer
+    ``agent_configs`` entsteht deshalb auch ohne eine einzige Config mit
+    ``stance`` eine Kopie (Suffix ``_with_stance``), die zumindest die
+    Längenregel trägt. Den unveränderten ``profile_path`` gibt die Funktion nur
+    zurück, wenn ``agent_configs`` leer/fehlend ist, die Twitter-CSV keine
+    ``user_char``-Spalte hat oder für keine Persona ein Abschnitt entsteht —
+    dann ohne Seiteneffekt und ohne Fehler.
     """
     if not agent_configs:
         return profile_path

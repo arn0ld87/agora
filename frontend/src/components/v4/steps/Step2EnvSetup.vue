@@ -10,6 +10,7 @@ import { useEnvForm } from '../../../composables/useEnvForm'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
+import DegradationNotice from '@/components/v4/DegradationNotice.vue'
 import QuotaPlanEditor from '../../step2/QuotaPlanEditor.vue'
 import AddPersonaModal from '../../step2/AddPersonaModal.vue'
 import PersonaDetailModal from '../../step2/PersonaDetailModal.vue'
@@ -74,6 +75,7 @@ const {
   expectedTotal,
   personaFloorApplied,
   simulationConfig,
+  degradations,
   fetchProfilesRealtime,
   startPrepare,
   probeAlreadyPrepared,
@@ -310,6 +312,9 @@ onMounted(async () => {
         <p class="card-hint" v-if="phase >= 1 && personaFloorApplied">
           {{ t('step2.personas.floorApplied', { total: expectedTotal || '?' }) }}
         </p>
+
+        <!-- Issue #1759: stille Teilausfälle des Prepare-Jobs sichtbar machen. -->
+        <DegradationNotice :report="degradations" />
 
         <div v-if="profiles.length" class="persona-search">
           <input

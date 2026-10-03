@@ -162,13 +162,32 @@ def _parse_legacy_llm_form(form: Mapping[str, str]) -> tuple[Optional[str], Any,
     return llm_model_override, llm_runtime, llm_profile_id
 
 
+def _default_project_name(raw_name: Optional[str], uploaded_files: list) -> str:
+    """Projektname aus dem Formular, sonst aus dem ersten Dateinamen (#1759 C4).
+
+    Ohne ``project_name`` hieß jeder Lauf „Unnamed Project“ und war in der
+    Laufliste nicht unterscheidbar. Der Dokumentname ist der naheliegendste
+    sprechende Name; erst ohne Dateinamen greift der alte Platzhalter.
+    """
+    name = (raw_name or "").strip()
+    if name:
+        return name
+    for uploaded in uploaded_files:
+        # ``/`` und ``\`` sind beide Trenner: Browser unter Windows liefern
+        # mitunter den vollen Pfad, ``os.path.basename`` kennt auf POSIX nur ``/``.
+        base = (uploaded.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        stem = os.path.splitext(base)[0].strip()
+        if stem:
+            return stem
+    return "Unnamed Project"
+
+
 @graph_bp.route('/ontology/generate', methods=['POST'])
 @require_scope("graph:write")
 @handle_api_errors(log_prefix="Ontology generation failed")
 def generate_ontology():
     """Interface 1: Upload files and analyze to generate ontology definition"""
     simulation_requirement = request.form.get('simulation_requirement', '')
-    project_name = request.form.get('project_name', 'Unnamed Project')
     additional_context = request.form.get('additional_context', '')
 
     if not simulation_requirement:
@@ -210,6 +229,7 @@ def generate_ontology():
     except ValueError as exc:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
 
+    project_name = _default_project_name(request.form.get('project_name'), uploaded_files)
     project = ProjectManager.create_project(name=project_name)
     project.simulation_requirement = simulation_requirement
 

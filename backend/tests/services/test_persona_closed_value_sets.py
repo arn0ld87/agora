@@ -67,7 +67,16 @@ class TestPersonaGender:
 
 class TestVoiceRegister:
     @pytest.mark.parametrize(
-        "register", ["formal-de", "neutral-de", "technical-de", "skeptisch-de"]
+        "register",
+        [
+            "formal-de",
+            "neutral-de",
+            "technical-de",
+            "skeptisch-de",
+            "betroffen-de",
+            "emotional-de",
+            "umgangssprachlich-de",
+        ],
     )
     def test_valid_registers_pass(self, register: str) -> None:
         assert PersonaProfileSchema.model_validate(
@@ -111,6 +120,9 @@ class TestSchemaEnumsReachTheProvider:
             "neutral-de",
             "technical-de",
             "skeptisch-de",
+            "betroffen-de",
+            "emotional-de",
+            "umgangssprachlich-de",
         }
 
 

@@ -162,6 +162,22 @@ class SimulationRunState:
     role_conflict_count: int = 0
     role_conflicts_by_reason: Dict[ConflictReason, int] = field(default_factory=dict)
 
+    # #1759 C1: Live-Zaehlung der Aktionen aus den OASIS-DBs. ``actions.jsonl``
+    # wird erst am Rundenende geschrieben, die Trace-Tabellen fuellen sich
+    # waehrend der Runde. Der Monitor haelt hier den DB-Stand; die Anzeige nimmt
+    # ``max(protokolliert, live)``. Mit Prozessende wird der Wert auf 0
+    # zurueckgesetzt — danach zaehlt nur noch das Aktionsprotokoll.
+    twitter_live_actions: int = 0
+    reddit_live_actions: int = 0
+
+    @property
+    def displayed_twitter_actions(self) -> int:
+        return max(self.twitter_actions_count, self.twitter_live_actions)
+
+    @property
+    def displayed_reddit_actions(self) -> int:
+        return max(self.reddit_actions_count, self.reddit_live_actions)
+
     def add_action(self, action: AgentAction) -> None:
         """Add action to recent actions list"""
         self.recent_actions.insert(0, action)
@@ -193,9 +209,9 @@ class SimulationRunState:
             "reddit_running": self.reddit_running,
             "twitter_completed": self.twitter_completed,
             "reddit_completed": self.reddit_completed,
-            "twitter_actions_count": self.twitter_actions_count,
-            "reddit_actions_count": self.reddit_actions_count,
-            "total_actions_count": self.twitter_actions_count + self.reddit_actions_count,
+            "twitter_actions_count": self.displayed_twitter_actions,
+            "reddit_actions_count": self.displayed_reddit_actions,
+            "total_actions_count": self.displayed_twitter_actions + self.displayed_reddit_actions,
             "started_at": self.started_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
@@ -280,8 +296,14 @@ def load_run_state(
             reddit_running=data.get("reddit_running", False),
             twitter_completed=data.get("twitter_completed", False),
             reddit_completed=data.get("reddit_completed", False),
-            twitter_actions_count=data.get("twitter_actions_count", 0),
-            reddit_actions_count=data.get("reddit_actions_count", 0),
+            # Protokollierte Zaehler; Dateien vor #1759 kennen nur den alten
+            # Feldnamen (dort stand der Anzeigewert).
+            twitter_actions_count=data.get(
+                "twitter_logged_actions_count", data.get("twitter_actions_count", 0)
+            ),
+            reddit_actions_count=data.get(
+                "reddit_logged_actions_count", data.get("reddit_actions_count", 0)
+            ),
             started_at=data.get("started_at"),
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             completed_at=data.get("completed_at"),
@@ -347,7 +369,17 @@ def save_run_state(
     os.makedirs(sim_dir, exist_ok=True)  # keep dir for log-pipe / shutil consumers
 
     data = state.to_detail_dict()
-    resolve_default_store().write_json(state.simulation_id, "run_state", data)
+    # ``twitter_actions_count``/``reddit_actions_count`` sind die Anzeigezaehler
+    # (``max(protokolliert, live)``). Zurueckgeladen wuerde ein Live-Wert zum
+    # "protokollierten" Zaehler und die Anzeige bliebe nach einem Neustart
+    # dauerhaft zu hoch. Deshalb stehen die protokollierten Zaehler zusaetzlich
+    # in der Persistenz — nur dort, nicht in der API-/Event-Antwort ``data``.
+    persisted = {
+        **data,
+        "twitter_logged_actions_count": state.twitter_actions_count,
+        "reddit_logged_actions_count": state.reddit_actions_count,
+    }
+    resolve_default_store().write_json(state.simulation_id, "run_state", persisted)
 
     if event_bus_publish is not None:
         try:

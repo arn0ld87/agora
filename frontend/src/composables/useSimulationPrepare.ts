@@ -19,6 +19,11 @@
 import { ref, onUnmounted, type Ref } from 'vue'
 import { parsePersonaTarget } from '../contracts/personaTargetContract'
 import {
+  EMPTY_DEGRADATION_REPORT,
+  parseDegradationReport,
+  type PipelineDegradationReport,
+} from '../contracts/pipelineDegradationContract'
+import {
   prepareSimulation,
   getPrepareStatus,
   getSimulationProfilesRealtime,
@@ -58,6 +63,12 @@ export interface SimulationPrepareState {
   personaFloorApplied: Ref<boolean>
   simulationConfig: Ref<Record<string, unknown> | null>
   error: Ref<string | null>
+  /**
+   * Stille Teilausfälle des Prepare-Jobs (Issue #1759), gelesen aus
+   * `result.degradations` des Tasks — auch im Fehlerfall, wo sie oft die
+   * Ursache nennen.
+   */
+  degradations: Ref<PipelineDegradationReport>
 }
 
 export interface UseSimulationPrepareReturn extends SimulationPrepareState {
@@ -86,6 +97,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   const personaFloorApplied = ref(false)
   const simulationConfig = ref<Record<string, unknown> | null>(null)
   const error = ref<string | null>(null)
+  const degradations = ref<PipelineDegradationReport>(EMPTY_DEGRADATION_REPORT)
 
   // Closure-scoped mutable refs for the current prepare session
   let _simulationId: string | null = null
@@ -175,6 +187,12 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
           void configPolling.start()
         }
 
+        if (st.status === 'completed' || st.status === 'failed') {
+          degradations.value = parseDegradationReport(
+            st.result as Record<string, unknown> | null | undefined,
+          )
+        }
+
         if (st.status === 'completed') {
           prepareStatusPolling.stop()
           profilesPolling.stop()
@@ -210,6 +228,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     personaFloorApplied.value = false
     simulationConfig.value = null
     error.value = null
+    degradations.value = EMPTY_DEGRADATION_REPORT
     _simulationId = null
     _taskId = null
     _onLog = null
@@ -238,6 +257,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     _onLog = onLog
     _onStatusChange = onStatusChange
     error.value = null
+    degradations.value = EMPTY_DEGRADATION_REPORT
 
     isPreparing.value = true
     phase.value = 1
@@ -337,6 +357,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     personaFloorApplied,
     simulationConfig,
     error,
+    degradations,
     // actions
     fetchProfilesRealtime,
     startPrepare,

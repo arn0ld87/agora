@@ -16,6 +16,7 @@ from .oasis_profile_models import (
     PersonaDemographicSlot,
     PersonaProfileSchema,
 )
+from .persona_bio_phrases import avoid_words_prompt_block, overused_bio_words
 from .run_budget import BudgetExceededError
 from .oasis_profile_generator import VOICE_REGISTERS
 
@@ -27,6 +28,7 @@ entity_summary :str ,
 entity_attributes :Dict [str ,Any ],
 context :str ,
 demographic_slot :Optional [PersonaDemographicSlot ]=None ,
+taken_names :Optional [List [str ]]=None ,
 )->Dict [str ,Any ]:
     """
     Use LLM to generate very detailed persona
@@ -59,6 +61,7 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         prompt =self ._build_individual_persona_prompt (
         entity_name ,entity_type ,entity_summary ,entity_attributes ,context ,
         detail_level =detail_level ,demographic_slot =demographic_slot ,
+        taken_names =taken_names ,
         )
     else :
         prompt =self ._build_group_persona_prompt (
@@ -71,6 +74,12 @@ demographic_slot :Optional [PersonaDemographicSlot ]=None ,
         # zu dem Schema passen, das derselbe Aufruf unten uebergibt
         # (CollectivePersonaSchema kennt keine Personenfelder).
     prompt =f"{prompt }\n\n{self ._build_eligibility_prompt_block (entity_name ,entity_type ,is_collective =not is_individual )}"
+
+    # Issue #1759 (A7): Woerter, die der Batch schon in mehreren Bios verbraucht
+    # hat, stehen als "vermeiden" im Prompt (analog zu den vergebenen Namen).
+    # Hinten angehaengt, damit sie weder den Kontext-Zuschnitt noch die
+    # Branchen-Erkennung der Prompt-Bausteine beruehren.
+    prompt +=avoid_words_prompt_block (overused_bio_words (self ,context ),self .language )
 
     # Try multiple times until successful or max retry attempts reached
     max_attempts =3

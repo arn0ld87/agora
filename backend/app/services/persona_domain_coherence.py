@@ -78,7 +78,23 @@ COLLECTIVE_HEAD_NOUNS: FrozenSet[str] = frozenset({
     "chamber", "kammer",
     "cooperative", "genossenschaft",
     "workforce", "belegschaft",
+    # Issue #1759 (A3): Fraktionen, Parteien, Regierungs- und Verwaltungsorgane,
+    # Kassen und Kliniken sind Träger, keine Einzelpersonen. Im Referenzlauf
+    # wurde ``GovernmentAgency`` korrekt Kollektiv, ``LocalGovernment`` und
+    # ``PoliticalFaction`` aber zur erfundenen Sachbearbeiterin bzw. Hebamme.
+    "faction", "fraktion", "party", "partei",
+    "government", "regierung", "administration", "verwaltung",
+    "parliament", "parlament", "senate", "senat",
+    "insurer", "insurance", "versicherer", "versicherung",
+    "kasse", "krankenkasse",
+    "hospital", "clinic", "klinik", "klinikum", "krankenhaus",
 })
+
+#: Typnamen, deren Grundwort morphologisch nicht auffällt ("NGO") und die
+#: deshalb exakt (casefold) geführt werden. Eine Kollektiv-Entscheidung hängt
+#: ausschließlich am Typ — derselbe Typ wird im Lauf nie mal so, mal so
+#: behandelt (Issue #1759, A3).
+COLLECTIVE_TYPE_NAMES: FrozenSet[str] = frozenset({"ngo", "mediaoutlet"})
 
 _TOKEN_RE = re.compile(r"[^\wäöüßÄÖÜ]+")
 #: Trennt ``HospitalNetwork`` in *hospital* und *network*, ohne dass der Typ
@@ -112,6 +128,8 @@ def is_collective_entity_type(entity_type: str) -> bool:
     projektspezifischen Ontologie ist damit von vornherein abgedeckt — die
     feste Liste ließ genau solche Typen zu erfundenen Einzelpersonen werden.
     """
+    if (entity_type or "").strip().casefold() in COLLECTIVE_TYPE_NAMES:
+        return True
     words = _type_words(entity_type)
     if not words:
         return False

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from ..contracts.entity_selection_contract import EntitySelectionDecision
 from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from . import prepare_service as _legacy
 from .degradation_collector import DegradationCollector
-from .entity_alias_resolution import resolve_aliases
+from .entity_alias_resolution import _attach_aliases, _UnionFind, resolve_aliases
 from .entity_reader import FilteredEntities
 from .persona_domain_coherence import is_collective_entity_type
+from .persona_eligibility import load_project_ontology
+from .prepare_requirement_selection import select_entities_with_requirement
 
 if TYPE_CHECKING:
     from .entity_reader import EntityNode, EntityReader
@@ -25,10 +30,36 @@ if TYPE_CHECKING:
 # Personen- oder Organisationsnamen. Vergleich case-insensitiv, weil
 # projektspezifische Ontologien den Relationsnamen leicht abweichend
 # schreiben koennen (z. B. "works_for").
-# Nur REPRESENTS: WORKS_FOR/AFFILIATED_WITH belegen Zugehoerigkeit, keine
-# Vertretung. Sonst wuerde z. B. eine Betriebsraetin, die fuer die Klinik
-# arbeitet, die Klinik als Akteur ersetzen und "fuer sie sprechen".
-_REPRESENTATION_RELATION_TYPES = frozenset({"REPRESENTS"})
+# REPRESENTS und LEADS belegen Vertretung (#1759 A4: der im Dokument genannte
+# Vorsitzende fuehrt den Betriebsrat, der Graph hatte dafuer LEADS statt
+# REPRESENTS — die Zusammenlegung griff deshalb nicht). WORKS_FOR/
+# AFFILIATED_WITH belegen nur Zugehoerigkeit, keine Vertretung. Sonst wuerde
+# z. B. eine Betriebsraetin, die fuer die Klinik arbeitet, die Klinik als
+# Akteur ersetzen und "fuer sie sprechen".
+_REPRESENTATION_RELATION_TYPES = frozenset({"REPRESENTS", "LEADS"})
+
+# Issue #1759 (A4): Namensvarianten derselben Organisation belegten mehrere
+# Persona-Plaetze. Die Vergleichsschluessel sind bewusst konservativ.
+_logger = logging.getLogger("agora.prepare_entities")
+# Issue #1759 (A5): so viele ausgelassene Akteure nennt die Degradation namentlich.
+_OMITTED_NAME_LIMIT = 8
+_VARIANT_FUNCTION_WORDS = frozenset(
+    {"der", "die", "das", "des", "dem", "den", "von", "vom", "fuer", "für",
+     "im", "in", "am", "und", "zu", "zur", "zum"}
+)
+_VARIANT_LEGAL_FORMS = frozenset(
+    {"gmbh", "ggmbh", "mbh", "ag", "kg", "ug", "gbr", "ohg", "se", "ev", "e.v"}
+)
+# Organe, die die Organisation nach aussen vertreten. Betriebsrat/Aufsichtsrat
+# sind bewusst NICHT enthalten: Sie sind eigene Stakeholder.
+_ORGAN_WORDS = frozenset(
+    {"geschäftsführung", "geschäftsleitung", "vorstand", "leitung",
+     "direktion", "präsidium"}
+)
+# Belegkanten, die ein Organ (ohne Organisationsnamen) an seine Organisation binden.
+_ORGAN_RELATION_TYPES = frozenset(
+    {"PART_OF", "ORGAN_OF", "BELONGS_TO", "LEADS", "MANAGES"}
+)
 
 def _strip_leading_article (tokens :list [str ])->list [str ]:
     """Entfernt fuehrende Artikel, falls danach noch ein Namensrest bleibt."""
@@ -262,6 +293,248 @@ def _apply_collective_affiliation(persons: "List[EntityNode]", org: "EntityNode"
     )
 
 
+def _genitive_stem(token: str) -> str:
+    """Streicht ein Genitiv-s/-es ("landkreises" -> "landkreis"), konservativ."""
+    if token.endswith("es") and len(token) >= 7:
+        return token[:-2]
+    if len(token) >= 6 and token.endswith("s") and not token.endswith(("ss", "us", "is")):
+        return token[:-1]
+    return token
+
+
+def _variant_tokens(name: str) -> tuple[str, ...]:
+    """Vergleichstokens eines Organisationsnamens (#1759 A4).
+
+    Casefold, Klammerinhalt, Satzzeichen, Artikel/Funktionswoerter und
+    Rechtsformen entfallen, Genitiv-s wird angeglichen. Die Reihenfolge bleibt
+    erhalten: das erste Token ist das Kopf-Nomen ("Hebammenverband, ...").
+    """
+    cleaned = re.sub(r"\([^)]*\)", " ", name or "")
+    tokens: list[str] = []
+    for raw in re.split(r"[\s,;/]+", cleaned):
+        token = raw.strip(".:\"'()[]").casefold()
+        if not token or token in _VARIANT_FUNCTION_WORDS or token in _VARIANT_LEGAL_FORMS:
+            continue
+        tokens.append(_genitive_stem(token))
+    return tuple(tokens)
+
+
+def _organ_split(tokens: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Trennt fuehrende Organ-Woerter ("Geschaeftsfuehrung ...") vom Rest."""
+    organ_end = 0
+    while organ_end < len(tokens) and tokens[organ_end] in _ORGAN_WORDS:
+        organ_end += 1
+    return tokens[:organ_end], tokens[organ_end:]
+
+
+def _organ_target_index(
+    organ: "EntityNode", org_indices: List[int], entities: "List[EntityNode]", self_index: int
+) -> Optional[int]:
+    """Index der einen Organisation, an die eine Belegkante das Organ bindet."""
+    uuid_to_index = {entities[i].uuid: i for i in org_indices if i != self_index}
+    targets: set[int] = set()
+    for edge in organ.related_edges or []:
+        if edge.get("direction") != "outgoing":
+            continue
+        if str(edge.get("edge_name") or "").strip().upper() not in _ORGAN_RELATION_TYPES:
+            continue
+        target_uuid = edge.get("target_node_uuid")
+        if isinstance(target_uuid, str) and target_uuid in uuid_to_index:
+            targets.add(uuid_to_index[target_uuid])
+    return next(iter(targets)) if len(targets) == 1 else None
+
+
+def _union_name_variants(
+    uf: "_UnionFind", org_indices: List[int], tokens: Dict[int, tuple[str, ...]]
+) -> None:
+    """Verbindet Organisationen mit gleicher Tokenmenge oder eindeutiger Obermenge."""
+    for pos, i in enumerate(org_indices):
+        if not tokens[i]:
+            continue
+        # Namensvariante: gleiche Tokenmenge nach Normalisierung.
+        for j in org_indices[pos + 1 :]:
+            if tokens[j] and set(tokens[i]) == set(tokens[j]):
+                uf.union(i, j)
+        # Teilmenge/Obermenge: nur mit gleichem Kopf-Nomen und genau einer
+        # Obermenge ("Betriebsrat Kliniken X" ist keine Variante von
+        # "Kliniken X"); mehrdeutige Kurzformen bleiben getrennt.
+        supersets = [
+            j
+            for j in org_indices
+            if j != i
+            and tokens[j]
+            and tokens[j][0] == tokens[i][0]
+            and set(tokens[i]) < set(tokens[j])
+        ]
+        if len(supersets) == 1:
+            uf.union(i, supersets[0])
+
+
+def _organ_base_index(
+    i: int, rest: tuple[str, ...], org_indices: List[int], tokens: Dict[int, tuple[str, ...]]
+) -> Optional[int]:
+    """Index der einen Organisation, die der Organ-Name eindeutig enthaelt."""
+    bases = [
+        j
+        for j in org_indices
+        if j != i and tokens[j] and set(tokens[j]) == set(rest) and not _organ_split(tokens[j])[0]
+    ]
+    return bases[0] if len(bases) == 1 else None
+
+
+def _union_entity_variants(
+    entities: "List[EntityNode]", org_indices: List[int]
+) -> "tuple[_UnionFind, set[int]]":
+    """Verbindet Organisations-Varianten; liefert Union-Find und aufgehende Organe."""
+    tokens = {i: _variant_tokens(entities[i].name) for i in org_indices}
+    uf = _UnionFind(len(entities))
+    absorbed: set[int] = set()
+    _union_name_variants(uf, org_indices, tokens)
+
+    for i in org_indices:
+        organ_words, rest = _organ_split(tokens[i])
+        if not organ_words:
+            continue
+        if rest:
+            target = _organ_base_index(i, rest, org_indices, tokens)
+        else:
+            target = _organ_target_index(entities[i], org_indices, entities, i)
+        if target is not None:
+            uf.union(i, target)
+            absorbed.add(i)
+    return uf, absorbed
+
+
+def _absorb_variants(survivor: "EntityNode", aliases: "List[EntityNode]") -> None:
+    """Uebernimmt Aliase und Attribute in ``survivor`` (in place).
+
+    Der Survivor behaelt bei Konflikten seinen Wert; jeder Konflikt wird
+    protokolliert (Logger ``agora.prepare_entities``).
+    """
+    merged = _attach_aliases(survivor, aliases)
+    attrs = merged.attributes
+    carried = list(attrs.get("_agora_aliases", []))
+    for alias in aliases:
+        for earlier in alias.attributes.get("_agora_aliases", []):
+            if earlier not in carried:
+                carried.append(earlier)
+        for key, value in alias.attributes.items():
+            if key.startswith("_agora_"):
+                continue
+            if key not in attrs or attrs[key] in (None, "", [], {}):
+                attrs[key] = value
+            elif attrs[key] != value and value not in (None, "", [], {}):
+                _logger.info(
+                    "Entity-Merge-Attributkonflikt (#1759): survivor=%s verworfen_aus=%s "
+                    "attribut=%s survivor_wert=%r verworfener_wert=%r",
+                    survivor.name,
+                    alias.name,
+                    key,
+                    attrs[key],
+                    value,
+                )
+    attrs["_agora_aliases"] = carried
+    if not survivor.summary:
+        for alias in aliases:
+            if alias.summary:
+                survivor.summary = alias.summary
+                summaries = attrs.get("_agora_alias_summaries", [])
+                if alias.summary in summaries:
+                    summaries.remove(alias.summary)
+                if not summaries:
+                    attrs.pop("_agora_alias_summaries", None)
+                break
+    survivor.attributes = attrs
+    survivor.related_edges = merged.related_edges
+    survivor.related_nodes = merged.related_nodes
+
+
+def _pick_variant_survivor(
+    cluster: List[int], absorbed: set[int], entities: "List[EntityNode]"
+) -> int:
+    """Informativster Name (meiste Tokens, dann laengster), Organe gehen auf."""
+    candidates = [i for i in cluster if i not in absorbed] or cluster
+    return max(
+        candidates,
+        key=lambda i: (len(_variant_tokens(entities[i].name)), len(entities[i].name), -i),
+    )
+
+
+def _remap_edge_targets(
+    entities: "List[EntityNode]", remap: Dict[str, str]
+) -> None:
+    """Zeigt Kanten auf zusammengefuehrte UUIDs auf den Survivor um."""
+    for entity in entities:
+        edges = []
+        for edge in entity.related_edges or []:
+            target = edge.get("target_node_uuid")
+            if isinstance(target, str) and target in remap:
+                edge = {**edge, "target_node_uuid": remap[target]}
+            if edge.get("target_node_uuid") == entity.uuid:
+                continue
+            edges.append(edge)
+        entity.related_edges = edges
+
+
+def _merge_entity_variants(entities: "List[EntityNode]") -> "List[EntityNode]":
+    """Fuehrt Namensvarianten derselben Organisation vor der Persona-Auswahl zusammen.
+
+    Issue #1759 (A4): "Hebammenverband" und "Hebammenverband, Kreisvertretung
+    Hollerau", "Rettungsdienst des Landkreises" und "Rettungsdienst Landkreis
+    Hollerau" oder "Kliniken Hollerau gGmbH" und deren "Geschaeftsfuehrung"
+    belegten im Referenzlauf je zwei Persona-Plaetze. ``resolve_aliases``
+    greift nicht, weil Kommata und Flexion die Tokenmengen verschieben.
+
+    Regeln (nur Organisationen, nie Person+Organisation allein ueber den Namen):
+
+    - gleiche Tokenmenge nach Normalisierung → eine Entitaet;
+    - Teilmenge/Obermenge mit gleichem Kopf-Nomen und genau einer Obermenge;
+    - Organ ("Geschaeftsfuehrung ...") geht in die Organisation auf, wenn der
+      Name sie eindeutig enthaelt oder genau eine Belegkante sie bindet. Ein
+      Organ ohne eindeutigen Bezug bleibt eigener Agent.
+
+    Der Survivor behaelt seine Attribute, fehlende werden ergaenzt, Konflikte
+    geloggt. Kanten anderer Entitaeten werden auf den Survivor umgezeigt.
+    """
+    org_indices = [i for i, e in enumerate(entities) if _is_organization_entity(e)]
+    if len(org_indices) < 2:
+        return entities
+
+    uf, absorbed = _union_entity_variants(entities, org_indices)
+    clusters = [c for c in uf.clusters(len(entities)).values() if len(c) > 1]
+    if not clusters:
+        return entities
+
+    replacements: Dict[int, Optional["EntityNode"]] = {}
+    remap: Dict[str, str] = {}
+    for cluster in clusters:
+        cluster = sorted(cluster)
+        survivor_index = _pick_variant_survivor(cluster, absorbed, entities)
+        survivor = entities[survivor_index]
+        aliases = [entities[i] for i in cluster if i != survivor_index]
+        _absorb_variants(survivor, aliases)
+        _logger.info(
+            "Entity-Varianten-Merge (#1759): %d Entitaeten zu '%s' zusammengefasst "
+            "(Aliase=%s)",
+            len(cluster),
+            survivor.name,
+            [a.name for a in aliases],
+        )
+        for alias in aliases:
+            remap[alias.uuid] = survivor.uuid
+        for i in cluster:
+            replacements[i] = None
+        replacements[cluster[0]] = survivor
+
+    merged: "List[EntityNode]" = []
+    for i, entity in enumerate(entities):
+        kept = replacements.get(i, entity)
+        if kept is not None:
+            merged.append(kept)
+    _remap_edge_targets(merged, remap)
+    return merged
+
+
 def _merge_persons_with_organizations(
     entities: "List[EntityNode]",
     degradations: Optional[DegradationCollector] = None,
@@ -339,6 +612,195 @@ def _replace_filtered_entities_if_reduced(
     return True
 
 
+def _build_selection_client(
+    llm_runtime: Any, llm_model: Optional[str], run_id: Optional[str]
+) -> Any:
+    """Baut den ``LLMClient`` fuer das Auswahl-LLM (gleiche Route wie die Personas).
+
+    ``run_id`` bindet die Calls ans Run-Budget (#984); ein
+    ``BudgetExceededError`` laeuft bis zum Orchestrator durch.
+    """
+    from ..llm.client import LLMClient
+
+    api_key, base_url, provider_type = _legacy._resolve_llm_connection(
+        llm_runtime, require=True
+    )
+    return LLMClient(
+        api_key=api_key,
+        base_url=base_url,
+        model=llm_model,
+        run_id=run_id,
+        provider_type=provider_type,
+    )
+
+
+def _omitted_names(omitted: "List[EntityNode]") -> str:
+    names = [entity.name for entity in omitted[:_OMITTED_NAME_LIMIT]]
+    rest = len(omitted) - len(names)
+    return ", ".join(names) + (f" (+{rest} weitere)" if rest > 0 else "")
+
+
+def _record_omitted_actors(
+    degradations: Optional[DegradationCollector],
+    omitted: "List[EntityNode]",
+    *,
+    max_agents: int,
+    mode: str,
+    prefix: str,
+) -> None:
+    """Meldet Dokument-Akteure ohne Persona-Platz sichtbar (#1759 A5)."""
+    if degradations is None or not omitted:
+        return
+    degradations.record(
+        DegradationKind.ENTITY_SELECTION_ACTORS_OMITTED,
+        DegradationSeverity.WARNING,
+        f"{prefix}{len(omitted)} im Dokument belegte Akteure erhalten bei "
+        f"max_agents={max_agents} keinen Persona-Platz: {_omitted_names(omitted)}.",
+        context={
+            "omitted_count": len(omitted),
+            "seat_count": max_agents,
+            "selection_mode": mode,
+        },
+    )
+
+
+def _fallback_blocker(
+    *,
+    llm_runtime: Any,
+    use_llm_for_profiles: bool,
+    has_quota_plan: bool,
+) -> Optional[str]:
+    """Grund, warum die Hybrid-Auswahl aus ist (``None`` = aktiv)."""
+    if has_quota_plan:
+        return "quota_plan gesetzt, Quote bestimmt die Plaetze"
+    if not use_llm_for_profiles:
+        return "use_llm_for_profiles=False"
+    if llm_runtime is None:
+        return "keine LLM-Route aufgeloest"
+    return None
+
+
+def _select_entities_for_requirement(
+    entities: "List[EntityNode]",
+    max_agents: int,
+    *,
+    simulation_requirement: Optional[str] = None,
+    llm_runtime: Any = None,
+    llm_model: Optional[str] = None,
+    run_id: Optional[str] = None,
+    use_llm_for_profiles: bool = True,
+    has_quota_plan: bool = False,
+    degradations: Optional[DegradationCollector] = None,
+) -> "tuple[List[EntityNode], List[EntityNode], List[EntitySelectionDecision]]":
+    """Cap mit Bezug zur Simulationsfrage (Issue #1759, A5).
+
+    Liefert ``(ausgewaehlt, reserve, begruendungen)``. ``ausgewaehlt`` kann
+    eine Gruppen-Entitaet mehrfach enthalten (je Wiederholung eine eigene
+    Einzelpersona); die Laenge ist immer ``max_agents``.
+
+    Aktiv, wenn eine Frage vorliegt, ``use_llm_for_profiles`` gesetzt ist, eine
+    LLM-Route existiert und kein ``quota_plan`` die Plaetze vorgibt. Sonst
+    bleibt es beim Round-Robin-Cap (``_cap_entities_across_types``); lag eine
+    Frage vor, wird das als Degradation sichtbar gemeldet. Ein
+    ``BudgetExceededError`` des Auswahl-LLM wird nie abgefangen.
+    """
+    requirement = (simulation_requirement or "").strip()
+    blocker = (
+        _fallback_blocker(
+            llm_runtime=llm_runtime,
+            use_llm_for_profiles=use_llm_for_profiles,
+            has_quota_plan=has_quota_plan,
+        )
+        if requirement
+        else "keine Simulationsfrage"
+    )
+    if blocker is None:
+        result = select_entities_with_requirement(
+            entities,
+            max_agents=max_agents,
+            requirement=requirement,
+            client_factory=lambda: _build_selection_client(llm_runtime, llm_model, run_id),
+            fill_fallback=_cap_entities_across_types,
+        )
+        prefix = (
+            f"Relevanz-Ranking ausgefallen ({result.llm_failure}), Restplaetze "
+            "nach Round-Robin. "
+            if result.llm_failure
+            else ""
+        )
+        _record_omitted_actors(
+            degradations,
+            result.omitted,
+            max_agents=max_agents,
+            mode="requirement_hybrid",
+            prefix=prefix,
+        )
+        return result.selected, result.omitted, result.decisions
+
+    capped = _cap_entities_across_types(entities, max_agents)
+    selected_uuids = {entity.uuid for entity in capped}
+    reserve = [entity for entity in entities if entity.uuid not in selected_uuids]
+    if requirement:
+        _record_omitted_actors(
+            degradations,
+            reserve,
+            max_agents=max_agents,
+            mode="round_robin_fallback",
+            prefix=f"Auswahl ohne Bezug zur Simulationsfrage ({blocker}): ",
+        )
+    return capped, reserve, []
+
+
+def _apply_entity_cap(
+    filtered: "FilteredEntities",
+    max_agents: int,
+    *,
+    simulation_requirement: Optional[str],
+    llm_runtime: Any,
+    llm_model: Optional[str],
+    run_id: Optional[str],
+    use_llm_for_profiles: bool,
+    has_quota_plan: bool,
+    degradations: Optional[DegradationCollector],
+) -> None:
+    """Kappt ``filtered`` auf ``max_agents`` und fuellt Reserve und Auswahlbegruendungen.
+
+    Issue #1177: Frueher ``entities[:max_agents]`` mit der Begruendung, der
+    Reader sortiere nach Grad/Wichtigkeit. Diese Annahme stimmt nicht —
+    weder ``filter_defined_entities`` noch der Neo4j-Lesepfad enthalten ein
+    ``ORDER BY``. Die Auswahl war damit die unsortierte Rueckgabereihenfolge
+    der Query, also willkuerlich.
+    """
+    _legacy.logger.info(
+        f"Capping agent count at {max_agents} "
+        f"(originally {len(filtered.entities)} entities)"
+    )
+    selected, reserve, decisions = _select_entities_for_requirement(
+        filtered.entities,
+        max_agents,
+        simulation_requirement=simulation_requirement,
+        llm_runtime=llm_runtime,
+        llm_model=llm_model,
+        run_id=run_id,
+        use_llm_for_profiles=use_llm_for_profiles,
+        has_quota_plan=has_quota_plan,
+        degradations=degradations,
+    )
+    # Issue #1247: Was der Cap wegschneidet, ist die Reserve. Die
+    # typunabhaengige Eignungspruefung faellt erst im
+    # Persona-Generierungsaufruf, also *nach* dem Cap — ohne Reservepool
+    # bliebe jeder dort abgelehnte Platz ersatzlos leer und der
+    # konfigurierte max_agents-Wert wuerde unterschritten.
+    filtered.reserve_entities = reserve
+    filtered.selection_decisions = decisions
+    # Issue #1759 (A5): ``selected`` kann eine Gruppen-Entitaet mehrfach
+    # enthalten; ``filtered_count`` zaehlt Plaetze und ist damit der Nenner
+    # fuer ``compute_persona_target``.
+    filtered.entities = selected
+    filtered.filtered_count = len(selected)
+    filtered.entity_types = {entity.get_entity_type() or "Entity" for entity in selected}
+
+
 def _phase_read_entities (
 state :SimulationState ,
 storage :Any ,
@@ -346,11 +808,23 @@ defined_entity_types :Optional [List [str ]],
 max_agents :Optional [int ],
 progress_callback :Optional [Callable ]=None ,
 degradations :Optional [DegradationCollector ]=None ,
+*,
+simulation_requirement :Optional [str ]=None ,
+llm_runtime :Any =None ,
+llm_model :Optional [str ]=None ,
+run_id :Optional [str ]=None ,
+use_llm_for_profiles :bool =True ,
+has_quota_plan :bool =False ,
 ):
     """Phase 1: Entities aus dem Graphen lesen + filtern + cappen.
 
     Aktualisiert ``state.entities_count`` und ``state.entity_types`` als
     Seiteneffekt; gibt das ``FilteredEntities``-Objekt zurück.
+
+    Issue #1759 (A5): Die Keyword-Argumente ab ``simulation_requirement``
+    steuern die fragebezogene Hybrid-Auswahl beim ``max_agents``-Cap
+    (``_select_entities_for_requirement``); ohne Frage bleibt es beim
+    bisherigen Round-Robin-Cap.
     """
     if progress_callback :
         progress_callback ("reading",0 ,"Connecting to graph...")
@@ -372,7 +846,12 @@ degradations :Optional [DegradationCollector ]=None ,
     # Entitäten ohne menschlichen Träger — "USA" (Country), "Agora"
     # (Product) usw. Der Eignungsfilter schließt sie vor dem
     # max_agents-Cap aus, damit sie weder zählen noch generiert werden.
-    eligibility =_legacy .filter_eligible_entities (filtered .entities ,degradations =degradations )
+    # Issue #1759 (B2/B3): die Typ-Definition der Ontologie steuert die Eignung.
+    eligibility =_legacy .filter_eligible_entities (
+    filtered .entities ,
+    degradations =degradations ,
+    ontology =load_project_ontology (getattr (state ,"project_id",None )),
+    )
     _replace_filtered_entities_if_reduced(filtered, eligibility.eligible)
 
     # Issue #1470 (Slice 4.2): Alias-Auflösung vor Dedupe/Cap.
@@ -395,6 +874,13 @@ degradations :Optional [DegradationCollector ]=None ,
     # einem Agenten zusammenlegen, bevor dedupliziert/gecappt wird — sonst
     # belegen beide getrennt Persona-Plaetze, obwohl sie im Bericht
     # dieselbe Stimme sind.
+    #
+    # Issue #1759 (A4): Vorher Namensvarianten derselben Organisation
+    # (Teilmenge/Obermenge, Genitiv, Organ einer Organisation) zusammenfuehren
+    # und Kanten auf den Survivor umzeigen, sonst geht eine Vertretungs-Kante
+    # auf eine bereits aufgegangene UUID ins Leere.
+    variant_merged = _merge_entity_variants(filtered.entities)
+    _replace_filtered_entities_if_reduced(filtered, variant_merged)
     merged_entities = _merge_persons_with_organizations(
         filtered.entities, degradations=degradations
     )
@@ -428,25 +914,17 @@ degradations :Optional [DegradationCollector ]=None ,
     and max_agents >0
     and len (filtered .entities )>max_agents
     ):
-        _legacy .logger .info (
-        f"Capping agent count at {max_agents } "
-        f"(originally {len (filtered .entities )} entities)"
+        _apply_entity_cap (
+        filtered ,
+        max_agents ,
+        simulation_requirement =simulation_requirement ,
+        llm_runtime =llm_runtime ,
+        llm_model =llm_model ,
+        run_id =run_id ,
+        use_llm_for_profiles =use_llm_for_profiles ,
+        has_quota_plan =has_quota_plan ,
+        degradations =degradations ,
         )
-        capped =_cap_entities_across_types (filtered .entities ,max_agents )
-        # Issue #1247: Was der Cap wegschneidet, ist die Reserve. Die
-        # typunabhaengige Eignungspruefung faellt erst im
-        # Persona-Generierungsaufruf, also *nach* dem Cap — ohne Reservepool
-        # bliebe jeder dort abgelehnte Platz ersatzlos leer und der
-        # konfigurierte max_agents-Wert wuerde unterschritten.
-        selected_uuids ={entity .uuid for entity in capped }
-        filtered .reserve_entities =[
-        entity for entity in filtered .entities if entity .uuid not in selected_uuids
-        ]
-        filtered .entities =capped
-        filtered .filtered_count =len (filtered .entities )
-        filtered .entity_types ={
-        entity .get_entity_type ()or "Entity"for entity in filtered .entities
-        }
 
     state .entities_count =filtered .filtered_count
     state .entity_types =list (filtered .entity_types )
@@ -550,6 +1028,7 @@ def _phase_read_entities_from_checkpoint(
         total_count=len(primary),
         filtered_count=len(primary),
         reserve_entities=reserve,
+        selection_decisions=list(checkpoint.selection_reasons),
     )
 
     state.entities_count = checkpoint.entities_count

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Literal, NamedTuple, Optional
 from pydantic import BaseModel, Field
 
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION, VoiceRegister
+from .persona_bio_phrases import register_bio_words
 # Codex-Finding F1 auf PR #1573: die Drift-Korrektur ist eine LLM-Antwort und
 # gehoert nach Repo-Regel "Contracts-first" in ``app/contracts/``, nicht in
 # dieses Service-Modul. Reexportiert, damit bestehende Importe (dieses Modul
@@ -72,7 +73,11 @@ class PersonaProfileSchema(BaseModel):
     # zulaessig, damit der bestehende neutral-de-Fallback in
     # oasis_profile_llm.py greifen kann, statt drei Versuche zu verbrennen.
     voice_register: Optional[VoiceRegister] = Field(
-        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+        None,
+        description=(
+            "One of formal-de/neutral-de/technical-de/skeptisch-de/"
+            "betroffen-de/emotional-de/umgangssprachlich-de"
+        ),
     )
     # Issue #1247: Ablehnung statt Erfindung. Die Frage "kann diese Entitaet
     # einen menschlichen Traeger haben" haengt am Namen und am Kontext, nicht
@@ -121,6 +126,33 @@ class PersonaIneligible(Exception):
         )
 
 
+def taken_display_names(generator: Any) -> Optional[List[str]]:
+    """Bereits vergebene Anzeigenamen des laufenden Batches (Issue #1759, A1).
+
+    ``None`` ohne vergebene Namen. Die Liste lebt am Generator
+    (``_taken_display_names``) und wird pro Batch zurueckgesetzt.
+    """
+    names = getattr(generator, "_taken_display_names", None)
+    return list(names) if names else None
+
+
+def register_taken_display_name(generator: Any, profile: Optional[Any]) -> None:
+    """Verbucht den Anzeigenamen eines fertigen individuellen Profils (A1).
+
+    Sequentielle Pfade (Nachbesetzung, Regenerierung) und spaetere Tasks des
+    parallelen Pools sehen damit die Namen vorheriger Profile im Prompt.
+    Kollektive tragen ihren Entitaetsnamen und sind nicht betroffen.
+    """
+    if profile is None or getattr(profile, "persona_kind", None) == "collective":
+        return
+    # Issue #1759 (A7): dieselbe Verbuchung fuer wiederkehrende Bio-Woerter.
+    register_bio_words(generator, profile)
+    name = (getattr(profile, "name", None) or "").strip()
+    names = getattr(generator, "_taken_display_names", None)
+    if name and names is not None and name not in names:
+        names.append(name)
+
+
 class CollectivePersonaSchema(BaseModel):
     """Antwortvertrag fuer Kollektiv-Personas (Issue #1246, CodeRabbit PR #1257).
 
@@ -141,7 +173,11 @@ class CollectivePersonaSchema(BaseModel):
     country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
     interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
     voice_register: Optional[VoiceRegister] = Field(
-        None, description="One of formal-de/neutral-de/technical-de/skeptisch-de"
+        None,
+        description=(
+            "One of formal-de/neutral-de/technical-de/skeptisch-de/"
+            "betroffen-de/emotional-de/umgangssprachlich-de"
+        ),
     )
     # Issue #1247: Der Eignungsblock haengt an beiden Prompts, also braucht auch
     # der Kollektiv-Vertrag das Ablehnungsfeld — sonst scheitert eine Ablehnung

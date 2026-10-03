@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Literal, Any
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def get_time_config_schema(num_entities: int) -> type[BaseModel]:
@@ -37,6 +37,28 @@ def get_time_config_schema(num_entities: int) -> type[BaseModel]:
 class InitialPostSchema(BaseModel):
     content: str
     poster_type: str
+    # Position des Posts zum Streitgegenstand (Issue #1759, A6). Optional:
+    # fehlt sie, wird der Post beim Stance-Abgleich nicht geprüft.
+    stance: Literal["supportive", "opposing", "neutral"] | None = None
+
+    @field_validator("stance", mode="before")
+    @classmethod
+    def _normalize_stance(cls, value: Any) -> Any:
+        """Freitext-Stance tolerant lesen; Unlesbares wird ``None``, nie ein Fehler.
+
+        Ein ungültiger Wert dürfte nicht die gesamte Event-Config kippen
+        (Fallback auf Default-Config), nur weil das optionale Feld abweicht.
+        """
+        if not isinstance(value, str):
+            return None
+        lowered = value.lower().strip()
+        if "support" in lowered or lowered == "pro":
+            return "supportive"
+        if "oppos" in lowered or "skeptic" in lowered:
+            return "opposing"
+        if "neutral" in lowered:
+            return "neutral"
+        return None
 
 
 class EventConfigResponse(BaseModel):

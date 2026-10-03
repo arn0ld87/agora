@@ -28,6 +28,9 @@ export const VoiceRegisterSchema = z.enum([
   'neutral-de',
   'technical-de',
   'skeptisch-de',
+  'betroffen-de',
+  'emotional-de',
+  'umgangssprachlich-de',
 ])
 export type VoiceRegister = z.infer<typeof VoiceRegisterSchema>
 

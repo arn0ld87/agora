@@ -25,6 +25,7 @@ from ...observability import sim_active_gauge, sim_counter, sim_duration_histogr
 from ...utils.logger import get_logger
 from .action_log_reader import get_actions as _get_actions
 from .action_log_reader import read_action_log_chunk
+from .live_progress import refresh_live_action_counts, reset_live_action_counts
 from .run_metrics import get_agent_stats as _aggregate_agent_stats
 from .run_metrics import get_timeline as _aggregate_timeline
 from .process_manager import _read_cancel_abort, _write_cancel_abort
@@ -613,6 +614,10 @@ def monitor_simulation(
                 )
                 return
 
+            # #1759 C1: Aktionen erscheinen im Protokoll erst am Rundenende —
+            # der DB-Stand haelt die Anzeige innerhalb einer Runde aktuell.
+            refresh_live_action_counts(sim_dir, state)
+
             # Update status
             save_state(state)
             time.sleep(2)
@@ -634,6 +639,10 @@ def monitor_simulation(
                 "reddit",
                 graph_memory_enabled=graph_memory_enabled.get(simulation_id, False),
             )
+
+        # Nach dem letzten Lesen des Aktionsprotokolls gilt nur noch dieses
+        # (#1759 C1) — spaetere Trace-Zeilen (z. B. Interviews) zaehlen nicht mit.
+        reset_live_action_counts(state)
 
         # Process ended
         exit_code = process.returncode

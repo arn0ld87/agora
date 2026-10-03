@@ -192,6 +192,8 @@ def new_checkpoint(
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
     demographic_slots: Optional[list[dict[str, Any]]] = None,
+    requirement_hash: Optional[str] = None,
+    selection_reasons: Optional[list[Any]] = None,
 ) -> PreparePersonaCheckpoint:
     """Baut den initialen Checkpoint eines Prepare-Versuchs (noch ohne Profile)."""
     return PreparePersonaCheckpoint(
@@ -212,6 +214,8 @@ def new_checkpoint(
         expanded_entity_uuids=list(expanded_entity_uuids),
         entities_count=entities_count,
         entity_types=list(entity_types),
+        requirement_hash=requirement_hash,
+        selection_reasons=list(selection_reasons or []),
         updated_at=datetime.now(UTC),
     )
 
@@ -228,8 +232,14 @@ def checkpoint_is_resumable(
     effective_quota_plan: Optional[dict[str, Any]],
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
+    requirement_hash: Optional[str] = None,
 ) -> bool:
     """Prüft, ob ein Checkpoint zum AKTUELLEN Prepare-Versuch passt.
+
+    Issue #1759 (A5): Die Cap-Auswahl hängt an der Simulationsfrage. Trägt der
+    Checkpoint einen ``requirement_hash``, der vom aktuellen abweicht, ist er
+    nicht resumable — die geänderte Frage verlangt eine neue Auswahl. Ein
+    Checkpoint ohne Hash (Altbestand) legt kein Veto ein.
 
     Ein Checkpoint ist nur verwertbar, wenn er derselben Simulation und
     demselben Graphen gehört UND alle Parameter trägt, die die Cap-/Quota-
@@ -268,6 +278,11 @@ def checkpoint_is_resumable(
     if checkpoint.llm_model != llm_model:
         return False
     if checkpoint.language != language:
+        return False
+    if (
+        checkpoint.requirement_hash is not None
+        and checkpoint.requirement_hash != requirement_hash
+    ):
         return False
     if not checkpoint.expanded_entity_uuids:
         return False

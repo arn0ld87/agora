@@ -138,6 +138,12 @@ class TestEnumValues:
             "graph_below_threshold",
             "persona_rule_based_fallback",
             "person_represents_organization_merged",
+            "persona_name_identity_rejected",
+            "stance_position_unrepresented",
+            "initial_post_stance_conflict",
+            "persona_role_implausible",
+            "ontology_topic_type_missing",
+            "entity_selection_actors_omitted",
         }
 
     def test_severity_values_are_stable(self):

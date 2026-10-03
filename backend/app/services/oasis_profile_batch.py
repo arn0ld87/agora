@@ -11,12 +11,63 @@ from . import oasis_profile_generator as _legacy
 
 if TYPE_CHECKING:
     from .degradation_collector import DegradationCollector
+import functools
 import json
+import re
 from typing import Callable, Dict, List, Optional
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+)
+from ..contracts.persona_contract import (
+    documented_age,
+    persona_name_identity_reason,
+    persona_role_plausibility_reason,
+)
 from .entity_reader import EntityNode
-from .oasis_profile_models import OasisAgentProfile, PersonaDemographicSlot, PersonaIneligible
+from .oasis_profile_models import (
+    OasisAgentProfile,
+    PersonaDemographicSlot,
+    PersonaIneligible,
+    register_taken_display_name,
+)
 from .run_budget import BudgetExceededError
 from .settings_layer import get_default_service as _get_settings
+
+
+def _apply_identity_rename (
+profile :"OasisAgentProfile" ,
+old_name :str ,
+new_name :str ,
+)->None :
+    """Zieht Freitext und Bio bei einer Dedup-Umbenennung nach (#1759 A1).
+
+    Der Dedup unten benennt kollidierende Profile um (``p.name = new_name``),
+    hat aber früher nur ``name``/``user_name`` angefasst. Der ``persona``-
+    Fließtext behielt den alten Namen — im Referenzlauf ``sim_3d3d8b2d8342``
+    hiess derselbe Agent im Handle ``valentina_ferrari_302`` und im eigenen
+    Profiltext ``Maren Hoffmann``.
+
+    Ersetzt den vollständigen alten Namen und danach seine Einzelteile
+    wortgrenzgenau ("Monika schätzt…" → "Mia schätzt…", "Frau Hartmann" →
+    "Frau Weber"). Steht der Text nicht mit dem Namen ein, bleiben Reste
+    stehen — die Namensidentitäts-Prüfung lehnt solche Profile dann sichtbar
+    ab, statt sie still durchzuwinken.
+    """
+    if not old_name or not new_name or old_name == new_name :
+        return
+    replacements :List [tuple [str ,str ]]=[(old_name ,new_name )]
+    old_parts =old_name .split ()
+    new_parts =new_name .split ()
+    for idx ,part in enumerate (old_parts ):
+        if len (part )<3 :
+            continue
+        target =new_parts [idx ]if idx <len (new_parts )else new_parts [-1 ]
+        replacements .append ((part ,target ))
+    for source ,target in sorted (replacements ,key =lambda pair :-len (pair [0 ])):
+        pattern =re .compile (rf"\b{re .escape (source )}\b",re .IGNORECASE )
+        profile .persona =pattern .sub (target ,profile .persona )
+        profile .bio =pattern .sub (target ,profile .bio )
 
 
 def _resolve_demographic_slots (
@@ -50,6 +101,152 @@ total :int ,
         f"entities length ({total })"
         )
     return demographic_slots
+
+
+def _rename_on_name_collision (
+generator :Any ,
+profile :"OasisAgentProfile" ,
+seen_names :set ,
+seen_last_names :set ,
+)->None :
+    """Gibt einem Profil mit doppeltem Namen oder Nachnamen einen neuen DACH-Namen.
+
+    Kollektive nehmen nicht teil (Issue #1246, CodeRabbit PR #1257): zwei
+    Organisationen mit gleichem Schlusstoken — "… GmbH", "… e.V." — galten sonst
+    als doppelter Nachname und bekamen einen zufaelligen Personennamen, waehrend
+    ihr Personatext weiter die Organisation beschreibt. Freitext und Bio ziehen
+    bei der Umbenennung nach (Issue #1759, A1).
+    """
+    norm_name =(profile .name or "").strip ().lower ()
+    last_name =generator ._last_name (profile .name or "")
+    collides =norm_name in seen_names or (
+    last_name is not None and last_name in seen_last_names
+    )
+    if not (norm_name and collides ):
+        return
+    new_name =generator ._pick_dach_name (profile .gender )
+    attempts =0
+    while (
+    new_name .lower ()in seen_names
+    or (generator ._last_name (new_name )or "")in seen_last_names
+    )and attempts <30 :
+        new_name =generator ._pick_dach_name (profile .gender )
+        attempts +=1
+    old_name =profile .name or ""
+    profile .name =new_name
+    profile .user_name =generator ._generate_username (new_name )
+    _apply_identity_rename (profile ,old_name ,new_name )
+
+
+def _dedupe_profile_names (generator :Any ,profiles :List [Optional ["OasisAgentProfile"]])->None :
+    """Dedup display_name und user_name.
+
+    Das LLM neigt dazu, dieselbe reale Person mehrfach zu klonen, wenn sie im
+    Dokument prominent ist. Bei Dubletten wird ein neuer DACH-Name aus dem Pool
+    gezogen und das Handle entsprechend neu gebaut.
+    """
+    seen_names :set =set ()
+    seen_last_names :set =set ()
+    seen_handles :set =set ()
+    for profile in profiles :
+        if profile is None or profile .persona_kind =="collective":
+            continue
+        _rename_on_name_collision (generator ,profile ,seen_names ,seen_last_names )
+        seen_names .add ((profile .name or "").strip ().lower ())
+        last_name =generator ._last_name (profile .name or "")
+        if last_name :
+            seen_last_names .add (last_name )
+
+        norm_handle =(profile .user_name or "").strip ().lower ()
+        if norm_handle and norm_handle in seen_handles :
+        # Handle steht schon; hänge Suffix-Rotation an.
+            base =norm_handle .rsplit ("_",1 )[0 ]if "_"in norm_handle else norm_handle
+            profile .user_name =generator ._generate_username (base )
+        seen_handles .add ((profile .user_name or "").strip ().lower ())
+
+
+def _incoherence_rejection (
+candidate :"OasisAgentProfile" ,
+entity :Optional [EntityNode ],
+)->Optional [tuple [DegradationKind ,str ]]:
+    """Ablehnungsgrund eines LLM-Profils: fremder Name im Freitext (A1) oder
+    Alter, das nicht zur Rolle passt (A2). ``None`` bei kohaerentem Profil."""
+    identity_reason =persona_name_identity_reason (candidate .name or "",candidate .persona or "")
+    if identity_reason is not None :
+        return DegradationKind .PERSONA_NAME_IDENTITY_REJECTED ,identity_reason
+    documented =documented_age (entity .attributes )if entity is not None else None
+    if documented is not None and documented ==candidate .age :
+        return None # Dokument-Belege haben Vorrang vor der Rollenregel.
+    role_reason =persona_role_plausibility_reason (
+    candidate .age ,candidate .profession ,candidate .bio
+    )
+    if role_reason is not None :
+        return DegradationKind .PERSONA_ROLE_IMPLAUSIBLE ,role_reason
+    return None
+
+
+def _incoherence_ineligible (
+candidate :"OasisAgentProfile" ,
+entity :Optional [EntityNode ],
+degradations :Optional ["DegradationCollector"],
+)->Optional [PersonaIneligible ]:
+    """Prueft ein einzelnes Profil auf Kohaerenz (#1759) und verbucht die Ablehnung.
+
+    ``None`` bei kohaerentem Profil, Kollektiv oder regelbasiertem Notprofil.
+    Sonst ist die Degradation (``persona_name_identity_rejected`` bzw.
+    ``persona_role_implausible``) verbucht und die zurueckgegebene
+    ``PersonaIneligible`` traegt den Grund in die ``rejected``-Liste, damit der
+    Slot nachbesetzt und in der Summenzeile mitgezaehlt wird.
+    """
+    if candidate .persona_kind =="collective"or candidate .generation_source !="llm":
+        return None
+    rejection =_incoherence_rejection (candidate ,entity )
+    if rejection is None :
+        return None
+    kind ,reason =rejection
+    _legacy .logger .warning (
+    "Persona abgelehnt (#1759): user_id=%s %s",candidate .user_id ,reason
+    )
+    if degradations is not None :
+        degradations .record (
+        kind ,
+        DegradationSeverity .WARNING ,
+        reason ,
+        context ={"user_id":candidate .user_id ,"name":candidate .name },
+        )
+    entity_name =(entity .name if entity is not None else None )or candidate .name or ""
+    entity_type =(
+    (entity .get_entity_type ()if entity is not None else None )
+    or candidate .source_entity_type
+    or "Entity"
+    )
+    return PersonaIneligible (entity_name ,entity_type ,reason )
+
+
+def _reject_incoherent_profiles (
+profiles :List [Optional ["OasisAgentProfile"]],
+entities :List [EntityNode ],
+degradations :Optional ["DegradationCollector"],
+rejected :List [PersonaIneligible ],
+)->None :
+    """Lehnt unkohaerente individuelle LLM-Profile sichtbar ab (Issue #1759).
+
+    Laeuft nach der Umbenennungs-Synchronisation und *vor* der Nachbesetzung.
+    Ein Profil mit fremdem Namen im Freitext oder unplausiblem Alter fuer die
+    Rolle wird als Degradation verbucht, der Slot geleert und die Ablehnung in
+    ``rejected`` eingetragen. ``_backfill_rejected_slots`` besetzt ihn dann aus
+    dem Reservepool nach, und die Summenzeile zaehlt die Ablehnung mit.
+    Kollektive und regelbasierte Notprofile nehmen nicht teil.
+    """
+    for idx ,candidate in enumerate (profiles ):
+        if candidate is None :
+            continue
+        entity =entities [idx ]if idx <len (entities )else None
+        ineligible =_incoherence_ineligible (candidate ,entity ,degradations )
+        if ineligible is None :
+            continue
+        rejected .append (ineligible )
+        profiles [idx ]=None
 
 
 def generate_profiles_from_entities (
@@ -102,7 +299,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         self .graph_id =graph_id
 
     total =len (entities )
-    profiles =[None ]*total # Pre-allocate list to maintain order
+    profiles :List [Optional ["OasisAgentProfile"]]=[None ]*total # Pre-allocate list to maintain order
     completed_count =[0 ]# Use list for modification in closure
     lock =Lock ()
     demographic_slots =_resolve_demographic_slots (
@@ -110,6 +307,10 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
     )
     # Issue #1247: abgelehnte Kandidaten, gesammelt fuer die Nachbesetzung.
     rejected :List [PersonaIneligible ]=[]
+    # Issue #1759 (A1): vergebene Anzeigenamen dieses Batches, pro Lauf neu.
+    self ._taken_display_names =[]
+    # Issue #1759 (A7): Bio-Woerter dieses Batches, gezaehlt je Bio.
+    self ._bio_word_counts ={}
 
     # Helper function for real-time file writing
     def save_profiles_realtime ():
@@ -167,6 +368,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         # demografischen Slot (siehe ``already_done``-Docstring oben).
         if already_done is not None and idx in already_done :
             cached_profile =already_done [idx ]
+            register_taken_display_name (self ,cached_profile )
             self ._print_generated_profile (entity .name ,entity_type ,cached_profile )
             return idx ,cached_profile ,None
 
@@ -177,6 +379,9 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             use_llm =use_llm ,
             demographic_slot =demographic_slots [idx ],
             )
+
+            # Issue #1759 (A1): Name sofort verbuchen, damit spaetere Tasks ihn kennen.
+            register_taken_display_name (self ,profile )
 
             # Real-time output generated persona to console and log
             self ._print_generated_profile (entity .name ,entity_type ,profile )
@@ -389,6 +594,15 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         # Bei einem Nutzerabbruch (cancel_requested) bleibt die Nachbesetzung
         # aus — sie würde weitere LLM-Calls auslösen, obwohl bereits
         # abgebrochen wurde.
+    # Dedup display_name und user_name (Details: _dedupe_profile_names).
+    _dedupe_profile_names (self ,profiles )
+
+    # Issue #1759 (A1/A2): Identitaets- und Rollenplausibilitaet nach der
+    # Umbenennungs-Synchronisation, aber VOR der Nachbesetzung: abgelehnte Slots
+    # laufen ueber ``rejected`` in dieselbe Nachbesetzung wie die Eignungs-
+    # ablehnungen und werden in der Summenzeile mitgezaehlt.
+    _reject_incoherent_profiles (profiles ,entities ,degradations ,rejected )
+
     if rejected and not cancel_requested :
         self ._backfill_rejected_slots (
         profiles =profiles ,
@@ -396,53 +610,15 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         reserve_entities =list (reserve_entities or []),
         use_llm =use_llm ,
         rejected =rejected ,
+        # Nachrueckende Profile durchlaufen dieselbe Pruefung; die
+        # Obergrenze ist die Reserveliste (jeder Eintrag wird hoechstens
+        # einmal gezogen), eine Endlosschleife kann nicht entstehen.
+        coherence_check =functools .partial (
+        _incoherence_ineligible ,degradations =degradations
+        ),
         )
-
-        # Dedup display_name und user_name: LLM neigt dazu, dieselbe reale Person
-        # mehrfach zu klonen wenn sie im Doc prominent ist. Bei Dubletten neuen
-        # DACH-Namen aus dem Pool ziehen, Handle entsprechend neu bauen.
-    seen_names :set =set ()
-    seen_last_names :set =set ()
-    seen_handles :set =set ()
-    for p in profiles :
-        if p is None :
-            continue
-            # Issue #1246 (CodeRabbit PR #1257): Kollektive nehmen an der
-            # Personennamen-Dedup nicht teil. Zwei Organisationen mit gleichem
-            # Schlusstoken — "… GmbH", "… e.V." — galten hier als doppelter
-            # Nachname, und die zweite bekam einen zufaelligen DACH-Personen-
-            # namen zugewiesen, waehrend ihr Personatext weiter die
-            # Organisation beschreibt. Das ist exakt der Identitaetsbruch,
-            # den dieser Slice schliesst.
-        if p .persona_kind =="collective":
-            continue
-        norm_name =(p .name or "").strip ().lower ()
-        last_name =self ._last_name (p .name or "")
-        if norm_name and (
-        norm_name in seen_names
-        or (last_name is not None and last_name in seen_last_names )
-        ):
-            new_name =self ._pick_dach_name (p .gender )
-            attempts =0
-            while (
-            new_name .lower ()in seen_names
-            or (self ._last_name (new_name )or "")in seen_last_names
-            )and attempts <30 :
-                new_name =self ._pick_dach_name (p .gender )
-                attempts +=1
-            p .name =new_name
-            p .user_name =self ._generate_username (new_name )
-        seen_names .add ((p .name or "").strip ().lower ())
-        last_name =self ._last_name (p .name or "")
-        if last_name :
-            seen_last_names .add (last_name )
-
-        norm_handle =(p .user_name or "").strip ().lower ()
-        if norm_handle and norm_handle in seen_handles :
-        # Handle steht schon; hänge Suffix-Rotation an.
-            base =norm_handle .rsplit ("_",1 )[0 ]if "_"in norm_handle else norm_handle
-            p .user_name =self ._generate_username (base )
-        seen_handles .add ((p .user_name or "").strip ().lower ())
+        # Nachbesetzte Profile koennen Namen mit bestehenden teilen.
+        _dedupe_profile_names (self ,profiles )
 
         # Summenzeile: die einzelnen "[i/n]"-Meldungen oben genuegen nicht als
         # Bilanz, ohne sie nachzuzaehlen — genau daran ist heute eine

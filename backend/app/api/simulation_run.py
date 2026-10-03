@@ -650,8 +650,15 @@ def _apply_route_to_simulation_config(
         config["time_config"] = time_config
     if req.llm_model_override or req.ai_model_ref is not None:
         config["llm_model"] = resolved_route.model
-    if (req.llm_runtime.enabled or req.ai_model_ref is not None) and resolved_route.base_url_sanitized:
-        config["llm_base_url"] = resolved_route.base_url_sanitized
+    if req.llm_runtime.enabled or req.ai_model_ref is not None:
+        if resolved_route.base_url_sanitized:
+            config["llm_base_url"] = resolved_route.base_url_sanitized
+        else:
+            # Die Route gibt keinen Endpoint vor (cli-Route oder HTTP-Route ohne
+            # eigene URL): eine aus dem Prepare (anderer Provider) stehengebliebene
+            # Basis-URL würde neben dem neuen Modell stehen und es über den
+            # falschen Endpoint rufen. Keine .env-URL als Ersatz einsetzen.
+            config["llm_base_url"] = ""
     store.write_json(req.simulation_id, "simulation_config", config)
 
 

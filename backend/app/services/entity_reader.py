@@ -65,6 +65,10 @@ class FilteredEntities:
     # nachbesetzt. Bewusst nicht in ``to_dict``: die Reserve ist ein internes
     # Auswahldetail und kein Bestandteil des Prepare-Ergebnisses.
     reserve_entities: List[EntityNode] = field(default_factory=list)
+    # Issue #1759 (A5): Auswahlbegruendungen der fragebezogenen Hybrid-Auswahl
+    # (``EntitySelectionDecision``), fuer den Prepare-Checkpoint. Intern,
+    # deshalb ebenfalls nicht in ``to_dict``.
+    selection_decisions: List[Any] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

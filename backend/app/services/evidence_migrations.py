@@ -43,7 +43,17 @@ _DEFAULT_TRUST_SIGNAL_TYPE = "authority"
 _GAP_ID_SUFFIX_RE = re.compile(r"^gap_(\d+)$")
 
 # Erlaubte voice_register-Werte (gespiegelt aus report_v3.Persona).
-_VALID_VOICE_REGISTERS = frozenset({"formal-de", "neutral-de", "technical-de", "skeptisch-de"})
+_VALID_VOICE_REGISTERS = frozenset(
+    {
+        "formal-de",
+        "neutral-de",
+        "technical-de",
+        "skeptisch-de",
+        "betroffen-de",
+        "emotional-de",
+        "umgangssprachlich-de",
+    }
+)
 _DEFAULT_VOICE_REGISTER = "neutral-de"
 
 

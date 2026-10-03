@@ -9,7 +9,9 @@ Ergänzt PersonaQuotaPlan, der heute fehlt — siehe ChatGPT-Audit
 """
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+import re
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -24,8 +26,22 @@ _STRICT = ConfigDict(extra="forbid")
 PERSONA_SCHEMA_VERSION: Literal[1] = 1
 
 
-# DACH-Voice-Register (für Layer 2)
-VoiceRegister = Literal["formal-de", "neutral-de", "technical-de", "skeptisch-de"]
+# DACH-Voice-Register (für Layer 2). Die ersten vier Werte sind sachlich; die
+# letzten drei (Issue #1759, A7) geben direkt Betroffenen und Privatpersonen
+# eine eigene Stimme, damit ein Personasatz nicht durchgehend nach Gutachten
+# klingt.
+VoiceRegister = Literal[
+    "formal-de",
+    "neutral-de",
+    "technical-de",
+    "skeptisch-de",
+    "betroffen-de",
+    "emotional-de",
+    "umgangssprachlich-de",
+]
+
+#: Laufzeit-Sicht auf :data:`VoiceRegister` für Prüfungen ohne Pydantic.
+VOICE_REGISTER_VALUES: tuple[str, ...] = get_args(VoiceRegister)
 
 
 class PersonaModel(BaseModel):
@@ -105,6 +121,202 @@ class PersonaModel(BaseModel):
     # Nur bei einem Ausfall gesetzt, nicht bei bewusst regelbasierter
     # Erzeugung.
     generation_error: Optional[str] = Field(default=None, max_length=200)
+
+
+def persona_name_identity_reason(name: str, persona_text: str) -> Optional[str]:
+    """Liefert den Ablehnungsgrund, wenn der Anzeigename im Freitext fehlt.
+
+    Issue #1759 (A1): Der Generierungs-Dedup benannte kollidierende Profile
+    um, ohne den ``persona``-Fließtext nachzuziehen — im Referenzlauf
+    ``sim_3d3d8b2d8342`` hieß derselbe Agent im Handle ``valentina_ferrari_302``
+    und im eigenen Profiltext ``Maren Hoffmann``. Der Interview-Prompt setzt
+    beides zusammen, die Persona laeuft unter zwei Identitaeten.
+
+    Diese Pruefung ist die letzte Verteidigungslinie NACH der
+    Umbenennungs-Synchronisation im Generator: Taucht der Anzeigename
+    (voll oder als Namensbestandteil ab drei Zeichen, case-insensitiv,
+    wortgrenzgenau) nicht im Freitext auf, wird das Profil abgelehnt statt
+    still durchgewunken. Kollektive nehmen nicht teil — sie sprechen als
+    Träger, nicht als erfundene Person.
+
+    Returns
+    -------
+    Optional[str]
+        ``None``, wenn die Identitaet im Freitext wiedererkennbar ist
+        (oder kein Anzeigename gesetzt ist), sonst ein Grund-String, der
+        den Namen und den Befund traegt und im Prepare-Status sichtbar ist.
+    """
+    normalized = (name or "").strip().casefold()
+    if not normalized:
+        return None
+    text_normalized = (persona_text or "").casefold()
+    if re.search(rf"\b{re.escape(normalized)}\b", text_normalized):
+        return None
+    for part in normalized.split():
+        if len(part) >= 3 and re.search(rf"\b{re.escape(part)}\b", text_normalized):
+            return None
+    return (
+        f"Anzeigename '{name}' fehlt im persona-Freitext: Die simulierte "
+        "Person wuerde unter zwei Namen laufen. Profil abgelehnt (#1759 A1)."
+    )
+
+
+#: Gesetzliche Regelaltersgrenze, ab der angestellte Rollen (Betriebsrat,
+#: Klinikärzte, Sachbearbeitung) ohne Ruhestands-Hinweis nicht mehr plausibel
+#: sind (Issue #1759, A2).
+RETIREMENT_AGE = 65
+
+_GenderName = Literal["male", "female"]
+
+#: (Muster, Mindestalter) je Rolle. Greift auf Berufsbezeichnung oder Bio.
+#: Werte sind bewusst konservativ: Facharztausbildung, Leitungslaufbahn.
+_ROLE_MIN_AGE: tuple[tuple[re.Pattern[str], int], ...] = tuple(
+    (re.compile(pattern, re.IGNORECASE), minimum)
+    for pattern, minimum in (
+        (r"chef(?:arzt|ärztin|aerztin)|ärztliche[rn]? direktor", 36),
+        (r"ober(?:arzt|ärztin|aerztin)", 32),
+        (r"fach(?:arzt|ärztin|aerztin)", 30),
+        (r"klinikdirektor|verwaltungsdirektor|krankenhausdirektor", 35),
+        (r"professor", 30),
+        (r"landrat|landrätin", 30),
+        (r"geschäftsführ|geschaeftsfuehr|vorstand", 28),
+        (r"bürgermeister", 25),
+    )
+)
+
+_EMPLOYEE_ROLE = re.compile(
+    r"betriebsrat|personalrat|chef(?:arzt|ärztin|aerztin)|ober(?:arzt|ärztin|aerztin)"
+    r"|fach(?:arzt|ärztin|aerztin)|sachbearbeit|pflegekraft|referent",
+    re.IGNORECASE,
+)
+_RETIRED_MARKER = re.compile(
+    r"pensionier|ruhestand|rentner|emerit|\ba\. ?d\.|retired|ehemalig|außer dienst",
+    re.IGNORECASE,
+)
+_FEMALE_TITLE = re.compile(
+    r"\w*(?:ärztin|aerztin|leiterin|direktorin|geschäftsführerin|bürgermeisterin"
+    r"|sprecherin|professorin|landrätin|pflegerin)\b|\bhebamme\b|\bkrankenschwester\b",
+    re.IGNORECASE,
+)
+_MALE_TITLE = re.compile(
+    r"\w*(?:arzt|leiter|direktor|geschäftsführer|bürgermeister|sprecher|professor"
+    r"|landrat|pfleger|vorsitzender)\b",
+    re.IGNORECASE,
+)
+_GENDER_VALUES: dict[str, _GenderName] = {
+    "male": "male", "männlich": "male", "maennlich": "male", "m": "male",
+    "female": "female", "weiblich": "female", "w": "female", "f": "female",
+}
+_ATTRIBUTE_AGE_KEYS = ("age", "alter")
+_ATTRIBUTE_GENDER_KEYS = ("gender", "geschlecht")
+
+
+def documented_age(attributes: Optional[Mapping[str, Any]]) -> Optional[int]:
+    """Im Dokument belegtes Alter (Graph-Attribut), sonst ``None`` (#1759 A2).
+
+    Dokument-Belege haben Vorrang vor gewürfelten Slot-Werten.
+    """
+    for key in _ATTRIBUTE_AGE_KEYS:
+        value = (attributes or {}).get(key)
+        if isinstance(value, bool):
+            continue
+        try:
+            age = int(str(value).strip())
+        except (TypeError, ValueError):
+            continue
+        if 18 <= age <= 99:
+            return age
+    return None
+
+
+def documented_gender(attributes: Optional[Mapping[str, Any]]) -> Optional[_GenderName]:
+    """Im Dokument belegtes Geschlecht (``male``/``female``), sonst ``None``."""
+    for key in _ATTRIBUTE_GENDER_KEYS:
+        value = str((attributes or {}).get(key) or "").strip().casefold()
+        if value in _GENDER_VALUES:
+            return _GENDER_VALUES[value]
+    return None
+
+
+def gender_from_role_title(*texts: Optional[str]) -> Optional[_GenderName]:
+    """Grammatisches Gender der Berufsbezeichnung, nur wenn eindeutig (A2).
+
+    ``Chefärztin`` → ``female``, ``Chefarzt`` → ``male``. Trägt der Text beide
+    Formen („Hebamme und Verbandssprecher“) oder keine, bleibt es bei ``None``
+    — dann wird nicht korrigiert.
+    """
+    text = next((t for t in texts if t and t.strip()), "")
+    female = bool(_FEMALE_TITLE.search(text))
+    male = bool(_MALE_TITLE.search(_FEMALE_TITLE.sub(" ", text)))
+    if female == male:
+        return None
+    return "female" if female else "male"
+
+
+def role_corrected_gender(
+    gender: Optional[str], profession: Optional[str], bio: Optional[str]
+) -> Optional[str]:
+    """Gender, korrigiert auf die Berufsbezeichnung, soweit diese es belegt.
+
+    Das Maskulinum ist im Deutschen oft generisch („Geschäftsführer der Klinik“),
+    ein männlicher Titel belegt deshalb kein männliches Geschlecht. Regeln:
+
+    * ``nonbinary`` bleibt immer unverändert.
+    * Eine eindeutig weibliche Bezeichnung (``Ärztin``) setzt ``female``.
+    * ``female`` wird nie wegen einer maskulinen Bezeichnung zu ``male``;
+      ``male`` bleibt bei maskuliner Bezeichnung ebenfalls ``male``.
+    * Nur bei ``other`` oder ungültigem Wert gilt die (eindeutige) Bezeichnung.
+    """
+    if gender is None or gender == "nonbinary":
+        return gender
+    title_gender = gender_from_role_title(profession, bio)
+    if title_gender is None or title_gender == gender:
+        return gender
+    if title_gender == "female":
+        return title_gender
+    if gender in ("male", "female"):
+        return gender
+    return title_gender
+
+
+def _role_min_age_reason(age: int, role_text: str) -> Optional[str]:
+    for pattern, minimum in _ROLE_MIN_AGE:
+        if pattern.search(role_text) and age < minimum:
+            return f"Alter {age} liegt unter dem Mindestalter {minimum} für die Rolle"
+    return None
+
+
+def _retirement_reason(age: int, role_text: str) -> Optional[str]:
+    if age < RETIREMENT_AGE or not _EMPLOYEE_ROLE.search(role_text):
+        return None
+    if _RETIRED_MARKER.search(role_text):
+        return None
+    return f"Alter {age} liegt im Rentenalter (ab {RETIREMENT_AGE}) für eine angestellte Rolle"
+
+
+def persona_role_plausibility_reason(
+    age: Optional[int], profession: Optional[str], bio: Optional[str]
+) -> Optional[str]:
+    """Ablehnungsgrund, wenn das Alter nicht zur Rolle passt (Issue #1759, A2).
+
+    Referenzlauf ``sim_3d3d8b2d8342``: Chefärztin mit 28, Chefarzt mit 25,
+    Betriebsratsvorsitzender mit 65 — das Alter kam aus einem rollenblind
+    gewürfelten Slot. Geprüft werden Mindestalter für Leitungs- und
+    Facharztrollen sowie das Rentenalter für angestellte Rollen.
+
+    Returns
+    -------
+    Optional[str]
+        ``None`` bei plausibler oder nicht prüfbarer Kombination (kein Alter,
+        keine erkennbare Rolle), sonst ein Grund-String für den Prepare-Status.
+    """
+    if age is None:
+        return None
+    role_text = " ".join(part for part in (profession, bio) if part)
+    reason = _role_min_age_reason(age, role_text) or _retirement_reason(age, role_text)
+    if reason is None:
+        return None
+    return f"{reason} ('{(profession or bio or '').strip()[:80]}'). Profil abgelehnt (#1759 A2)."
 
 
 class PersonaQuotaPlan(BaseModel):

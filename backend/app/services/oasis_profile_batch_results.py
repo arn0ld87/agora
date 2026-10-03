@@ -9,9 +9,13 @@ from contextvars import copy_context
 from typing import Any
 
 from . import oasis_profile_generator as _legacy
-from typing import List, Optional
+from typing import Callable, List, Optional
 from .entity_reader import EntityNode
-from .oasis_profile_models import OasisAgentProfile, PersonaIneligible
+from .oasis_profile_models import (
+    OasisAgentProfile,
+    PersonaIneligible,
+    register_taken_display_name,
+)
 from .run_budget import BudgetExceededError
 
 def _backfill_rejected_slots (
@@ -22,8 +26,17 @@ entities :List [EntityNode ],
 reserve_entities :List [EntityNode ],
 use_llm :bool ,
 rejected :List ["PersonaIneligible"],
+coherence_check :Optional [
+Callable [[OasisAgentProfile ,EntityNode ],Optional [PersonaIneligible ]]
+]=None ,
 )->None :
     """Besetzt abgelehnte Persona-Slots aus dem Reservepool nach (#1247).
+
+    ``coherence_check`` (#1759) prueft jedes nachrueckende Profil wie die
+    Hauptgenerierung auf Namensidentitaet und Rollenplausibilitaet. Eine
+    Ablehnung kommt in ``rejected``, der Slot bleibt offen und der naechste
+    Reservekandidat wird gezogen. Jeder Reserve-Eintrag wird hoechstens einmal
+    verbraucht, damit endet die Schleife spaetestens mit der Reserve.
 
     Der Eignungsfilter ueber die Blockliste laeuft vor dem ``max_agents``-Cap
     und ist damit unproblematisch. Die typunabhaengige Pruefung faellt aber
@@ -87,7 +100,7 @@ rejected :List ["PersonaIneligible"],
             candidate_slot =reserve_slots [reserve_index ]
             used .add (reserve_index )
             try :
-                profiles [slot_idx ]=self .generate_profile_from_entity (
+                new_profile :Optional [OasisAgentProfile ]=self .generate_profile_from_entity (
                 entity =candidate ,
                 user_id =slot_idx ,
                 use_llm =use_llm ,
@@ -108,9 +121,18 @@ rejected :List ["PersonaIneligible"],
                 exc ,
                 )
                 continue
-                # Die Entity am selben Index mittauschen, damit die
-                # Config-Generierung den Nachruecker beschreibt und nicht die
-                # abgelehnte Entitaet.
+            if new_profile is None :
+                continue
+            if coherence_check is not None :
+                incoherent =coherence_check (new_profile ,candidate )
+                if incoherent is not None :
+                    rejected .append (incoherent )
+                    continue
+            profiles [slot_idx ]=new_profile
+            # Die Entity am selben Index mittauschen, damit die
+            # Config-Generierung den Nachruecker beschreibt und nicht die
+            # abgelehnte Entitaet.
+            register_taken_display_name (self ,new_profile )
             if slot_idx <len (entities ):
                 entities [slot_idx ]=candidate
             filled +=1

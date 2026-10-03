@@ -5,10 +5,18 @@ Interface 1: Analyze text content and generate entity and relationship type defi
 
 from typing import Dict, Any, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import Config
+from ..contracts.ontology_type_contract import (
+    ONTOLOGY_KIND_CONTESTED_TOPIC,
+    ONTOLOGY_KIND_ENTITY,
+    OntologyTypeMetadata,
+    contested_topic_type_names,
+)
+from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from ..utils.llm_client import LLMClient
+from .degradation_collector import DegradationCollector
 from .settings_layer import get_default_service as _get_settings
 
 
@@ -20,8 +28,15 @@ class OntologyAttribute(BaseModel):
     description: str = Field("", description="Attribute description")
 
 
-class OntologyEntityType(BaseModel):
-    """Entity-Typ in der Ontology-Definition."""
+class OntologyEntityType(OntologyTypeMetadata):
+    """Entity-Typ in der Ontology-Definition.
+
+    ``kind``/``actor_capable`` kommen aus dem Vertrag
+    ``contracts.ontology_type_contract`` (Issue #1759, B1). LLM-Ausgaben mit
+    unbekannten Zusatzfeldern bleiben tolerant, daher ``extra="ignore"``.
+    """
+
+    model_config = ConfigDict(extra="ignore")
 
     name: str = Field(..., description="Entity type name (English, PascalCase)")
     description: str = Field(..., description="Brief description (English, <=100 chars)")
@@ -101,6 +116,8 @@ Therefore, **entities must be real-world entities that can voice and interact on
 - Topics/subjects (such as "academic integrity", "education reform")
 - Views/attitudes (such as "supporters", "opponents")
 
+**Single exception — the contested subject of the run**: you MUST declare exactly one type for the one subject the simulation is about (for example a planned measure or a policy) as its own entity type with `"kind": "contested_topic"` and `"actor_capable": false`. Entities of that type are graph nodes that actors support, oppose or comment on; they never speak themselves. Every other type omits `kind` (default `"entity"`) and keeps `"actor_capable": true`, except types that are clearly not actors (locations, projects, documents), which set `"actor_capable": false`.
+
 ## Output Format
 
 Please output JSON format with the following structure:
@@ -118,7 +135,9 @@ Please output JSON format with the following structure:
                     "description": "Attribute description"
                 }
             ],
-            "examples": ["Example entity 1", "Example entity 2"]
+            "examples": ["Example entity 1", "Example entity 2"],
+            "kind": "entity (default) or contested_topic (the contested subject of the run — exactly one type must use it)",
+            "actor_capable": true
         }
     ],
     "edge_types": [
@@ -220,6 +239,49 @@ B. **Specific types (designed based on text content)**:
 """
 
 
+def _normalize_type_metadata(entity: Dict[str, Any]) -> None:
+    """Macht ``kind``/``actor_capable`` eines Typs explizit und widerspruchsfrei.
+
+    Ein unbekannter ``kind`` fällt auf ``"entity"`` zurück (der Streitgegenstand
+    wird nur über den exakten Wert deklariert), ein fehlendes ``actor_capable``
+    auf ``True`` (bisheriges Verhalten), und ein ``contested_topic`` ist nie
+    akteursfähig. So landet die Metadaten-Information immer persistiert in
+    ``Project.ontology``.
+    """
+    kind = entity.get("kind")
+    if kind != ONTOLOGY_KIND_CONTESTED_TOPIC:
+        kind = ONTOLOGY_KIND_ENTITY
+    entity["kind"] = kind
+    actor_capable = entity.get("actor_capable")
+    if kind == ONTOLOGY_KIND_CONTESTED_TOPIC:
+        entity["actor_capable"] = False
+    elif isinstance(actor_capable, bool):
+        entity["actor_capable"] = actor_capable
+    else:
+        entity["actor_capable"] = True
+
+
+def _cap_preserving_topics(entity_types: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    """Kuerzt auf ``limit`` Typen (Reihenfolge erhalten), Topic-Typen zuletzt.
+
+    Das Kuerzen auf ``ONTOLOGY_MAX_ENTITY_TYPES`` schnitt bisher von hinten ab
+    und haette den Streitgegenstand-Typ (Issue #1759, B1) treffen koennen.
+    """
+    if len(entity_types) <= limit:
+        return list(entity_types)
+    keep = [
+        index
+        for index, entity in enumerate(entity_types)
+        if entity.get("kind") == ONTOLOGY_KIND_CONTESTED_TOPIC
+    ][: max(limit, 0)]
+    for index in range(len(entity_types)):
+        if len(keep) >= limit:
+            break
+        if index not in keep:
+            keep.append(index)
+    return [entity_types[index] for index in sorted(keep)]
+
+
 class OntologyGenerator:
     """
     Ontology generator
@@ -228,6 +290,8 @@ class OntologyGenerator:
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm_client = llm_client or LLMClient()
+        # Issue #1759 (B1): sichtbare Degradation, wenn kein Topic-Typ deklariert wurde.
+        self.degradations = DegradationCollector()
 
     def generate(
         self,
@@ -331,7 +395,7 @@ Based on the above content, design entity types and relationship types suitable 
 1. Output between {Config.ONTOLOGY_MIN_ENTITY_TYPES} and {Config.ONTOLOGY_MAX_ENTITY_TYPES} entity types, based on document complexity
 2. Last 2 must be fallback types: Person (individual fallback) and Organization (organization fallback)
 3. All other types are specific types designed based on text content
-4. All entity types must be real-world subjects that can voice opinions, not abstract concepts
+4. All entity types must be real-world subjects that can voice opinions, not abstract concepts — except exactly one type with "kind": "contested_topic" and "actor_capable": false for the contested subject of the run (see system prompt); it is mandatory
 5. Attribute names cannot use reserved words like name, uuid, group_id, use full_name, org_name, etc. instead
 """
 
@@ -354,6 +418,8 @@ Based on the above content, design entity types and relationship types suitable 
                 entity["attributes"] = []
             if "examples" not in entity:
                 entity["examples"] = []
+            # Vor jedem Kuerzen explizit machen, damit der Topic-Typ erkennbar ist.
+            _normalize_type_metadata(entity)
             # Ensure description doesn't exceed 100 characters
             if len(entity.get("description", "")) > 100:
                 entity["description"] = entity["description"][:97] + "..."
@@ -378,7 +444,9 @@ Based on the above content, design entity types and relationship types suitable 
                 {"name": "full_name", "type": "text", "description": "Full name of the person"},
                 {"name": "role", "type": "text", "description": "Role or occupation"}
             ],
-            "examples": ["ordinary citizen", "anonymous netizen"]
+            "examples": ["ordinary citizen", "anonymous netizen"],
+            "kind": ONTOLOGY_KIND_ENTITY,
+            "actor_capable": True,
         }
 
         organization_fallback = {
@@ -388,7 +456,9 @@ Based on the above content, design entity types and relationship types suitable 
                 {"name": "org_name", "type": "text", "description": "Name of the organization"},
                 {"name": "org_type", "type": "text", "description": "Type of organization"}
             ],
-            "examples": ["small business", "community group"]
+            "examples": ["small business", "community group"],
+            "kind": ONTOLOGY_KIND_ENTITY,
+            "actor_capable": True,
         }
 
         # Check if fallback types already exist
@@ -412,8 +482,11 @@ Based on the above content, design entity types and relationship types suitable 
             if current_count + needed_slots > max_entity_types:
                 # Calculate how many to remove
                 to_remove = current_count + needed_slots - max_entity_types
-                # Remove from end (keep more important specific types in front)
-                result["entity_types"] = result["entity_types"][:-to_remove]
+                # Remove from end (keep more important specific types in front);
+                # der Streitgegenstand-Typ wird nie abgeschnitten (#1759, B1).
+                result["entity_types"] = _cap_preserving_topics(
+                    result["entity_types"], current_count - to_remove
+                )
 
             # Add fallback types
             result["entity_types"].extend(fallbacks_to_add)
@@ -427,17 +500,35 @@ Based on the above content, design entity types and relationship types suitable 
             ]
             fallback_names = {entity.get("name") for entity in fallbacks}
             specific_slots = max_entity_types - len(fallback_names)
-            specifics = [
-                entity
-                for entity in result["entity_types"]
-                if entity.get("name") not in {"Person", "Organization"}
-            ][:specific_slots]
+            specifics = _cap_preserving_topics(
+                [
+                    entity
+                    for entity in result["entity_types"]
+                    if entity.get("name") not in {"Person", "Organization"}
+                ],
+                specific_slots,
+            )
             result["entity_types"] = specifics + fallbacks
 
         if len(result["edge_types"]) > max_edge_types:
             result["edge_types"] = result["edge_types"][:max_edge_types]
 
+        self._record_missing_topic_type(result)
+
         return result
+
+    def _record_missing_topic_type(self, result: Dict[str, Any]) -> None:
+        """Meldet sichtbar, wenn kein ``contested_topic``-Typ deklariert wurde (#1759, B1)."""
+        if contested_topic_type_names(result):
+            return
+        self.degradations.record(
+            DegradationKind.ONTOLOGY_TOPIC_TYPE_MISSING,
+            DegradationSeverity.WARNING,
+            "Die Ontologie deklariert keinen Streitgegenstand-Typ "
+            "(kind=contested_topic): Positionskanten zeigen auf Akteure statt "
+            "auf einen Topic-Knoten.",
+            context={"entity_types": len(result.get("entity_types", []))},
+        )
     
     def generate_python_code(self, ontology: Dict[str, Any]) -> str:
         """

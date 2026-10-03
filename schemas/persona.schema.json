@@ -282,7 +282,10 @@
             "formal-de",
             "neutral-de",
             "technical-de",
-            "skeptisch-de"
+            "skeptisch-de",
+            "betroffen-de",
+            "emotional-de",
+            "umgangssprachlich-de"
           ],
           "type": "string"
         },

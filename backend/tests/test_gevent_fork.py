@@ -89,7 +89,7 @@ def test_gevent_pool_execution_fallback(monkeypatch):
             user_name="test_user",
             name="Test Name",
             bio="bio",
-            persona="persona",
+            persona="Test Name ist eine Testperson.",
         )
     monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
 
@@ -181,7 +181,7 @@ def test_is_gevent_detected_when_socket_patched(monkeypatch):
             user_name="test_user",
             name="Patched",
             bio="b",
-            persona="p",
+            persona="Patched ist eine Testperson.",
         )
     monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
 
@@ -241,7 +241,7 @@ def test_is_gevent_false_when_socket_not_patched(monkeypatch):
             user_name="test_user",
             name="Unpatched",
             bio="b",
-            persona="p",
+            persona="Unpatched ist eine Testperson.",
         )
     monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
 
@@ -302,7 +302,7 @@ def test_is_gevent_false_when_gevent_not_importable(monkeypatch):
             user_name="test_user",
             name="NoGevent",
             bio="b",
-            persona="p",
+            persona="NoGevent ist eine Testperson.",
         )
     monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
 

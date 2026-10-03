@@ -35,10 +35,12 @@ müssen — keine zweite Kopie der Filterlogik:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from ..contracts.entity_semantic_class_contract import SemanticEntityClass
+from ..contracts.ontology_type_contract import OntologyTypeCatalog, ontology_type_catalog
 from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
@@ -228,15 +230,44 @@ def _ineligible_head(normalized_type: str) -> Optional[str]:
     return max(matches, key=len)
 
 
-def _known_entity_types() -> frozenset[str]:
-    """``INDIVIDUAL_ENTITY_TYPES``/``GROUP_ENTITY_TYPES`` — Single Source
-    of Truth im Generator, hier nur für die Stufe-2-Klassifikation
-    (unbekannt vs. bekannt) gelesen.
+def load_project_ontology(project_id: Optional[str]) -> Optional[Mapping[str, Any]]:
+    """Liest ``Project.ontology`` für die typgetriebene Eignungsprüfung (#1759).
+
+    Fehlerfest: ein nicht lesbares oder fehlendes Projekt ergibt ``None`` und
+    damit den Rückfall auf die festen Typlisten, statt das Prepare zu kippen.
+    """
+    if not project_id or not isinstance(project_id, str):
+        return None
+    from ..models.project import ProjectManager
+
+    try:
+        project = ProjectManager.get_project(project_id)
+    except Exception as exc:  # noqa: BLE001 — Lesefehler darf das Prepare nicht kippen
+        logger.warning(
+            "Ontologie nicht lesbar (project_id=%s): %s — Eignung nach fester Typliste",
+            project_id,
+            exc,
+        )
+        return None
+    ontology = getattr(project, "ontology", None)
+    return ontology if isinstance(ontology, Mapping) else None
+
+
+def _known_entity_types(catalog: Optional[OntologyTypeCatalog] = None) -> frozenset[str]:
+    """Typen, die für die Stufe-2-Klassifikation (unbekannt vs. bekannt) gelten.
+
+    Issue #1759 (B3): Trägt die Ontologie Typ-Metadaten, sind ihre deklarierten
+    Typen die bekannten — die Typ-Definition ist die Quelle der Wahrheit.
+    Ohne Metadaten (Altbestand) bleibt es beim Rückfall auf
+    ``INDIVIDUAL_ENTITY_TYPES``/``GROUP_ENTITY_TYPES`` — Single Source of
+    Truth im Generator.
 
     Lazy importiert: Aufrufer, die nur die Blockliste brauchen, ziehen
     sich damit nicht den (schwereren) ``oasis_profile_generator``-Import
     ins Modul.
     """
+    if catalog is not None and catalog.metadata_driven:
+        return catalog.declared_types
     from .oasis_profile_generator import OasisProfileGenerator
 
     return frozenset(
@@ -269,10 +300,30 @@ class PersonaEligibilityResult:
         return len(self.exclusions)
 
 
+def _non_actor_exclusion(
+    entity: EntityNode, entity_type: str, non_actor: str
+) -> EligibilityExclusion:
+    """Ausschluss nach Typ-Definition der Ontologie (#1759, B2/B3) samt Log."""
+    reason = (
+        f"entity_type '{entity_type}' ist laut Ontologie-Typ-Definition kein "
+        f"Akteur ({non_actor}, Issue #1759)"
+    )
+    logger.info(
+        "Persona-Eligibility: Entität ausgeschlossen name=%s type=%s reason=%s",
+        entity.name,
+        entity_type,
+        reason,
+    )
+    return EligibilityExclusion(
+        entity_name=entity.name, entity_type=entity_type, reason=reason
+    )
+
+
 def filter_eligible_entities(
     entities: Sequence[EntityNode],
     *,
     degradations: Optional[DegradationCollector] = None,
+    ontology: Optional[Mapping[str, Any]] = None,
 ) -> PersonaEligibilityResult:
     """Schließt Entitäten aus, die keine handlungsfähigen Stakeholder sind.
 
@@ -283,6 +334,10 @@ def filter_eligible_entities(
             (Issue #1029). Ein einzelner Ausschluss ist kein
             Degradations-Befund — erst die vollständige Leerung eines
             zuvor nicht-leeren Pools wird als ``BLOCKING`` gemeldet.
+        ontology: persistierte Ontologie (``Project.ontology``). Trägt sie
+            Typ-Metadaten (``kind``/``actor_capable``), folgt die Eignung der
+            Typ-Definition (Issue #1759, B2/B3); ohne Metadaten bleiben die
+            festen Typlisten der Rückfall.
 
     Returns:
         ``PersonaEligibilityResult`` mit den verbleibenden Entitäten und
@@ -292,7 +347,8 @@ def filter_eligible_entities(
     # persona_domain_coherence, nicht persona_eligibility).
     from .entity_semantic_class import classify_entity
 
-    known_types = _known_entity_types()
+    catalog = ontology_type_catalog(ontology)
+    known_types = _known_entity_types(catalog)
     eligible: list[EntityNode] = []
     exclusions: list[EligibilityExclusion] = []
     unknown_types: list[tuple[str, str]] = []
@@ -300,6 +356,14 @@ def filter_eligible_entities(
     for entity in entities:
         entity_type = entity.get_entity_type() or "Entity"
         normalized = entity_type.strip().lower()
+
+        # Issue #1759 (B2/B3): Die Typ-Definition der Ontologie entscheidet
+        # zuerst — Streitgegenstand und nicht akteursfähige Typen (Standorte,
+        # Vorhaben, Dokumente) werden nie Persona.
+        non_actor = catalog.non_actor_reason(entity_type)
+        if non_actor is not None:
+            exclusions.append(_non_actor_exclusion(entity, entity_type, non_actor))
+            continue
 
         blocking_head = None if normalized in INELIGIBLE_ENTITY_TYPES else _ineligible_head(normalized)
         if normalized in INELIGIBLE_ENTITY_TYPES or blocking_head is not None:
@@ -415,4 +479,5 @@ __all__ = [
     "EligibilityExclusion",
     "PersonaEligibilityResult",
     "filter_eligible_entities",
+    "load_project_ontology",
 ]

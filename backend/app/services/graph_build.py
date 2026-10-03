@@ -43,6 +43,20 @@ AI_MODEL_REF_ROUTING_FAILURE_MESSAGE = "ai_model_ref routing could not be finali
 AI_MODEL_REF_GENERATION_FAILURE_MESSAGE = "ontology generation could not be completed"
 
 
+def _ontology_completion_message(generator: object) -> str:
+    """Abschlussmeldung der Ontologie-Generierung samt sichtbaren Warnungen.
+
+    Issue #1759 (B1): Deklariert der Generator keinen Streitgegenstand-Typ,
+    steht das in der Run-Meldung statt still zu verschwinden.
+    """
+    base = "Ontology generation completed"
+    degradations = getattr(generator, "degradations", None)
+    if not isinstance(degradations, DegradationCollector) or not degradations:
+        return base
+    details = "; ".join(event.detail for event in degradations.report().events)
+    return f"{base} (Warnung: {details})"
+
+
 class AiModelRefPostValidationError(RuntimeError):
     """Safe boundary error for synchronous AiModelRef operational failures."""
 
@@ -306,7 +320,7 @@ class GraphBuildService:
                 run_id,
                 status="completed",
                 progress=100,
-                message="Ontology generation completed",
+                message=_ontology_completion_message(generator),
                 linked_ids={"project_id": project.project_id},
             )
         return project

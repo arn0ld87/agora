@@ -23,6 +23,9 @@ from ...contracts.role_leakage_contract import (
     RoleLeakagePlatformSummary,
     RoleLeakageSummary,
 )
+from ...utils.logger import get_logger
+
+_logger = get_logger("agora.role_leakage")
 
 # ---------------------------------------------------------------------------
 # Muster für Selbstreferenzen
@@ -438,7 +441,31 @@ def detect_role_conflict(
         own_persona=_resolve_persona(profiles, agent_id),
         all_personas=profiles,
     )
-    return conflict.reason if conflict is not None else None
+    if conflict is None:
+        return None
+    # Issue #1759 (C2): ``role_conflict_count`` allein ist nicht auswertbar —
+    # jeder Konflikt wird mit Agent, Plattform, Runde, Art und Textstelle
+    # protokolliert. Der Beitragstext selbst gehört nicht ins Log: ein Beitrag
+    # kann einen API-Key oder andere Geheimnisse enthalten. Statt Auszug und
+    # Selbstreferenz stehen Start-Offset und Länge der Textstelle im Log (der
+    # Text bleibt über die Aktion im ``actions.jsonl`` auffindbar).
+    text = _action_text(action_type, action_dict.get("action_args", {}))
+    _logger.info(
+        "Role conflict: platform=%s round=%s agent_id=%s agent_name=%s "
+        "action_type=%s reason=%s matched_role=%s "
+        "self_reference_offset=%d self_reference_len=%d excerpt_len=%d",
+        conflict.platform,
+        conflict.round,
+        conflict.agent_id,
+        conflict.agent_name,
+        conflict.action_type,
+        conflict.reason,
+        conflict.matched_role,
+        text.find(conflict.self_reference),
+        len(conflict.self_reference),
+        len(conflict.excerpt),
+    )
+    return conflict.reason
 
 
 # ---------------------------------------------------------------------------

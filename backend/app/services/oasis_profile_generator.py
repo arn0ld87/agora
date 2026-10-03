@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Any, List, Optional
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
+from ..contracts.persona_contract import VOICE_REGISTER_VALUES
 from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
 from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
@@ -37,8 +38,8 @@ if TYPE_CHECKING:
 
 logger = get_logger('agora.oasis_profile')
 
-# Erlaubte Voice-Register-Werte (gespiegelt aus VoiceRegister Literal in persona_contract.py)
-VOICE_REGISTERS = ("formal-de", "neutral-de", "technical-de", "skeptisch-de")
+# Erlaubte Voice-Register-Werte (abgeleitet aus dem VoiceRegister Literal in persona_contract.py)
+VOICE_REGISTERS = VOICE_REGISTER_VALUES
 
 
 
@@ -341,8 +342,8 @@ class OasisProfileGenerator:
 
 
     @measure_llm_latency(operation='persona_generation', extract_model=lambda self, *a, **kw: getattr(self, 'model_name', None), extract_prompt_chars=None)
-    def _generate_profile_with_llm(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, demographic_slot: Optional[PersonaDemographicSlot]=None) -> Dict[str, Any]:
-        return _oasis_profile_llm._generate_profile_with_llm(self, entity_name, entity_type, entity_summary, entity_attributes, context, demographic_slot)
+    def _generate_profile_with_llm(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, demographic_slot: Optional[PersonaDemographicSlot]=None, taken_names: Optional[List[str]]=None) -> Dict[str, Any]:
+        return _oasis_profile_llm._generate_profile_with_llm(self, entity_name, entity_type, entity_summary, entity_attributes, context, demographic_slot, taken_names)
 
     def _validate_profile_metadata(self, result: Dict[str, Any], *, is_collective: bool=False) -> List[str]:
         return _oasis_profile_llm._validate_profile_metadata(self, result, is_collective=is_collective)
@@ -356,8 +357,8 @@ class OasisProfileGenerator:
     def _get_system_prompt(self, is_individual: bool) -> str:
         return _oasis_profile_prompts._get_system_prompt(self, is_individual)
 
-    def _build_individual_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> str:
-        return _oasis_profile_prompts._build_individual_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot)
+    def _build_individual_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None, taken_names: Optional[List[str]]=None) -> str:
+        return _oasis_profile_prompts._build_individual_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot, taken_names)
 
     def _build_group_persona_prompt(self, entity_name: str, entity_type: str, entity_summary: str, entity_attributes: Dict[str, Any], context: str, detail_level: Optional[dict]=None, demographic_slot: Optional[PersonaDemographicSlot]=None) -> str:
         return _oasis_profile_prompts._build_group_persona_prompt(self, entity_name, entity_type, entity_summary, entity_attributes, context, detail_level, demographic_slot)
@@ -366,8 +367,8 @@ class OasisProfileGenerator:
         return _oasis_profile_prompts._build_drift_correction_prompt(self, entity_name=entity_name, entity_type=entity_type, persona_kind=persona_kind, profession=profession, bio=bio, persona_text=persona_text, drifted_domains=drifted_domains, source_text=source_text)
 
     @staticmethod
-    def _rule_based_voice_register(entity_type: str, profession: str='') -> str:
-        return _oasis_profile_rule_based._rule_based_voice_register(entity_type, profession)
+    def _rule_based_voice_register(entity_type: str, profession: str='', seed: str='') -> str:
+        return _oasis_profile_rule_based._rule_based_voice_register(entity_type, profession, seed)
 
     def _report_persona_degradation(self, profiles: List[Optional[OasisAgentProfile]], degradations: 'DegradationCollector') -> None:
         return _oasis_profile_rule_based._report_persona_degradation(self, profiles, degradations)
@@ -388,8 +389,8 @@ class OasisProfileGenerator:
         """Set knowledge graph ID for knowledge graph search"""
         self.graph_id = graph_id
 
-    def _backfill_rejected_slots(self, *, profiles: List[Optional[OasisAgentProfile]], entities: List[EntityNode], reserve_entities: List[EntityNode], use_llm: bool, rejected: List['PersonaIneligible']) -> None:
-        return _oasis_profile_batch_results._backfill_rejected_slots(self, profiles=profiles, entities=entities, reserve_entities=reserve_entities, use_llm=use_llm, rejected=rejected)
+    def _backfill_rejected_slots(self, *, profiles: List[Optional[OasisAgentProfile]], entities: List[EntityNode], reserve_entities: List[EntityNode], use_llm: bool, rejected: List['PersonaIneligible'], coherence_check: Optional[Callable[[OasisAgentProfile, EntityNode], Optional['PersonaIneligible']]] = None) -> None:
+        return _oasis_profile_batch_results._backfill_rejected_slots(self, profiles=profiles, entities=entities, reserve_entities=reserve_entities, use_llm=use_llm, rejected=rejected, coherence_check=coherence_check)
 
     def _consume_gevent_results(self, pool, worker_wrapper, entities, process_result, completed_count, total) -> bool:
         return _oasis_profile_batch_results._consume_gevent_results(self, pool, worker_wrapper, entities, process_result, completed_count, total)

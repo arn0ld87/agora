@@ -22,6 +22,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .entity_selection_contract import EntitySelectionDecision
+
 _STRICT = ConfigDict(extra="forbid")
 
 
@@ -85,6 +87,14 @@ class PreparePersonaCheckpoint(BaseModel):
 
     entities_count: int = 0
     entity_types: list[str] = Field(default_factory=list)
+
+    # Issue #1759 (A5): die Auswahl haengt jetzt an der Simulationsfrage. Der
+    # Hash der (whitespace-normalisierten) Frage macht einen Checkpoint zur
+    # geaenderten Frage nicht resumable; die Begruendungen halten fest, warum
+    # eine Entitaet einen Platz bekam. Beides optional: Checkpoints aus der Zeit
+    # davor bleiben lesbar (``None`` = Frage unbekannt, kein Veto beim Resume).
+    requirement_hash: Optional[str] = None
+    selection_reasons: list[EntitySelectionDecision] = Field(default_factory=list)
 
     # Bereits generierte Profile, Schlüssel = str(Generierungs-Index).
     completed_profiles: dict[str, dict[str, Any]] = Field(default_factory=dict)

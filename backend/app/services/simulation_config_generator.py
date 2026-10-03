@@ -12,6 +12,7 @@ Adopt step-by-step generation strategy to avoid failures from generating too lon
 
 import math
 import os
+from collections.abc import Collection
 from typing import Dict, Any, List, Optional, Callable
 
 
@@ -33,6 +34,8 @@ from . import simulation_config_llm as _simulation_config_llm
 from . import simulation_config_time as _simulation_config_time
 from . import simulation_config_events as _simulation_config_events
 from . import simulation_config_agents as _simulation_config_agents
+from . import simulation_stance_graph as _stance_graph
+from .degradation_collector import DegradationCollector
 
 logger = get_logger("agora.simulation_config")
 
@@ -143,6 +146,9 @@ class SimulationConfigGenerator:
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
         # Batching-Granularität (#870): ENV-konfigurierbar, Default 8.
         self.AGENTS_PER_BATCH = self._resolve_agents_per_batch()
+        # Topic-Typen des aktuellen Laufs (Issue #1759); ``generate_config``
+        # setzt sie, die Agent-Batches lesen sie nur.
+        self._contested_topic_types: frozenset[str] = frozenset()
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -176,6 +182,19 @@ class SimulationConfigGenerator:
             use_active_config=not tenant_scoped,
             allow_api_key_fallback=not tenant_scoped,
         )
+
+    def _persisted_llm_base_url(self) -> str:
+        """Basis-URL, die in ``simulation_config.json`` landet (#1759 C4).
+
+        Eine ``cli``-Route (codex_cli/claude_cli) hat keinen HTTP-Endpoint. Der
+        ``.env``-Fallback in ``__init__`` (``Config.LLM_BASE_URL``) darf dort
+        nicht als ``llm_base_url`` persistiert werden: das Modell der CLI-Route
+        stünde sonst neben ``https://api.openai.com/v1`` im selben Objekt, und
+        Interview/Preflight lösen darüber die falsche Connection auf.
+        """
+        if self.provider_type in (PROVIDER_CODEX_CLI, PROVIDER_CLAUDE_CLI):
+            return ""
+        return self.base_url
 
     @staticmethod
     def _resolve_agents_per_batch() -> int:
@@ -219,6 +238,8 @@ class SimulationConfigGenerator:
         enable_twitter: bool = True,
         enable_reddit: bool = True,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        contested_topic_types: Optional[Collection[str]] = None,
+        degradations: Optional[DegradationCollector] = None,
     ) -> SimulationParameters:
         """
         Intelligently generate complete simulation configuration (step-by-step generation)
@@ -233,6 +254,10 @@ class SimulationConfigGenerator:
             enable_twitter: Whether to enable Twitter
             enable_reddit: Whether to enable Reddit
             progress_callback: Progress callback function(current_step, total_steps, message)
+            contested_topic_types: Als ``contested_topic`` deklarierte Ontologie-Typen
+                (Issue #1759). ``None`` liest sie aus der Ontologie des Projekts;
+                leer bedeutet: bisheriges Stance-Verhalten ohne Graph-Ableitung.
+            degradations: Optionaler Sammler für sichtbare Stance-Warnungen.
 
         Returns:
             SimulationParameters: Complete simulation parameters
@@ -240,6 +265,12 @@ class SimulationConfigGenerator:
         logger.info(
             f"Starting intelligent simulation configuration generation: simulation_id={simulation_id}, entities={len(entities)}"
         )
+        topic_types = (
+            frozenset(contested_topic_types)
+            if contested_topic_types is not None
+            else _stance_graph.resolve_contested_topic_types(project_id)
+        )
+        self._contested_topic_types = topic_types
 
         # Calculate total steps
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
@@ -316,9 +347,19 @@ class SimulationConfigGenerator:
         # ========== Skeptiker-Quote ≥20 % (Slice 5, Issue #497) ==========
         all_agent_configs = self._ensure_skeptic_quota(all_agent_configs)
 
+        # ========== Stance-Abgleich gegen den Graph (Issue #1759, A6) ==========
+        stance_warnings = _stance_graph.warn_unrepresented_positions(
+            entities, all_agent_configs, topic_types, degradations
+        )
+
         # ========== Assign initial post agents ==========
         logger.info("Assigning appropriate publisher agents to initial posts...")
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
+        stance_warnings += _stance_graph.align_initial_posts_with_stance(
+            event_config, all_agent_configs, topic_types, degradations
+        )
+        if stance_warnings:
+            reasoning_parts.append("Stance check: " + " ".join(stance_warnings))
         assigned_count = len(
             [p for p in event_config.initial_posts if p.get("poster_agent_id") is not None]
         )
@@ -363,7 +404,7 @@ class SimulationConfigGenerator:
             twitter_config=twitter_config,
             reddit_config=reddit_config,
             llm_model=self.model_name,
-            llm_base_url=self.base_url,
+            llm_base_url=self._persisted_llm_base_url(),
             language=self.language,
             enable_agent_tools=getattr(Config, "ENABLE_AGENT_TOOLS", False),
             max_tool_calls_per_action=getattr(Config, "MAX_TOOL_CALLS_PER_ACTION", 2),

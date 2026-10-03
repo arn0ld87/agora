@@ -21,12 +21,15 @@
       "type": "string"
     },
     "VoiceRegister": {
-      "description": "Voice-Register aus oasis_profile_generator (Sub-Slice 10).\n\nVokabular ist der Profil-Generator-SSoT (``formal-de``/``neutral-de``/\n``technical-de``/``skeptisch-de``). Das alte Vokabular\n``formal``/``casual``/``jugendsprache`` war nie an den Generator\nangebunden und ist entfernt \u2014 der Runner-Fallback auf ``casual``\nverschleierte bisher jede Persona als \u201ecasual`` (#1009/#1216).\nFrontend rendert Badge in PersonaAvatar.",
+      "description": "Voice-Register aus oasis_profile_generator (Sub-Slice 10).\n\nVokabular ist der Profil-Generator-SSoT (``formal-de``/``neutral-de``/\n``technical-de``/``skeptisch-de`` plus die Betroffenen-Register\n``betroffen-de``/``emotional-de``/``umgangssprachlich-de``, #1759 A7). Das alte Vokabular\n``formal``/``casual``/``jugendsprache`` war nie an den Generator\nangebunden und ist entfernt \u2014 der Runner-Fallback auf ``casual``\nverschleierte bisher jede Persona als \u201ecasual`` (#1009/#1216).\nFrontend rendert Badge in PersonaAvatar.",
       "enum": [
         "formal-de",
         "neutral-de",
         "technical-de",
-        "skeptisch-de"
+        "skeptisch-de",
+        "betroffen-de",
+        "emotional-de",
+        "umgangssprachlich-de"
       ],
       "title": "VoiceRegister",
       "type": "string"

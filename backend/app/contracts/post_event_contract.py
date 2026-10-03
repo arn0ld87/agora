@@ -46,7 +46,8 @@ class VoiceRegister(str, Enum):
     """Voice-Register aus oasis_profile_generator (Sub-Slice 10).
 
     Vokabular ist der Profil-Generator-SSoT (``formal-de``/``neutral-de``/
-    ``technical-de``/``skeptisch-de``). Das alte Vokabular
+    ``technical-de``/``skeptisch-de`` plus die Betroffenen-Register
+    ``betroffen-de``/``emotional-de``/``umgangssprachlich-de``, #1759 A7). Das alte Vokabular
     ``formal``/``casual``/``jugendsprache`` war nie an den Generator
     angebunden und ist entfernt — der Runner-Fallback auf ``casual``
     verschleierte bisher jede Persona als „casual`` (#1009/#1216).
@@ -57,6 +58,9 @@ class VoiceRegister(str, Enum):
     NEUTRAL_DE = "neutral-de"
     TECHNICAL_DE = "technical-de"
     SKEPTISCH_DE = "skeptisch-de"
+    BETROFFEN_DE = "betroffen-de"
+    EMOTIONAL_DE = "emotional-de"
+    UMGANGSSPRACHLICH_DE = "umgangssprachlich-de"
 
 
 class PostKind(str, Enum):

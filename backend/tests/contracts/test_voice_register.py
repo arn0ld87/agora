@@ -1,7 +1,7 @@
 """Voice-Lint CI-Check (Sub-Slice 11, Layer 2).
 
 Pinnt DACH-Voice-Constraints:
-- Nur 4 erlaubte voice_register-Werte
+- Nur 7 erlaubte voice_register-Werte (4 sachliche + 3 Betroffenen-Register, #1759 A7)
 - Default ist neutral-de
 - None erlaubt für Legacy-Daten
 - _rule_based_voice_register ist deterministisch und liefert nur erlaubte Werte
@@ -13,7 +13,15 @@ from pydantic import ValidationError
 from app.contracts.persona_contract import PersonaModel
 from app.services.oasis_profile_generator import OasisProfileGenerator
 
-VALID_VOICE_REGISTERS = {"formal-de", "neutral-de", "technical-de", "skeptisch-de"}
+VALID_VOICE_REGISTERS = {
+    "formal-de",
+    "neutral-de",
+    "technical-de",
+    "skeptisch-de",
+    "betroffen-de",
+    "emotional-de",
+    "umgangssprachlich-de",
+}
 
 
 class TestVoiceRegisterContract:
@@ -21,7 +29,7 @@ class TestVoiceRegisterContract:
 
     @pytest.mark.parametrize("value", sorted(VALID_VOICE_REGISTERS))
     def test_valid_voice_register_accepted(self, value: str) -> None:
-        """Jeder der 4 erlaubten Werte muss in PersonaModel akzeptiert werden."""
+        """Jeder der 7 erlaubten Werte muss in PersonaModel akzeptiert werden."""
         p = PersonaModel(
             user_id=1,
             user_name="test_user",

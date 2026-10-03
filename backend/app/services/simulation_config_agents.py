@@ -23,6 +23,7 @@ from .simulation_config_models import (
 from .simulation_config_schemas import (
     AgentConfigsResponse,
 )
+from .simulation_stance_graph import graph_edge_facts, resolve_stance
 
 logger = get_logger("agora.simulation_config")
 
@@ -87,13 +88,36 @@ def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNo
     return all_agent_configs
 
 
+_GRAPH_EDGES_PROMPT_HINT = (
+    '\n\n## Graph Edges\nEach entity lists `graph_edges` (edge_name, fact; `topic` is set when the edge points at the contested topic of this run). '
+    'Set `stance` consistently with what these facts say about the entity\'s position on the contested topic; do not invent a position the facts do not support.'
+)
+
+
+def _topic_types_of(self) -> frozenset:
+    """Topic-Typen des Laufs; leer, wenn der Generator keine gesetzt hat."""
+    value = getattr(self, '_contested_topic_types', None)
+    return value if isinstance(value, frozenset) else frozenset()
+
+
+def _resolve_agent_stance(entity: EntityNode, cfg: Dict[str, Any], topic_types: frozenset) -> str:
+    """Graph-Stance (Kante auf Topic-Knoten) vor LLM-/Regel-Stance (Issue #1759, A6)."""
+    return resolve_stance(entity, cfg.get('stance', 'neutral'), topic_types)
+
+
 def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str) -> List[AgentActivityConfig]:
     """Generate agent configurations in batch"""
     entity_list = []
     summary_len = self.AGENT_SUMMARY_LENGTH
+    topic_types = _topic_types_of(self)
     for i, e in enumerate(entities):
-        entity_list.append({'agent_id': start_idx + i, 'entity_name': e.name, 'entity_type': e.get_entity_type() or 'Unknown', 'summary': e.summary[:summary_len] if e.summary else ''})
+        entry = {'agent_id': start_idx + i, 'entity_name': e.name, 'entity_type': e.get_entity_type() or 'Unknown', 'summary': e.summary[:summary_len] if e.summary else ''}
+        if topic_types:
+            entry['graph_edges'] = graph_edge_facts(e, topic_types)
+        entity_list.append(entry)
     prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **activity_level has a hard floor of 0.5** (values below 0.5 are raised automatically) — use it to differentiate degree of engagement above that floor, not to make an entity inactive\n- **Official institutions** (University/GovernmentAgency): Lower engagement within the floor (0.5-0.6), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium-high activity (0.6-0.8), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.7-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium-high activity (0.6-0.8), medium-high influence (1.5-2.0)\n- **active_hours must cover at least 06:00-23:59** (hours outside that range are added automatically) — narrow it only within that window, never to fewer hours overall\n\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.5-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, must include 6-23, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>\n        }},\n        ...\n    ]\n}}'
+    if topic_types:
+        prompt += _GRAPH_EDGES_PROMPT_HINT
     system_prompt = 'You are a social media behavior analysis expert. Return pure JSON and use DACH / Europe-Berlin activity habits by default.'
     try:
         result = self._call_llm_with_retry(prompt, system_prompt, AgentConfigsResponse)
@@ -115,7 +139,7 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
         active_hours = enforce_active_hours_floor(
             self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23)))
         )
-        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=cfg.get('stance', 'neutral'), influence_weight=cfg.get('influence_weight', 1.0))
+        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0))
         configs.append(config)
     return configs
 

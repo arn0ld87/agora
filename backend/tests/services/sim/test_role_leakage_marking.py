@@ -476,3 +476,103 @@ def test_leere_profile_werden_nicht_gecacht(tmp_path) -> None:
     _twitter, reddit = reader._get_profiles(str(sim_dir))
     assert reddit and reddit[0]["name"] == "Laura Wagner"
     reader._clear_profile_cache()
+
+
+def test_konflikt_log_enthaelt_keinen_beitragstext(caplog, monkeypatch) -> None:
+    """Review-Finding PR #1762: ein Beitrag mit API-Key darf nicht im Log landen."""
+    import logging
+
+    # ``setup_logger`` setzt ``propagate=False``; ohne Weiterleitung sieht ``caplog`` nichts.
+    monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+    monkeypatch.setattr(logging.getLogger("agora.role_leakage"), "propagate", True)
+
+    # Erfundener Wert, zur Laufzeit zusammengesetzt (kein Literal für den Secret-Scan).
+    secret = "sk-" + "live1234567890" + "abcdefSECRET"
+    action = _make_action_dict(
+        content=f"Als Betriebsratsvorsitzende {secret} schreibe ich hier. Weitere Details folgen.",
+    )
+    caplog.set_level(logging.INFO, logger="agora.role_leakage")
+
+    result = detect_role_conflict("reddit", action, [DOZENTIN, BETRIEBSRAT])
+
+    assert result is not None
+    assert secret not in caplog.text
+    assert "SECRET" not in caplog.text
+    messages = [r.getMessage() for r in caplog.records if r.name == "agora.role_leakage"]
+    assert len(messages) == 1
+    message = messages[0]
+    for expected in (
+        "platform=reddit",
+        "round=1",
+        "agent_id=0",
+        "agent_name=Dozentin",
+        "action_type=CREATE_POST",
+        f"reason={result}",
+        "self_reference_offset=",
+        "self_reference_len=",
+    ):
+        assert expected in message
+
+
+# ---------------------------------------------------------------------------
+# Protokollierte Zähler überleben den Neustart (Review-Finding PR #1762)
+# ---------------------------------------------------------------------------
+
+def _persisted_payload(state: SimulationRunState, tmp_path: Path) -> tuple[dict, dict]:
+    """Ergebnis von ``save_run_state``: (in den Store geschrieben, an Event-Bus/Registry gegeben)."""
+    from app.services.sim import run_state_store
+
+    store = MagicMock()
+    published: list[dict] = []
+    with patch("app.services.artifact_store.resolve_default_store", return_value=store):
+        run_state_store.save_run_state(
+            state, tmp_path, event_bus_publish=published.append
+        )
+    return store.write_json.call_args.args[2], published[0]
+
+
+def test_run_state_persistiert_protokollierte_zaehler_getrennt_von_der_anzeige(
+    tmp_path: Path,
+) -> None:
+    state = SimulationRunState(simulation_id="sim_live")
+    state.twitter_actions_count = 4
+    state.twitter_live_actions = 9
+    state.reddit_actions_count = 2
+
+    persisted, published = _persisted_payload(state, tmp_path)
+
+    assert persisted["twitter_actions_count"] == 9  # Anzeige = max(protokolliert, live)
+    assert persisted["twitter_logged_actions_count"] == 4
+    assert persisted["reddit_logged_actions_count"] == 2
+    # Die neuen Felder laufen nicht in die API-/Event-Antwort.
+    assert "twitter_logged_actions_count" not in published
+    assert "reddit_logged_actions_count" not in published
+
+
+def test_load_run_state_nimmt_die_protokollierten_zaehler_statt_der_anzeige(
+    tmp_path: Path,
+) -> None:
+    state = SimulationRunState(simulation_id="sim_live")
+    state.twitter_actions_count = 4
+    state.twitter_live_actions = 9
+    state.reddit_actions_count = 2
+    persisted, _ = _persisted_payload(state, tmp_path)
+
+    loaded = _load_from_dict(persisted)
+
+    assert loaded.twitter_actions_count == 4, "Live-Wert darf nicht protokolliert werden"
+    assert loaded.reddit_actions_count == 2
+    assert loaded.displayed_twitter_actions == 4
+
+
+def test_load_run_state_altbestand_nutzt_den_alten_feldnamen() -> None:
+    d = SimulationRunState(simulation_id="sim_old").to_dict()
+    d["twitter_actions_count"] = 7
+    d["reddit_actions_count"] = 3
+    d.pop("twitter_logged_actions_count", None)
+    d.pop("reddit_logged_actions_count", None)
+
+    loaded = _load_from_dict(d)
+
+    assert loaded.twitter_actions_count == 7
+    assert loaded.reddit_actions_count == 3
