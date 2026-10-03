@@ -1,0 +1,5 @@
+# Supply-Chain-Cooldown: bun loest nur npm-Releases auf, die mindestens
+# 7 Tage alt sind (Wert in Sekunden). Wirkt bei bun add/update und bei
+# Dependabot, nicht bei bun install --frozen-lockfile.
+[install]
+minimumReleaseAge = 604800

@@ -15,6 +15,10 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
+    # Supply-Chain-Cooldown: Version-Updates erst 7 Tage nach Release
+    # vorschlagen. Security-Updates sind davon ausgenommen.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -49,6 +53,10 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
+    # Supply-Chain-Cooldown: Version-Updates erst 7 Tage nach Release
+    # vorschlagen. Security-Updates sind davon ausgenommen.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
@@ -70,6 +78,10 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
+    # Supply-Chain-Cooldown: Version-Updates erst 7 Tage nach Release
+    # vorschlagen. Security-Updates sind davon ausgenommen.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     labels:
       - "dependencies"
@@ -89,6 +101,10 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "Europe/Berlin"
+    # Supply-Chain-Cooldown: Version-Updates erst 7 Tage nach Release
+    # vorschlagen. Security-Updates sind davon ausgenommen.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     labels:
       - "dependencies"
