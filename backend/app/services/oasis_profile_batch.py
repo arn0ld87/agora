@@ -11,6 +11,7 @@ from . import oasis_profile_generator as _legacy
 
 if TYPE_CHECKING:
     from .degradation_collector import DegradationCollector
+import functools
 import json
 import re
 from typing import Callable, Dict, List, Optional
@@ -184,40 +185,67 @@ entity :Optional [EntityNode ],
     return None
 
 
+def _incoherence_ineligible (
+candidate :"OasisAgentProfile" ,
+entity :Optional [EntityNode ],
+degradations :Optional ["DegradationCollector"],
+)->Optional [PersonaIneligible ]:
+    """Prueft ein einzelnes Profil auf Kohaerenz (#1759) und verbucht die Ablehnung.
+
+    ``None`` bei kohaerentem Profil, Kollektiv oder regelbasiertem Notprofil.
+    Sonst ist die Degradation (``persona_name_identity_rejected`` bzw.
+    ``persona_role_implausible``) verbucht und die zurueckgegebene
+    ``PersonaIneligible`` traegt den Grund in die ``rejected``-Liste, damit der
+    Slot nachbesetzt und in der Summenzeile mitgezaehlt wird.
+    """
+    if candidate .persona_kind =="collective"or candidate .generation_source !="llm":
+        return None
+    rejection =_incoherence_rejection (candidate ,entity )
+    if rejection is None :
+        return None
+    kind ,reason =rejection
+    _legacy .logger .warning (
+    "Persona abgelehnt (#1759): user_id=%s %s",candidate .user_id ,reason
+    )
+    if degradations is not None :
+        degradations .record (
+        kind ,
+        DegradationSeverity .WARNING ,
+        reason ,
+        context ={"user_id":candidate .user_id ,"name":candidate .name },
+        )
+    entity_name =(entity .name if entity is not None else None )or candidate .name or ""
+    entity_type =(
+    (entity .get_entity_type ()if entity is not None else None )
+    or candidate .source_entity_type
+    or "Entity"
+    )
+    return PersonaIneligible (entity_name ,entity_type ,reason )
+
+
 def _reject_incoherent_profiles (
 profiles :List [Optional ["OasisAgentProfile"]],
 entities :List [EntityNode ],
 degradations :Optional ["DegradationCollector"],
+rejected :List [PersonaIneligible ],
 )->None :
     """Lehnt unkohaerente individuelle LLM-Profile sichtbar ab (Issue #1759).
 
-    Letzte Verteidigungslinie nach der Umbenennungs-Synchronisation. Ein Profil
-    mit fremdem Namen im Freitext oder unplausiblem Alter fuer die Rolle wird
-    als Degradation verbucht und der Slot geleert, statt still in die Simulation
-    zu gehen. Kollektive und regelbasierte Notprofile nehmen nicht teil.
+    Laeuft nach der Umbenennungs-Synchronisation und *vor* der Nachbesetzung.
+    Ein Profil mit fremdem Namen im Freitext oder unplausiblem Alter fuer die
+    Rolle wird als Degradation verbucht, der Slot geleert und die Ablehnung in
+    ``rejected`` eingetragen. ``_backfill_rejected_slots`` besetzt ihn dann aus
+    dem Reservepool nach, und die Summenzeile zaehlt die Ablehnung mit.
+    Kollektive und regelbasierte Notprofile nehmen nicht teil.
     """
     for idx ,candidate in enumerate (profiles ):
-        if (
-        candidate is None
-        or candidate .persona_kind =="collective"
-        or candidate .generation_source !="llm"
-        ):
+        if candidate is None :
             continue
         entity =entities [idx ]if idx <len (entities )else None
-        rejection =_incoherence_rejection (candidate ,entity )
-        if rejection is None :
+        ineligible =_incoherence_ineligible (candidate ,entity ,degradations )
+        if ineligible is None :
             continue
-        kind ,reason =rejection
-        _legacy .logger .warning (
-        "Persona abgelehnt (#1759): user_id=%s %s",candidate .user_id ,reason
-        )
-        if degradations is not None :
-            degradations .record (
-            kind ,
-            DegradationSeverity .WARNING ,
-            reason ,
-            context ={"user_id":candidate .user_id ,"name":candidate .name },
-            )
+        rejected .append (ineligible )
         profiles [idx ]=None
 
 
@@ -566,6 +594,15 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         # Bei einem Nutzerabbruch (cancel_requested) bleibt die Nachbesetzung
         # aus — sie würde weitere LLM-Calls auslösen, obwohl bereits
         # abgebrochen wurde.
+    # Dedup display_name und user_name (Details: _dedupe_profile_names).
+    _dedupe_profile_names (self ,profiles )
+
+    # Issue #1759 (A1/A2): Identitaets- und Rollenplausibilitaet nach der
+    # Umbenennungs-Synchronisation, aber VOR der Nachbesetzung: abgelehnte Slots
+    # laufen ueber ``rejected`` in dieselbe Nachbesetzung wie die Eignungs-
+    # ablehnungen und werden in der Summenzeile mitgezaehlt.
+    _reject_incoherent_profiles (profiles ,entities ,degradations ,rejected )
+
     if rejected and not cancel_requested :
         self ._backfill_rejected_slots (
         profiles =profiles ,
@@ -573,14 +610,15 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         reserve_entities =list (reserve_entities or []),
         use_llm =use_llm ,
         rejected =rejected ,
+        # Nachrueckende Profile durchlaufen dieselbe Pruefung; die
+        # Obergrenze ist die Reserveliste (jeder Eintrag wird hoechstens
+        # einmal gezogen), eine Endlosschleife kann nicht entstehen.
+        coherence_check =functools .partial (
+        _incoherence_ineligible ,degradations =degradations
+        ),
         )
-
-    # Dedup display_name und user_name (Details: _dedupe_profile_names).
-    _dedupe_profile_names (self ,profiles )
-
-    # Issue #1759 (A1/A2): letzte Verteidigungslinie nach der Umbenennungs-
-    # Synchronisation — Identitaets- und Rollenplausibilitaet.
-    _reject_incoherent_profiles (profiles ,entities ,degradations )
+        # Nachbesetzte Profile koennen Namen mit bestehenden teilen.
+        _dedupe_profile_names (self ,profiles )
 
         # Summenzeile: die einzelnen "[i/n]"-Meldungen oben genuegen nicht als
         # Bilanz, ohne sie nachzuzaehlen — genau daran ist heute eine

@@ -245,8 +245,13 @@ class SimulationRunner:
                 return
             from .simulation_manager import SimulationManager
 
-            mirror_runtime_progress(SimulationManager(), state)
-            cls._mirrored_progress[state.simulation_id] = key
+            written = mirror_runtime_progress(SimulationManager(), state)
+            # ``None`` heisst: es wurde nichts geschrieben (etwa weil
+            # ``get_simulation`` voruebergehend keinen State liefert). Dann
+            # bleibt der Schluessel unveraendert, und der naechste Takt versucht
+            # es erneut, statt den Fortschritt bis zum naechsten Wechsel zu verlieren.
+            if written is not None:
+                cls._mirrored_progress[state.simulation_id] = key
         except Exception as exc:  # noqa: BLE001 — Spiegelung ist best-effort, Monitor laeuft weiter
             logger.warning(
                 "state.json-Fortschritt nicht gespiegelt: simulation_id=%s, error=%s",

@@ -256,11 +256,25 @@ def gender_from_role_title(*texts: Optional[str]) -> Optional[_GenderName]:
 def role_corrected_gender(
     gender: Optional[str], profession: Optional[str], bio: Optional[str]
 ) -> Optional[str]:
-    """Gender, korrigiert auf die Berufsbezeichnung, wenn diese eindeutig ist."""
-    if gender is None:
-        return None
+    """Gender, korrigiert auf die Berufsbezeichnung, soweit diese es belegt.
+
+    Das Maskulinum ist im Deutschen oft generisch („Geschäftsführer der Klinik“),
+    ein männlicher Titel belegt deshalb kein männliches Geschlecht. Regeln:
+
+    * ``nonbinary`` bleibt immer unverändert.
+    * Eine eindeutig weibliche Bezeichnung (``Ärztin``) setzt ``female``.
+    * ``female`` wird nie wegen einer maskulinen Bezeichnung zu ``male``;
+      ``male`` bleibt bei maskuliner Bezeichnung ebenfalls ``male``.
+    * Nur bei ``other`` oder ungültigem Wert gilt die (eindeutige) Bezeichnung.
+    """
+    if gender is None or gender == "nonbinary":
+        return gender
     title_gender = gender_from_role_title(profession, bio)
     if title_gender is None or title_gender == gender:
+        return gender
+    if title_gender == "female":
+        return title_gender
+    if gender in ("male", "female"):
         return gender
     return title_gender
 

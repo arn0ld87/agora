@@ -903,9 +903,15 @@ def augment_profile_with_stance(
     diese Funktion wird dort bewusst nicht aufgerufen, sonst stünde die
     Haltung zweimal im Kontext des Agenten.
 
-    Ohne ``agent_configs`` (leer/fehlend) oder ohne eine einzige Config mit
-    gesetztem ``stance`` gibt die Funktion den unveränderten ``profile_path``
-    zurück — kein Seiteneffekt, kein Fehler.
+    Ergänzt wird je Persona die Haltung (soweit die Config eine trägt) und
+    die Beitragslängenregel von Plattform und Voice-Register
+    (``_profile_prompt_sections``, #1759 A7). Bei nicht leerer
+    ``agent_configs`` entsteht deshalb auch ohne eine einzige Config mit
+    ``stance`` eine Kopie (Suffix ``_with_stance``), die zumindest die
+    Längenregel trägt. Den unveränderten ``profile_path`` gibt die Funktion nur
+    zurück, wenn ``agent_configs`` leer/fehlend ist, die Twitter-CSV keine
+    ``user_char``-Spalte hat oder für keine Persona ein Abschnitt entsteht —
+    dann ohne Seiteneffekt und ohne Fehler.
     """
     if not agent_configs:
         return profile_path

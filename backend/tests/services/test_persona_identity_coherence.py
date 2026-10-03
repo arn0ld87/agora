@@ -507,6 +507,92 @@ class TestAblehnungBeiFehlendemNamen:
         assert "Mia Weber" in passende[0].detail
 
 
+class TestKohaerenzAblehnungWirdNachbesetzt:
+    """Review-Finding PR #1762: unkohaerente Profile werden nachbesetzt und mitgezaehlt."""
+
+    @staticmethod
+    def _profile(user_id: int, name: str, persona_name: str):
+        from app.services.oasis_profile_models import OasisAgentProfile
+
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name=name.lower().replace(" ", "_"),
+            name=name,
+            bio="Beschäftigte der Klinik",
+            persona=f"{persona_name}, 40, arbeitet in der Klinik. {persona_name} sorgt sich.",
+            generation_source="llm",
+        )
+
+    def test_abgelehnter_slot_wird_aus_der_reserve_nachbesetzt(
+        self, generator, monkeypatch, caplog
+    ):
+        import logging
+
+        from app.contracts.pipeline_degradation_contract import DegradationKind
+
+        # ``setup_logger`` setzt ``propagate=False``; ohne Weiterleitung sieht
+        # ``caplog`` nichts (wie in tests/test_oasis_profile_generator.py).
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(logging.getLogger("agora.oasis_profile"), "propagate", True)
+        from app.services.degradation_collector import DegradationCollector
+
+        # Primaerkandidat und erster Reservekandidat tragen einen fremden Namen
+        # im Freitext; erst der zweite Reservekandidat ist kohaerent.
+        by_entity = {
+            "Primär": ("Mia Weber", "Monika Hartmann"),
+            "Reserve A": ("Lena Roth", "Sabine Krüger"),
+            "Reserve B": ("Jana Falk", "Jana Falk"),
+        }
+
+        def fake(entity, user_id, use_llm=True, demographic_slot=None):
+            name, persona_name = by_entity[entity.name]
+            return self._profile(user_id, name, persona_name)
+
+        monkeypatch.setattr(generator, "generate_profile_from_entity", fake)
+        caplog.set_level(logging.INFO, logger="agora.oasis_profile")
+        degradations = DegradationCollector()
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("Primär", "Person")],
+            use_llm=True,
+            parallel_count=1,
+            degradations=degradations,
+            reserve_entities=[_entity("Reserve A", "Person"), _entity("Reserve B", "Person")],
+        )
+
+        assert [p.name for p in profiles] == ["Jana Falk"], "Slot muss nachbesetzt werden"
+        rejected_events = [
+            e
+            for e in degradations.report().events
+            if e.kind == DegradationKind.PERSONA_NAME_IDENTITY_REJECTED
+        ]
+        assert len(rejected_events) == 2, "beide Ablehnungen bleiben sichtbar"
+        summary = [
+            r.getMessage()
+            for r in caplog.records
+            if "Persona generation complete" in r.getMessage()
+        ]
+        assert len(summary) == 1
+        assert "3 Kandidat(en) angetreten, 2 abgelehnt, 1 Personas erzeugt" in summary[0]
+
+    def test_ohne_kohaerenten_nachruecker_bleibt_der_slot_leer_und_die_schleife_endet(
+        self, generator, monkeypatch
+    ):
+        def fake(entity, user_id, use_llm=True, demographic_slot=None):
+            return self._profile(user_id, "Mia Weber", "Monika Hartmann")
+
+        monkeypatch.setattr(generator, "generate_profile_from_entity", fake)
+
+        profiles = generator.generate_profiles_from_entities(
+            entities=[_entity("Primär", "Person")],
+            use_llm=True,
+            parallel_count=1,
+            reserve_entities=[_entity("Reserve A", "Person"), _entity("Reserve B", "Person")],
+        )
+
+        assert profiles == []
+
+
 class TestVergebeneNamenImPrompt:
     """Der Generierungs-Prompt kennt die bereits vergebenen Namen."""
 
@@ -638,6 +724,30 @@ class TestRollenPlausibilitaet:
         assert role_corrected_gender("male", "Hebamme und Verbandssprecher", None) == "male"
         assert role_corrected_gender(None, "Chefarzt", None) is None
 
+    def test_generisches_maskulinum_macht_eine_frau_nicht_zum_mann(self):
+        from app.contracts.persona_contract import role_corrected_gender
+
+        assert role_corrected_gender("female", "Geschäftsführer der Klinik", None) == "female"
+        assert role_corrected_gender("female", "Chefarzt", None) == "female"
+        assert role_corrected_gender("male", "Chefarzt", None) == "male"
+
+    def test_nonbinary_bleibt_unveraendert(self):
+        from app.contracts.persona_contract import role_corrected_gender
+
+        assert role_corrected_gender("nonbinary", "Ärztin", None) == "nonbinary"
+        assert role_corrected_gender("nonbinary", "Chefarzt", None) == "nonbinary"
+
+    def test_maennlich_mit_eindeutig_weiblicher_bezeichnung_wird_weiblich(self):
+        from app.contracts.persona_contract import role_corrected_gender
+
+        assert role_corrected_gender("male", "Ärztin", None) == "female"
+
+    def test_ungueltiges_gender_folgt_der_bezeichnung(self):
+        from app.contracts.persona_contract import role_corrected_gender
+
+        assert role_corrected_gender("unbekannt", "Geschäftsführer der Klinik", None) == "male"
+        assert role_corrected_gender("other", "Ärztin", None) == "female"
+
     def test_profil_bekommt_korrigiertes_gender_aus_der_berufsbezeichnung(self, generator):
         _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe")
         slot = PersonaDemographicSlot(age=45, gender="male", mbti="INTJ")
@@ -665,6 +775,49 @@ class TestRollenPlausibilitaet:
 
         assert profile.age == 52
         assert profile.gender == "female"
+
+    def test_llm_prompt_bekommt_die_dokumentierte_demografie(self, generator):
+        """Review-Finding PR #1762: der Freitext beschreibt den belegten Wert, nicht den Wuerfel."""
+        calls: list = []
+        _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe", calls)
+        slot = PersonaDemographicSlot(age=28, gender="male", mbti="INTJ")
+        entity = _entity_with(
+            "Chefärztin Geburtshilfe", "Person", {"age": 52, "gender": "weiblich"}
+        )
+
+        generator.generate_profile_from_entity(
+            entity, user_id=1, use_llm=True, demographic_slot=slot
+        )
+
+        sent = calls[0]["demographic_slot"]
+        assert (sent.age, sent.gender, sent.mbti) == (52, "female", "INTJ")
+        assert (slot.age, slot.gender) == (28, "male"), "Aufrufer-Slot bleibt unveraendert"
+
+    def test_llm_prompt_behaelt_den_slot_ohne_dokumentierte_werte(self, generator):
+        calls: list = []
+        _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe", calls)
+        slot = PersonaDemographicSlot(age=45, gender="female", mbti="INTJ")
+
+        generator.generate_profile_from_entity(
+            _entity_with("Chefärztin Geburtshilfe", "Person"),
+            user_id=1,
+            use_llm=True,
+            demographic_slot=slot,
+        )
+
+        assert calls[0]["demographic_slot"] == slot
+
+    def test_kollektiv_bekommt_keine_dokumentierte_demografie_im_prompt(self, generator):
+        calls: list = []
+        _stub_llm(generator, "Klinikverbund Nord", "", calls)
+        slot = PersonaDemographicSlot(age=28, gender="male", mbti="INTJ")
+        entity = _entity_with("Klinikverbund Nord", "Organization", {"age": 52})
+
+        generator.generate_profile_from_entity(
+            entity, user_id=1, use_llm=True, demographic_slot=slot
+        )
+
+        assert calls[0]["demographic_slot"] == slot
 
     def test_unplausibles_alter_wird_im_batch_sichtbar_abgelehnt(self, generator):
         from app.contracts.pipeline_degradation_contract import DegradationKind

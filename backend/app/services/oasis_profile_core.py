@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import oasis_profile_generator as _legacy
+import dataclasses
 import random
 from typing import List, Optional
 from collections.abc import Mapping
@@ -86,6 +87,29 @@ is_collective :bool =False ,
         profile_data ["gender"]=gender
 
 
+def _slot_with_documented_demographics (
+slot :Optional [PersonaDemographicSlot ],
+attributes :Optional [Mapping [str ,Any ]],
+is_collective :bool ,
+)->Optional [PersonaDemographicSlot ]:
+    """Slot mit den im Dokument belegten Werten, schon vor dem LLM-Aufruf (#1759 A2).
+
+    Sonst beschreibt der Freitext den gewuerfelten Slot (``alter 29``), und erst
+    nach der Generierung wird ``age`` auf den belegten Wert gesetzt: Feld und
+    Text widersprechen sich. Kollektive und fehlende Slots bleiben unberuehrt;
+    ``_apply_documented_demographics`` bleibt als Absicherung nach der Generierung.
+    """
+    if slot is None or is_collective :
+        return slot
+    age =documented_age (attributes )
+    gender =documented_gender (attributes )
+    return dataclasses .replace (
+    slot ,
+    age =slot .age if age is None else age ,
+    gender =slot .gender if gender is None else gender ,
+    )
+
+
 def generate_profile_from_entity (
 self: Any ,
 entity :EntityNode ,
@@ -135,6 +159,13 @@ taken_names :Optional [List [str ]]=None ,
     # Prompt, damit der Dedup nicht nachtraeglich umbenennen muss.
     taken_names =_resolve_taken_names (self ,taken_names )
 
+    # Issue #1759 (A2): belegte Demografie schon im Prompt anfordern, nicht
+    # erst nach der Generierung ueber den gewuerfelten Slot legen.
+    is_collective =self ._is_group_entity (entity_type )
+    demographic_slot =_slot_with_documented_demographics (
+    demographic_slot ,entity .attributes ,is_collective
+    )
+
     if use_llm :
     # Use LLM to generate detailed persona
         profile_data =self ._generate_profile_with_llm (
@@ -177,7 +208,6 @@ taken_names :Optional [List [str ]]=None ,
         # Demografie zugewiesen — es gibt kein Alter, kein Geschlecht und
         # keinen MBTI-Typ, den man ihr zuschreiben koennte, und jeder Wert an
         # dieser Stelle waere eine Erfindung.
-    is_collective =self ._is_group_entity (entity_type )
     persona_kind ="collective"if is_collective else "individual"
 
     if is_collective :

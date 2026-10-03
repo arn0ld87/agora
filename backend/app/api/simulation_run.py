@@ -625,14 +625,6 @@ def _has_config_overrides(req: _StartRequest) -> bool:
     )
 
 
-def _route_uses_cli_transport(resolved_route: "ResolvedRoute") -> bool:
-    """Ob die Route über einen CLI-Provider läuft (kein HTTP-Endpoint, #1759 C4)."""
-    from ..services.llm_provider_registry import LlmProviderRegistry
-
-    definition = LlmProviderRegistry.connection_definition(resolved_route.provider_id)
-    return definition is not None and definition.transport == "cli"
-
-
 def _apply_route_to_simulation_config(
     req: _StartRequest, resolved_route: "ResolvedRoute", run_id: str
 ) -> None:
@@ -661,10 +653,11 @@ def _apply_route_to_simulation_config(
     if req.llm_runtime.enabled or req.ai_model_ref is not None:
         if resolved_route.base_url_sanitized:
             config["llm_base_url"] = resolved_route.base_url_sanitized
-        elif _route_uses_cli_transport(resolved_route):
-            # Eine cli-Route hat keinen HTTP-Endpoint: eine aus dem Prepare
-            # (anderer Provider) stehengebliebene Basis-URL würde neben dem
-            # CLI-Modell stehen und die falsche Connection auflösen.
+        else:
+            # Die Route gibt keinen Endpoint vor (cli-Route oder HTTP-Route ohne
+            # eigene URL): eine aus dem Prepare (anderer Provider) stehengebliebene
+            # Basis-URL würde neben dem neuen Modell stehen und es über den
+            # falschen Endpoint rufen. Keine .env-URL als Ersatz einsetzen.
             config["llm_base_url"] = ""
     store.write_json(req.simulation_id, "simulation_config", config)
 

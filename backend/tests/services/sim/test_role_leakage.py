@@ -792,9 +792,15 @@ class TestKonfliktDetailProtokoll:
             "reason=unmatched_self_reference",
         ):
             assert fragment in meldung, f"Fehlt im Log: {fragment!r}"
-        assert "Technischen Dienstes" in meldung, (
-            "Die betreffende Textstelle muss im Log stehen"
+        # Die Textstelle steht als Offset und Länge im Log, nicht als Text
+        # (ein Beitrag kann einen API-Key enthalten, Review-Finding PR #1762).
+        content = action_dict["action_args"]["content"]
+        offset = content.index("Technischen Dienstes")
+        assert f"self_reference_offset={offset} " in meldung, (
+            "Die betreffende Textstelle muss per Offset im Log stehen"
         )
+        assert "self_reference_len=" in meldung
+        assert "Technischen Dienstes" not in meldung, "Beitragstext gehört nicht ins Log"
 
     def test_kein_konflikt_erzeugt_kein_konfliktlog(
         self, caplog: pytest.LogCaptureFixture

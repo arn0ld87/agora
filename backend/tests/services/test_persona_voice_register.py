@@ -135,6 +135,29 @@ class TestRollenZuordnung:
         assert classify_voice_role(entity_type, None) is VoiceRole.INSTITUTIONAL
         assert rule_based_voice_register(entity_type) in FORMAL_OR_NEUTRAL
 
+    @pytest.mark.parametrize(
+        "profession",
+        [
+            "Bürgermeisterin",
+            "Bürgermeister der Gemeinde",
+            "Landrat",
+            "Landrätin",
+            "Abgeordnete des Landtags",
+            "Dezernent für Soziales",
+            "Ministerin",
+        ],
+    )
+    def test_amtstraeger_sind_institutionell_und_nicht_betroffen(self, profession: str) -> None:
+        assert classify_voice_role("Person", profession) is VoiceRole.INSTITUTIONAL
+        assert rule_based_voice_register("Person", profession, seed="Mia Weber") == "formal-de"
+
+    @pytest.mark.parametrize(
+        "profession", ["Bürgerin", "Mitglied einer Bürgerinitiative"]
+    )
+    def test_buerger_bleiben_betroffene(self, profession: str) -> None:
+        assert classify_voice_role("Person", profession) is VoiceRole.AFFECTED
+        assert rule_based_voice_register("Person", profession, seed="Mia Weber") in AFFECTED_REGISTERS
+
     def test_behoerde_ist_formal_unternehmen_neutral(self) -> None:
         assert rule_based_voice_register("GovernmentAgency") == "formal-de"
         assert rule_based_voice_register("Company") == "neutral-de"

@@ -69,7 +69,8 @@ OFFICIAL_KEYWORDS: Tuple[str, ...] = (
     "beamt", "jurist", "lawyer", "governmentagency", "official", "verwalt",
     "agency", "behörde", "behoerde", "authority", "ministeri", "ministry",
     "government", "regierung", "kommission", "commission", "parlament",
-    "parliament",
+    "parliament", "bürgermeister", "buergermeister", "mayor", "landrat", "landrät",
+    "landraet", "minister", "dezernent", "abgeordnet",
 )
 
 #: Fachrollen: präzise, knapp, ohne Gefühlsausdruck.

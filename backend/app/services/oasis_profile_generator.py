@@ -389,8 +389,8 @@ class OasisProfileGenerator:
         """Set knowledge graph ID for knowledge graph search"""
         self.graph_id = graph_id
 
-    def _backfill_rejected_slots(self, *, profiles: List[Optional[OasisAgentProfile]], entities: List[EntityNode], reserve_entities: List[EntityNode], use_llm: bool, rejected: List['PersonaIneligible']) -> None:
-        return _oasis_profile_batch_results._backfill_rejected_slots(self, profiles=profiles, entities=entities, reserve_entities=reserve_entities, use_llm=use_llm, rejected=rejected)
+    def _backfill_rejected_slots(self, *, profiles: List[Optional[OasisAgentProfile]], entities: List[EntityNode], reserve_entities: List[EntityNode], use_llm: bool, rejected: List['PersonaIneligible'], coherence_check: Optional[Callable[[OasisAgentProfile, EntityNode], Optional['PersonaIneligible']]] = None) -> None:
+        return _oasis_profile_batch_results._backfill_rejected_slots(self, profiles=profiles, entities=entities, reserve_entities=reserve_entities, use_llm=use_llm, rejected=rejected, coherence_check=coherence_check)
 
     def _consume_gevent_results(self, pool, worker_wrapper, entities, process_result, completed_count, total) -> bool:
         return _oasis_profile_batch_results._consume_gevent_results(self, pool, worker_wrapper, entities, process_result, completed_count, total)

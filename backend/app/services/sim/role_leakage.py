@@ -445,10 +445,15 @@ def detect_role_conflict(
         return None
     # Issue #1759 (C2): ``role_conflict_count`` allein ist nicht auswertbar —
     # jeder Konflikt wird mit Agent, Plattform, Runde, Art und Textstelle
-    # protokolliert.
+    # protokolliert. Der Beitragstext selbst gehört nicht ins Log: ein Beitrag
+    # kann einen API-Key oder andere Geheimnisse enthalten. Statt Auszug und
+    # Selbstreferenz stehen Start-Offset und Länge der Textstelle im Log (der
+    # Text bleibt über die Aktion im ``actions.jsonl`` auffindbar).
+    text = _action_text(action_type, action_dict.get("action_args", {}))
     _logger.info(
         "Role conflict: platform=%s round=%s agent_id=%s agent_name=%s "
-        "action_type=%s reason=%s matched_role=%s self_reference=%r excerpt=%r",
+        "action_type=%s reason=%s matched_role=%s "
+        "self_reference_offset=%d self_reference_len=%d excerpt_len=%d",
         conflict.platform,
         conflict.round,
         conflict.agent_id,
@@ -456,8 +461,9 @@ def detect_role_conflict(
         conflict.action_type,
         conflict.reason,
         conflict.matched_role,
-        conflict.self_reference,
-        conflict.excerpt,
+        text.find(conflict.self_reference),
+        len(conflict.self_reference),
+        len(conflict.excerpt),
     )
     return conflict.reason
 

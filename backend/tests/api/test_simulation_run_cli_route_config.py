@@ -70,8 +70,9 @@ def test_http_route_with_base_url_overrides_it(monkeypatch):
     assert store.written["llm_base_url"] == "https://api.example.test/v1"
 
 
-def test_http_route_without_base_url_keeps_existing_value(monkeypatch):
-    store = _FakeStore({"llm_base_url": "https://api.openai.com/v1"})
+def test_http_route_without_base_url_clears_stale_value(monkeypatch):
+    """Alte URL (z. B. MiniMax) darf nicht neben dem neuen Modell stehen bleiben."""
+    store = _FakeStore({"llm_base_url": "https://api.minimax.example/v1"})
     monkeypatch.setattr(simulation_run, "get_artifact_store", lambda: store)
 
     simulation_run._apply_route_to_simulation_config(
@@ -79,4 +80,4 @@ def test_http_route_without_base_url_keeps_existing_value(monkeypatch):
     )
 
     assert store.written is not None
-    assert store.written["llm_base_url"] == "https://api.openai.com/v1"
+    assert store.written["llm_base_url"] == ""

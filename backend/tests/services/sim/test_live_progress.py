@@ -316,6 +316,40 @@ def test_runner_mirrors_only_when_progress_key_changes(monkeypatch):
     assert runtime_progress_key(run_state)[0] == 2
 
 
+def test_runner_retries_when_nothing_was_written(monkeypatch):
+    """Review-Finding PR #1762: ``get_simulation`` liefert voruebergehend ``None``.
+
+    Der Schluessel darf dann nicht als gespiegelt gelten, sonst bleibt
+    ``state.json`` bis zum naechsten Runden-/Statuswechsel veraltet.
+    """
+    from app.services import simulation_manager
+    from app.services.simulation_runner import SimulationRunner
+
+    managers: list[_FakeManager] = []
+    states: list[SimpleNamespace | None] = [None, _sim_state()]
+
+    def factory():
+        manager = _FakeManager(states.pop(0) if len(states) > 1 else states[0])
+        managers.append(manager)
+        return manager
+
+    monkeypatch.setattr(simulation_manager, "SimulationManager", factory)
+    SimulationRunner._mirrored_progress.pop("sim_retry", None)
+    run_state = SimulationRunState(simulation_id="sim_retry", runner_status=RunnerStatus.RUNNING)
+    run_state.current_round = 3
+
+    try:
+        SimulationRunner._mirror_runtime_progress(run_state)  # nichts geschrieben
+        assert "sim_retry" not in SimulationRunner._mirrored_progress
+        SimulationRunner._mirror_runtime_progress(run_state)  # gleicher Takt, neuer Versuch
+        assert SimulationRunner._mirrored_progress["sim_retry"] == runtime_progress_key(run_state)
+        SimulationRunner._mirror_runtime_progress(run_state)  # jetzt gespiegelt, kein 3. Write
+    finally:
+        SimulationRunner._mirrored_progress.pop("sim_retry", None)
+
+    assert [len(m.saved) for m in managers] == [0, 1]
+
+
 def test_runner_mirror_failure_never_raises(monkeypatch):
     from app.services import simulation_manager
     from app.services.simulation_runner import SimulationRunner

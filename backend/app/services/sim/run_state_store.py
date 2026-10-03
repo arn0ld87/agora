@@ -296,8 +296,14 @@ def load_run_state(
             reddit_running=data.get("reddit_running", False),
             twitter_completed=data.get("twitter_completed", False),
             reddit_completed=data.get("reddit_completed", False),
-            twitter_actions_count=data.get("twitter_actions_count", 0),
-            reddit_actions_count=data.get("reddit_actions_count", 0),
+            # Protokollierte Zaehler; Dateien vor #1759 kennen nur den alten
+            # Feldnamen (dort stand der Anzeigewert).
+            twitter_actions_count=data.get(
+                "twitter_logged_actions_count", data.get("twitter_actions_count", 0)
+            ),
+            reddit_actions_count=data.get(
+                "reddit_logged_actions_count", data.get("reddit_actions_count", 0)
+            ),
             started_at=data.get("started_at"),
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             completed_at=data.get("completed_at"),
@@ -363,7 +369,17 @@ def save_run_state(
     os.makedirs(sim_dir, exist_ok=True)  # keep dir for log-pipe / shutil consumers
 
     data = state.to_detail_dict()
-    resolve_default_store().write_json(state.simulation_id, "run_state", data)
+    # ``twitter_actions_count``/``reddit_actions_count`` sind die Anzeigezaehler
+    # (``max(protokolliert, live)``). Zurueckgeladen wuerde ein Live-Wert zum
+    # "protokollierten" Zaehler und die Anzeige bliebe nach einem Neustart
+    # dauerhaft zu hoch. Deshalb stehen die protokollierten Zaehler zusaetzlich
+    # in der Persistenz — nur dort, nicht in der API-/Event-Antwort ``data``.
+    persisted = {
+        **data,
+        "twitter_logged_actions_count": state.twitter_actions_count,
+        "reddit_logged_actions_count": state.reddit_actions_count,
+    }
+    resolve_default_store().write_json(state.simulation_id, "run_state", persisted)
 
     if event_bus_publish is not None:
         try:

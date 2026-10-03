@@ -173,7 +173,10 @@ def _default_project_name(raw_name: Optional[str], uploaded_files: list) -> str:
     if name:
         return name
     for uploaded in uploaded_files:
-        stem = os.path.splitext(os.path.basename(uploaded.filename or ""))[0].strip()
+        # ``/`` und ``\`` sind beide Trenner: Browser unter Windows liefern
+        # mitunter den vollen Pfad, ``os.path.basename`` kennt auf POSIX nur ``/``.
+        base = (uploaded.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        stem = os.path.splitext(base)[0].strip()
         if stem:
             return stem
     return "Unnamed Project"

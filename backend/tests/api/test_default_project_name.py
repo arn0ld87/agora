@@ -29,5 +29,13 @@ def test_path_components_are_stripped():
     assert _default_project_name("", _files("../../etc/analyse.docx")) == "analyse"
 
 
+def test_windows_path_separators_are_stripped():
+    assert _default_project_name("", _files("C:\\Users\\Alice\\bericht.pdf")) == "bericht"
+
+
+def test_mixed_separators_are_stripped():
+    assert _default_project_name("", _files("C:\\Users/Alice\\..\\analyse.docx")) == "analyse"
+
+
 def test_no_name_and_no_files_keeps_placeholder():
     assert _default_project_name(None, _files("")) == "Unnamed Project"
