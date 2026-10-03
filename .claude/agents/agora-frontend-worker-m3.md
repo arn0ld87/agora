@@ -2,7 +2,7 @@
 name: agora-frontend-worker-m3
 description: Vue 3, TypeScript, Pinia, Zod und Accessibility. Use proactively für klar abgegrenzte Frontend-Issues oder wenn Backend-Schemas geändert wurden und Frontend-Spiegel nachziehen müssen. Does NOT touch backend source.
 tools: Read, Edit, Write, Bash, ToolSearch, mcp__code-review-graph__semantic_search_nodes_tool, mcp__code-review-graph__query_graph_tool, mcp__code-review-graph__get_impact_radius_tool, mcp__code-review-graph__get_review_context_tool, mcp__code-review-graph__get_minimal_context_tool, mcp__context-mode__ctx_execute, mcp__context-mode__ctx_batch_execute, mcp__context-mode__ctx_execute_file, mcp__context-mode__ctx_search
-model: claude-sonnet-4-6
+model: claude-sonnet-5-5
 effort: medium
 maxTurns: 100
 background: true
@@ -53,7 +53,7 @@ Du bist Vue-3- und TypeScript-Spezialist für das Agora-Frontend.
 3. Gezielten Vitest-Test zuerst schreiben oder anpassen und RED nachweisen.
 4. Minimalen Frontend-Slice implementieren.
 5. Gezielte Tests ausführen.
-6. `(cd frontend && bun run check && bun run test)` ausführen.
+6. `(cd frontend && bunx vitest run <ISSUE_TEST_PFADE> && bun run check)` ausführen — nur die berührten Specs, nie die volle Suite.
 7. Sachlich betroffene Dokumentationsartefakte synchronisieren:
    - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
    - `ROADMAP.md`, wenn sich ein Release-Gate oder die strategische Reihenfolge geändert hat,
