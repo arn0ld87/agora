@@ -163,6 +163,82 @@ def _camp_of(contribution_classes: Sequence[StanceClass]) -> StanceClass:
     return "undecided"
 
 
+def _classified_contributions(
+    contributions: Sequence[Mapping[str, Any]],
+    classes: Sequence[Optional[StanceClass]],
+) -> List[ClassifiedContribution]:
+    """Beiträge mit klassifizierter Haltung; ausgefallene Klassifikationen fehlen."""
+    classified: List[ClassifiedContribution] = []
+    for action, stance in zip(contributions, classes):
+        agent_id = action.get("agent_id")
+        if stance is None or not isinstance(agent_id, int):
+            continue
+        round_num = action.get("round_num")
+        classified.append(
+            ClassifiedContribution(
+                agent_id=agent_id,
+                agent_name=str(action.get("agent_name") or f"Agent {agent_id}"),
+                platform=str(action.get("platform") or "unknown"),
+                round_num=round_num if isinstance(round_num, int) else 0,
+                action_type=str(action.get("action_type") or "action"),
+                producer_key=str(
+                    build_action_evidence_item(dict(action)).get("producer_key") or ""
+                ),
+                stance_class=stance,
+            )
+        )
+    return classified
+
+
+def _voices(
+    simulation_config: Optional[Mapping[str, Any]],
+    classified: Sequence[ClassifiedContribution],
+) -> List[VoiceStance]:
+    """Eine Stimme je Agent der Konfiguration, mit Startwert und Beitragshaltungen."""
+    classes_by_agent: Dict[int, List[StanceClass]] = {}
+    for contribution in classified:
+        classes_by_agent.setdefault(contribution.agent_id, []).append(contribution.stance_class)
+
+    agent_configs = (simulation_config or {}).get("agent_configs")
+    voices: List[VoiceStance] = []
+    for agent_config in agent_configs if isinstance(agent_configs, list) else []:
+        if not isinstance(agent_config, Mapping):
+            continue
+        agent_id = agent_config.get("agent_id")
+        if not isinstance(agent_id, int):
+            continue
+        voices.append(
+            VoiceStance(
+                voice_key=f"agent:{agent_id}",
+                agent_name=str(agent_config.get("entity_name") or f"Agent {agent_id}"),
+                role_family=agent_config.get("role_family") or None,
+                start_class=_START_CLASS_BY_CONFIG_STANCE.get(
+                    str(agent_config.get("stance") or "").strip().lower(), "undecided"
+                ),
+                contribution_classes=classes_by_agent.get(agent_id, []),
+            )
+        )
+    return voices
+
+
+def _camps(voices: Sequence[VoiceStance]) -> tuple[Dict[StanceClass, int], int]:
+    """Lagerverteilung und Zahl der positionierten Stimmen.
+
+    Positioniert ist eine Stimme mit mindestens einem Beitrag ``in_favour``
+    oder ``opposed``; alle anderen zählen im Lager ``undecided``.
+    """
+    camp_distribution: Dict[StanceClass, int] = {"in_favour": 0, "opposed": 0, "undecided": 0}
+    voices_positioned = 0
+    for voice in voices:
+        positioned = any(stance != "undecided" for stance in voice.contribution_classes)
+        if positioned:
+            voices_positioned += 1
+            camp_distribution[_camp_of(voice.contribution_classes)] += 1
+        else:
+            camp_distribution["undecided"] += 1
+    return camp_distribution, voices_positioned
+
+
 def build_stance_analysis(
     simulation_id: str,
     simulation_config: Optional[Mapping[str, Any]],
@@ -182,50 +258,9 @@ def build_stance_analysis(
     contributions = text_contributions(dict(action) for action in actions)
     classes = classify_contributions(llm_client, statement, contributions)
 
-    classified: List[ClassifiedContribution] = []
-    classes_by_agent: Dict[int, List[StanceClass]] = {}
-    for action, stance in zip(contributions, classes):
-        agent_id = action.get("agent_id")
-        if stance is None or not isinstance(agent_id, int):
-            continue
-        round_num = action.get("round_num")
-        classified.append(
-            ClassifiedContribution(
-                agent_id=agent_id,
-                agent_name=str(action.get("agent_name") or f"Agent {agent_id}"),
-                platform=str(action.get("platform") or "unknown"),
-                round_num=round_num if isinstance(round_num, int) else 0,
-                action_type=str(action.get("action_type") or "action"),
-                producer_key=str(build_action_evidence_item(action).get("producer_key") or ""),
-                stance_class=stance,
-            )
-        )
-        classes_by_agent.setdefault(agent_id, []).append(stance)
-
-    agent_configs = (simulation_config or {}).get("agent_configs")
-    voices: List[VoiceStance] = []
-    for agent_config in agent_configs if isinstance(agent_configs, list) else []:
-        if not isinstance(agent_config, Mapping) or not isinstance(agent_config.get("agent_id"), int):
-            continue
-        agent_id = agent_config["agent_id"]
-        voices.append(
-            VoiceStance(
-                voice_key=f"agent:{agent_id}",
-                agent_name=str(agent_config.get("entity_name") or f"Agent {agent_id}"),
-                role_family=agent_config.get("role_family") or None,
-                start_class=_START_CLASS_BY_CONFIG_STANCE.get(
-                    str(agent_config.get("stance") or "").strip().lower(), "undecided"
-                ),
-                contribution_classes=classes_by_agent.get(agent_id, []),
-            )
-        )
-
-    camp_distribution: Dict[StanceClass, int] = {"in_favour": 0, "opposed": 0, "undecided": 0}
-    voices_positioned = 0
-    for voice in voices:
-        positioned = any(stance != "undecided" for stance in voice.contribution_classes)
-        voices_positioned += 1 if positioned else 0
-        camp_distribution[_camp_of(voice.contribution_classes) if positioned else "undecided"] += 1
+    classified = _classified_contributions(contributions, classes)
+    voices = _voices(simulation_config, classified)
+    camp_distribution, voices_positioned = _camps(voices)
 
     voices_total = len(voices)
     analysis = StanceAnalysis(
