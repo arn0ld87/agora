@@ -185,7 +185,7 @@
     },
     {
       "id": "adr-superseding",
-      "rule": "Eine akzeptierte ADR wird inhaltlich nicht bearbeitet. Änderungen erfolgen über eine neue, ablösende ADR.",
+      "rule": "Eine akzeptierte ADR wird inhaltlich nicht bearbeitet. Änderungen erfolgen über eine neue, ablösende ADR. Ausnahme: docs/decisions/0002-supersedes.md ist das fortlaufende Freigabeprotokoll für Änderungen an den Evidence-Gating-Ankern aus ADR-0002; ein neuer datierter Abschnitt mit Maintainer-Freigabe dort ist vorgesehen und kein Befund. Bestehende Abschnitte dieser Datei bleiben unverändert.",
       "scope": [
         "docs/decisions/**"
       ],
