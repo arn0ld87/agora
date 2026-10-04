@@ -824,3 +824,54 @@ def test_a_degraded_run_marked_incomplete_violates_nothing():
         )
         == []
     )
+
+
+# ---------------------------------------------------------------------------
+# Positionierungsquote (Issue #1778, Schritt 1.8)
+# ---------------------------------------------------------------------------
+
+
+def _stance_analysis(positioned: int, total: int, *, applicable: bool = True) -> Dict[str, Any]:
+    return {
+        "applicable": applicable,
+        "voices_total": total,
+        "voices_positioned": positioned,
+        "positioning_ratio": positioned / total if applicable and total else None,
+    }
+
+
+def test_a_low_positioning_ratio_becomes_a_visible_warning():
+    found = collect_run_degradations(stance_analysis=_stance_analysis(3, 10))
+
+    assert len(found) == 1
+    entry = RunDegradationModel.model_validate(found[0])
+    assert entry.component == "simulation_positioning"
+    assert entry.reason == "positioning_ratio_3_of_10"
+    assert entry.severity == "warning"
+    assert entry.detail == (
+        "Nur 3 von 10 Stimmen (30 %) beziehen in der Simulation Stellung zur "
+        "Streitfrage. Der Simulationsverlauf trägt deshalb wenig zum Bericht bei."
+    )
+
+
+def test_a_sufficient_positioning_ratio_is_no_degradation():
+    assert collect_run_degradations(stance_analysis=_stance_analysis(6, 10)) == []
+
+
+def test_a_run_without_contested_question_has_no_positioning_degradation():
+    assert (
+        collect_run_degradations(stance_analysis=_stance_analysis(0, 10, applicable=False))
+        == []
+    )
+
+
+def test_a_missing_stance_analysis_is_no_degradation():
+    assert collect_run_degradations(stance_analysis=None) == []
+    # Ein Test-Double am Agenten darf keine Degradation vortäuschen.
+    assert collect_run_degradations(stance_analysis=MagicMock()) == []
+
+
+def test_a_low_positioning_ratio_does_not_downgrade_the_status():
+    found = collect_run_degradations(stance_analysis=_stance_analysis(3, 10))
+
+    assert apply_run_degradation_downgrade(ReportStatus.COMPLETED, found) == ReportStatus.COMPLETED

@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
+from ...config import Config
+
 #: Simulationsstatus, bei denen die Simulation nicht regulär endete.
 #:
 #: ``running`` gehört bewusst **nicht** dazu. Ein Bericht darf über eine
@@ -244,6 +246,44 @@ def _cancellation_degradations(missing_section_count: int) -> List[Dict[str, Any
     ]
 
 
+def _positioning_degradations(
+    analysis: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Zu wenige Stimmen beziehen Stellung zur Streitfrage (Issue #1778).
+
+    Im Referenzlauf ``sim_c8c6b30aa652`` beruhten 3 von 164 stützenden Belegen
+    auf Simulationsaktionen. Ob die Simulation überhaupt etwas zur Streitfrage
+    beiträgt, zeigt die Positionierungsquote aus ``stance_analysis``.
+
+    Der Schweregrad ist bewusst ``warning``: der Bericht bleibt lesbar, die
+    Degradation ist sichtbar. Ohne Analyse oder ohne Streitfrage wird nichts
+    behauptet.
+    """
+    if not isinstance(analysis, Mapping) or analysis.get("applicable") is not True:
+        return []
+    ratio = analysis.get("positioning_ratio")
+    if not isinstance(ratio, (int, float)) or isinstance(ratio, bool):
+        return []
+    if ratio >= Config.REPORT_POSITIONING_RATIO_MIN:
+        return []
+
+    positioned = analysis.get("voices_positioned")
+    total = analysis.get("voices_total")
+    percent = round(ratio * 100)
+    return [
+        _entry(
+            "simulation_positioning",
+            f"positioning_ratio_{positioned}_of_{total}",
+            (
+                f"Nur {positioned} von {total} Stimmen ({percent} %) beziehen in "
+                "der Simulation Stellung zur Streitfrage. Der Simulationsverlauf "
+                "trägt deshalb wenig zum Bericht bei."
+            ),
+            severity="warning",
+        )
+    ]
+
+
 def collect_run_degradations(
     *,
     simulation_snapshot: Optional[Mapping[str, Any]] = None,
@@ -261,6 +301,7 @@ def collect_run_degradations(
     cancelled_missing_section_count: int = 0,
     simulation_llm_calls_total: Optional[int] = None,
     simulation_llm_calls_failed: Optional[int] = None,
+    stance_analysis: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Alle deterministisch feststellbaren Qualitätsmängel eines Laufs.
 
@@ -273,6 +314,9 @@ def collect_run_degradations(
             simulation_llm_calls_total, simulation_llm_calls_failed
         )
     )
+    # Issue #1778: Die Positionierungsquote beschreibt, was die Simulation
+    # zur Streitfrage beiträgt — sie gehört zu den Mängeln der Grundlage.
+    found.extend(_positioning_degradations(stance_analysis))
     found.extend(_outline_degradations(fallback_outline_used))
     # Reihenfolge nach Schwere fuer den Leser: worauf der Bericht beruht,
     # steht vor dem, was beim Erzeugen schiefging. Die Personas sind die

@@ -915,6 +915,10 @@ class RunDegradationModel(BaseModel):
         # Nutzer-Abbruch (Cancel) nicht mehr alle Outline-Sections —
         # additiv ergaenzt, blockierend (severity="blocking").
         "run_cancellation",
+        # Issue #1778: zu wenige Stimmen beziehen in der Simulation Stellung
+        # zur Streitfrage (Positionierungsquote unter der Schwelle) —
+        # additiv ergänzt (severity="warning").
+        "simulation_positioning",
     ]
     reason: str = Field(
         min_length=1,

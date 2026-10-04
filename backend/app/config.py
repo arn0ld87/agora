@@ -909,6 +909,13 @@ class Config:
     REPORT_REQUIREMENT_CHECKER_ENABLED = os.environ.get(
         'REPORT_REQUIREMENT_CHECKER_ENABLED', 'true'
     ).strip().lower() in ('1', 'true', 'yes', 'on')
+    # Issue #1778 — Positionierungsquote: Anteil der Stimmen, die in der
+    # Simulation Stellung zur Streitfrage beziehen. Liegt die Quote eines
+    # Laufs unter diesem Wert, weist der Bericht die Degradation
+    # ``simulation_positioning`` aus (severity="warning").
+    REPORT_POSITIONING_RATIO_MIN = float(
+        os.environ.get('AGORA_REPORT_POSITIONING_RATIO_MIN', '0.5')
+    )
     # Output language for generated reports (plan, sections, chat answers).
     REPORT_LANGUAGE = os.environ.get('REPORT_LANGUAGE', 'German')
 

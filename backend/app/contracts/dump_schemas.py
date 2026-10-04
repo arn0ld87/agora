@@ -28,6 +28,7 @@ from app.contracts.readiness_contract import (
 )
 from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.contested_question_contract import ContestedQuestion
+from app.contracts.stance_analysis_contract import StanceAnalysis
 from app.contracts.simulation_status_contract import SimulationStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
@@ -153,6 +154,8 @@ CONTRACTS: dict[str, type] = {
     "branch-overrides.schema.json": BranchOverrides,
     # Streitfrage eines Laufs (Issue #1778, Schritt 1.4)
     "contested-question.schema.json": ContestedQuestion,
+    # Haltung der Stimmen zur Streitfrage (Issue #1778, Schritt 1.8)
+    "stance-analysis.schema.json": StanceAnalysis,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)

@@ -360,6 +360,9 @@ export const RunDegradationSchema = z.object({
     // Issue #1479: die Section-Schleife erreichte nach einem Nutzer-Abbruch
     // nicht mehr alle Outline-Sections (severity="blocking").
     'run_cancellation',
+    // Issue #1778: zu wenige Stimmen beziehen in der Simulation Stellung zur
+    // Streitfrage (severity="warning").
+    'simulation_positioning',
   ]),
   reason: z.string().min(1),
   detail: z.string().default(''),

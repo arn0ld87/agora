@@ -68,6 +68,7 @@ from .search_dedup import (
     registry_for,
 )
 from .section_coverage import section_has_sufficient_evidence
+from .stance_analysis import build_stance_analysis, save_stance_analysis
 from .simulation_snapshot import (
     capture_simulation_snapshot,
     load_simulation_llm_call_stats,
@@ -135,6 +136,52 @@ def _load_persona_count(agent: Any) -> int:
         )
         return 0
     return len(profiles) if isinstance(profiles, list) else 0
+
+
+def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, Any]]:
+    """Haltung je Beitrag und Positionierungsquote des Laufs (Issue #1778).
+
+    Läuft einmal vor dem ersten Abschnitt. Die Klassifikation nutzt den
+    LLM-Client des Report-Agenten, damit ihre Aufrufe im Budget-Ledger des
+    Berichts landen; ``BudgetExceededError`` wird nicht gefangen.
+
+    Sind Simulationskonfiguration oder Aktionen nicht lesbar, wird nichts
+    behauptet (``None``): eine Quote von null wäre dann eine Aussage über den
+    Store, nicht über die Simulation.
+    """
+    try:
+        from ..simulation_runner import SimulationRunner
+
+        config = resolve_default_store().read_json(
+            agent.simulation_id,
+            "simulation_config",
+            default=None,
+        )
+        if not isinstance(config, dict):
+            return None
+        actions = [
+            action.to_dict()
+            for action in SimulationRunner.get_all_actions(agent.simulation_id)
+        ]
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        logger.warning(
+            "stance analysis: failed to read config or actions for simulation %s: %r",
+            getattr(agent, "simulation_id", "<unknown>"),
+            exc,
+        )
+        return None
+
+    analysis = build_stance_analysis(
+        agent.simulation_id, config, actions, None, agent.llm
+    )
+    save_stance_analysis(ReportManager._get_report_folder(report_id), analysis)
+    return analysis.model_dump(mode="json")
+
+
+def _stance_analysis_of(agent: Any) -> Optional[Dict[str, Any]]:
+    """Die am Agenten abgelegte Analyse; ein Test-Double liefert ``None``."""
+    analysis = getattr(agent, "stance_analysis", None)
+    return analysis if isinstance(analysis, dict) else None
 
 
 def _load_persona_fallback_stats(agent: Any) -> tuple[int, int]:
@@ -1704,6 +1751,7 @@ def _build_partial_report(
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
+        stance_analysis=_stance_analysis_of(agent),
     )
     report.status = apply_run_degradation_downgrade(
         report.status, report.run_degradations
@@ -1972,6 +2020,10 @@ def generate_report(
             agent.evidence_map = EvidenceMapModel.model_validate(
                 agent.evidence_map
             ).model_dump(mode="json")
+
+        # Issue #1778: Haltung je Beitrag einmal vor dem ersten Abschnitt
+        # bestimmen; das Ergebnis geht in die Degradationssumme des Laufs.
+        agent.stance_analysis = _compute_stance_analysis(agent, report_id)
 
         _restore_work_trace_markers(agent, report_id)
 
@@ -2254,6 +2306,7 @@ def generate_report(
                 agent
             ).work_trace_removed_sections,
             metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
+            stance_analysis=_stance_analysis_of(agent),
         )
         report.status = apply_run_degradation_downgrade(
             report.status, report.run_degradations

@@ -497,6 +497,7 @@ describe('RunDegradationSchema — Persona-Komponente (#1419)', () => {
       'contract_export',
       'outline_planning',
       'run_cancellation',
+      'simulation_positioning',
     ]);
   });
 
