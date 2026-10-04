@@ -137,6 +137,7 @@
     },
     "ConfidenceLabel": {
       "enum": [
+        "speculative",
         "low",
         "medium",
         "high",

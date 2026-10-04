@@ -38,6 +38,7 @@
           "description": "Histogramm der Claim-Confidence-Scores: {low: int, medium: int, high: int, verified: int}",
           "propertyNames": {
             "enum": [
+              "speculative",
               "low",
               "medium",
               "high",
@@ -236,6 +237,7 @@
           "description": "Signed Differenz pro Confidence-Label (B - A)",
           "propertyNames": {
             "enum": [
+              "speculative",
               "low",
               "medium",
               "high",

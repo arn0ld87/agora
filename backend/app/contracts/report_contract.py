@@ -39,6 +39,7 @@ _STRICT = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class ConfidenceLabel(str, Enum):
+    speculative = "speculative"
     low = "low"
     medium = "medium"
     high = "high"
@@ -462,7 +463,7 @@ class ReportClaimModel(BaseModel):
         # nachvollziehbaren Evidence-Anker. Low-Orphans bleiben fuer alte
         # Artefakte lesbar, werden beim Schreiben aber in hypotheses/data_gaps
         # geroutet.
-        if self.confidence_label != ConfidenceLabel.low and not self.evidence:
+        if self.confidence_label not in (ConfidenceLabel.speculative, ConfidenceLabel.low) and not self.evidence:
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt mindestens "
                 "eine Evidence mit nachvollziehbarem Anker."
@@ -633,7 +634,7 @@ class IndexedReportClaimModel(BaseModel):
 
     @model_validator(mode="after")
     def require_binding_for_non_low_claim(self) -> "IndexedReportClaimModel":
-        if self.confidence_label != ConfidenceLabel.low and not self.evidence:
+        if self.confidence_label not in (ConfidenceLabel.speculative, ConfidenceLabel.low) and not self.evidence:
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt mindestens ein Evidence-Binding."
             )
