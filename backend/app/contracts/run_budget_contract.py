@@ -95,6 +95,12 @@ class UsageMetrics(BaseModel):
     output_tokens: Optional[int] = Field(None, ge=0)
     total_tokens: Optional[int] = Field(None, ge=0)
     llm_calls: int = Field(0, ge=0)
+    # Davon fehlgeschlagene Providerattempts (``success=False`` im Ledger,
+    # Issue #1766). ``None`` = unbekannt: Summaries aus der Zeit vor diesem
+    # Feld und Event-Zeilen ohne Erfolgsangabe liefern keine Fehlerzahl, und
+    # "unbekannt" darf nie als "0 Fehler" gelesen werden. ``0`` heißt
+    # ausdrücklich: gemessen, kein Aufruf scheiterte.
+    failed_llm_calls: Optional[int] = Field(None, ge=0)
     cost_micros: Optional[int] = Field(None, ge=0)
     cost_status: CostStatus = "unknown"
     tokens_status: TokensStatus = "unknown"

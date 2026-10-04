@@ -94,6 +94,161 @@ def test_a_missing_snapshot_produces_nothing():
     assert collect_run_degradations(simulation_snapshot=None) == []
 
 
+# --- Fehlgeschlagene LLM-Aufrufe der Simulation (Issue #1766) ---------------
+
+
+def _llm_failures(total, failed) -> List[Dict[str, Any]]:
+    return collect_run_degradations(
+        simulation_llm_calls_total=total, simulation_llm_calls_failed=failed
+    )
+
+
+def test_a_majority_of_failed_simulation_llm_calls_is_blocking():
+    """Referenzlauf sim_cc6067a70603: 2.225 von 3.284 Aufrufen scheiterten."""
+    (entry,) = _llm_failures(3284, 2225)
+
+    assert entry["component"] == "simulation"
+    assert entry["reason"] == "2225_of_3284_simulation_llm_calls_failed"
+    assert entry["severity"] == "blocking"
+    assert "2225" in entry["detail"]
+    assert "3284" in entry["detail"]
+    assert "67,8 %" in entry["detail"]
+
+
+def test_a_noticeable_share_of_failed_simulation_llm_calls_is_a_warning():
+    (entry,) = _llm_failures(3284, 400)
+
+    assert entry["reason"] == "400_of_3284_simulation_llm_calls_failed"
+    assert entry["severity"] == "warning"
+    assert "400" in entry["detail"] and "3284" in entry["detail"]
+
+
+def test_a_few_failed_simulation_llm_calls_produce_nothing():
+    assert _llm_failures(3284, 100) == []
+
+
+def test_simulation_llm_failure_thresholds_are_inclusive():
+    assert [e["severity"] for e in _llm_failures(100, 10)] == ["warning"]
+    assert _llm_failures(100, 9) == []
+    assert [e["severity"] for e in _llm_failures(100, 50)] == ["blocking"]
+    assert [e["severity"] for e in _llm_failures(100, 49)] == ["warning"]
+
+
+def test_an_unknown_failure_count_is_not_treated_as_healthy_or_degraded():
+    """Altbestand ohne ``failed_llm_calls``: keine Aussage, kein Eintrag."""
+    assert _llm_failures(3284, None) == []
+    assert _llm_failures(None, None) == []
+    assert _llm_failures(None, 5) == []
+
+
+def test_zero_calls_or_zero_failures_produce_nothing():
+    assert _llm_failures(0, 0) == []
+    assert _llm_failures(3284, 0) == []
+
+
+def test_a_blocking_simulation_llm_failure_downgrades_the_report():
+    found = _llm_failures(3284, 2225)
+
+    assert (
+        apply_run_degradation_downgrade(ReportStatus.COMPLETED, found)
+        == ReportStatus.INCOMPLETE
+    )
+
+
+def test_a_warning_level_simulation_llm_failure_does_not_downgrade():
+    found = _llm_failures(3284, 400)
+
+    assert (
+        apply_run_degradation_downgrade(ReportStatus.COMPLETED, found)
+        == ReportStatus.COMPLETED
+    )
+
+
+def test_a_simulation_llm_failure_entry_validates_against_the_contract():
+    for entry in _llm_failures(3284, 2225) + _llm_failures(3284, 400):
+        RunDegradationModel.model_validate(entry)
+
+
+class _FakeRegistry:
+    """Ersatz fuer die Run-Registry: ein Simulations-Job pro simulation_id."""
+
+    lookups: List[tuple] = []
+
+    def get_latest_by_linked_id(self, key, value, *, run_type=None):
+        _FakeRegistry.lookups.append((key, value, run_type))
+        if value == "sim_known":
+            return {"run_id": "run_sim_known"}
+        return None
+
+
+def _usage(llm_calls: int, failed):
+    from app.contracts.run_budget_contract import RunUsage, UsageMetrics
+
+    return RunUsage(
+        totals=UsageMetrics(llm_calls=llm_calls, failed_llm_calls=failed)
+    )
+
+
+def test_stats_are_read_from_the_usage_of_the_simulation_job(monkeypatch):
+    from app.services import run_registry, run_usage_ledger
+    from app.services.report_agent.simulation_snapshot import (
+        load_simulation_llm_call_stats,
+    )
+
+    _FakeRegistry.lookups = []
+    monkeypatch.setattr(run_registry, "RunRegistry", _FakeRegistry)
+    monkeypatch.setattr(
+        run_usage_ledger,
+        "load_usage_summary",
+        lambda run_id: _usage(3284, 2225) if run_id == "run_sim_known" else None,
+    )
+
+    assert load_simulation_llm_call_stats("sim_known") == (3284, 2225)
+    assert _FakeRegistry.lookups == [("simulation_id", "sim_known", "simulation_run")]
+
+
+def test_stats_of_a_legacy_summary_stay_unknown(monkeypatch):
+    from app.services import run_registry, run_usage_ledger
+    from app.services.report_agent.simulation_snapshot import (
+        load_simulation_llm_call_stats,
+    )
+
+    monkeypatch.setattr(run_registry, "RunRegistry", _FakeRegistry)
+    monkeypatch.setattr(
+        run_usage_ledger, "load_usage_summary", lambda run_id: _usage(3284, None)
+    )
+
+    total, failed = load_simulation_llm_call_stats("sim_known")
+
+    assert (total, failed) == (3284, None)
+    assert _llm_failures(total, failed) == []
+
+
+def test_stats_without_a_simulation_job_are_unknown(monkeypatch):
+    from app.services import run_registry
+    from app.services.report_agent.simulation_snapshot import (
+        load_simulation_llm_call_stats,
+    )
+
+    monkeypatch.setattr(run_registry, "RunRegistry", _FakeRegistry)
+
+    assert load_simulation_llm_call_stats("sim_unknown") == (None, None)
+
+
+def test_a_broken_registry_costs_no_report(monkeypatch):
+    from app.services import run_registry
+    from app.services.report_agent.simulation_snapshot import (
+        load_simulation_llm_call_stats,
+    )
+
+    def _boom():
+        raise RuntimeError("registry kaputt")
+
+    monkeypatch.setattr(run_registry, "RunRegistry", _boom)
+
+    assert load_simulation_llm_call_stats("sim_known") == (None, None)
+
+
 # --- Interviews -------------------------------------------------------------
 
 

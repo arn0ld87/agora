@@ -116,6 +116,7 @@ class TestUsageMetrics:
         assert m.output_tokens is None
         assert m.total_tokens is None
         assert m.llm_calls == 0
+        assert m.failed_llm_calls is None
         assert m.cost_micros is None
         assert m.cost_status == "unknown"
         assert m.tokens_status == "unknown"
@@ -124,6 +125,17 @@ class TestUsageMetrics:
     def test_negative_values_rejected(self):
         with pytest.raises(ValidationError):
             UsageMetrics(llm_calls=-1)
+        with pytest.raises(ValidationError):
+            UsageMetrics(failed_llm_calls=-1)
+
+    def test_failed_llm_calls_unknown_is_not_zero(self):
+        """Issue #1766: fehlend/None = unbekannt, 0 = gemessen ohne Fehler."""
+        assert UsageMetrics.model_validate({"llm_calls": 5}).failed_llm_calls is None
+        assert UsageMetrics(llm_calls=5, failed_llm_calls=0).failed_llm_calls == 0
+        restored = UsageMetrics.model_validate_json(
+            UsageMetrics(llm_calls=5, failed_llm_calls=3).model_dump_json()
+        )
+        assert restored.failed_llm_calls == 3
 
     def test_cost_status_values(self):
         for status in ("measured", "estimated", "free", "unknown"):

@@ -170,6 +170,19 @@
           "title": "Duration Ms",
           "type": "integer"
         },
+        "failed_llm_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Failed Llm Calls"
+        },
         "input_tokens": {
           "anyOf": [
             {
