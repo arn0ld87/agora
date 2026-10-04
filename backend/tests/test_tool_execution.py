@@ -414,3 +414,32 @@ class TestEvidenceCallback:
 class TestReportAgentReExport:
     def test_re_exports_execute_tool(self):
         assert report_agent.execute_tool is tool_execution.execute_tool
+
+
+def test_contested_statement_reicht_einen_budgetabbruch_durch(monkeypatch):
+    """Review PR #1780 (P0): ein Budgetabbruch ist kein „keine Streitfrage"."""
+    import pytest
+
+    from app.services import artifact_store, tool_execution
+    from app.services.run_budget import BudgetExceededError
+
+    class _Store:
+        def read_json(self, *_a, **_k):
+            raise BudgetExceededError("calls", 101, 100)
+
+    monkeypatch.setattr(artifact_store, "resolve_default_store", lambda: _Store())
+
+    with pytest.raises(BudgetExceededError):
+        tool_execution._contested_statement("sim-1")
+
+
+def test_contested_statement_ohne_lesbare_config_ist_none(monkeypatch):
+    from app.services import artifact_store, tool_execution
+
+    class _Store:
+        def read_json(self, *_a, **_k):
+            raise PermissionError("simulation_config.json")
+
+    monkeypatch.setattr(artifact_store, "resolve_default_store", lambda: _Store())
+
+    assert tool_execution._contested_statement("sim-1") is None

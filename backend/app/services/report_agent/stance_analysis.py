@@ -165,6 +165,11 @@ def _contested_statement(simulation_config: Optional[Mapping[str, Any]]) -> Opti
     return statement.strip() if isinstance(statement, str) and statement.strip() else None
 
 
+def contested_statement_of(simulation_config: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """Die Streitfrage des Laufs als Aussage, sonst ``None``."""
+    return _contested_statement(simulation_config)
+
+
 def has_contested_statement(simulation_config: Optional[Mapping[str, Any]]) -> bool:
     """Ob der Lauf eine Streitfrage hat, die Analyse also anwendbar ist."""
     return _contested_statement(simulation_config) is not None

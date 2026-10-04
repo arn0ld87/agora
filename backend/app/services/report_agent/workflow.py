@@ -72,6 +72,7 @@ from .search_dedup import (
 from .section_coverage import section_has_sufficient_evidence
 from .stance_analysis import (
     build_stance_analysis,
+    contested_statement_of,
     has_contested_statement,
     load_stance_analysis,
     save_stance_analysis,
@@ -163,11 +164,6 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
     """
     simulation_id = getattr(agent, "simulation_id", "<unknown>")
     report_folder = ReportManager._get_report_folder(report_id)
-    # Ein Resume derselben ``report_id`` übernimmt die gespeicherte Analyse,
-    # statt alle Beiträge erneut zu klassifizieren (Budget des Resumes).
-    stored = load_stance_analysis(report_folder)
-    if stored is not None:
-        return stored.model_dump(mode="json")
     actions: list[Dict[str, Any]] = []
     try:
         from ..simulation_runner import SimulationRunner
@@ -179,6 +175,12 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
         )
         if not isinstance(config, dict):
             return None
+        # Ein Resume derselben ``report_id`` übernimmt die gespeicherte
+        # Analyse, statt alle Beiträge erneut zu klassifizieren (Budget des
+        # Resumes) — aber nur, wenn sie zur aktuellen Streitfrage gehört.
+        stored = load_stance_analysis(report_folder)
+        if stored is not None and stored.contested_statement == contested_statement_of(config):
+            return stored.model_dump(mode="json")
         # Ohne Streitfrage ist die Analyse nicht anwendbar: das Protokoll
         # wird dann gar nicht erst gelesen.
         if has_contested_statement(config):

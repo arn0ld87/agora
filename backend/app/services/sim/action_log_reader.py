@@ -402,16 +402,20 @@ def action_log_health(simulation_id: str, base_dir: str | Path) -> tuple[int, in
     sim_dir = safe_join_within_root(
         str(base_dir), validate_path_id(simulation_id, field_name="simulation_id")
     )
-    log_files = 0
+    platform_logs = [
+        path
+        for path in (
+            os.path.join(sim_dir, "twitter", "actions.jsonl"),
+            os.path.join(sim_dir, "reddit", "actions.jsonl"),
+        )
+        if os.path.exists(path)
+    ]
+    # Wie ``get_all_actions``: das alte Einzelprotokoll zählt nur, wenn es
+    # keine Plattformprotokolle gibt — sonst wird es gar nicht gelesen.
+    legacy_log = os.path.join(sim_dir, "actions.jsonl")
+    log_paths = platform_logs or ([legacy_log] if os.path.exists(legacy_log) else [])
     unreadable_lines = 0
-    for log_path in (
-        os.path.join(sim_dir, "twitter", "actions.jsonl"),
-        os.path.join(sim_dir, "reddit", "actions.jsonl"),
-        os.path.join(sim_dir, "actions.jsonl"),
-    ):
-        if not os.path.exists(log_path):
-            continue
-        log_files += 1
+    for log_path in log_paths:
         with open(log_path, "r", encoding="utf-8") as handle:
             for line in handle:
                 if not line.strip():
@@ -420,6 +424,7 @@ def action_log_health(simulation_id: str, base_dir: str | Path) -> tuple[int, in
                     json.loads(line)
                 except json.JSONDecodeError:
                     unreadable_lines += 1
+    log_files = len(log_paths)
     return log_files, unreadable_lines
 
 

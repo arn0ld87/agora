@@ -55,6 +55,10 @@ def _contested_statement(simulation_id: Optional[str]) -> Optional[str]:
             or {}
         )
     except Exception as exc:  # noqa: BLE001 — Lesefehler heißt: keine Streitfrage bekannt
+        from .run_budget import reraise_if_budget_exceeded
+
+        # Ein hartes Budget ist das Ende des Laufs, kein Fallback-Fall.
+        reraise_if_budget_exceeded(exc)
         logger.warning(f"Simulations-Config nicht lesbar ({simulation_id}): {exc}")
         return None
     question = config.get("contested_question") if isinstance(config, dict) else None

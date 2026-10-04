@@ -468,3 +468,44 @@ def test_workflow_ohne_streitfrage_liest_das_protokoll_nicht(monkeypatch, tmp_pa
     result = workflow._compute_stance_analysis(_Agent(_StubLLM(_by_keyword)), "report-1")
 
     assert result is not None and result["applicable"] is False
+
+
+def test_workflow_rechnet_neu_wenn_sich_die_streitfrage_geaendert_hat(monkeypatch, tmp_path):
+    """Review PR #1780: eine gespeicherte Analyse gilt nur für ihre Streitfrage."""
+    actions = [_action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern.")]
+    workflow = _workflow_with(
+        monkeypatch, tmp_path, store=_Store(_config("opposing", "neutral")), actions=actions, health=(1, 0)
+    )
+    first = workflow._compute_stance_analysis(_Agent(_StubLLM(_by_keyword)), "report-1")
+    assert first["contested_statement"] == STATEMENT
+
+    new_statement = "Die Kinderklinik in Brenkhausen wird zum 30. Juni 2027 geschlossen."
+    workflow = _workflow_with(
+        monkeypatch,
+        tmp_path,
+        store=_Store(_config("opposing", "neutral", statement=new_statement)),
+        actions=actions,
+        health=(1, 0),
+    )
+    llm = _StubLLM(_by_keyword)
+    second = workflow._compute_stance_analysis(_Agent(llm), "report-1")
+
+    assert len(llm.calls) == 1
+    assert second["contested_statement"] == new_statement
+
+
+def test_action_log_health_ignoriert_das_alte_protokoll_neben_plattformprotokollen(tmp_path):
+    """Review PR #1780: ``get_all_actions`` liest es dann auch nicht."""
+    from app.services.sim.action_log_reader import action_log_health
+
+    sim_dir = tmp_path / "sim-1"
+    (sim_dir / "reddit").mkdir(parents=True)
+    (sim_dir / "reddit" / "actions.jsonl").write_text('{"agent_id": 0, "round": 1}\n', encoding="utf-8")
+    (sim_dir / "actions.jsonl").write_text("kaputt\n", encoding="utf-8")
+
+    assert action_log_health("sim-1", tmp_path) == (1, 0)
+
+    legacy = tmp_path / "sim-2"
+    legacy.mkdir()
+    (legacy / "actions.jsonl").write_text("kaputt\n", encoding="utf-8")
+    assert action_log_health("sim-2", tmp_path) == (1, 1)
