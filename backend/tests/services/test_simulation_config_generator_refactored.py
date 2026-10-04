@@ -145,7 +145,10 @@ class TestSimulationConfigGeneratorRefactored:
         )
 
         assert params is not None
-        assert params.time_config.total_simulation_hours == 72
+        # #1772: Das Modell liefert hier 72 h; ohne ausdruecklichen Nutzerwunsch
+        # klemmt die Generierung auf den Standard von 24 h (1 Tag, 24 Runden).
+        assert params.time_config.total_simulation_hours == 24
+        assert "total_simulation_hours 72 -> 24" in params.generation_reasoning
         # 30 Entitaeten + 8 synthetische Skeptiker. Die Zahl stand hier bis zur
         # Korrektur der Quotenrechnung auf 36 (= 30 + ceil(30 * 0.2)) und
         # spiegelte damit den Rechenfehler: 6/36 sind 16,67 %, nicht die

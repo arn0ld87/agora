@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 def get_time_config_schema(num_entities: int) -> type[BaseModel]:
     class TimeConfigResponse(BaseModel):
-        total_simulation_hours: int = Field(default=72, ge=24, le=168)
+        # #1772: Standard 24 h; kuerzere Laeufe sind erlaubt. Antworten ueber der
+        # konfigurierten Obergrenze kommen hier noch durch und werden danach in
+        # ``_parse_time_config`` sichtbar geklemmt (statt die ganze Antwort zu verwerfen).
+        total_simulation_hours: int = Field(default=24, ge=1, le=168)
         minutes_per_round: int = Field(default=60, ge=30, le=120)
         agents_per_hour_min: int = Field(default=5, ge=1)
         agents_per_hour_max: int = Field(default=20, ge=1)
