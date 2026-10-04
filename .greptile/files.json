@@ -1,0 +1,37 @@
+{
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "description": "Verbindliche Projektregeln: Contracts-first, Arbeitsweise, Verbote, Dokumentationshierarchie"
+    },
+    {
+      "path": "CONTEXT.md",
+      "description": "Domänenvokabular, Laufzeit-Mechanik, Artefaktformen und Evidence-Modell"
+    },
+    {
+      "path": "docs/agents/architecture-ssot.md",
+      "description": "Kanonische Pfade für Verträge, Provider-Erkennung, LLM-Aufrufe, Embedding-Konfiguration und Lauf-Status",
+      "scope": ["backend/**", "frontend/src/contracts/**"]
+    },
+    {
+      "path": "docs/decisions/0002-evidence-gating.md",
+      "description": "ADR-0002: Evidence-Gating und die fünf Hartanker, die nicht abgeschwächt werden dürfen",
+      "scope": ["backend/app/services/report_agent/**", "backend/app/services/report_prompts/**", "backend/app/services/confidence_calculator.py", "backend/app/contracts/report_contract.py"]
+    },
+    {
+      "path": "docs/decisions/0012-run-budgets.md",
+      "description": "ADR-0012: Lauf-Budgets für Zeit, Tokens, Kosten und Aufrufe mit Reservierungen",
+      "scope": ["backend/app/services/run_budget*.py", "backend/scripts/sim_runtime/**", "backend/app/llm/**"]
+    },
+    {
+      "path": "backend/app/services/sim/process_environment.py",
+      "description": "SAFE_ENV_KEYS: die einzigen Umgebungsvariablen, die der Simulations-Subprozess erhält",
+      "scope": ["backend/scripts/**"]
+    },
+    {
+      "path": "docs/runbooks/upgrade.md",
+      "description": "Upgrade-Runbook: muss bei Änderungen an Persistenz, Migrationen, Env-Defaults oder Compose-Stack mitgezogen werden",
+      "scope": ["backend/app/config*.py", "backend/app/services/settings_schema.py", "docker-compose*.yml", ".env.example"]
+    }
+  ]
+}
