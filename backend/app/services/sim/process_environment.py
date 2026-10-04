@@ -27,6 +27,8 @@ SAFE_ENV_KEYS: frozenset[str] = frozenset(
         # Reine Zahlen-/Schalterwerte, keine Secrets.
         "AGORA_SIM_MEMORY_PRUNE_FEEDS", "AGORA_SIM_MEMORY_KEEP_FEEDS",
         "AGORA_SIM_MEMORY_TOKEN_CAP",
+        # #1772: Kommentardeckel im Agenten-Feed (scripts/agent_feed.py).
+        "AGORA_SIM_FEED_MAX_COMMENTS",
     }
 )
 

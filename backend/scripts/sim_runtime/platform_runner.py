@@ -108,6 +108,7 @@ except ImportError:
 # ``actions.jsonl`` — ``action_logger``/``oasis_action_ingest`` liegen wie
 # ``agent_tools`` auf Ebene ``scripts/`` und sind dort bare-importierbar.
 from action_logger import PlatformActionLogger
+from agent_feed import install_feed_comment_cap
 from agent_memory import describe_memory_policy, prune_graph_memories
 from oasis_action_ingest import (
     fetch_new_actions_from_db,
@@ -510,6 +511,7 @@ class SinglePlatformRunner:
         except Exception as e:
             print(f"enforce_memory_token_limit ({self.PLATFORM_SLUG}-single) failed: {e}", flush=True)
         logger.info(describe_memory_policy())
+        install_feed_comment_cap(self.agent_graph, log=logger.info)
 
         # Databasepath
         db_path = self._get_db_path()

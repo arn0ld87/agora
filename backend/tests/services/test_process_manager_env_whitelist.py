@@ -133,6 +133,7 @@ class TestSubprocessEnvIncludesOptionalConnectionKeys:
             ("AGORA_SIM_MEMORY_PRUNE_FEEDS", "false"),
             ("AGORA_SIM_MEMORY_KEEP_FEEDS", "3"),
             ("AGORA_SIM_MEMORY_TOKEN_CAP", "24000"),
+            ("AGORA_SIM_FEED_MAX_COMMENTS", "3"),
         ):
             assert key in SAFE_ENV_KEYS
             monkeypatch.setenv(key, value)
@@ -140,6 +141,7 @@ class TestSubprocessEnvIncludesOptionalConnectionKeys:
         assert captured.get("AGORA_SIM_MEMORY_PRUNE_FEEDS") == "false"
         assert captured.get("AGORA_SIM_MEMORY_KEEP_FEEDS") == "3"
         assert captured.get("AGORA_SIM_MEMORY_TOKEN_CAP") == "24000"
+        assert captured.get("AGORA_SIM_FEED_MAX_COMMENTS") == "3"
 
     def test_safe_env_keys_includes_hf_token(self) -> None:
         """HF_TOKEN muss in SAFE_ENV_KEYS sein, sonst scheitern private HF-Modell-Loads."""

@@ -16,3 +16,11 @@
   `AGORA_SIM_MEMORY_PRUNE_FEEDS=false` und `AGORA_SIM_MEMORY_TOKEN_CAP=0` gilt
   der alte Zustand. Agenten kennen ältere Feeds nicht mehr, nur ihre eigenen
   früheren Aktionen. Siehe `docs/runbooks/upgrade.md`.
+- Simulation: Der Feed der Agenten zeigt je Post höchstens die neuesten fünf
+  Kommentare ([#1772](https://github.com/arn0ld87/agora/issues/1772)). OASIS
+  serialisierte jeden Post mit allen Kommentaren als eingerücktes JSON.
+  `backend/scripts/agent_feed.py` ersetzt über eine Subklasse von
+  `SocialEnvironment` (ohne Patch an OASIS) nur `get_posts_env`: die neuesten
+  `AGORA_SIM_FEED_MAX_COMMENTS` Kommentare je Post (Default 5, `0` = aus)
+  bleiben, die Zahl der weggelassenen steht als `omitted_comments` am Post,
+  das Feed-JSON ist kompakt. Die Recommender-Parameter bleiben unverändert.

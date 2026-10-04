@@ -68,6 +68,12 @@ def _patch(monkeypatch: Any, events: List[str], prune_calls: List[Dict[str, Any]
     monkeypatch.setattr(rps, "fetch_new_actions_from_db", lambda db_path, last_rowid, names: ([], last_rowid))
     monkeypatch.setattr(rps, "prune_graph_memories", fake_prune)
 
+    def fake_install(agent_graph: Any, *, max_comments: Any = None, log: Any = None) -> int:
+        events.append("install_comment_cap")
+        return 0
+
+    monkeypatch.setattr(rps, "install_feed_comment_cap", fake_install)
+
 
 def _config() -> Dict[str, Any]:
     return {
@@ -97,8 +103,9 @@ async def test_round_loop_prunes_after_every_step(
 
     result = await getattr(rps, runner_name)(_config(), str(tmp_path))
 
-    # Pro Runde genau ein Pruning, direkt nach dem Schritt; Rundennummer 1-basiert wie im Action-Log.
-    assert events == ["step", "prune", "step", "prune"], platform
+    # Kommentardeckel einmal vor der ersten Runde (#1772); pro Runde genau ein Pruning,
+    # direkt nach dem Schritt; Rundennummer 1-basiert wie im Action-Log.
+    assert events == ["install_comment_cap", "step", "prune", "step", "prune"], platform
     assert [c["round_num"] for c in prune_calls] == [1, 2]
     assert all(c["graph"] is result.agent_graph for c in prune_calls)
     assert all(callable(c["log"]) for c in prune_calls)
@@ -110,3 +117,5 @@ def test_single_platform_runner_prunes_after_env_step() -> None:
     prune = source.index("prune_graph_memories(self.agent_graph")
     assert prune > step
     assert "describe_memory_policy()" in source
+    # Kommentardeckel wird vor dem Aufbau der OASIS-Umgebung eingehaengt.
+    assert source.index("install_feed_comment_cap(self.agent_graph") < source.index("oasis.make(")

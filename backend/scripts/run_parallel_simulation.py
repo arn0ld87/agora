@@ -309,6 +309,12 @@ try:
 except ImportError as _e:
     AGENT_TOOLS_AVAILABLE = False
 
+# Kommentardeckel im Agenten-Feed (#1772). Braucht oasis, steht deshalb hinter dem Import-Guard oben.
+try:
+    from .agent_feed import install_feed_comment_cap
+except ImportError:  # direct script execution
+    from agent_feed import install_feed_comment_cap
+
 
 # ---------------------------------------------------------------------------
 # Slice 5-pre: Live-Post-Event-Emit nach CREATE_POST
@@ -1559,6 +1565,7 @@ async def run_twitter_simulation(
         except Exception as e:
             log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
     log_info(describe_memory_policy())
+    install_feed_comment_cap(result.agent_graph, log=log_info)
 
     # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
     # to every SocialAgent. OASIS triggers these through its normal LLMAction()
@@ -1928,6 +1935,7 @@ async def run_reddit_simulation(
         except Exception as e:
             log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
     log_info(describe_memory_policy())
+    install_feed_comment_cap(result.agent_graph, log=log_info)
 
     # Native CAMEL function-calling for Reddit agents (see Twitter branch).
     if enable_tools and AGENT_TOOLS_AVAILABLE:
