@@ -14,6 +14,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from sim_runtime.budget_guard import SubprocessBudgetGuard  # noqa: E402
 from sim_runtime.throttle import (  # noqa: E402
+    DEFAULT_INPUT_TOKENS_PER_MINUTE,
     DEFAULT_MAX_CONCURRENCY,
     ENV_INPUT_TOKENS_PER_MINUTE,
     ENV_MAX_CONCURRENCY,
@@ -96,8 +97,9 @@ class TestResolveSimMaxConcurrency:
 
 
 class TestResolveTokensPerMinute:
-    def test_default_off(self):
-        assert resolve_input_tokens_per_minute({}) == 0
+    def test_default_is_1_5_million(self):
+        assert DEFAULT_INPUT_TOKENS_PER_MINUTE == 1_500_000
+        assert resolve_input_tokens_per_minute({}) == 1_500_000
 
     def test_valid_and_zero(self):
         assert resolve_input_tokens_per_minute({ENV_INPUT_TOKENS_PER_MINUTE: "2000000"}) == 2_000_000
@@ -105,7 +107,10 @@ class TestResolveTokensPerMinute:
 
     @pytest.mark.parametrize("raw", ["viel", "-1"])
     def test_invalid_falls_back_and_logs(self, raw, throttle_records):
-        assert resolve_input_tokens_per_minute({ENV_INPUT_TOKENS_PER_MINUTE: raw}) == 0
+        assert (
+            resolve_input_tokens_per_minute({ENV_INPUT_TOKENS_PER_MINUTE: raw})
+            == DEFAULT_INPUT_TOKENS_PER_MINUTE
+        )
         assert any(
             r.levelno == logging.WARNING and ENV_INPUT_TOKENS_PER_MINUTE in r.getMessage()
             for r in throttle_records
@@ -230,6 +235,125 @@ class TestInputTokenRateLimiter:
         sleeps = asyncio.run(scenario())
         assert sleeps  # der vierte Aufruf wurde gedrosselt, ohne dass etwas abgeschlossen war
 
+    def test_sixteen_concurrent_calls_start_at_most_five_in_first_window(self):
+        """16 gleichzeitige Aufrufe a 20.000 Tokens bei Limit 100.000 (#1772).
+
+        Zwei Plattformen mit Parallelitaet 8 starten 16 Aufrufe im selben
+        Eventloop. Bei leerem Fenster gab es keine Reservierung: alle 16
+        rutschten durch. Jetzt laeuft zuerst eine Sonde, danach reserviert jeder
+        laufende Aufruf das gemessene Mittel -- hoechstens 5 starten, solange
+        die Uhr im ersten Fenster steht.
+        """
+        clock = _FakeClock()
+
+        async def poll_sleep(seconds: float) -> None:
+            await asyncio.sleep(0)  # Uhr steht: alles passiert im ersten Fenster
+
+        limiter = InputTokenRateLimiter(100_000, clock=clock, sleep=poll_sleep)
+        started: list[int] = []
+
+        async def scenario():
+            release_gate = asyncio.Event()
+
+            async def call(index: int) -> None:
+                await limiter.acquire()
+                started.append(index)
+                await release_gate.wait()
+                limiter.release(20_000)
+
+            tasks = [asyncio.create_task(call(i)) for i in range(16)]
+            for _ in range(50):
+                await asyncio.sleep(0)
+            assert len(started) == 1  # Kaltstart: nur die Sonde laeuft
+            release_gate.set()
+            for _ in range(200):
+                await asyncio.sleep(0)
+            count_in_first_window = len(started)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            return count_in_first_window
+
+        assert asyncio.run(scenario()) <= 5
+
+    def test_cold_start_runs_a_single_probe_then_releases_waiters(self):
+        clock = _FakeClock()
+
+        async def poll_sleep(seconds: float) -> None:
+            await asyncio.sleep(0)
+
+        limiter = InputTokenRateLimiter(1_000_000, clock=clock, sleep=poll_sleep)
+        started: list[int] = []
+
+        async def scenario():
+            gate = asyncio.Event()
+
+            async def call(index: int) -> None:
+                await limiter.acquire()
+                started.append(index)
+                if index == 0:
+                    await gate.wait()
+                limiter.release(10_000)
+
+            tasks = [asyncio.create_task(call(i)) for i in range(6)]
+            for _ in range(30):
+                await asyncio.sleep(0)
+            probe_only = len(started)
+            gate.set()
+            await asyncio.wait_for(asyncio.gather(*tasks), timeout=5)
+            return probe_only
+
+        assert asyncio.run(scenario()) == 1
+        assert len(started) == 6
+
+    def test_empty_window_after_pause_still_reserves_for_inflight_calls(self):
+        """Nach einer Pause (Fenster leer) zaehlen laufende Aufrufe weiter mit."""
+        clock = _FakeClock()
+        waited: list[float] = []
+
+        class _Waited(Exception):
+            pass
+
+        async def sleep_once(seconds: float) -> None:
+            waited.append(seconds)
+            raise _Waited  # nichts gibt frei: der Aufruf muss tatsaechlich warten
+
+        limiter = InputTokenRateLimiter(100_000, clock=clock, sleep=sleep_once)
+
+        async def scenario():
+            await limiter.acquire()
+            limiter.release(40_000)
+            clock.now += 120  # Fenster verfaellt, Messwert bleibt als Schaetzung
+            await limiter.acquire()  # 0 laufend -> frei
+            await limiter.acquire()  # 1 laufend -> 40k < 100k
+            await limiter.acquire()  # 2 laufend -> 80k < 100k
+            assert waited == []
+            with pytest.raises(_Waited):
+                await limiter.acquire()  # 3 laufend -> 120k >= 100k -> wartet
+
+        asyncio.run(scenario())
+        assert len(waited) == 1
+
+    def test_provider_without_usage_does_not_serialize_forever(self, throttle_records):
+        clock = _FakeClock()
+        limiter = _limiter(100_000, clock)
+
+        async def scenario():
+            for _ in range(3):
+                await limiter.acquire()
+                limiter.release(None)
+            # Drei Freigaben ohne Messwert: Anbieter meldet keine Usage.
+            for _ in range(5):
+                await limiter.acquire()  # alle gleichzeitig laufend, ohne Warten
+            return limiter._inflight
+
+        assert asyncio.run(scenario()) == 5
+        assert clock.sleeps == []
+        assert any(
+            r.levelno == logging.WARNING and "keine Token-Usage" in r.getMessage()
+            for r in throttle_records
+        )
+
     def test_cancellation_during_wait_is_not_swallowed(self):
         clock = _FakeClock()
 
@@ -301,8 +425,16 @@ class TestGuardIntegration:
         assert guard.rate_limiter is not None
         assert guard.rate_limiter.limit == 123_456
 
-    def test_from_environment_default_has_disabled_limiter(self, ledger, monkeypatch):
+    def test_from_environment_default_has_enabled_limiter(self, ledger, monkeypatch):
         monkeypatch.delenv(ENV_INPUT_TOKENS_PER_MINUTE, raising=False)
+        guard = SubprocessBudgetGuard.from_environment(str(ledger))
+        assert guard is not None
+        assert guard.rate_limiter is not None
+        assert guard.rate_limiter.enabled
+        assert guard.rate_limiter.limit == 1_500_000
+
+    def test_from_environment_zero_disables_limiter(self, ledger, monkeypatch):
+        monkeypatch.setenv(ENV_INPUT_TOKENS_PER_MINUTE, "0")
         guard = SubprocessBudgetGuard.from_environment(str(ledger))
         assert guard is not None
         assert guard.rate_limiter is not None

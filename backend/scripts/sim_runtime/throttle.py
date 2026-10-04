@@ -14,7 +14,8 @@ Dieses Modul liefert zwei Stellschrauben, beide per Umgebungsvariable:
   (OASIS-``semaphore``). Beide Plattformen laufen parallel im selben Prozess;
   die Gesamtlast ist daher bis zu **doppelt** so hoch.
 * ``AGORA_SIM_INPUT_TOKENS_PER_MINUTE`` -- gleitendes 60-Sekunden-Fenster ueber
-  die zuletzt gemessenen Eingabe-Tokens (``0`` = aus, Standard). Der Limiter
+  die zuletzt gemessenen Eingabe-Tokens. Standard 1.500.000 (siehe
+  :data:`DEFAULT_INPUT_TOKENS_PER_MINUTE`), ``0`` schaltet ab. Der Limiter
   haengt im ``_UsageTrackingModelProxy`` (``budget_guard.py``), an dem jeder
   Simulations-Aufruf beider Plattformen vorbeikommt.
 
@@ -45,10 +46,25 @@ DEFAULT_MAX_CONCURRENCY = 8
 MIN_MAX_CONCURRENCY = 1
 MAX_MAX_CONCURRENCY = 256
 
-DEFAULT_INPUT_TOKENS_PER_MINUTE = 0  # aus
+# Standard seit #1772 (Nacharbeit): 1.500.000 Eingabe-Tokens pro Minute, also
+# 75 % des Kontolimits von 2.000.000 TPM fuer ``gpt-6-luna``. Anlass ist der
+# Lauf ``sim_c8c6b30aa652`` (24 Runden, 54 Agenten, Twitter+Reddit, ohne
+# Limiter): 2.091 Modellaufrufe, davon 872 ``RateLimitError`` (42 %), 209
+# Agentenschritte verloren; die Fehler begannen ab Runde 12 bei gut 2 Mio.
+# Eingabe-Tokens pro Minute. 25 % Luft decken Wiederholungen des SDK und
+# parallele Jobs auf demselben Konto ab. ``0`` schaltet den Limiter ab.
+DEFAULT_INPUT_TOKENS_PER_MINUTE = 1_500_000
 
 WINDOW_SECONDS = 60.0
 _MIN_POLL_SECONDS = 0.01
+# Solange Aufrufe laufen, kann eine Freigabe die Schaetzung jederzeit senken;
+# dann nicht bis zum Ablauf des aeltesten Fenstereintrags schlafen.
+_INFLIGHT_POLL_SECONDS = 0.25
+# Mittel der letzten N gemessenen Aufrufe als Schaetzung fuer laufende Aufrufe.
+_ESTIMATE_SAMPLES = 32
+# Liefert der Anbieter dreimal hintereinander keine Usage (und es gibt noch
+# keinen einzigen Messwert), kann nicht geschaetzt werden: nicht serialisieren.
+_BLIND_AFTER_UNMEASURED = 3
 # Alle 50 Drosselungen eine Zwischenmeldung, damit das Log nicht ueberlaeuft.
 _LOG_EVERY_N_THROTTLES = 50
 
@@ -134,8 +150,19 @@ class InputTokenRateLimiter:
     """Gleitendes 60-Sekunden-Fenster ueber gemessene Eingabe-Tokens.
 
     ``acquire()`` wartet, solange die Summe der im Fenster gemessenen
-    Eingabe-Tokens (plus eine Schaetzung fuer noch laufende Aufrufe: Mittel
-    der Fenstereintraege je laufendem Aufruf) das Limit erreicht hat.
+    Eingabe-Tokens plus eine Reservierung fuer jeden noch laufenden Aufruf
+    das Limit erreicht hat. Die Reservierung je laufendem Aufruf ist das Mittel
+    der letzten :data:`_ESTIMATE_SAMPLES` Messwerte -- unabhaengig vom Fenster,
+    sodass auch nach einer Pause (leeres Fenster) nicht alle wartenden Aufrufe
+    gleichzeitig durchrutschen.
+
+    **Kaltstart:** Gibt es noch keinen einzigen Messwert, laeuft genau EIN
+    Aufruf als Sonde; alle anderen warten, bis er verbucht ist. Ohne diese
+    Regel starteten bei Parallelitaet 8 je Plattform sofort 16 Aufrufe, bevor
+    irgendein Messwert existiert. Meldet der Anbieter keine Usage
+    (:data:`_BLIND_AFTER_UNMEASURED` Freigaben ohne Wert, noch kein Messwert),
+    wird nicht mehr serialisiert -- ohne Messwerte laesst sich nichts begrenzen.
+
     ``release(tokens)`` verbucht den gemessenen Wert nach dem Aufruf; ``None``
     (Fehlschlag, Usage unbekannt) verbucht nichts.
 
@@ -157,7 +184,10 @@ class InputTokenRateLimiter:
         self._clock = clock
         self._sleep = sleep
         self._window: Deque[tuple[float, int]] = deque()
+        self._recent: Deque[int] = deque(maxlen=_ESTIMATE_SAMPLES)
         self._inflight = 0
+        self._unmeasured_releases = 0
+        self._blind_logged = False
         self.throttle_count = 0
         self.waited_seconds = 0.0
 
@@ -176,12 +206,37 @@ class InputTokenRateLimiter:
         while self._window and self._window[0][0] <= cutoff:
             self._window.popleft()
 
+    def _estimate(self) -> Optional[int]:
+        """Reservierung je laufendem Aufruf; ``None`` = noch kein Messwert."""
+        if not self._recent:
+            return None
+        return sum(self._recent) // len(self._recent)
+
+    def _blind(self) -> bool:
+        """Anbieter meldet keine Usage: es gibt nichts zu schaetzen."""
+        return not self._recent and self._unmeasured_releases >= _BLIND_AFTER_UNMEASURED
+
     def _used(self) -> int:
         measured = sum(tokens for _, tokens in self._window)
-        if not self._window or self._inflight == 0:
+        estimate = self._estimate()
+        if estimate is None or self._inflight == 0:
             return measured
-        average = measured // len(self._window)
-        return measured + self._inflight * average
+        return measured + self._inflight * estimate
+
+    def _may_start(self) -> bool:
+        if self._estimate() is None:
+            # Kaltstart: genau eine Sonde, solange nichts gemessen ist.
+            if self._blind():
+                if not self._blind_logged:
+                    self._blind_logged = True
+                    logger.warning(
+                        "[throttle] Der Anbieter meldet keine Token-Usage; das "
+                        "Eingabe-Token-Limit %d/min kann nicht durchgesetzt werden",
+                        self.limit,
+                    )
+                return True
+            return self._inflight == 0
+        return self._used() < self.limit
 
     async def acquire(self) -> None:
         """Auf freie Fensterkapazitaet warten und einen Aufruf als laufend merken."""
@@ -191,13 +246,15 @@ class InputTokenRateLimiter:
         while True:
             now = self._clock()
             self._prune(now)
-            if self._used() < self.limit:
+            if self._may_start():
                 self._inflight += 1
                 return
             if self._window:
                 wait = self._window[0][0] + WINDOW_SECONDS - now
             else:  # nur laufende Aufrufe belegen das Fenster
                 wait = _MIN_POLL_SECONDS
+            if self._inflight:
+                wait = min(wait, _INFLIGHT_POLL_SECONDS)
             wait = min(max(wait, _MIN_POLL_SECONDS), WINDOW_SECONDS)
             if not throttled:
                 throttled = True
@@ -218,3 +275,6 @@ class InputTokenRateLimiter:
         self._inflight = max(0, self._inflight - 1)
         if isinstance(input_tokens, int) and input_tokens > 0:
             self._window.append((self._clock(), input_tokens))
+            self._recent.append(input_tokens)
+        else:
+            self._unmeasured_releases += 1

@@ -29,6 +29,9 @@ SAFE_ENV_KEYS: frozenset[str] = frozenset(
         "AGORA_SIM_MEMORY_TOKEN_CAP",
         # #1772: Kommentardeckel im Agenten-Feed (scripts/agent_feed.py).
         "AGORA_SIM_FEED_MAX_COMMENTS",
+        # #1772: Drosselung der Modellaufrufe (scripts/sim_runtime/throttle.py).
+        # Ohne diese Keys erreichte ein gesetzter Wert den Subprozess nie.
+        "AGORA_SIM_MAX_CONCURRENCY", "AGORA_SIM_INPUT_TOKENS_PER_MINUTE",
     }
 )
 

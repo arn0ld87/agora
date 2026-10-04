@@ -9,7 +9,7 @@
   (68 %); ein Agentenschritt, dessen Wiederholungen erschöpft sind, ging still
   verloren. Die Laufzeit pro Runde kann dadurch steigen, dafür kommen die
   Agentenschritte an.
-- Neu: `AGORA_SIM_INPUT_TOKENS_PER_MINUTE` (Standard `0` = aus) drosselt die
+- Neu: `AGORA_SIM_INPUT_TOKENS_PER_MINUTE` (Standard inzwischen `1500000`, `0` = aus; siehe `1772-limiter-default`) drosselt die
   Simulations-Aufrufe auf ein gleitendes 60-Sekunden-Fenster über die gemessenen
   Eingabe-Tokens. Der Limiter hängt im Budget-Proxy (`SubprocessBudgetGuard`) und
   gilt damit für beide Plattformen im Parallel-Runner gemeinsam; er wartet nur

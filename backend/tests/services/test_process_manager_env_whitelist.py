@@ -143,6 +143,19 @@ class TestSubprocessEnvIncludesOptionalConnectionKeys:
         assert captured.get("AGORA_SIM_MEMORY_TOKEN_CAP") == "24000"
         assert captured.get("AGORA_SIM_FEED_MAX_COMMENTS") == "3"
 
+    def test_safe_env_keys_includes_throttle_settings(self, tmp_path, monkeypatch) -> None:
+        """#1772: Parallelitaet und Tokens-pro-Minute-Limit muessen den Subprozess erreichen,
+        sonst wirkt ein in .env/Compose gesetzter Wert nie."""
+        for key, value in (
+            ("AGORA_SIM_MAX_CONCURRENCY", "4"),
+            ("AGORA_SIM_INPUT_TOKENS_PER_MINUTE", "1200000"),
+        ):
+            assert key in SAFE_ENV_KEYS
+            monkeypatch.setenv(key, value)
+        captured = _run_start_simulation(tmp_path, monkeypatch)
+        assert captured.get("AGORA_SIM_MAX_CONCURRENCY") == "4"
+        assert captured.get("AGORA_SIM_INPUT_TOKENS_PER_MINUTE") == "1200000"
+
     def test_safe_env_keys_includes_hf_token(self) -> None:
         """HF_TOKEN muss in SAFE_ENV_KEYS sein, sonst scheitern private HF-Modell-Loads."""
         assert "HF_TOKEN" in SAFE_ENV_KEYS, (
