@@ -301,73 +301,38 @@ def resolve_camel_ollama_url(base_url: str | None) -> str | None:
     return ensure_v1_suffix(base_url)
 
 
-_REASONING_GPT_MAJOR_RE = re.compile(r"^gpt-[5-9](?:$|[-.])")
-
-
 def uses_max_completion_tokens(model: str) -> bool:
     """True wenn das Modell ``max_completion_tokens`` statt ``max_tokens`` verlangt.
 
-    Hintergrund: Die OpenAI GPT-5..GPT-9-Familie und die Reasoning-Modelle
-    ``o1`` / ``o3`` / ``o4`` haben ``max_tokens`` deprecated und
-    antworten 400 ``Unsupported parameter: 'max_tokens' is not supported
-    with this model. Use 'max_completion_tokens' instead.``, sobald der
-    Parameter im Request-Body landet. Ältere OpenAI-Modelle (``gpt-4o``,
-    ``gpt-4-turbo``, ``gpt-3.5-turbo``) sowie alle nicht-OpenAI-Backends
-    (Qwen, Llama, Claude, DeepSeek, Mistral, Ollama-Modelle) nutzen
-    weiterhin ``max_tokens``.
+    Duenne Weiterleitung an
+    ``app.llm.model_capabilities.uses_max_completion_tokens_hyphen_boundary``
+    (#1766, Single Source of Truth fuer App-Pfad und Simulation). Die
+    Simulations-Variante kennt fuer ``o1``/``o3``/``o4`` nur die
+    ``-``-Grenze (``o1.5-turbo`` -> ``False``); der App-Pfad akzeptiert auch
+    ``.`` und bleibt deshalb eine eigene, testfixierte Funktion.
 
-    Heuristik (#1572): Modellname (case-insensitiv, getrimmt) matcht
-    ``gpt-<N>`` fuer eine einstellige Major-Version N ∈ 5..9 (mit ``-``/``.``-
-    Grenze oder Stringende — deckt proaktiv auch noch unveroeffentlichte
-    GPT-6..GPT-9-Modelle ab, statt erst nach jedem Release nachzuziehen)
-    oder einen ``o<n>``-Prefix gefolgt von ``-`` oder Ende.
+    Der Import erfolgt erst beim Aufruf (wie ``detect_provider`` weiter
+    oben): ``app`` liegt erst nach ``install_script_paths`` auf ``sys.path``,
+    und ein Modul-Import wuerde ``app/__init__`` (Flask, ``Config``) vor
+    ``load_project_env`` ausfuehren.
     """
-    lowered = model.strip().lower()
-    if _REASONING_GPT_MAJOR_RE.match(lowered):
-        return True
-    for prefix in ("o1", "o3", "o4"):
-        if lowered == prefix or lowered.startswith(f"{prefix}-"):
-            return True
-    return False
+    from app.llm import model_capabilities
 
-
-_GPT_REASONING_NONE_RE = re.compile(r"^gpt-([5-9])(?:\.(\d+))?(?:-|$)")
+    return model_capabilities.uses_max_completion_tokens_hyphen_boundary(model)
 
 
 def supports_reasoning_effort_none(model: str) -> bool:
     """True wenn das Modell ``reasoning_effort: "none"`` akzeptiert.
 
-    Hintergrund: GPT-5.x verlangt bei Function-Tools auf
-    ``/v1/chat/completions`` ein explizites ``reasoning_effort: "none"`` —
-    ohne den Parameter greift serverseitig ein Reasoning-Default und
-    Tools + Reasoning gibt es nur auf ``/v1/responses`` (400
-    ``Function tools with reasoning_effort are not supported ...``).
-
-    **Wichtig:** Das ursprüngliche ``gpt-5`` (5.0, ohne Minor-Version)
-    kennt ``"none"`` NICHT — dort sind nur ``minimal``…``high`` gültig.
-    Erst ab Minor-Version 5.1 (``gpt-5.1``, ``gpt-5.6-luna`` etc.) ist
-    ``"none"`` ein gültiger Wert. Modelle ohne erkennbare Minor-Version
-    (``gpt-5``, ``gpt-5-mini``, ``gpt-5-turbo``) gelten als 5.0 und
-    bekommen den Parameter NICHT gesetzt.
-
-    Ab Major-Version 6 (``gpt-6``, ``gpt-6-luna``, ``gpt-6-sol``) gilt
-    ``"none"`` auch ohne Minor-Version — die Familie hat denselben
-    serverseitigen Reasoning-Default und liefert denselben Tools-400.
-
-    Heuristik: Modellname (case-insensitiv, getrimmt) matched
-    ``gpt-<5..9>``, optional gefolgt von ``.<minor>``, danach ``-`` oder
-    Ende. Bei Major 5 muss die Minor-Version vorhanden und ``>= 1`` sein.
+    Duenne Weiterleitung an
+    ``app.llm.model_capabilities.supports_reasoning_effort_none`` (#1766).
+    Dort stehen Regel und Begruendung (``gpt-5`` ohne Minor ausgenommen,
+    ab ``gpt-5.1`` und ab Major 6 gesetzt, siehe auch #1763). Lazy Import aus
+    demselben Grund wie in :func:`uses_max_completion_tokens`.
     """
-    lowered = model.strip().lower()
-    match = _GPT_REASONING_NONE_RE.match(lowered)
-    if match is None:
-        return False
-    if int(match.group(1)) >= 6:
-        return True
-    minor = match.group(2)
-    if minor is None:
-        return False
-    return int(minor) >= 1
+    from app.llm import model_capabilities
+
+    return model_capabilities.supports_reasoning_effort_none(model)
 
 
 def build_camel_completion_params(

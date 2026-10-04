@@ -20,9 +20,9 @@ Zwei Rollen koexistieren in diesem Modul, klar getrennt:
    Fallback-Heuristik).
 """
 
-import re
 from typing import Any, Dict, Optional
 
+from app.llm import model_capabilities as _model_capabilities
 from app.llm.providers.base import (
     CompletionTokenParam,
     ProviderAdapter,
@@ -35,45 +35,32 @@ from app.llm.providers.base import (
 # ----------------------------------------------------------------------
 
 
-_REASONING_GPT_MAJOR_RE = re.compile(r"^gpt-[5-9](?:$|[-.])")
-
-
 def _is_reasoning_family(model: str) -> bool:
     """Whether *model* belongs to the GPT-5..GPT-9-/o1-/o3-/o4-Reasoning-Familie.
 
-    Gemeinsamer Helper fuer :func:`uses_max_completion_tokens` und
-    :func:`omits_temperature` (#1572) — beide Quirks (Token-Key, temperature)
-    teilen dieselbe Modellfamilie und damit dieselbe Erkennungsregel.
-
-    Matcht ``gpt-5`` bis ``gpt-9`` (einstellige Major-Version, mit ``-``/``.``-
-    Grenze oder Stringende — also ``gpt-6``, ``gpt-6-luna``, ``gpt-6.1-x``,
-    aber NICHT ``gpt-500``, ``gpt-4o``, ``gpt-60``) sowie ``o1``/``o3``/``o4``
-    (exaktes Prefix-Matching mit ``-``/``.``-Grenze).
+    Duenne Weiterleitung an
+    :func:`app.llm.model_capabilities.is_reasoning_family` (#1766, Single
+    Source of Truth fuer App-Pfad UND Simulation). Gemeinsamer Helper fuer
+    :func:`uses_max_completion_tokens`, :func:`omits_temperature` (#1572) und
+    :func:`reasoning_effort_kwargs`.
     """
-    lowered = (model or "").strip().lower()
-    if _REASONING_GPT_MAJOR_RE.match(lowered):
-        return True
-    for prefix in ("o1", "o3", "o4"):
-        if lowered == prefix or lowered.startswith(f"{prefix}-") or lowered.startswith(f"{prefix}."):
-            return True
-    return False
+    return _model_capabilities.is_reasoning_family(model)
 
 
 def uses_max_completion_tokens(model: str) -> bool:
     """Whether *model* requires ``max_completion_tokens`` instead of ``max_tokens``.
 
     GPT-5..GPT-9 / o1 / o3 / o4 verlangen max_completion_tokens; OpenAI
-    antwortet sonst 400 "Unsupported parameter: 'max_tokens'". Delegiert an
-    :func:`_is_reasoning_family` (#1572, deckt proaktiv auch gpt-6..gpt-9 ab,
-    statt erst nach jedem neuen Modell-Release nachzuziehen). Heuristik
-    gespiegelt aus backend/scripts/_sim_common.py::uses_max_completion_tokens
-    — Single Source of Truth bleibt dort, hier nur die zweite Stelle.
+    antwortet sonst 400 "Unsupported parameter: 'max_tokens'". Duenne
+    Weiterleitung an :func:`app.llm.model_capabilities.uses_max_completion_tokens`
+    (#1766).
 
-    Bekannte, testfixierte Divergenz: ``scripts/_sim_common.py::
-    uses_max_completion_tokens`` kennt keine ``.``-Grenze fuer o1/o3/o4 —
-    Vereinheitlichung ist ein Follow-up, kein Teil dieses Refactorings.
+    Bekannte, testfixierte Divergenz: der Simulations-Pfad
+    (``scripts/_sim_common.py::uses_max_completion_tokens``) kennt keine
+    ``.``-Grenze fuer o1/o3/o4 und bleibt bewusst eine eigene Funktion
+    (``model_capabilities.uses_max_completion_tokens_hyphen_boundary``).
     """
-    return _is_reasoning_family(model)
+    return _model_capabilities.uses_max_completion_tokens(model)
 
 
 def is_token_key_400(exc: Exception) -> bool:
@@ -135,9 +122,10 @@ def omits_temperature(model: str) -> bool:
     und antworten sonst 400 "Unsupported value: 'temperature' does not
     support 0.7 with this model. Only the default (1) value is supported."
     Delegiert an :func:`_is_reasoning_family`, geteilt mit
-    :func:`uses_max_completion_tokens` (#1572).
+    :func:`uses_max_completion_tokens` (#1572). Duenne Weiterleitung an
+    :func:`app.llm.model_capabilities.omits_temperature` (#1766).
     """
-    return _is_reasoning_family(model)
+    return _model_capabilities.omits_temperature(model)
 
 
 def is_temperature_400(exc: Exception) -> bool:
