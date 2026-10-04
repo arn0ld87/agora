@@ -8,6 +8,7 @@ from ..tool_schema import (
     TOOL_DESC_INTERVIEW_AGENTS,
     TOOL_DESC_PANORAMA_SEARCH,
     TOOL_DESC_QUICK_SEARCH,
+    TOOL_DESC_SEARCH_SIMULATION_ACTIONS,
 )
 from ..tool_validation import (
     is_valid_tool_call as _is_valid_tool_call,
@@ -51,6 +52,17 @@ def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
             "parameters": {
                 "interview_topic": "Interview topic or requirement description (e.g. 'understand students' views on the dorm formaldehyde incident')",
                 "max_agents": "Maximum number of agents to interview (optional, default 5, max 10)",
+            },
+        },
+        "search_simulation_actions": {
+            "name": "search_simulation_actions",
+            "description": TOOL_DESC_SEARCH_SIMULATION_ACTIONS,
+            "parameters": {
+                "query": "Keywords to look for in the posts and comments (optional; empty returns posts in round order)",
+                "agent_name": "Only posts of agents whose name contains this text (optional)",
+                "round_from": "First simulation round to include (optional)",
+                "round_to": "Last simulation round to include (optional)",
+                "limit": "Number of posts to return (optional, default 12, max 20)",
             },
         },
     }
@@ -149,7 +161,7 @@ def get_openai_tools_schema(agent: Any) -> List[Dict[str, Any]]:
 
     ``parameters`` wird als valides JSON-Schema aufgebaut. Typ- und
     Required-Heuristik basiert auf Parameter-Name und -Beschreibung:
-    ``limit``/``max_*`` → ``integer``, ``include_expired`` → ``boolean``,
+    ``limit``/``max_*``/``round_*`` → ``integer``, ``include_expired`` → ``boolean``,
     Rest ``string``. Parameter mit ``optional`` in der Beschreibung sind
     nicht required.
     """
@@ -161,7 +173,7 @@ def get_openai_tools_schema(agent: Any) -> List[Dict[str, Any]]:
         for param_name, param_desc in tool_def.get("parameters", {}).items():
             desc_str = str(param_desc)
             p_type = "string"
-            if param_name == "limit" or param_name.startswith("max_"):
+            if param_name == "limit" or param_name.startswith(("max_", "round_")):
                 p_type = "integer"
             elif param_name == "include_expired":
                 p_type = "boolean"

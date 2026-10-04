@@ -27,6 +27,7 @@ from .evidence import (
     register_evidence_record,
     resolve_embedder,
 )
+from .action_search import ActionSearchResult, build_action_evidence_item
 from .data_gap import ClaimGapKind, classify_claim_gap
 from .evidence_ledger import ledger_for
 from .evidence_candidates import EvidenceCandidatePool
@@ -43,7 +44,6 @@ from .postprocess_timing import PostprocessPhaseTracker
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
 from .takeaway_confidence import cap_section_key_takeaways
 from .sections import (
-    action_content as sections_action_content,
     attach_provenance,
     atomize_claim_chunk,
     build_source_id_anchor,
@@ -470,41 +470,10 @@ class ReportAgent:
             _skipped_foreign = len(action_dicts) - len(eligible_actions)
             sampled_actions = self._sample_actions_timeseries(eligible_actions, k=8)
             for action in sampled_actions:
-                action_type = action.get("action_type") or "action"
-                agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
-                platform = action.get("platform") or "unknown"
-                round_num = action.get("round_num")
-                # Issue #1304 (S2): Der Snippet war reine Metabeschreibung —
-                # "Agent X create_post on reddit in round 3". Gegen so einen
-                # Text kann kein Entailment eine Aussage stuetzen, egal wie gut
-                # gesampelt wurde. Der Beitragstext selbst gehoert hinein; ohne
-                # ihn bleibt die Aktion Dekoration.
-                action_text = sections_action_content(action)
-                snippet = f"{agent} {action_type} on {platform} in round {round_num}"
-                if action_text:
-                    snippet = f"{snippet}: {self._truncate(action_text, 600)}"
-                items.append(EvidenceItem(
-                    type="agent_action",
-                    source="simulation_actions",
-                    value=action_type,
-                    snippet=snippet,
-                    raw=action,
-                ).to_dict())
-                # Issue #1778 (Schritt 1.2): Stimme des Belegs — dieselbe
-                # agent_id wie im Interview derselben Persona.
-                if action.get("agent_id") is not None:
-                    items[-1]["voice_key"] = f"agent:{action.get('agent_id')}"
-                action_identity = (
-                    action.get("platform"),
-                    action.get("round_num"),
-                    action.get("agent_id"),
-                    action.get("action_type"),
-                    action.get("timestamp"),
-                )
-                if all(value is not None and str(value).strip() for value in action_identity):
-                    items[-1]["producer_key"] = "simulation-action:" + ":".join(
-                        str(value) for value in action_identity
-                    )
+                # Issue #1778 (Schritt 1.7): gemeinsame Quelle mit dem
+                # Suchwerkzeug — dieselbe Aktion bekommt in Stichprobe und
+                # Suche dieselbe Evidence-ID.
+                items.append(build_action_evidence_item(action))
             if _skipped_foreign:
                 logger.info(
                     "report_evidence: %d action(s) with foreign role conflict skipped "
@@ -744,6 +713,17 @@ class ReportAgent:
                 evidence_id = self._record_evidence_item(item)
                 if evidence_id:
                     interview_evidence_ids[original_index] = evidence_id
+        elif isinstance(structured_result, ActionSearchResult):
+            # Issue #1778 (Schritt 1.7): Jeder Suchtreffer wird ein Beleg
+            # ``agent_action`` — gleiche Form und Identität wie in der
+            # Stichprobe (``_collect_simulation_evidence_items``).
+            for action in structured_result.hits:
+                item = build_action_evidence_item(action)
+                item["tool_name"] = tool_name
+                if structured_result.query:
+                    item["query"] = structured_result.query
+                item["agent_log_ref"] = {"section_index": section_index, "action": "tool_result", "tool_name": tool_name}
+                items.append(item)
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
                 item = {

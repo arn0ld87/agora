@@ -87,10 +87,15 @@ Function Flow:
 
 [Important] This feature requires the OASIS simulation environment to be running!"""
 
+TOOL_DESC_SEARCH_SIMULATION_ACTIONS = """\
+Search what the simulated agents actually posted and commented during the simulation (posts, comments, quote posts). Use this to find out what was said publicly, by whom and in which round. Use it for claims about the course of the debate. It returns original post texts with agent name, platform and round. It does NOT interview anyone; for first-person answers use interview_agents.
+Parameters: query (keywords), agent_name (optional), round_from / round_to (optional), limit (default 12, max 20)."""
+
 
 __all__ = [
     "TOOL_DESC_INSIGHT_FORGE",
     "TOOL_DESC_PANORAMA_SEARCH",
     "TOOL_DESC_QUICK_SEARCH",
     "TOOL_DESC_INTERVIEW_AGENTS",
+    "TOOL_DESC_SEARCH_SIMULATION_ACTIONS",
 ]

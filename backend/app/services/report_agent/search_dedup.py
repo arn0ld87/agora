@@ -38,7 +38,9 @@ from typing import Any, Dict, Set
 #: bewusst: ein Interview ohne Ergebnis ist kein Suchtreffer-Problem, sondern
 #: ein Persona-Pool-Problem — und ein zweiter Versuch mit anderem Zuschnitt
 #: kann dort sehr wohl etwas liefern.
-SEARCH_TOOLS = frozenset({"insight_forge", "panorama_search", "quick_search"})
+SEARCH_TOOLS = frozenset(
+    {"insight_forge", "panorama_search", "quick_search", "search_simulation_actions"}
+)
 
 _PUNCTUATION_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)

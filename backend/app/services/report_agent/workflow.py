@@ -973,7 +973,13 @@ def generate_section_react(
     # zurueck und wuerde alle Tool-Calls unterdruecken.
     registry_for(agent).reset()
     used_tools = set()
-    all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+    all_tools = {
+        "insight_forge",
+        "panorama_search",
+        "quick_search",
+        "interview_agents",
+        "search_simulation_actions",
+    }
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
 
     # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten

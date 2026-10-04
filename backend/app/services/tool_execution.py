@@ -102,6 +102,38 @@ def _run_interview_agents(
     return structured_result, structured_result.to_text()
 
 
+def _optional_int(value: Any) -> Optional[int]:
+    """Liest eine optionale Ganzzahl aus einem Tool-Parameter.
+
+    Modelle liefern Zahlen auch als String. Fehlend, leer oder nicht lesbar
+    heißt: der Filter ist nicht gesetzt.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
+
+
+def _run_search_simulation_actions(
+    *, parameters: Dict[str, Any], simulation_id: Optional[str]
+) -> tuple[Any, str]:
+    """Führt ``search_simulation_actions`` aus (Issue #1778, Schritt 1.7)."""
+    from .report_agent import action_search
+
+    limit = _optional_int(parameters.get("limit"))
+    structured_result = action_search.search_simulation_actions(
+        simulation_id=simulation_id or "",
+        query=str(parameters.get("query") or ""),
+        agent_name=str(parameters.get("agent_name") or ""),
+        round_from=_optional_int(parameters.get("round_from")),
+        round_to=_optional_int(parameters.get("round_to")),
+        limit=limit if limit is not None else 12,
+    )
+    return structured_result, structured_result.to_text()
+
+
 def _record_and_annotate(
     *,
     tool_name: str,
@@ -297,10 +329,17 @@ def execute_tool(
             )
             return json.dumps([n.to_dict() for n in nodes], ensure_ascii=False, indent=2)
 
+        elif tool_name == "search_simulation_actions":
+            structured_result, rendered = _run_search_simulation_actions(
+                parameters=parameters,
+                simulation_id=simulation_id,
+            )
+
         else:
             return (
                 f"Unknown tool: {tool_name}. Please use one of the following "
-                "tools: insight_forge, panorama_search, quick_search"
+                "tools: insight_forge, panorama_search, quick_search, "
+                "search_simulation_actions"
             )
 
         return _record_and_annotate(

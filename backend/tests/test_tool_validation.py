@@ -23,6 +23,7 @@ class TestValidToolNames:
             "panorama_search",
             "quick_search",
             "interview_agents",
+            "search_simulation_actions",
         })
 
     def test_is_immutable_frozenset(self):

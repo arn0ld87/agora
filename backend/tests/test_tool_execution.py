@@ -142,6 +142,90 @@ class TestInterviewAgents:
         assert graph_tools.interview_agents.call_args.kwargs["max_agents"] == 10
 
 
+class TestSearchSimulationActions:
+    """Issue #1778, Schritt 1.7: Dispatch des Werkzeugs für Simulationsbeiträge."""
+
+    @staticmethod
+    def _patch_search(monkeypatch, text: str = "beiträge"):
+        from app.services.report_agent import action_search
+
+        calls = []
+
+        def fake_search(**search_kwargs):
+            calls.append(search_kwargs)
+            return _structured(text)
+
+        monkeypatch.setattr(action_search, "search_simulation_actions", fake_search)
+        return calls
+
+    def test_dispatches_with_coerced_parameters(self, kwargs, monkeypatch):
+        calls = self._patch_search(monkeypatch)
+
+        result = execute_tool(
+            tool_name="search_simulation_actions",
+            parameters={
+                "query": "Schließung",
+                "agent_name": "Hebamme",
+                "round_from": "2",
+                "round_to": 5,
+                "limit": "8",
+            },
+            report_context="",
+            **kwargs,
+        )
+
+        assert result == "beiträge"
+        assert calls == [
+            {
+                "simulation_id": "sim-1",
+                "query": "Schließung",
+                "agent_name": "Hebamme",
+                "round_from": 2,
+                "round_to": 5,
+                "limit": 8,
+            }
+        ]
+
+    def test_defaults_without_parameters(self, kwargs, monkeypatch):
+        calls = self._patch_search(monkeypatch)
+
+        execute_tool(
+            tool_name="search_simulation_actions",
+            parameters={},
+            report_context="",
+            **kwargs,
+        )
+
+        assert calls == [
+            {
+                "simulation_id": "sim-1",
+                "query": "",
+                "agent_name": "",
+                "round_from": None,
+                "round_to": None,
+                "limit": 12,
+            }
+        ]
+
+    def test_result_is_recorded_as_evidence(self, kwargs, monkeypatch):
+        self._patch_search(monkeypatch, "gerendert")
+        recorded = []
+
+        execute_tool(
+            tool_name="search_simulation_actions",
+            parameters={"query": "q"},
+            report_context="",
+            record_evidence=lambda *args: recorded.append(args),
+            section_index=4,
+            **kwargs,
+        )
+
+        assert len(recorded) == 1
+        assert recorded[0][0] == "search_simulation_actions"
+        assert recorded[0][3] == "gerendert"
+        assert recorded[0][4] == 4
+
+
 class TestWebTools:
     def test_web_search_uses_format_search_result(self, kwargs, web_tools):
         web_tools.web_search.return_value = "raw"
@@ -251,6 +335,7 @@ class TestUnknownTool:
         )
         assert "Unknown tool" in result
         assert "some_unknown_tool" in result
+        assert "search_simulation_actions" in result
 
 
 class TestExceptionSwallowed:
