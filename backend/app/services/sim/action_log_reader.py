@@ -391,6 +391,24 @@ def read_actions_from_file(
 # ---------------------------------------------------------------------------
 
 
+def _log_file_health(log_path: str) -> tuple[int, int]:
+    """(unlesbare Zeilen, Aktionszeilen) einer Protokolldatei."""
+    unreadable_lines = 0
+    action_lines = 0
+    with open(log_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                unreadable_lines += 1
+                continue
+            if isinstance(data, dict) and "agent_id" in data and "event_type" not in data:
+                action_lines += 1
+    return unreadable_lines, action_lines
+
+
 def action_log_health(simulation_id: str, base_dir: str | Path) -> tuple[int, int]:
     """(vorhandene Protokolldateien, unlesbare Zeilen) einer Simulation.
 
@@ -410,21 +428,17 @@ def action_log_health(simulation_id: str, base_dir: str | Path) -> tuple[int, in
         )
         if os.path.exists(path)
     ]
-    # Wie ``get_all_actions``: das alte Einzelprotokoll zählt nur, wenn es
-    # keine Plattformprotokolle gibt — sonst wird es gar nicht gelesen.
+    platform_health = [_log_file_health(path) for path in platform_logs]
+    # Wie ``get_all_actions``: das alte Einzelprotokoll wird genau dann
+    # gelesen, wenn die Plattformprotokolle keine Aktion liefern. Geprüft
+    # wird das Protokoll, aus dem die Aktionen tatsächlich stammen.
     legacy_log = os.path.join(sim_dir, "actions.jsonl")
-    log_paths = platform_logs or ([legacy_log] if os.path.exists(legacy_log) else [])
-    unreadable_lines = 0
-    for log_path in log_paths:
-        with open(log_path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                try:
-                    json.loads(line)
-                except json.JSONDecodeError:
-                    unreadable_lines += 1
-    log_files = len(log_paths)
+    if not any(actions for _unreadable, actions in platform_health) and os.path.exists(legacy_log):
+        legacy_unreadable, legacy_actions = _log_file_health(legacy_log)
+        if legacy_actions or not platform_logs:
+            return 1, legacy_unreadable
+    log_files = len(platform_logs)
+    unreadable_lines = sum(unreadable for unreadable, _actions in platform_health)
     return log_files, unreadable_lines
 
 

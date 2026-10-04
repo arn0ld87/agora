@@ -509,3 +509,22 @@ def test_action_log_health_ignoriert_das_alte_protokoll_neben_plattformprotokoll
     legacy.mkdir()
     (legacy / "actions.jsonl").write_text("kaputt\n", encoding="utf-8")
     assert action_log_health("sim-2", tmp_path) == (1, 1)
+
+
+def test_action_log_health_prueft_das_protokoll_aus_dem_die_aktionen_stammen(tmp_path):
+    """Review PR #1780: liefern die Plattformprotokolle nichts, zählt das alte."""
+    from app.services.sim.action_log_reader import action_log_health
+
+    sim_dir = tmp_path / "sim-1"
+    (sim_dir / "twitter").mkdir(parents=True)
+    (sim_dir / "twitter" / "actions.jsonl").write_text("kaputt\n", encoding="utf-8")
+    (sim_dir / "actions.jsonl").write_text('{"agent_id": 0, "round": 1}\n', encoding="utf-8")
+
+    assert action_log_health("sim-1", tmp_path) == (1, 0)
+
+    # Ohne verwertbares altes Protokoll bleibt der Schaden sichtbar.
+    broken = tmp_path / "sim-2"
+    (broken / "twitter").mkdir(parents=True)
+    (broken / "twitter" / "actions.jsonl").write_text("kaputt\n", encoding="utf-8")
+    assert action_log_health("sim-2", tmp_path) == (1, 1)
+
