@@ -35,6 +35,7 @@ from .graph.graph_dtos import PanoramaResult as PanoramaResult  # noqa: PLC0414
 from .graph.graph_dtos import AgentInterview as AgentInterview  # noqa: PLC0414
 from .graph.graph_dtos import InterviewResult as InterviewResult  # noqa: PLC0414
 from .interview_panel import InterviewPanelTracker
+from .persona_role import normalize_role
 
 logger = get_logger('agora.graph_tools')
 
@@ -458,7 +459,8 @@ class GraphToolsService:
             for i, agent_idx in enumerate(selected_indices):
                 agent = selected_agents[i]
                 agent_name = agent.get("realname", agent.get("username", f"Agent_{agent_idx}"))
-                agent_role = agent.get("profession", "Unknown")
+                # Issue #1766: fehlende Berufsangabe bleibt leer, kein "Unknown".
+                agent_role = normalize_role(agent.get("profession"))
                 # Issue #1248: Das Rollenfamilien-Label ist der Entitaetstyp der
                 # Quellentitaet — kontrolliert und pro Lauf stabil, im Gegensatz
                 # zum frei formulierten Berufstitel. Kollektiv- und

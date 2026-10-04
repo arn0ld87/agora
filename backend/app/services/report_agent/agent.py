@@ -13,6 +13,7 @@ from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penal
 from ..evidence_entailment import SCENARIO_ROLE_REASON_PREFIX, EntailmentJudge
 from ..evidence_identity import build_producer_key
 from ..llm_entailment_judge import build_llm_judge
+from ..persona_role import resolve_stakeholder_group
 from ..run_budget import reraise_if_budget_exceeded
 from .evidence import (
     build_seed_document_anchor,
@@ -680,10 +681,16 @@ class ReportAgent:
                 # Fallback, sonst wirft build_producer_key ValueError.
                 agent_name = (interview.agent_name or "").strip() or "unknown-agent"
                 question = (interview.question or "").strip() or "no-question"
-                stakeholder_group = (
-                    (interview.agent_role or "").strip()
-                    or (interview.agent_name or "").strip()
-                    or "unbekannt"
+                role_family = (
+                    getattr(interview, "agent_role_family", None) or ""
+                ).strip() or None
+                # Issue #1766: Fehlende Rollenangabe ("", "Unknown", "unbekannt")
+                # ist keine Gruppe. Kette: Rolle, nicht-generische Rollenfamilie,
+                # sonst ein konstanter Wert. Bewusst kein Agentenname: der
+                # Cross-Stakeholder-Validator zaehlt Titel, die Zahl
+                # unterscheidbarer Gruppen darf hier nicht steigen.
+                stakeholder_group = resolve_stakeholder_group(
+                    interview.agent_role, role_family
                 )
                 # Issue #1277-4: Fallback ist das bereinigte substance, nicht
                 # das rohe response — sonst bleiben Plattform-Strukturmarker
@@ -692,9 +699,6 @@ class ReportAgent:
                     (q.strip() for q in interview.key_quotes if q and q.strip()),
                     substance,
                 )
-                role_family = (
-                    getattr(interview, "agent_role_family", None) or ""
-                ).strip() or None
                 item: Dict[str, Any] = {
                     "type": "agent_interview",
                     "tool_name": tool_name,
