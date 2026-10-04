@@ -141,10 +141,12 @@ class SubprocessBudgetGuard:
         if limiter is not None:
             await limiter.acquire()
 
-    def _release_rate_slot(self, input_tokens: Optional[int]) -> None:
+    def _release_rate_slot(
+        self, input_tokens: Optional[int], *, succeeded: bool = True
+    ) -> None:
         limiter = self.rate_limiter
         if limiter is not None:
-            limiter.release(input_tokens)
+            limiter.release(input_tokens, succeeded=succeeded)
 
     def _invocation_logger(self, run_id: str):
         logger = self._loggers.get(run_id)
@@ -590,6 +592,7 @@ class _UsageTrackingModelProxy:
         guard._enforce_before_physical_call()
         await guard._acquire_rate_slot()
         prompt: Optional[int] = None
+        succeeded = False
         try:
             started = time.monotonic()
             try:
@@ -608,9 +611,10 @@ class _UsageTrackingModelProxy:
                 completion_tokens=completion,
                 cached_input_tokens=cached,
             )
+            succeeded = True
             return result
         finally:
-            guard._release_rate_slot(prompt)
+            guard._release_rate_slot(prompt, succeeded=succeeded)
 
     async def _arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
@@ -618,6 +622,7 @@ class _UsageTrackingModelProxy:
         guard._enforce_before_physical_call()
         await guard._acquire_rate_slot()
         prompt: Optional[int] = None
+        succeeded = False
         try:
             started = time.monotonic()
             try:
@@ -636,6 +641,7 @@ class _UsageTrackingModelProxy:
                 completion_tokens=completion,
                 cached_input_tokens=cached,
             )
+            succeeded = True
             return result
         finally:
-            guard._release_rate_slot(prompt)
+            guard._release_rate_slot(prompt, succeeded=succeeded)

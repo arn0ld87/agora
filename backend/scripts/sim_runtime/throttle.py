@@ -268,13 +268,19 @@ class InputTokenRateLimiter:
             self.waited_seconds += wait
             await self._sleep(wait)
 
-    def release(self, input_tokens: Optional[int]) -> None:
-        """Laufenden Aufruf abschliessen und gemessene Eingabe-Tokens verbuchen."""
+    def release(self, input_tokens: Optional[int], *, succeeded: bool = True) -> None:
+        """Laufenden Aufruf abschliessen und gemessene Eingabe-Tokens verbuchen.
+
+        ``succeeded=False`` (der Anbieter hat eine Exception geworfen) zaehlt
+        nicht als "Anbieter meldet keine Usage": sonst wuerden drei gescheiterte
+        Aufrufe -- etwa drei ``RateLimitError`` -- die Kaltstart-Sonde aushebeln
+        und alle wartenden Aufrufe gleichzeitig freigeben.
+        """
         if not self.enabled:
             return
         self._inflight = max(0, self._inflight - 1)
         if isinstance(input_tokens, int) and input_tokens > 0:
             self._window.append((self._clock(), input_tokens))
             self._recent.append(input_tokens)
-        else:
+        elif succeeded:
             self._unmeasured_releases += 1

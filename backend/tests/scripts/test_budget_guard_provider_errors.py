@@ -242,6 +242,18 @@ class TestNoSecretsInLog:
         assert "hunter2hunter2" not in line
         assert "[redacted]" in line
 
+    def test_base64_bearer_token_is_fully_redacted(self):
+        from app.utils.provider_message import redacted_provider_message
+
+        token = "+abc/" + "def" + "=="
+        line = redacted_provider_message(
+            RuntimeError(f"upstream said: Authorization: Bearer {token} rejected")
+        )
+        assert token not in line
+        assert "abc/def" not in line
+        assert "[redacted]" in line
+        assert "rejected" in line
+
     def test_prompt_and_headers_are_not_read(self, run_ledger, guard_records):
         class _Err(RateLimitError):
             request = type("R", (), {"headers": {"Authorization": "Bearer SECRET-HEADER"}})()

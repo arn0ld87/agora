@@ -14,7 +14,8 @@ DEFAULT_PROVIDER_MESSAGE_MAX_CHARS = 240
 _SECRET_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_\-*]{4,}"),
     re.compile(r"\bago_[A-Za-z0-9_\-]{4,}"),
-    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]+"),
+    # Bis zum naechsten Trennzeichen: Base64-Token enthalten auch ``+``, ``/``, ``=``.
+    re.compile(r"(?i)\bbearer\s+[^\s'\",;]+"),
     re.compile(
         r"(?i)\b(api[_-]?key|token|secret|password)\b(['\"]?\s*[:=]\s*)['\"]?[^\s'\",;]+"
     ),

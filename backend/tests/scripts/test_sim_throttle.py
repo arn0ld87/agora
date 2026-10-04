@@ -354,6 +354,33 @@ class TestInputTokenRateLimiter:
             for r in throttle_records
         )
 
+    def test_failed_calls_do_not_trigger_the_blind_fallback(self, throttle_records):
+        """Drei gescheiterte Aufrufe heben die Kaltstart-Sonde nicht auf."""
+        clock = _FakeClock()
+
+        async def poll_sleep(seconds: float) -> None:
+            await asyncio.sleep(0)
+
+        limiter = InputTokenRateLimiter(100_000, clock=clock, sleep=poll_sleep)
+
+        async def scenario():
+            for _ in range(3):
+                await limiter.acquire()
+                limiter.release(None, succeeded=False)
+            await limiter.acquire()  # die naechste Sonde laeuft
+            waiter = asyncio.create_task(limiter.acquire())
+            for _ in range(30):
+                await asyncio.sleep(0)
+            started = waiter.done()
+            waiter.cancel()
+            await asyncio.gather(waiter, return_exceptions=True)
+            return started, limiter._inflight
+
+        started, inflight = asyncio.run(scenario())
+        assert started is False
+        assert inflight == 1
+        assert not any("keine Token-Usage" in r.getMessage() for r in throttle_records)
+
     def test_cancellation_during_wait_is_not_swallowed(self):
         clock = _FakeClock()
 
