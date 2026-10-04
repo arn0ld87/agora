@@ -196,7 +196,7 @@ def default_simulation_budget(read: Any = None) -> Optional[RunBudgetConfig]:
     cap = resolve_default_simulation_token_cap(read)
     if cap is None:
         return None
-    return RunBudgetConfig(max_tokens=cap, enforcement="hard")
+    return RunBudgetConfig.model_validate({"max_tokens": cap, "enforcement": "hard"})
 
 
 def set_termination_reason(run_id: str, reason: TerminationReason) -> None:
