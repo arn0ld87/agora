@@ -18,6 +18,7 @@ from ...contracts.report_v3 import (
 )
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
+from ...utils.provider_message import redacted_provider_message as _redacted_provider_message
 from ..artifact_store import resolve_default_store
 from ..report_intent import ReportIntent, detect_report_intent
 from ..report_prompts import DEFAULT_REPORT_SECTIONS
@@ -633,15 +634,6 @@ SECTION_FALLBACK_HINT_SKIPPED = (
     "der Route (Settings → LLM-Provider) und starte den Report neu."
 )
 
-_PROVIDER_MESSAGE_MAX_CHARS = 240
-_SECRET_PATTERNS = (
-    re.compile(r"\bsk-[A-Za-z0-9_\-*]{4,}"),
-    re.compile(r"\bago_[A-Za-z0-9_\-]{4,}"),
-    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]+"),
-    re.compile(
-        r"(?i)\b(api[_-]?key|token|secret|password)\b(['\"]?\s*[:=]\s*)['\"]?[^\s'\",;]+"
-    ),
-)
 # 400er, die am Inhalt eines einzelnen Abschnitts hängen (zu langer Kontext,
 # Content-Filter): ein anderer Abschnitt kann trotzdem gelingen.
 _PROMPT_SPECIFIC_400_CODES = frozenset(
@@ -655,25 +647,6 @@ _PROMPT_SPECIFIC_400_PHRASES = (
     "content policy",
     "content_filter",
 )
-
-
-def _redacted_provider_message(exc: BaseException) -> str:
-    """Gekürzte Providermeldung ohne erkennbare Secrets (#1738)."""
-    body = getattr(exc, "body", None)
-    raw = ""
-    if isinstance(body, dict):
-        raw = str(body.get("message") or "")
-    if not raw:
-        raw = str(exc)
-    text = " ".join(raw.split())
-    for pattern in _SECRET_PATTERNS:
-        if pattern.groups >= 2:
-            text = pattern.sub(lambda m: f"{m.group(1)}{m.group(2)}[redacted]", text)
-        else:
-            text = pattern.sub("[redacted]", text)
-    if len(text) > _PROVIDER_MESSAGE_MAX_CHARS:
-        text = text[: _PROVIDER_MESSAGE_MAX_CHARS - 1].rstrip() + "…"
-    return text
 
 
 def _is_persistent_provider_400(exc: BaseException) -> bool:
