@@ -175,6 +175,8 @@ Vereinfacht:
 
 Dieser zweite Fall ist für persistierte Altartefakte wichtig: Ein Bericht kann lesbar bleiben, obwohl seine alte Evidence-Map die heute strengere Rollenfamilien-/Cross-Reference-Semantik nicht mehr erfüllt. Die API darf dann nicht so tun, als sei die Evidence validiert.
 
+Belege aus Interview und Simulationsaktion tragen seit [#1778](https://github.com/arn0ld87/agora/issues/1778) das optionale Feld `voice_key` in der Form `agent:<agent_id>`. Es benennt die Stimme, von der der Beleg stammt; ein Interview und ein Simulationsbeitrag derselben Persona haben denselben Wert. Belege anderer Quellenarten und Altbestand haben das Feld nicht.
+
 Exportpfade sind teilweise absichtlich strenger, weil ein ZIP/CSV eine invalidierte Evidence-Datei sonst als geprüftes Artefakt materialisieren würde.
 
 Kanonische Dateien:
@@ -213,8 +215,18 @@ Für Consumer gilt:
 - `section_generation`
 - `outline_planning`
 - `run_cancellation`
+- `simulation_positioning` (seit #1778: die Positionierungsquote liegt unter `AGORA_REPORT_POSITIONING_RATIO_MIN`, Standard 0,5; `reason="positioning_ratio_<positioniert>_of_<gesamt>"`, immer `warning`; ohne Streitfrage kein Eintrag)
 
 Der Zweck ist nicht, jeden Fehler mit einem neuen Status zu erschlagen, sondern technische Ausführung und fachliche Ergebnisqualität getrennt sichtbar zu machen.
+
+---
+
+## Streitfrage und Haltungsanalyse
+
+Seit [#1778](https://github.com/arn0ld87/agora/issues/1778) gibt es zwei Verträge zur Streitfrage eines Laufs:
+
+- `ContestedQuestion` (`backend/app/contracts/contested_question_contract.py`, `schemas/contested-question.schema.json`, `frontend/src/contracts/contestedQuestionContract.ts`): `statement` (10 bis 300 Zeichen oder `null`), `origin` (`assistant` | `user` | `none`), `absence_reason`. `origin="none"` verlangt `statement=null`, die beiden anderen Werte verlangen eine Aussage. Das Objekt steht als `contested_question` in der Simulationskonfiguration. Der Prepare-Request (`POST /api/simulation/prepare`) nimmt die Aussage als optionalen String `contested_question` entgegen.
+- `StanceAnalysis` (`backend/app/contracts/stance_analysis_contract.py`, `schemas/stance-analysis.schema.json`, `frontend/src/contracts/stanceAnalysisContract.ts`): Ergebnis der Haltungsklassifikation vor dem ersten Berichtsabschnitt, mit `applicable`, `voices_total`, `voices_positioned`, `positioning_ratio`, `camp_distribution`, `voices[]` und `contributions[]`. Die Haltungsklassen sind `in_favour`, `opposed` und `undecided`. Der Vertrag beschreibt die Datei `stance_analysis.json` im Berichtsverzeichnis; ein API-Endpunkt liefert sie nicht aus.
 
 ---
 

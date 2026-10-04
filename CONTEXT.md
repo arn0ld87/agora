@@ -132,6 +132,8 @@ Der Report besteht grob aus:
 4. **Prose-/Attribution-/Requirement-Gates**
 5. **Persistenz, Export und Degradationsmodell**
 
+Mit dem Werkzeug `search_simulation_actions` sucht der Report-Agent seit #1778 gezielt in den Simulationsbeiträgen (Stichwort, Agentenname, Rundenbereich); jeder Treffer wird ein Beleg vom Typ `agent_action`.
+
 Ein Fallback-Outline oder ein Cancel mit fehlenden Sections wird nicht mehr still als vollständig abgeschlossen behandelt. Ein Resume bewahrt relevante Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).
 
 ---

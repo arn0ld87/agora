@@ -82,6 +82,8 @@ Die Simulations-API ist nach Verantwortlichkeiten aufgeteilt:
 - `simulation_compare.py` — Branch-/Run-Vergleich
 - `simulation_budget.py` — Budget-Preflight (`POST /api/simulation/preflight-estimate`; optional `platform` = `parallel` (Standard) | `twitter` | `reddit`, seit #1772; `400` bei anderem Wert)
 
+`POST /api/simulation/prepare` nimmt seit #1778 das optionale Feld `contested_question` entgegen: die Streitfrage des Laufs als Aussage mit 10 bis 300 Zeichen. Ist es gesetzt, übernimmt die Simulationskonfiguration sie mit `origin="user"`, und der Konfigurations-Assistent leitet keine eigene ab. Fehlt es oder ist es leer, schlägt der Assistent eine Streitfrage vor (`origin="assistant"`) oder hält fest, dass es keine gibt (`origin="none"`). Ein Wert außerhalb der Längengrenzen oder ein Nicht-String antwortet mit `400`.
+
 Wichtige Konfliktcodes:
 
 - aktiver Prepare → `409 simulation_prepare_in_progress`
@@ -156,6 +158,8 @@ Nach Completion (`completed`, `failed`, `stopped`) ist ein neuer Start wieder er
 2. `evidence_omitted` mit `reason=contract_violation`.
 
 Bei einem **persistierten Altartefakt**, das die heutige Evidence-Semantik nicht mehr erfüllt, kann der direkte Evidence-Endpunkt deshalb HTTP 200 mit `evidence_omitted` liefern. Das hält den Bericht lesbar, ohne ungültige Evidence als geprüft auszugeben (#1477).
+
+Belege aus Interview und Simulationsaktion tragen seit #1778 das optionale Feld `voice_key` (`agent:<agent_id>`), die Stimme, von der der Beleg stammt. `run_degradations` kennt seit #1778 die Komponente `simulation_positioning` (`warning`): zu wenige Stimmen beziehen in der Simulation Stellung zur Streitfrage.
 
 Exportpfade bleiben strenger: Wenn ein Format Evidence als geprüfte Datei ausliefern würde, wird sie weggelassen (`evidence-omitted.json`) oder der spezifische Export antwortet mit Contract-Fehler. Die alten pauschalen Aussagen „jede invalide Evidence = 422“ sind damit nicht mehr korrekt.
 
