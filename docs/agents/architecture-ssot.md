@@ -15,6 +15,7 @@
 | Amazon Bedrock (OpenAI-kompatibler mantle-Pfad) | `OpenAIAdapter` + Bearer-Token, Host-Erkennung `registry.py::_is_bedrock_host` (`bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com`, #1282) |
 | Request-Shaping (kwargs-Bau, Provider-Quirks) | `backend/app/llm/request_plan.py::build_request` + `RequestOptions` |
 | Request-Fehlerbehandlung/Retry | `backend/app/llm/request_plan.py::execute` |
+| Modellfähigkeiten (modellnamenbasiert: Token-Key, `temperature`, `reasoning_effort`) | `backend/app/llm/model_capabilities.py` (reine Funktionen, von `LLMClient` über `providers/openai.py` und vom Simulations-Subprozess über `scripts/_sim_common.py` gelesen, #1766); die Provider-Frage bleibt bei `detect_provider` |
 | Strukturierte LLM-Calls | `backend/app/llm/client.py::LLMClient.chat_json` (Pydantic-Schema, strict-mode, Repair) |
 | Modellauswahl-UI | `frontend/src/components/v4/forms/AiModelPicker.vue` |
 | Modellreferenz / Route | `AiModelRef` / `AiRoute` / `LlmRoute` |
