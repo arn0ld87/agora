@@ -6,7 +6,7 @@
   "statusCheck": true,
   "fixWithAI": true,
   "excludeAuthors": ["dependabot[bot]"],
-  "ignorePatterns": "schemas/**\nfrontend/src/contracts/schemas/**\nfrontend/src/contracts/generated/**\n**/*.lock\nbackend/uv.lock\nfrontend/bun.lock\nfrontend/dist/**\nbackend/tests/eval/snapshots/**\nbackend/radon-allowlist.txt\ndocs/archive/**\n.claude/**\n.pandaos/**\n*.min.js\n*.map",
+  "ignorePatterns": "schemas/**\nfrontend/src/contracts/schemas/**\nfrontend/src/contracts/generated/**\n**/*.lock\nbackend/uv.lock\nfrontend/bun.lock\nfrontend/dist/**\nbackend/radon-allowlist.txt\ndocs/archive/**\n.claude/**\n.pandaos/**\n*.min.js\n*.map",
   "summarySection": { "included": true, "collapsible": true, "defaultOpen": false },
   "issuesTableSection": { "included": true, "collapsible": true, "defaultOpen": true },
   "confidenceScoreSection": { "included": true, "collapsible": false, "defaultOpen": true },
