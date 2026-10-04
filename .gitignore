@@ -267,3 +267,16 @@ secrets.env
 # gepinnter Commit) und die Storage-Laufzeitdaten. Beides gehoert nicht ins
 # Repository; `supabase/.env` faellt schon unter die `.env`-Regel oben.
 supabase/volumes/
+
+# Von `code-review-graph install` erzeugte Regeldateien für andere
+# Agent-Werkzeuge. Maschinenspezifisch, nicht Teil des Repos.
+/GEMINI.md
+/QODER.md
+/CODEBUDDY.md
+/.cursorrules
+/.windsurfrules
+/.gemini/
+/.kiro/
+/.qoder/
+/.codebuddy/
+/.github/instructions/code-review-graph.instructions.md
