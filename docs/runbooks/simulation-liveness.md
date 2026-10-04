@@ -135,13 +135,22 @@ Regel-Fallback unabhängig voneinander:
   Kandidatenpool in allen übrigen Stunden, unabhängig von `activity_level`.
 
 `backend/app/services/simulation_activity_policy.py` hebt alle drei Werte
-auf eine Untergrenze an (`agents_per_hour_min ≥ ceil(0,4·N)`,
-`agents_per_hour_max ≥ ceil(0,7·N)`, `activity_level ≥ 0,5`, `active_hours`
+auf eine Untergrenze an (`agents_per_hour_min ≥ ceil(min_ratio·N)`,
+`agents_per_hour_max ≥ ceil(max_ratio·N)`, `activity_level ≥ 0,5`, `active_hours`
 deckt mindestens 06-23 Uhr ab — 0-5 Uhr bleibt bewusst die
 DACH-Nachtruhe-Ausnahme). Die Runden-Auswahl selbst
 (`select_active_agent_ids`) ist seitdem ein gemeinsamer Helfer für
 `platform_runner.py` und `run_parallel_simulation.py` statt zweier
 Kopien.
+
+Die beiden Quoten (`min_ratio`/`max_ratio`) waren ursprünglich fest 0,4/0,7 und
+sind seit [#1772](https://github.com/arn0ld87/agora/issues/1772) über
+`AGORA_SIM_AGENTS_PER_HOUR_MIN_RATIO`/`AGORA_SIM_AGENTS_PER_HOUR_MAX_RATIO`
+einstellbar (Standard **0,25/0,5**, gültig `0 < min ≤ max ≤ 1`). Der niedrigere
+Standard senkt die Kosten (weniger aktive Agenten je Runde, weniger Beiträge),
+verfehlt aber L2 (≥ 40 % aktive Agenten) im Mittel: erwartet werden rund 37 %.
+Wer L2 braucht, setzt 0,4/0,7. Die Quoten wirken beim Erzeugen der
+Simulationskonfiguration, nicht auf bereits gespeicherte Konfigurationen.
 
 Zusätzlich vergrößert Agora den Twitter-Feed gegenüber dem engen
 OASIS-Default (`refresh_rec_post_count`/`max_rec_post_len`/

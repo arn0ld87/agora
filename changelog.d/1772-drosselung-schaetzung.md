@@ -15,3 +15,13 @@
   gilt damit für beide Plattformen im Parallel-Runner gemeinsam; er wartet nur
   per `await` und prüft ein hartes Budget vor dem Warten. Aktive Parallelität und
   Limit stehen einmal pro Lauf im Log.
+- Simulation: Die Aktivitäts-Untergrenze (Anteil der Agenten, die je Simulationsstunde
+  mindestens aktiviert werden) ist konfigurierbar:
+  `AGORA_SIM_AGENTS_PER_HOUR_MIN_RATIO` und `AGORA_SIM_AGENTS_PER_HOUR_MAX_RATIO`
+  (auch in den Einstellungen unter OASIS). Der Standard sinkt von 0,4/0,7 auf 0,25/0,5.
+  **Verhaltenswechsel:** Neu erzeugte Simulationskonfigurationen aktivieren je Runde
+  weniger Agenten, es entstehen weniger Beiträge und weniger Modellaufrufe; das
+  Liveness-Ziel L2 (aktive Agenten je Runde ≥ 40 %) liegt im Mittel bei rund 37 %
+  und wird erst mit 0,4/0,7 wieder erreicht. Gültig ist `0 < min ≤ max ≤ 1`, sonst
+  Rückfall auf den Standard mit Warnung. Bereits gespeicherte
+  `simulation_config.json` bleiben unverändert.

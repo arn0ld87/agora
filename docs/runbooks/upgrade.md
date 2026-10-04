@@ -56,6 +56,8 @@ Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0
 
 **`AGORA_SIM_INPUT_TOKENS_PER_MINUTE`** ([#1772](https://github.com/arn0ld87/agora/issues/1772)). Default `0` (aus), kein Verhaltenswechsel. Ein Wert größer 0 begrenzt die Eingabe-Tokens der Simulations-Aufrufe auf ein gleitendes 60-Sekunden-Fenster (Wert unter dem Minutenlimit des Anbieters wählen). Das Limit gilt je Simulationsprozess; im Standard-Parallelrunner teilen sich Twitter und Reddit es.
 
+**`AGORA_SIM_AGENTS_PER_HOUR_MIN_RATIO` / `AGORA_SIM_AGENTS_PER_HOUR_MAX_RATIO`** ([#1772](https://github.com/arn0ld87/agora/issues/1772)). Die Aktivitäts-Untergrenze aus [#1713](https://github.com/arn0ld87/agora/issues/1713) S4 war fest `0,4`/`0,7` und ist jetzt einstellbar; der neue Default ist `0,25`/`0,5` (gültig `0 < min ≤ max ≤ 1`, sonst Warnung und Rückfall auf den Default). **Verhaltenswechsel ohne Zutun:** Neu erzeugte Simulationskonfigurationen aktivieren je Runde weniger Agenten, also weniger Beiträge und weniger Modellaufrufe; das Liveness-Ziel L2 (≥ 40 % aktive Agenten je Runde) liegt im Mittel bei rund 37 %. Wer das alte Verhalten braucht, setzt `0.4`/`0.7`. Bereits gespeicherte `simulation_config.json` bleiben unverändert; die Quoten wirken erst beim Erzeugen einer neuen Konfiguration.
+
 ---
 
 ## 0.9.x → 0.10
