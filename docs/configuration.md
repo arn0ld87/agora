@@ -215,6 +215,7 @@ Startup-Reconciliation korrigiert persistierte Simulation-Runs mit toter PID. Si
 | `PERSONA_REVIEW_ENABLED` | Review-Gate |
 | `ENABLE_AGENT_TOOLS` | Agent-Tools aktivieren |
 | `MAX_TOOL_CALLS_PER_ACTION` | Tool-Limit pro Aktion |
+| `AGORA_SIM_MAX_HOURS` | Obergrenze der Simulationsdauer (Stunden), die der Konfigurations-Assistent beim Erzeugen der `time_config` vorschlägt (Default `24` = 1 Tag, 24 Runden bei 60 Minuten je Runde; gültig ganze Zahl `1`–`168`, sonst Rückfall auf `24` mit Warnung). Eine längere LLM-Antwort wird geklemmt und im `generation_reasoning` vermerkt; ein ausdrücklicher Wunsch beim Start (`simulation_days`) bleibt davon unberührt. Gespeicherte Konfigurationen ändern sich nicht |
 | `AGORA_SIM_MEMORY_PRUNE_FEEDS` | Feeds älterer Aktivierungen aus dem Agentengedächtnis nehmen (Default `true`, `false` = alter Zustand) |
 | `AGORA_SIM_MEMORY_KEEP_FEEDS` | Feeds der letzten N Aktivierungen bleiben vollständig (Default `4`, Minimum `1`) |
 | `AGORA_SIM_FEED_MAX_COMMENTS` | Je Post im Agenten-Feed höchstens die neuesten N Kommentare, der Rest als `omitted_comments` gezählt (Default `5`, `0` = aus: alle Kommentare, OASIS-JSON mit Einrückung) |

@@ -10,6 +10,14 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+# Issue #1772: Standard-Laufgroesse -- 1 Tag, 60 Minuten je Runde = 24 Runden.
+# Der Tokenverbrauch waechst mit der Rundenzahl (gemessener Standardlauf
+# ``sim_cc6067a70603``: 24 Runden, 52 Agenten, 35,7 Mio. Eingabe-Tokens); die
+# fruehere Vorgabe von 72 Stunden (3 Tage) verdreifachte die Runden.
+DEFAULT_TOTAL_SIMULATION_HOURS = 24
+DEFAULT_MINUTES_PER_ROUND = 60
+
+
 @dataclass
 class AgentActivityConfig:
     """Activity configuration for a single Agent"""
@@ -48,10 +56,10 @@ class TimeSimulationConfig:
     """Time simulation configuration (default profile: DACH / Europe-Berlin)"""
 
     # Total simulation time (simulation hours)
-    total_simulation_hours: int = 72  # Default 72 hours (3 days)
+    total_simulation_hours: int = DEFAULT_TOTAL_SIMULATION_HOURS  # Default 24 hours (1 day)
 
     # Time represented per round (simulation minutes) - default 60 minutes (1 hour), speed up time
-    minutes_per_round: int = 60
+    minutes_per_round: int = DEFAULT_MINUTES_PER_ROUND
 
     # Range of agents activated per hour
     agents_per_hour_min: int = 5

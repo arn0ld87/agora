@@ -185,6 +185,11 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
               default=0.25, min_value=0.01, max_value=1.0),
     FieldSpec('AGORA_SIM_AGENTS_PER_HOUR_MAX_RATIO', 'oasis', 'float',
               default=0.5, min_value=0.01, max_value=1.0),
+    # #1772: Obergrenze fuer ``total_simulation_hours`` beim Erzeugen der
+    # Simulationskonfiguration (Standard 1 Tag / 24 Runden). Default =
+    # ``DEFAULT_TOTAL_SIMULATION_HOURS`` in ``simulation_config_models.py``.
+    FieldSpec('AGORA_SIM_MAX_HOURS', 'oasis', 'int',
+              default=24, min_value=1, max_value=168),
     # #1772: harter Standard-Tokendeckel fuer Simulationen ohne Nutzerbudget
     # (0 = abgeschaltet). Default = ``DEFAULT_SIM_MAX_TOKENS`` in run_budget.py.
     FieldSpec('AGORA_SIM_DEFAULT_MAX_TOKENS', 'oasis', 'int',
