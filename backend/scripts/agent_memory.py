@@ -308,7 +308,7 @@ def prune_memory_feeds(memory: Any, *, keep_feeds: int, token_cap: int = 0) -> P
         try:
             memory.clear()
             memory.write_records(records)
-        except Exception:  # pragma: no cover - doppelter Speicherfehler
+        except Exception:
             logger.error("[agent_memory] restore after failed rewrite failed", exc_info=True)
         raise
     return PruneResult(len(indices), tokens_before, tokens_after)
@@ -323,7 +323,7 @@ def _reraise_if_budget_exceeded(exc: BaseException) -> None:
     """
     try:
         from app.services.run_budget import reraise_if_budget_exceeded
-    except ImportError:  # pragma: no cover - ohne app-Paket kein Budget
+    except ImportError:
         return
     reraise_if_budget_exceeded(exc)
 

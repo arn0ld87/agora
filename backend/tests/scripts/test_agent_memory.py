@@ -319,6 +319,26 @@ def test_failed_rewrite_restores_original_memory() -> None:
     assert [r.to_dict() for r in _records(memory)] == snapshot
 
 
+def test_failed_rewrite_and_failed_restore_still_raise_original_error() -> None:
+    memory = _new_memory()
+    for n in range(1, 7):
+        _write_activation(memory, n)
+
+    def broken_write(records: List[MemoryRecord]) -> None:
+        raise OSError("disk full")
+
+    memory.write_records = broken_write  # type: ignore[method-assign]
+
+    with pytest.raises(OSError, match="disk full"):
+        agent_memory.prune_memory_feeds(memory, keep_feeds=1)
+
+
+def test_reraise_helper_is_noop_without_app_package(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "app.services.run_budget", None)
+
+    agent_memory._reraise_if_budget_exceeded(ValueError("kein Budgetfehler"))
+
+
 def test_budget_exceeded_is_not_swallowed() -> None:
     class _BudgetMemory:
         def retrieve(self) -> List[Any]:
