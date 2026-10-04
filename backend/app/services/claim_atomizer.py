@@ -23,6 +23,8 @@ from __future__ import annotations
 import re
 from typing import List, Optional
 
+from .sentence_splitter import split_sentences
+
 #: Konjunktionen, an denen ein Satz in eigenständige Behauptungen zerfällt.
 #: "sowie", "und zugleich", "während" verbinden Aussagen, die je für sich wahr
 #: oder falsch sind. "oder" fehlt bewusst — eine Alternative ist eine Aussage.
@@ -30,8 +32,6 @@ _SPLIT_PATTERN = re.compile(
     r"(?:;|(?<=\s)(?:sowie|und\s+zugleich|und\s+gleichzeitig|während|wohingegen)\s+)",
     re.IGNORECASE,
 )
-
-_SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
 #: Bindestrich-/Sternchen-/Nummern-Aufzaehlung (#1346). Eine Zeile wie
 #: "- S-17 behoben" oder "1. S-17 behoben".
@@ -89,7 +89,8 @@ def _split_list_block(text: str) -> Optional[List[str]]:
 
 def _split_prose(text: str) -> List[str]:
     parts: List[str] = []
-    for sentence in _SENTENCE_PATTERN.split(text):
+    # Gemeinsamer Splitter: "zum 30. Juni 2027" ist keine Satzgrenze (#1766).
+    for sentence in split_sentences(text):
         for piece in _SPLIT_PATTERN.split(sentence):
             cleaned = piece.strip(" ,;:-–—")
             if cleaned and len(_content_tokens(cleaned)) >= MIN_ATOM_TOKENS:

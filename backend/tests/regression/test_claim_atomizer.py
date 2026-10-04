@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+import pytest
+
 from app.services.claim_atomizer import is_compound, split_compound_claim
 from app.services.evidence_entailment import EntailmentVerdict, classify_evidence
 
@@ -49,6 +51,77 @@ def test_two_sentences_are_two_claims():
     )
 
     assert len(parts) == 2
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "Die Verwaltung prüft die Folgen, bevor der Kreistag den Standort zum "
+        "30. Juni 2027 aufgibt.",
+        "Der Kreistag soll bis zum 11. Juni 2027 entscheiden, ob der Standort "
+        "erhalten bleibt.",
+        "Die Auswertung erfolgt im 2. Quartal durch die Verwaltung des Landkreises.",
+    ],
+)
+def test_ordinal_date_is_not_a_sentence_boundary(statement):
+    """#1766: "zum 30. Juni 2027" ist ein Datum, kein Satzende.
+
+    Der naive Trenner machte daraus "… zum 30." und "Juni 2027 aufgibt." —
+    zwei Fragmente, die als Hypothesen und Data Gaps durch den Bericht liefen.
+    """
+    assert split_compound_claim(statement) == [statement]
+
+
+def test_a_year_followed_by_a_new_sentence_is_still_a_boundary():
+    """Gegenprobe: Punkt nach vierstelliger Jahreszahl bleibt ein Satzende."""
+    parts = split_compound_claim(
+        "Der Standort schließt im Jahr 2027. Danach übernimmt die Nachbarklinik "
+        "die Versorgung."
+    )
+
+    assert parts == [
+        "Der Standort schließt im Jahr 2027.",
+        "Danach übernimmt die Nachbarklinik die Versorgung.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Die Verwaltung prüft die Folgen, bevor der Kreistag den Standort zum "
+            "30. Juni 2027 aufgibt.",
+            [
+                "Die Verwaltung prüft die Folgen, bevor der Kreistag den Standort "
+                "zum 30. Juni 2027 aufgibt."
+            ],
+        ),
+        (
+            "Der Kreistag soll bis zum 11. Juni 2027 entscheiden, ob der Standort "
+            "erhalten bleibt.",
+            [
+                "Der Kreistag soll bis zum 11. Juni 2027 entscheiden, ob der "
+                "Standort erhalten bleibt."
+            ],
+        ),
+        (
+            "Der Standort schließt im Jahr 2027. Danach übernimmt die Nachbarklinik "
+            "die Versorgung.",
+            [
+                "Der Standort schließt im Jahr 2027.",
+                "Danach übernimmt die Nachbarklinik die Versorgung.",
+            ],
+        ),
+        ("Ist das belegt? Ja. Es steht im Bericht!", ["Ist das belegt?", "Ja.", "Es steht im Bericht!"]),
+    ],
+)
+def test_shared_splitter_and_entailment_sentences_agree(text, expected):
+    """Claim-Atomizer, Entailment und Fließtext-Prüfung teilen eine Satzgrenze."""
+    from app.services.evidence_entailment import _sentences
+    from app.services.sentence_splitter import split_sentences
+
+    assert split_sentences(text) == expected
+    assert _sentences(text) == expected
 
 
 def test_a_simple_claim_stays_whole():

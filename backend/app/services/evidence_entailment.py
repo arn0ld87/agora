@@ -41,6 +41,7 @@ from .quantifier_claims import (
     evidence_backs_quantifier,
     quantifier_label,
 )
+from .sentence_splitter import split_sentences
 
 
 class EntailmentVerdict(str, Enum):
@@ -650,8 +651,7 @@ def _scopes_diverge(left: frozenset[str], right: frozenset[str]) -> bool:
 
 
 def _sentences(text: str) -> List[str]:
-    parts = re.split(r"(?<=[.!?])\s+", (text or "").strip())
-    return [p for p in parts if p.strip()]
+    return split_sentences(text or "")
 
 
 #: Ab wie vielen Inhaltswörtern der Teil rechts der Zahl als eigenständige
