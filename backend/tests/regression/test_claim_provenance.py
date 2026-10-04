@@ -58,7 +58,9 @@ def test_the_source_kind_is_looked_up_in_the_index():
     evidence: List[Dict[str, Any]] = [_bound("ev_1"), _bound("ev_2")]
     index = _index(("ev_1", "seed_corpus"), ("ev_2", "seed_corpus"))
 
-    assert derive_confidence_scope(evidence, None) == "simulation_consensus"
+    # #1766: ohne Index ist weder Gattung noch Stimme aufloesbar — der Claim
+    # gilt konservativ als Einzelstimme, nicht mehr als Konsens.
+    assert derive_confidence_scope(evidence, None) == "simulation_single_voice"
     assert derive_confidence_scope(evidence, index) == "evidence"
     assert derive_aggregation_basis(evidence, index) == "seed"
 
@@ -77,12 +79,103 @@ def test_seed_carried_claims_report_seed():
     assert derive_aggregation_basis(evidence, index) == "seed"
 
 
+def _voice_index(*triples: tuple[str, str, str]) -> Dict[str, Dict[str, Any]]:
+    """Index-Records von ``agent_quote``-Evidence mit Persona-Identitaet.
+
+    ``raw`` ist, was ``interview.to_dict()`` am Record hinterlaesst; dort steht
+    der ``agent_name`` — die stabile Identitaet einer Persona. Ein Eintrag je
+    Interviewantwort: dieselbe Persona kann mehrere Evidence-IDs haben.
+    """
+    return {
+        evidence_id: {
+            "evidence_id": evidence_id,
+            "source_kind": "agent_quote",
+            "snippet": "…",
+            "persona_stakeholder_group": group,
+            "raw": {"agent_name": agent_name, "agent_role": group},
+        }
+        for evidence_id, agent_name, group in triples
+    }
+
+
 def test_quote_carried_claims_report_persona():
     evidence = [_bound(f"ev_{i}") for i in range(3)]
-    index = _index(*[(f"ev_{i}", "agent_quote") for i in range(3)])
+    index = _voice_index(
+        ("ev_0", "Anna", "Lehrerin"),
+        ("ev_1", "Bernd", "Schulleiter"),
+        ("ev_2", "Clara", "Elternvertreterin"),
+    )
     assert derive_aggregation_basis(evidence, index) == "persona"
     # Nur Agentenstimmen: quellengebunden ist der Claim damit nicht.
     assert derive_confidence_scope(evidence, index) == "simulation_consensus"
+
+
+# --- Eine einzelne Stimme ist kein Konsens (#1766) -------------------------
+
+def test_one_voice_is_not_consensus():
+    """Der Fall aus Lauf report_a8fa9ff9fad0: genau ein Interview stuetzt.
+
+    Eine einzelne synthetische Perspektive ist kein Konsens — der Claim darf
+    das Label ``simulation_consensus`` nicht tragen.
+    """
+    evidence = [_bound("ev_1")]
+    index = _voice_index(("ev_1", "Anna", "Lehrerin"))
+    assert derive_confidence_scope(evidence, index) == "simulation_single_voice"
+
+
+def test_two_evidence_items_of_the_same_persona_are_one_voice():
+    """Zwei Fragen an dieselbe Persona sind zwei Evidence-IDs, aber eine Stimme."""
+    evidence = [_bound("ev_1"), _bound("ev_2")]
+    index = _voice_index(("ev_1", "Anna", "Lehrerin"), ("ev_2", "Anna", "Lehrerin"))
+    assert derive_confidence_scope(evidence, index) == "simulation_single_voice"
+
+
+def test_the_persona_name_is_compared_normalised():
+    evidence = [_bound("ev_1"), _bound("ev_2")]
+    index = _voice_index(("ev_1", "Anna  Meier", "Lehrerin"), ("ev_2", "anna meier", "Lehrerin"))
+    assert derive_confidence_scope(evidence, index) == "simulation_single_voice"
+
+
+def test_two_different_personas_are_a_consensus():
+    evidence = [_bound("ev_1"), _bound("ev_2")]
+    index = _voice_index(("ev_1", "Anna", "Lehrerin"), ("ev_2", "Bernd", "Lehrer"))
+    assert derive_confidence_scope(evidence, index) == "simulation_consensus"
+
+
+def test_without_a_persona_name_the_stakeholder_group_identifies_the_voice():
+    """Aeltere Records tragen keinen ``raw.agent_name`` — dann zaehlt die Gruppe."""
+    evidence = [
+        _bound("ev_1", persona_stakeholder_group="Buerger"),
+        _bound("ev_2", persona_stakeholder_group="buerger"),
+        _bound("ev_3", persona_stakeholder_group="Verwaltung"),
+    ]
+    index = _index(*[(f"ev_{i}", "agent_quote") for i in (1, 2, 3)])
+    assert derive_confidence_scope(evidence, index) == "simulation_consensus"
+    assert derive_confidence_scope(evidence[:2], index) == "simulation_single_voice"
+
+
+def test_an_unresolvable_voice_counts_as_one_voice():
+    """Ist die Identitaet nicht ermittelbar, gilt konservativ: eine Stimme."""
+    evidence = [_bound(f"ev_{i}") for i in range(3)]
+    index = _index(*[(f"ev_{i}", "agent_quote") for i in range(3)])
+    assert derive_confidence_scope(evidence, index) == "simulation_single_voice"
+
+
+def test_an_unresolvable_voice_does_not_add_to_a_resolved_one():
+    evidence = [_bound("ev_1"), _bound("ev_unbekannt")]
+    index = _voice_index(("ev_1", "Anna", "Lehrerin"))
+    assert derive_confidence_scope(evidence, index) == "simulation_single_voice"
+
+
+def test_seed_evidence_stays_evidence_regardless_of_the_voice_count():
+    evidence = [_bound("ev_1")]
+    assert derive_confidence_scope(evidence, _index(("ev_1", "seed_corpus"))) == "evidence"
+
+
+def test_non_supporting_voices_do_not_count():
+    evidence = [_bound("ev_1"), _bound("ev_2", supports=False)]
+    index = _voice_index(("ev_1", "Anna", "Lehrerin"), ("ev_2", "Bernd", "Lehrer"))
+    assert derive_confidence_scope(evidence, index) == "simulation_single_voice"
 
 
 def test_a_tie_is_an_aggregate_not_a_winner():

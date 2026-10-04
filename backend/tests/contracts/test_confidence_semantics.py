@@ -229,9 +229,12 @@ def test_nicht_stuetzende_quellenevidenz_begruendet_keine_quellenbindung() -> No
     """
     evidence = [
         _agent_quote("Buerger"),
+        _agent_quote("Verwaltung"),
         {"source_kind": "seed_corpus", "supports_claim": False},
     ]
     assert _derive_confidence_scope(evidence) == "simulation_consensus"
+    # #1766: mit nur einer stuetzenden Stimme bleibt es eine Einzelstimme.
+    assert _derive_confidence_scope(evidence[:1] + evidence[2:]) == "simulation_single_voice"
 
 
 @pytest.mark.parametrize("kaputt", [None, "kein-array", [], [42, "text"]])
@@ -260,6 +263,29 @@ def test_die_claim_tabelle_zeigt_den_geltungsbereich_im_klartext() -> None:
     assert "Simulationskonsens" in table
 
     assert "Quellenbindung" in render_claim_table([_v3_claim("evidence")])
+
+
+def test_die_claim_tabelle_nennt_eine_einzelstimme_nicht_konsens() -> None:
+    """#1766: Eine einzelne simulierte Perspektive steht nicht als Konsens da."""
+    table = render_claim_table([_v3_claim("simulation_single_voice")])
+    assert "Einzelstimme (Simulation)" in table
+    assert "Simulationskonsens" not in table
+
+
+def test_der_vertrag_nimmt_die_einzelstimme_an_und_laedt_den_altwert_weiter() -> None:
+    """Neuer Wert gueltig; Berichte mit ``simulation_consensus`` bleiben lesbar."""
+    for scope in ("simulation_single_voice", "simulation_consensus", "evidence"):
+        claim = ReportV3Claim.model_validate(
+            {
+                "id": "claim_01",
+                "statement": "Die Zielgruppe reagiert zurueckhaltend auf den Preis.",
+                "evidence_refs": ["ev_00000000000000000000000000000000"],
+                "confidence": "low",
+                "aggregation_basis": "persona",
+                "confidence_scope": scope,
+            }
+        )
+        assert claim.confidence_scope == scope
 
 
 def test_bestandsartefakte_ohne_das_feld_behaupten_keinen_geltungsbereich() -> None:

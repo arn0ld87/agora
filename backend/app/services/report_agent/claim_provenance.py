@@ -42,7 +42,9 @@ from collections import Counter
 from typing import Any, Literal, Mapping, Optional
 
 AggregationBasis = Literal["seed", "persona", "aggregat", "datenluecke"]
-ConfidenceScope = Literal["simulation_consensus", "evidence", "empirical"]
+ConfidenceScope = Literal[
+    "simulation_consensus", "simulation_single_voice", "evidence", "empirical"
+]
 
 #: Quellengattungen, die den Claim an etwas ausserhalb der Simulation binden.
 #: ``agent_quote`` und ``agent_action`` fehlen hier bewusst: beides sind
@@ -84,6 +86,68 @@ def supporting_source_kinds(
     return kinds
 
 
+def _normalised(value: Any) -> str:
+    """Vergleichsform eines Namens: Whitespace-Kollaps und casefold."""
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _voice_key(item: Mapping[str, Any], record: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """Identitaet der Stimme hinter einem stuetzenden Item, oder ``None``.
+
+    Eine Stimme ist eine Persona, nicht ein Evidence-Item: Zwei Fragen an
+    dieselbe Persona erzeugen zwei ``evidence_id`` und bleiben eine Stimme.
+    Stabil ist der ``agent_name`` — er steht im ``raw``-Teil des Index-Records
+    (``AgentInterview.to_dict()``), bei Items direkt am Item. Aeltere Records
+    ohne Namen fallen auf ``persona_stakeholder_group`` zurueck; das ist die
+    Rolle der Persona und damit nie feiner als die Persona selbst.
+
+    ``None`` heisst: nicht ermittelbar. Der Aufrufer zaehlt das konservativ.
+    """
+    sources = [s for s in (item, record) if isinstance(s, Mapping)]
+    for source in sources:
+        name = _normalised(source.get("agent_name"))
+        if not name:
+            raw = source.get("raw")
+            name = _normalised(raw.get("agent_name")) if isinstance(raw, Mapping) else ""
+        if name:
+            return f"agent:{name}"
+    for source in sources:
+        group = _normalised(source.get("persona_stakeholder_group"))
+        if group:
+            return f"group:{group}"
+    return None
+
+
+def count_supporting_voices(
+    evidence: Any,
+    evidence_index: Optional[Mapping[str, Any]] = None,
+) -> int:
+    """Anzahl verschiedener Stimmen unter den stuetzenden Items (#1766).
+
+    Nicht ermittelbare Identitaeten bilden zusammen hoechstens *eine* Stimme
+    und erhoehen die Zahl nie, sobald eine Stimme bekannt ist: Ein Item ohne
+    erkennbare Persona kann dieselbe Person sein wie ein anderes. Im Zweifel
+    die kleinere Zahl — nie ungeprueft Uebereinstimmung behaupten.
+    """
+    if not isinstance(evidence, list):
+        return 0
+    index = evidence_index or {}
+    resolved: set[str] = set()
+    unresolved = False
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("supports_claim") is not True:
+            continue
+        record = index.get(str(item.get("evidence_id") or ""))
+        key = _voice_key(item, record if isinstance(record, Mapping) else None)
+        if key is None:
+            unresolved = True
+        else:
+            resolved.add(key)
+    if resolved:
+        return len(resolved)
+    return 1 if unresolved else 0
+
+
 def derive_confidence_scope(
     evidence: Any,
     evidence_index: Optional[Mapping[str, Any]] = None,
@@ -91,12 +155,21 @@ def derive_confidence_scope(
     """Leitet den Geltungsbereich aus den stuetzenden Evidence-Items ab.
 
     ``empirical`` wird hier nie vergeben: der Wert bezeichnet reale empirische
-    Daten, die Agora nicht erhebt. Die Ableitung kennt daher nur die beiden
-    Faelle, die im Lauf tatsaechlich vorkommen.
+    Daten, die Agora nicht erhebt.
+
+    Ohne quellengebundene Evidence entscheidet die Zahl der Stimmen
+    (#1766): ``simulation_consensus`` verlangt mindestens zwei verschiedene
+    Personas. Stuetzt genau eine, ist das eine Einzelstimme und kein Konsens.
+    Stuetzt keine (leere oder nur nicht-stuetzende Evidence), bleibt es beim
+    bisherigen Rueckfallwert ``simulation_consensus`` — der Claim ist dann ein
+    ``datenluecke``-Fall, dessen Scope der Vertrag ohnehin nicht als
+    quellengebunden zulaesst.
     """
     kinds = supporting_source_kinds(evidence, evidence_index)
     if any(kind in EVIDENCE_BOUND_SOURCE_KINDS for kind in kinds):
         return "evidence"
+    if kinds and count_supporting_voices(evidence, evidence_index) < 2:
+        return "simulation_single_voice"
     return "simulation_consensus"
 
 
@@ -123,6 +196,7 @@ __all__ = [
     "EVIDENCE_BOUND_SOURCE_KINDS",
     "AggregationBasis",
     "ConfidenceScope",
+    "count_supporting_voices",
     "derive_aggregation_basis",
     "derive_confidence_scope",
     "supporting_source_kinds",

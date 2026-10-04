@@ -139,7 +139,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     }
   });
 
-  it("akzeptiert die drei Geltungsbereiche und weist andere ab", () => {
+  it("akzeptiert die vier Geltungsbereiche und weist andere ab", () => {
     const base = {
       id: "c1",
       statement: "Dieser Claim ist ausreichend lang.",
@@ -147,7 +147,13 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       confidence: "high",
       aggregation_basis: "persona",
     };
-    for (const scope of ["simulation_consensus", "evidence", "empirical"]) {
+    // Issue #1766: "simulation_single_voice" = genau eine simulierte Stimme.
+    for (const scope of [
+      "simulation_consensus",
+      "simulation_single_voice",
+      "evidence",
+      "empirical",
+    ]) {
       expect(ClaimSchema.safeParse({ ...base, confidence_scope: scope }).success).toBe(true);
     }
     expect(
