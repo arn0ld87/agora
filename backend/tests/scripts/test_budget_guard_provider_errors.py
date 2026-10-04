@@ -187,6 +187,33 @@ class TestThrottledProviderMessageLog:
         assert "HTTP 429" in lines[0]
         assert len(_events(run_ledger)) == 3  # Events bleiben vollstaendig, je Aufruf eines
 
+    def test_minute_and_daily_limit_are_separate_error_kinds(self, run_ledger, guard_records):
+        """Zwei Limit-Gruende mit gleichem Status verdecken sich nicht."""
+        guard = _guard(run_ledger, _Clock())
+        per_minute = RateLimitError(RATE_LIMIT_MESSAGE)
+        per_day = RateLimitError(
+            "Rate limit reached for gpt-6-luna on tokens per day (TPD): "
+            "Limit 20000000, Used 19990000, Requested 20000"
+        )
+        _call_arun(guard.wrap_model(_FailingModel(per_minute)), 2)
+        _call_arun(guard.wrap_model(_FailingModel(per_day)), 2)
+
+        lines = _failure_records(guard_records)
+        assert len(lines) == 2
+        assert "tokens per min" in lines[0]
+        assert "tokens per day" in lines[1]
+
+    def test_changing_numbers_do_not_create_new_error_kinds(self, run_ledger, guard_records):
+        guard = _guard(run_ledger, _Clock())
+        for used in (1990000, 1995000, 1999000):
+            exc = RateLimitError(
+                "Rate limit reached for gpt-6-luna on tokens per min (TPM): "
+                f"Limit 2000000, Used {used}, Requested 20000"
+            )
+            _call_arun(guard.wrap_model(_FailingModel(exc)), 1)
+
+        assert len(_failure_records(guard_records)) == 1
+
     def test_next_minute_logs_again_with_suppressed_count(self, run_ledger, guard_records):
         clock = _Clock()
         guard = _guard(run_ledger, clock)

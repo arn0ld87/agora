@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Mapping, Optional
@@ -44,6 +45,8 @@ BUDGET_ABORT_FILENAME = "budget_abort.json"
 # Aufruf flutete das simulation.log und verschwieg trotzdem die Anbietermeldung.
 FAILURE_LOG_INTERVAL_SECONDS = 60.0
 FAILURE_MESSAGE_MAX_CHARS = 300
+FAILURE_REASON_KEY_CHARS = 120
+FAILURE_LOG_MAX_KINDS = 32
 
 
 def _provider_http_status(exc: BaseException) -> Optional[int]:
@@ -339,8 +342,26 @@ class SubprocessBudgetGuard:
     def _log_provider_failure(
         self, exc: BaseException, error_type: str, status: Optional[int]
     ) -> None:
-        """Hoechstens eine Zeile je (Fehlerklasse, Status) und Minute, mit Zaehler."""
-        key = (error_type, status)
+        """Hoechstens eine Zeile je Fehlerart und Minute, mit Zaehler.
+
+        Zur Fehlerart gehoert der Grund aus der Anbietermeldung (Zahlen
+        normalisiert): Ein Minutenlimit und ein Tageslimit kommen beide als
+        ``RateLimitError`` mit HTTP 429 und duerfen sich nicht gegenseitig
+        verdecken. Bei sehr vielen verschiedenen Gruenden faellt der Schluessel
+        auf (Fehlerklasse, Status) zurueck, damit der Zustand nicht waechst.
+        """
+        try:
+            from app.utils.provider_message import redacted_provider_message
+
+            message = redacted_provider_message(exc, max_chars=FAILURE_MESSAGE_MAX_CHARS)
+        except Exception:  # noqa: BLE001 — Logging darf die Simulation nicht stoeren
+            return
+        reason = re.sub(r"\d+", "#", message)[:FAILURE_REASON_KEY_CHARS]
+        key: tuple[Any, ...] = (error_type, status, reason)
+        if key not in self._failure_log_state and (
+            len(self._failure_log_state) >= FAILURE_LOG_MAX_KINDS
+        ):
+            key = (error_type, status)
         now = self._failure_log_clock()
         state = self._failure_log_state.get(key)
         if state is not None and now - state[0] < FAILURE_LOG_INTERVAL_SECONDS:
@@ -350,9 +371,7 @@ class SubprocessBudgetGuard:
         self._failure_log_state[key] = [now, 0]
         try:
             from app.utils.logger import get_logger
-            from app.utils.provider_message import redacted_provider_message
 
-            message = redacted_provider_message(exc, max_chars=FAILURE_MESSAGE_MAX_CHARS)
             get_logger("agora.sim_runtime.budget_guard").warning(
                 "[budget-guard] Anbieterfehler %s (HTTP %s): %s "
                 "(%d gleichartige Fehler seit der letzten Meldung unterdrueckt)",
