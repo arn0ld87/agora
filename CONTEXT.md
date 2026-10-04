@@ -146,7 +146,39 @@ Ein Fallback-Outline oder ein Cancel mit fehlenden Sections wird nicht mehr stil
 
 Ein fehlgeschlagenes Binding ist nicht automatisch ein Data Gap. Wenn die Information vorhanden ist, aber das Matching scheitert, muss das als Binding-/Gate-Problem sichtbar bleiben.
 
-### Evidence-Arten
+### Beleg, Stimme und Quellenart
+
+- **Beleg:** ein einzelner Evidence-Eintrag, etwa ein Simulationspost, eine Interviewantwort oder eine Seed-Stelle.
+- **Stimme:** eine Persona, unabhängig davon, über wie viele Belege und Kanäle sie auftritt. Ein Post und eine Interviewantwort derselben Persona sind zwei Belege, aber eine Stimme.
+- **Quellenart:** die Herkunftsklasse eines Belegs. Die Quellenarten stehen im nächsten Abschnitt.
+
+Zwei Belege gelten als voneinander unabhängig, wenn sie von verschiedenen Stimmen oder aus verschiedenen Quellenarten stammen. Mehrere Belege derselben Stimme sind nicht unabhängig. Übereinstimmung mehrerer Stimmen bleibt Simulationskonsens: Alle Personas sind synthetisch.
+
+### Streitfrage
+
+Eine Aussage, die man bejahen oder verneinen kann, abgeleitet aus der Fragestellung des Laufs. Ein Lauf hat höchstens eine Streitfrage. Sie wird vor der Simulation festgelegt und ist prüf- und änderbar.
+
+Enthält die Fragestellung keine entscheidbare Aussage, hat der Lauf keine Streitfrage. Haltung, Positionswechsel, Koalition und Positionierungsquote sind dann nicht anwendbar; das ist keine Degradation.
+
+### Haltung, Positionswechsel und Haltungsabweichung
+
+- **Haltung:** die Position einer Stimme zur Streitfrage, in einer von drei Klassen: dafür, dagegen, unentschieden. Was eine Stimme sonst vertritt, ist Inhalt ihrer Beiträge, nicht ihre Haltung.
+- **Positionswechsel:** Eine Stimme hat am Ende des Laufs eine andere Haltungsklasse als zu Beginn, und mindestens ein Simulationsbeitrag dieser Stimme belegt die neue Haltung. Der Übergang von unentschieden zu dafür oder dagegen zählt.
+- **Haltungsabweichung:** Anfangs- und Endhaltung einer Stimme unterscheiden sich, ohne dass ein Simulationsbeitrag die neue Haltung belegt. Eine Haltungsabweichung ist eine Auffälligkeit, kein Positionswechsel.
+
+„Kein Positionswechsel beobachtet" ist ein gültiges Ergebnis.
+
+### Lager und Koalition
+
+- **Lager:** alle Stimmen mit derselben Haltungsklasse, unabhängig davon, ob sie in der Simulation aufeinander reagiert haben.
+- **Koalition:** mindestens zwei Stimmen aus verschiedenen Rollenfamilien mit derselben Haltungsklasse, die in der Simulation zustimmend aufeinander Bezug genommen haben.
+
+- **Positionierungsquote:** Anteil der Stimmen, die in mindestens einem Simulationsbeitrag eine Haltung dafür oder dagegen zeigen. Interviews zählen dafür nicht. Eine niedrige Positionierungsquote ist eine Degradation.
+- **Lagerverteilung:** wie sich die positionierten Stimmen auf die Lager verteilen. Eine einseitige Lagerverteilung ist ein Befund, keine Degradation.
+
+Stimmen derselben Rollenfamilie bilden keine Koalition. Häufige Interaktion bei gegensätzlicher Haltung ist eine Konfliktlinie, keine Koalition.
+
+### Quellenarten
 
 Je nach Pfad unter anderem:
 
