@@ -60,4 +60,20 @@ describe('ContestedQuestionField (Issue #1778)', () => {
     const wrapper = mountComponent({ isPreparing: true })
     expect(wrapper.find('textarea').attributes('disabled')).toBeDefined()
   })
+
+  it('meldet eine zu kurze Streitfrage am Feld', () => {
+    const short = mountComponent({ modelValue: 'Zu kurz' })
+    expect(short.find('[role="alert"]').text()).toBe(
+      'Die Streitfrage braucht mindestens 10 Zeichen.',
+    )
+    expect(short.find('textarea').attributes('aria-invalid')).toBe('true')
+    expect(short.find('textarea').attributes('minlength')).toBe('10')
+  })
+
+  it('meldet nichts bei leerem Feld oder ausreichender Länge', () => {
+    expect(mountComponent().find('[role="alert"]').exists()).toBe(false)
+    const valid = mountComponent({ modelValue: 'Die Kita am Berg wird geschlossen.' })
+    expect(valid.find('[role="alert"]').exists()).toBe(false)
+    expect(valid.find('textarea').attributes('aria-invalid')).toBeUndefined()
+  })
 })

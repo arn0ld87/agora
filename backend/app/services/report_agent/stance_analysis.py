@@ -12,6 +12,7 @@ ist dann nicht anwendbar und löst keinen LLM-Aufruf aus.
 
 from __future__ import annotations
 
+import json
 import os
 from collections import Counter
 from typing import Any, Dict, List, Mapping, Optional, Sequence
@@ -112,8 +113,19 @@ def _classify_batch(
         )
         return [None] * len(batch)
 
-    by_index: Dict[int, StanceClass] = {item.index: item.stance for item in response.items}
-    classes: List[Optional[StanceClass]] = [by_index.get(index) for index in range(1, len(batch) + 1)]
+    # Nennt das Modell einen Index mehrfach mit verschiedenen Haltungen, ist
+    # die Antwort für diesen Beitrag widersprüchlich: er gilt als nicht
+    # klassifiziert statt still die letzte Nennung zu übernehmen.
+    by_index: Dict[int, StanceClass] = {}
+    contradictory: set[int] = set()
+    for item in response.items:
+        if item.index in by_index and by_index[item.index] != item.stance:
+            contradictory.add(item.index)
+        by_index[item.index] = item.stance
+    classes: List[Optional[StanceClass]] = [
+        None if index in contradictory else by_index.get(index)
+        for index in range(1, len(batch) + 1)
+    ]
     missing = sum(1 for stance in classes if stance is None)
     if missing:
         logger.warning(
@@ -291,6 +303,19 @@ def build_stance_analysis(
     return analysis
 
 
+def load_stance_analysis(report_folder: str) -> Optional[StanceAnalysis]:
+    """Liest eine bereits gespeicherte Analyse; ``None``, wenn keine gültige vorliegt."""
+    path = os.path.join(report_folder, STANCE_ANALYSIS_FILENAME)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return StanceAnalysis.model_validate(json.load(handle))
+    except (OSError, ValueError) as exc:
+        logger.warning("Gespeicherte Haltungsanalyse nicht lesbar (%s): %r", path, exc)
+        return None
+
+
 def save_stance_analysis(report_folder: str, analysis: StanceAnalysis) -> str:
     """Schreibt die Analyse atomar als ``stance_analysis.json`` und liefert den Pfad."""
     path = os.path.join(report_folder, STANCE_ANALYSIS_FILENAME)
@@ -300,6 +325,7 @@ def save_stance_analysis(report_folder: str, analysis: StanceAnalysis) -> str:
 
 __all__ = [
     "STANCE_ANALYSIS_FILENAME",
+    "load_stance_analysis",
     "StanceBatchResponse",
     "build_stance_analysis",
     "classify_contributions",

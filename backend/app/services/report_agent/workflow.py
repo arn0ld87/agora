@@ -73,6 +73,7 @@ from .section_coverage import section_has_sufficient_evidence
 from .stance_analysis import (
     build_stance_analysis,
     has_contested_statement,
+    load_stance_analysis,
     save_stance_analysis,
 )
 from ..run_budget import reraise_if_budget_exceeded
@@ -161,6 +162,13 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
     überhaupt eine Streitfrage hat.
     """
     simulation_id = getattr(agent, "simulation_id", "<unknown>")
+    report_folder = ReportManager._get_report_folder(report_id)
+    # Ein Resume derselben ``report_id`` übernimmt die gespeicherte Analyse,
+    # statt alle Beiträge erneut zu klassifizieren (Budget des Resumes).
+    stored = load_stance_analysis(report_folder)
+    if stored is not None:
+        return stored.model_dump(mode="json")
+    actions: list[Dict[str, Any]] = []
     try:
         from ..simulation_runner import SimulationRunner
 
@@ -171,11 +179,13 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
         )
         if not isinstance(config, dict):
             return None
-        actions = [
-            action.to_dict()
-            for action in SimulationRunner.get_all_actions(agent.simulation_id)
-        ]
+        # Ohne Streitfrage ist die Analyse nicht anwendbar: das Protokoll
+        # wird dann gar nicht erst gelesen.
         if has_contested_statement(config):
+            actions = [
+                action.to_dict()
+                for action in SimulationRunner.get_all_actions(agent.simulation_id)
+            ]
             log_files, unreadable_lines = action_log_health(
                 agent.simulation_id, SimulationRunner.RUN_STATE_DIR
             )
@@ -201,7 +211,7 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
     analysis = build_stance_analysis(
         agent.simulation_id, config, actions, None, agent.llm
     )
-    save_stance_analysis(ReportManager._get_report_folder(report_id), analysis)
+    save_stance_analysis(report_folder, analysis)
     return analysis.model_dump(mode="json")
 
 

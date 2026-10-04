@@ -164,8 +164,11 @@ def _contested_question_changed(simulation_id: str, requested: str | None) -> bo
         return False
     config = resolve_default_store().read_json(simulation_id, "simulation_config", default=None)
     contested = config.get("contested_question") if isinstance(config, dict) else None
-    persisted = contested.get("statement") if isinstance(contested, dict) else None
-    return persisted != requested
+    if not isinstance(contested, dict):
+        return True
+    # Derselbe Wortlaut als Nutzervorgabe ändert die Herkunft: aus einem
+    # Vorschlag des Assistenten wird ``origin="user"``.
+    return contested.get("statement") != requested or contested.get("origin") != "user"
 
 
 def _already_prepared_response(simulation_id: str):

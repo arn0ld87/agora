@@ -932,3 +932,46 @@ def test_an_unavailable_stance_analysis_is_a_visible_degradation(reason, fragmen
     assert entry.severity == "warning"
     assert fragment in entry.detail
     assert "Positionierungsquote" in entry.detail
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (0.8, 0.8),
+        ("0.25", 0.25),
+        (0, 0.0),
+        (1, 1.0),
+        # CLI-Review PR #1780: ungültige Werte fallen auf den Standard zurück.
+        (None, 0.5),
+        ("", 0.5),
+        ("viel", 0.5),
+        (1.5, 0.5),
+        (-0.1, 0.5),
+        (True, 0.5),
+        (float("nan"), 0.5),
+    ],
+)
+def test_positioning_threshold_comes_from_the_settings_layer(raw, expected):
+    from app.services.report_agent.run_degradation import resolve_positioning_ratio_min
+
+    assert resolve_positioning_ratio_min(lambda _key: raw) == expected
+
+
+def test_a_stored_threshold_changes_the_positioning_warning(monkeypatch):
+    from app.services.report_agent import run_degradation
+
+    monkeypatch.setattr(run_degradation, "resolve_positioning_ratio_min", lambda: 0.2)
+    assert collect_run_degradations(stance_analysis=_stance_analysis(3, 10)) == []
+
+    monkeypatch.setattr(run_degradation, "resolve_positioning_ratio_min", lambda: 0.9)
+    found = collect_run_degradations(stance_analysis=_stance_analysis(6, 10))
+    assert [entry["reason"] for entry in found] == ["positioning_ratio_6_of_10"]
+
+
+@pytest.mark.parametrize("raw", ["", "viel", "7", "-1", "nan"])
+def test_an_invalid_threshold_env_does_not_break_config_import(raw):
+    from app.config import _env_ratio
+
+    assert _env_ratio({"X": raw}, "X", 0.5) == 0.5
+    assert _env_ratio({"X": "0.3"}, "X", 0.5) == 0.3
+    assert _env_ratio({}, "X", 0.5) == 0.5

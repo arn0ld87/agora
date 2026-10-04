@@ -269,3 +269,55 @@ def test_kuerzel_wird_unabhaengig_von_der_schreibweise_gefunden(monkeypatch):
     for query in ("afd", "AFD", "Afd"):
         hits = search_simulation_actions("sim-1", query=query).hits
         assert [hit["agent_name"] for hit in hits] == ["Stadtrat Weber"], query
+
+
+def test_trefferliste_zeigt_die_evidence_id_je_treffer(actions):
+    """CLI-Review PR #1780: ohne ID im Tool-Ergebnis ist ein Treffer nicht zitierbar."""
+    result = search_simulation_actions("sim-1", query="Kreißsaal")
+
+    text = result.to_text(evidence_ids={0: "ev_abc123"})
+
+    assert "1. [Evidence ID: `ev_abc123`] Hebamme Lena" in text
+    assert "Evidence ID" not in result.to_text()
+
+
+def test_tool_ergebnis_der_beitragssuche_wird_mit_ids_angereichert(actions):
+    from app.services.tool_execution import _record_and_annotate
+
+    result = search_simulation_actions("sim-1", query="Kreißsaal")
+
+    rendered = _record_and_annotate(
+        tool_name="search_simulation_actions",
+        parameters={"query": "Kreißsaal"},
+        structured_result=result,
+        rendered=result.to_text(),
+        section_index=3,
+        record_evidence=lambda *_a: {0: "ev_abc123"},
+        annotate_rendered=None,
+    )
+
+    assert "[Evidence ID: `ev_abc123`]" in rendered
+
+
+def test_agent_gibt_die_ids_der_suchtreffer_zurueck(actions):
+    from app.services.report_agent import ReportAgent
+
+    class _Agent:
+        def __init__(self) -> None:
+            self.evidence_map = {"evidence_index": {}, "global_evidence_refs": [], "sections": []}
+            self._truncate = lambda text, length=200: text
+            self.recorded: List[Dict[str, Any]] = []
+
+        def _record_evidence_item(self, item: Dict[str, Any]) -> str:
+            self.recorded.append(item)
+            return f"ev_{len(self.recorded)}"
+
+    agent = _Agent()
+    result = search_simulation_actions("sim-1", query="Schließung")
+
+    ids = ReportAgent._record_tool_evidence(
+        agent, "search_simulation_actions", {"query": "Schließung"}, result, result.to_text(), 3
+    )
+
+    assert ids == {0: "ev_1", 1: "ev_2"}
+    assert [item["type"] for item in agent.recorded] == ["agent_action", "agent_action"]

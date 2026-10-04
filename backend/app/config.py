@@ -4,8 +4,9 @@ Loads configuration from .env file in project root directory
 """
 
 import json
+import math
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:
@@ -644,6 +645,15 @@ else:
     load_dotenv(override=False)
 
 
+def _env_ratio(environ: Mapping[str, str], name: str, default: float) -> float:
+    """Anteil ``0..1`` aus der Umgebung; alles Ungültige ergibt ``default``."""
+    try:
+        value = float(environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) and 0.0 <= value <= 1.0 else default
+
+
 class Config:
     """Flask configuration class"""
 
@@ -913,8 +923,10 @@ class Config:
     # Simulation Stellung zur Streitfrage beziehen. Liegt die Quote eines
     # Laufs unter diesem Wert, weist der Bericht die Degradation
     # ``simulation_positioning`` aus (severity="warning").
-    REPORT_POSITIONING_RATIO_MIN = float(
-        os.environ.get('AGORA_REPORT_POSITIONING_RATIO_MIN', '0.5')
+    # Ein leerer, nicht numerischer oder außerhalb 0..1 liegender Wert fällt
+    # auf 0.5 zurück statt den Start zu verhindern.
+    REPORT_POSITIONING_RATIO_MIN = _env_ratio(
+        os.environ, 'AGORA_REPORT_POSITIONING_RATIO_MIN', 0.5
     )
     # Output language for generated reports (plan, sections, chat answers).
     REPORT_LANGUAGE = os.environ.get('REPORT_LANGUAGE', 'German')

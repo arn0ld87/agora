@@ -276,6 +276,9 @@ class _ConfigStore:
         ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"},
          "Die Kita am Berg wird geschlossen.", False),
         ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"}, None, False),
+        # CLI-Review PR #1780: derselbe Wortlaut als Nutzervorgabe ändert die Herkunft.
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "assistant"},
+         "Die Kita am Berg wird geschlossen.", True),
     ],
 )
 def test_contested_question_changed(monkeypatch, persisted, requested, expected):

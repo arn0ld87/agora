@@ -419,6 +419,7 @@
     "contestedQuestion": {
       "label": "Streitfrage (optional)",
       "hint": "Eine Aussage, die man bejahen oder verneinen kann. Leer lassen, dann schlägt der Assistent eine vor.",
+      "tooShort": "Die Streitfrage braucht mindestens 10 Zeichen.",
       "applied": "Streitfrage: {statement}",
       "originAssistant": "(Vorschlag des Assistenten)",
       "originUser": "(von dir vorgegeben)",

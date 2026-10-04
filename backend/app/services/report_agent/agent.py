@@ -239,6 +239,38 @@ def _typed_confidence(
     return claim_type, floored[0], floored[1]
 
 
+def _record_action_search_hits(
+    record_evidence_item: Any,
+    result: ActionSearchResult,
+    tool_name: str,
+    section_index: int,
+) -> Optional[Dict[int, str]]:
+    """Registriert die Treffer der Beitragssuche als Belege ``agent_action``.
+
+    Issue #1778 (Schritt 1.7): gleiche Form und Identität wie in der
+    Stichprobe (``_collect_simulation_evidence_items``). Wie beim Interview
+    (#1300) werden die IDs je Trefferindex zurückgegeben, damit
+    ``execute_tool`` die Trefferliste damit anreichert — sonst ist ein Treffer
+    nicht zitierbar.
+    """
+    evidence_ids: Dict[int, str] = {}
+    for hit_index, action in enumerate(result.hits):
+        item = build_action_evidence_item(action)
+        item["tool_name"] = tool_name
+        if result.query:
+            item["query"] = result.query
+        item["agent_log_ref"] = {
+            "section_index": section_index,
+            "action": "tool_result",
+            "tool_name": tool_name,
+        }
+        item.setdefault("source", "report_tool")
+        evidence_id = record_evidence_item(item)
+        if evidence_id:
+            evidence_ids[hit_index] = evidence_id
+    return evidence_ids or None
+
+
 class ReportAgent:
     """Simulation report generation agent."""
     
@@ -554,6 +586,11 @@ class ReportAgent:
                 item["document_role"] = role
             return item
 
+        if isinstance(structured_result, ActionSearchResult) and structured_result.hits:
+            return _record_action_search_hits(
+                self._record_evidence_item, structured_result, tool_name, section_index
+            )
+
         items: List[Dict[str, Any]] = []
         # Issue #1300 (Review-Finding Codex, P1): der ReACT-Loop sieht nur den
         # gerenderten Text — ohne die hier vergebene ``ev_``-ID im Observation-
@@ -713,17 +750,6 @@ class ReportAgent:
                 evidence_id = self._record_evidence_item(item)
                 if evidence_id:
                     interview_evidence_ids[original_index] = evidence_id
-        elif isinstance(structured_result, ActionSearchResult):
-            # Issue #1778 (Schritt 1.7): Jeder Suchtreffer wird ein Beleg
-            # ``agent_action`` — gleiche Form und Identität wie in der
-            # Stichprobe (``_collect_simulation_evidence_items``).
-            for action in structured_result.hits:
-                item = build_action_evidence_item(action)
-                item["tool_name"] = tool_name
-                if structured_result.query:
-                    item["query"] = structured_result.query
-                item["agent_log_ref"] = {"section_index": section_index, "action": "tool_result", "tool_name": tool_name}
-                items.append(item)
         elif isinstance(structured_result, dict) and "results" in structured_result:
             for result in (structured_result.get("results") or [])[:8]:
                 item = {

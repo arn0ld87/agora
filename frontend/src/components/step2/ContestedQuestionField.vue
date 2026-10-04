@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
-defineProps({
+const props = defineProps({
   modelValue: { type: String, required: true },
   isPreparing: { type: Boolean, default: false },
+})
+
+// Der Vertrag verlangt 10 bis 300 Zeichen. Ein kürzerer Text würde erst vom
+// Backend mit HTTP 400 abgelehnt; das Feld sagt es vorher.
+const MIN_LENGTH = 10
+const tooShort = computed(() => {
+  const length = props.modelValue.trim().length
+  return length > 0 && length < MIN_LENGTH
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -23,13 +31,18 @@ const fieldId = useId()
       :id="fieldId"
       class="contested-question-input"
       rows="2"
+      minlength="10"
       maxlength="300"
+      :aria-invalid="tooShort ? 'true' : undefined"
       :value="modelValue"
       :disabled="isPreparing"
       :aria-describedby="`${fieldId}-hint`"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     ></textarea>
     <p :id="`${fieldId}-hint`" class="hint">{{ t('step2.contestedQuestion.hint') }}</p>
+    <p v-if="tooShort" class="hint hint--error" role="alert">
+      {{ t('step2.contestedQuestion.tooShort') }}
+    </p>
   </div>
 </template>
 
@@ -64,4 +77,5 @@ const fieldId = useId()
   color: var(--fg-muted);
   margin: 0;
 }
+.hint--error { color: var(--status-error); }
 </style>

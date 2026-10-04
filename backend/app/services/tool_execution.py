@@ -159,7 +159,7 @@ def _record_and_annotate(
         # und kann ein Zitat daraus nie gueltig verankern. Der zweite
         # ``to_text()``-Aufruf reichert das bereits Registrierte nur mit
         # der jetzt bekannten ID an, ohne erneut zu registrieren.
-        if tool_name == "interview_agents" and recorded_evidence_ids:
+        if tool_name in ("interview_agents", "search_simulation_actions") and recorded_evidence_ids:
             rendered = structured_result.to_text(evidence_ids=recorded_evidence_ids)
     if annotate_rendered is not None:
         rendered = annotate_rendered(structured_result, rendered)

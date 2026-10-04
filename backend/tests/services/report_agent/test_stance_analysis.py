@@ -403,3 +403,68 @@ def test_action_log_health_zaehlt_dateien_und_unlesbare_zeilen(tmp_path):
     assert action_log_health("sim-1", tmp_path) == (1, 2)
     (tmp_path / "sim-2").mkdir()
     assert action_log_health("sim-2", tmp_path) == (0, 0)
+
+
+def test_widerspruechliche_doppelte_indizes_gelten_als_nicht_klassifiziert():
+    """CLI-Review PR #1780: die zweite Nennung überschrieb still die erste."""
+
+    class _LLM:
+        def chat_json(self, **_kwargs: Any) -> Dict[str, Any]:
+            return {
+                "items": [
+                    {"index": 1, "stance": "in_favour"},
+                    {"index": 1, "stance": "opposed"},
+                    {"index": 2, "stance": "opposed"},
+                    {"index": 2, "stance": "opposed"},
+                ]
+            }
+
+    classes = classify_contributions(
+        _LLM(),
+        STATEMENT,
+        [_action(0, "A", 1, "Erster Beitrag."), _action(1, "B", 1, "Zweiter Beitrag.")],
+    )
+
+    assert classes == [None, "opposed"]
+
+
+def test_workflow_uebernimmt_beim_resume_die_gespeicherte_analyse(monkeypatch, tmp_path):
+    """CLI-Review PR #1780: ein Resume klassifiziert nicht erneut."""
+    workflow = _workflow_with(
+        monkeypatch,
+        tmp_path,
+        store=_Store(_config("opposing", "neutral")),
+        actions=[_action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern.")],
+        health=(1, 0),
+    )
+    first_llm = _StubLLM(_by_keyword)
+    first = workflow._compute_stance_analysis(_Agent(first_llm), "report-1")
+    assert len(first_llm.calls) == 1
+
+    second_llm = _StubLLM(_by_keyword)
+    second = workflow._compute_stance_analysis(_Agent(second_llm), "report-1")
+
+    assert second == first
+    assert second_llm.calls == []
+
+
+def test_workflow_ohne_streitfrage_liest_das_protokoll_nicht(monkeypatch, tmp_path):
+    """CLI-Review PR #1780: ein Lesefehler dort wäre eine Warnung ohne Anlass."""
+    from app.services.simulation_runner import SimulationRunner
+
+    workflow = _workflow_with(
+        monkeypatch,
+        tmp_path,
+        store=_Store(_config("opposing", statement=None)),
+        actions=[],
+        health=(0, 0),
+    )
+
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        raise PermissionError("actions.jsonl")
+
+    monkeypatch.setattr(SimulationRunner, "get_all_actions", staticmethod(_boom))
+
+    result = workflow._compute_stance_analysis(_Agent(_StubLLM(_by_keyword)), "report-1")
+
+    assert result is not None and result["applicable"] is False

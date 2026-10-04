@@ -50,8 +50,14 @@ class ActionSearchResult:
     total_matching: int = 0
     total_actions: int = 0
 
-    def to_text(self) -> str:
-        """Trefferliste für den ReACT-Loop: Stimme, Plattform, Runde, Wortlaut."""
+    def to_text(self, evidence_ids: Optional[Dict[int, str]] = None) -> str:
+        """Trefferliste für den ReACT-Loop: Stimme, Plattform, Runde, Wortlaut.
+
+        ``evidence_ids`` ordnet dem 0-basierten Index eines Treffers seine
+        Evidence-ID zu. Sie entsteht erst beim Registrieren; ohne sie im
+        Tool-Ergebnis kann das Modell einen Treffer nicht als Zitat verankern
+        (gleiches Muster wie bei ``interview_agents``, Issue #1300).
+        """
         label = f' for "{self.query}"' if self.query else ""
         if not self.hits:
             return (
@@ -64,7 +70,9 @@ class ActionSearchResult:
             f"({self.total_actions} posts with text in the simulation)."
         ]
         for position, action in enumerate(self.hits, 1):
-            lines.append(f"{position}. {_describe_action(action)}")
+            evidence_id = (evidence_ids or {}).get(position - 1)
+            anchor = f"[Evidence ID: `{evidence_id}`] " if evidence_id else ""
+            lines.append(f"{position}. {anchor}{_describe_action(action)}")
         return "\n".join(lines)
 
 

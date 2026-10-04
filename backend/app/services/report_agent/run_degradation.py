@@ -18,9 +18,13 @@ Einschätzung.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+import math
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from ...config import Config
+from ...utils.logger import get_logger
+
+logger = get_logger("agora.report_agent.run_degradation")
 
 #: Simulationsstatus, bei denen die Simulation nicht regulär endete.
 #:
@@ -246,6 +250,50 @@ def _cancellation_degradations(missing_section_count: int) -> List[Dict[str, Any
     ]
 
 
+ENV_POSITIONING_RATIO_MIN = "AGORA_REPORT_POSITIONING_RATIO_MIN"
+
+
+def _as_ratio(value: Any) -> Optional[float]:
+    """Zahl in ``0..1`` oder ``None`` (ungültig); ``bool``/NaN/Text sind ungültig."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and 0.0 <= number <= 1.0 else None
+
+
+def resolve_positioning_ratio_min(
+    read: Optional[Callable[[str], Any]] = None,
+) -> float:
+    """Wirksame Warnschwelle der Positionierungsquote (Standard 0.5).
+
+    Liest ``AGORA_REPORT_POSITIONING_RATIO_MIN`` über die Settings-Schicht
+    (Env, ``instance/settings.json``, Laufzeit-Override), damit ein in den
+    Einstellungen gespeicherter Wert wirkt. Ungültige Werte fallen mit
+    Warnung auf den Standard zurück.
+    """
+    if read is None:
+        from ..settings_layer import get_default_service
+
+        read = get_default_service().effective_value
+    raw = read(ENV_POSITIONING_RATIO_MIN)
+    ratio = _as_ratio(raw)
+    if ratio is None:
+        if raw is not None:
+            logger.warning(
+                "%s=%r ist ungültig (erwartet Zahl 0..1); Standard %s wird verwendet",
+                ENV_POSITIONING_RATIO_MIN,
+                raw,
+                Config.REPORT_POSITIONING_RATIO_MIN,
+            )
+        return Config.REPORT_POSITIONING_RATIO_MIN
+    return ratio
+
+
 _STANCE_UNAVAILABLE_DETAILS: Dict[str, str] = {
     "read_failed": (
         "Simulationskonfiguration oder Aktionsprotokoll konnten nicht gelesen werden"
@@ -330,7 +378,7 @@ def _positioning_degradations(
     ratio = analysis.get("positioning_ratio")
     if not isinstance(ratio, (int, float)) or isinstance(ratio, bool):
         return []
-    if ratio >= Config.REPORT_POSITIONING_RATIO_MIN:
+    if ratio >= resolve_positioning_ratio_min():
         return []
 
     percent = round(ratio * 100)

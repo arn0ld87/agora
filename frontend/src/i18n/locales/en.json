@@ -419,6 +419,7 @@
     "contestedQuestion": {
       "label": "Contested question (optional)",
       "hint": "A statement one can affirm or deny. Leave empty and the assistant proposes one.",
+      "tooShort": "The contested question needs at least 10 characters.",
       "applied": "Contested question: {statement}",
       "originAssistant": "(proposed by the assistant)",
       "originUser": "(set by you)",
