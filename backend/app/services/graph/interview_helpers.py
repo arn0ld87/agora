@@ -18,6 +18,7 @@ from ...contracts.interview_contract import (
 )
 from ...utils.logger import get_logger
 from ..interview_panel import InterviewPanelTracker
+from ..persona_role import display_role
 from .graph_dtos import AgentInterview
 
 logger = get_logger("agora.graph_tools")
@@ -96,7 +97,9 @@ def load_agent_profiles(
                             "username": row.get("username", ""),
                             "bio": row.get("description", ""),
                             "persona": row.get("user_char", ""),
-                            "profession": "Unknown",
+                            # Die CSV fuehrt keine Berufsspalte; leer statt
+                            # "Unknown" (Issue #1766).
+                            "profession": "",
                         }
                     )
             logger.info(
@@ -124,7 +127,7 @@ def select_agents_for_interview(
         summary = {
             "index": index,
             "name": profile.get("realname", profile.get("username", f"Agent_{index}")),
-            "profession": profile.get("profession", "Unknown"),
+            "profession": display_role(profile.get("profession")),
             "bio": profile.get("bio", "")[:200],
             "interested_topics": profile.get("interested_topics", []),
         }
@@ -222,7 +225,7 @@ def generate_interview_questions(
     llm: Any,
 ) -> List[str]:
     """Use the configured LLM to generate interview questions."""
-    agent_roles = [agent.get("profession", "Unknown") for agent in selected_agents]
+    agent_roles = [display_role(agent.get("profession")) for agent in selected_agents]
 
     system_prompt = """You are a professional journalist/interviewer. Based on the interview requirements, generate 3-5 deep interview questions.
 
@@ -290,7 +293,7 @@ def generate_interview_summary(
     interview_texts = []
     for interview in interviews:
         interview_texts.append(
-            f"[{interview.agent_name} ({interview.agent_role})]\n"
+            f"[{interview.agent_name} ({display_role(interview.agent_role)})]\n"
             f"{interview.response[:500]}"
         )
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 
 from app.contracts.graph_relevance_contract import SearchRelevanceVerdict
+from app.services.persona_role import display_role
 
 
 def provenance_at(
@@ -374,7 +375,7 @@ class AgentInterview:
         }
 
     def to_text(self) -> str:
-        text = f"**{self.agent_name}** ({self.agent_role})\n"
+        text = f"**{self.agent_name}** ({display_role(self.agent_role)})\n"
         text += f"_Bio: {self.agent_bio}_\n\n"
         text += f"**Q:** {self.question}\n\n"
         text += f"**A:** {self.response}\n"
