@@ -368,3 +368,37 @@ class TestAuffangtypenSindKeineRollenfamilie:
 
         assert count_groups(items) == 2
         assert compute_confidence_breakdown(items)["stakeholder_group_count"] == 2.0
+
+
+class TestStimmeHebtRollenfamilieNichtAuf:
+    """#1778 Schritt 1.3: der Ein-Quellen-Deckel zählt Stimmen — Hartanker 4
+    (``cross_stakeholder_for_high``) bleibt davon unberührt.
+
+    Zwei Interviews mit verschiedenen ``voice_key`` sind zwei Stimmen und
+    heben den Confidence-Deckel des Rechners. Der Vertrag verlangt für
+    ``high`` weiterhin zwei Rollenfamilien — dieselbe Familie bleibt
+    abgelehnt, egal wie viele Stimmen aus ihr sprechen.
+    """
+
+    def test_zwei_stimmen_einer_rollenfamilie_bleiben_high_verwehrt(self):
+        evidence = [
+            {
+                **_quote(
+                    1,
+                    job_title="Umschüler im IT-Bereich",
+                    role_family="Retrainee",
+                ),
+                "voice_key": "agent:1",
+            },
+            {
+                **_quote(
+                    2,
+                    job_title="Teilnehmer einer IT-Umschulung",
+                    role_family="Retrainee",
+                ),
+                "voice_key": "agent:2",
+            },
+        ]
+
+        with pytest.raises(ValidationError):
+            ReportClaimModel.model_validate(_claim(evidence))

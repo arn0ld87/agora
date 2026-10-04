@@ -296,3 +296,70 @@ def test_apply_echo_cap_non_high_label_unchanged_when_capped():
     )
     assert score == 0.55
     assert label == "low"
+
+
+# ---------------------------------------------------------------------------
+# #1778 Schritt 1.3 — Ein-Quellen-Deckel zählt Stimmen und Quellenarten
+# ---------------------------------------------------------------------------
+
+
+def test_same_voice_two_channels_stays_capped():
+    """Interview und Simulationsbeitrag derselben Stimme bleiben eine Quelle.
+
+    Entscheidung 3 des Plans: Unabhängigkeit hängt an der Stimme, nicht am
+    Kanal. Gleicher ``voice_key`` über zwei Kanäle zählt wie eine Quelle —
+    der Ein-Quellen-Deckel greift weiterhin.
+    """
+    items = [
+        {"type": "agent_interview", "source": "interview-1",
+         "snippet": "x", "supports_claim": True, "match_score": 0.7,
+         "voice_key": "agent:1"},
+        {"type": "agent_action", "source": "simulation_actions",
+         "snippet": "y", "supports_claim": True, "match_score": 0.7,
+         "voice_key": "agent:1"},
+    ]
+    score, _label = compute_confidence(items)
+    assert score <= 0.59
+
+
+def test_two_voices_lift_the_cap():
+    """Zwei Stimmen sind zwei unabhängige Quellen — der Deckel fällt.
+
+    Beide Belege tragen absichtlich dieselbe Quellenart und Herkunft;
+    allein der unterschiedliche ``voice_key`` hebt den Deckel.
+    """
+    items = [
+        {"type": "agent_interview", "source": "interview-1",
+         "snippet": "x", "supports_claim": True, "match_score": 0.7,
+         "voice_key": "agent:1"},
+        {"type": "agent_interview", "source": "interview-1",
+         "snippet": "y", "supports_claim": True, "match_score": 0.7,
+         "voice_key": "agent:2"},
+    ]
+    score, _label = compute_confidence(items)
+    assert score > 0.59
+
+
+def test_seed_plus_one_voice_lifts_the_cap():
+    """Seed-Beleg plus eine Stimme sind zwei Quellenarten — Deckel fällt."""
+    items = [
+        {"type": "document_quote", "source": "seed-doc-1",
+         "snippet": "x", "supports_claim": True, "match_score": 0.7},
+        {"type": "agent_interview", "source": "interview-1",
+         "snippet": "y", "supports_claim": True, "match_score": 0.7,
+         "voice_key": "agent:1"},
+    ]
+    score, _label = compute_confidence(items)
+    assert score > 0.59
+
+
+def test_items_without_voice_key_count_as_before():
+    """Ohne ``voice_key`` zählt weiter Quellenart und Herkunft wie bisher."""
+    items = [
+        {"type": "agent_interview", "source": "interview-1",
+         "snippet": "x", "supports_claim": True, "match_score": 0.7},
+        {"type": "agent_interview", "source": "interview-1",
+         "snippet": "y", "supports_claim": True, "match_score": 0.7},
+    ]
+    score, _label = compute_confidence(items)
+    assert score <= 0.59

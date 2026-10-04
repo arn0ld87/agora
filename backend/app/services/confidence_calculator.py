@@ -45,7 +45,7 @@ die applied_penalties auswerten wollen.
 from __future__ import annotations
 
 import statistics
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # MAI-14: Schwellwerte für Sentiment-Contradiction-Heuristik.
 _CONTRADICTION_PENALTY_AMOUNT: float = 0.2
@@ -143,14 +143,31 @@ def _component_specificity(evidence: List[Dict]) -> float:
     return 0.4
 
 
+def _independence_key(e: Dict[str, Any]) -> Tuple[str, str, str]:
+    """Schlüssel für die Unabhängigkeit eines Belegs.
+
+    Belege derselben Stimme sind nicht unabhängig, egal über welchen
+    Kanal (Interview, Simulationsbeitrag). Belege ohne Stimme zählen
+    nach Quellenart und Herkunft wie bisher.
+    """
+    voice = e.get("voice_key")
+    if voice:
+        return ("voice", str(voice), "")
+    return ("source", str(e.get("type") or ""), str(e.get("source") or ""))
+
+
+def _count_independent_sources(evidence: List[Dict[str, Any]]) -> int:
+    return len({_independence_key(e) for e in evidence})
+
+
 def _component_consistency(evidence: List[Dict]) -> float:
     """Wieviele unabhängige Quellen? Mehr = robuster gegen Einzelfehler."""
-    sources = {(e.get("type"), e.get("source")) for e in evidence}
-    if len(sources) >= 3:
+    count = _count_independent_sources(evidence)
+    if count >= 3:
         return 1.0
-    if len(sources) == 2:
+    if count == 2:
         return 0.8
-    if len(sources) == 1:
+    if count == 1:
         return 0.6
     return 0.0
 
@@ -262,7 +279,7 @@ def _compute_confidence_with_penalties(
         for e in evidence
         if "match_score" in e
     )
-    unique_sources = len({(e.get("type"), e.get("source")) for e in evidence})
+    unique_sources = _count_independent_sources(evidence)
 
     score = _apply_single_source_cap(
         score, unique_sources=unique_sources, has_strong_match=has_strong_match
