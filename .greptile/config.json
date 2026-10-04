@@ -1,0 +1,195 @@
+{
+  "strictness": 2,
+  "commentTypes": [
+    "logic",
+    "syntax"
+  ],
+  "effort": "base",
+  "autoReview": [
+    "open"
+  ],
+  "statusCheck": true,
+  "fixWithAI": true,
+  "excludeAuthors": [
+    "dependabot[bot]"
+  ],
+  "ignorePatterns": "**/*.lock\nbackend/uv.lock\nfrontend/bun.lock\nfrontend/dist/**\nbackend/radon-allowlist.txt\ndocs/archive/**\n.claude/**\n.pandaos/**\n*.min.js\n*.map",
+  "summarySection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "issuesTableSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": true
+  },
+  "confidenceScoreSection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": true
+  },
+  "sequenceDiagramSection": {
+    "included": false
+  },
+  "instructions": "Agora ist eine lokale Multi-Agent-Analyseplattform (Flask, Python 3.14, Pydantic v2, Vue 3, TypeScript, Neo4j, Redis). Pipeline: Dokumente, Knowledge Graph, Personas, Simulation (OASIS/CAMEL im Subprozess), Bericht. Schreibe alle Review-Kommentare auf Deutsch mit korrekten Umlauten; Bezeichner, Dateinamen und Code bleiben im Original. Melde nur Befunde, die ein konkretes Fehlverhalten, einen Vertragsbruch oder eine Regelverletzung aus rules.md belegen. Keine Stil-, Format- oder Typ-Annotations-Hinweise: ruff, mypy, radon und ein Coverage-Ratchet laufen in der CI. Jeder Befund nennt Datei und Zeile, das konkrete Fehlverhalten und den Auslöser. Lies vor einem Befund den aufgerufenen und den aufrufenden Code; viele Fehler in diesem Repo liegen zwischen zwei Dateien (Vertrag gegen Rechner, Elternprozess gegen Subprozess, Backend-Vertrag gegen Frontend-Spiegel).",
+  "rules": [
+    {
+      "id": "adr-0002-hartanker",
+      "rule": "Die fünf Evidence-Gating-Anker aus ADR-0002 dürfen nicht geändert oder abgeschwächt werden, außer docs/decisions/0002-supersedes.md wird im selben PR ergänzt: der Block <evidence_gating priority=\"hard\"> in report_prompts/sections.py, der Snapshot evidence-gating-hedge-words.txt, das Enum EvidenceSourceKind, die Validatoren cross_stakeholder_for_high und reject_inferred_in_high_confidence. Jede Änderung daran ist ein Befund mit hoher Schwere.",
+      "scope": [
+        "backend/app/services/report_prompts/**",
+        "backend/app/contracts/report_contract.py",
+        "backend/tests/eval/snapshots/**",
+        "backend/app/services/confidence_calculator.py"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "contracts-first",
+      "rule": "Daten an API-Grenzen sind Pydantic-v2-Modelle aus backend/app/contracts/. Ein neues Dataclass, Inline-Schema oder handgeschriebenes Dict an einer API-Grenze ist ein Befund. Ändert sich ein Vertrag, müssen das generierte JSON-Schema unter schemas/ und der Frontend-Spiegel unter frontend/src/contracts/ im selben PR mitgezogen sein.",
+      "scope": [
+        "backend/app/api/**",
+        "backend/app/contracts/**",
+        "frontend/src/contracts/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "llm-client-only",
+      "rule": "Strukturierte LLM-Ausgaben laufen ausschließlich über LLMClient.chat_json mit Pydantic-Schema. Ein roher OpenAI-Client für JSON-Ausgaben und jede Provider-Erkennung neben backend/app/llm/providers/registry.py::detect_provider sind Befunde.",
+      "scope": [
+        "backend/app/**",
+        "backend/scripts/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "degradation-sichtbar",
+      "rule": "Degradationen müssen sichtbar bleiben: INCOMPLETE, evidence_omitted, Fallback-Personas und verlorene Simulationsschritte dürfen nie als normaler Erfolg ausgegeben werden. BudgetExceededError darf nicht abgefangen und in eine Fallback-Antwort umgewandelt werden; ein breites except, das sie verschluckt, ist ein Befund. Ein fehlgeschlagenes Evidence-Binding ist kein Data Gap.",
+      "scope": [
+        "backend/app/**",
+        "backend/scripts/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "route-vor-fallback",
+      "rule": "Existiert eine aufgelöste Lauf- oder Stage-Route oder eine persistierte Konfiguration, darf kein Legacy- oder Env-Fallback sie ersetzen. Eine cli-Route darf nie mit einem HTTP-Endpoint aus der Umgebung oder einem fremden API-Key kombiniert werden.",
+      "scope": [
+        "backend/app/llm/**",
+        "backend/app/services/**",
+        "backend/scripts/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "subprozess-umgebung",
+      "rule": "Der Simulations-Subprozess erhält nur Umgebungsvariablen aus SAFE_ENV_KEYS in backend/app/services/sim/process_environment.py. Liest Code unter backend/scripts/ eine neue Umgebungsvariable, die dort nicht eingetragen ist, wirkt sie im Docker-Betrieb nicht: das ist ein Befund.",
+      "scope": [
+        "backend/scripts/**",
+        "backend/app/services/sim/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "kein-print-keine-secrets",
+      "rule": "print() ist im Produktivcode verboten, es gilt strukturiertes Logging. Secrets, Tokens, Authorization-Header und Prompts dürfen nicht geloggt, in Fixtures abgelegt oder in Fehlermeldungen durchgereicht werden.",
+      "scope": [
+        "backend/app/**",
+        "backend/scripts/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "persistenz-atomar",
+      "rule": "Schreibzugriffe auf Lauf-, Bericht- und Simulationsartefakte sind atomar (temporäre Datei, fsync, Umbenennen). Beim Bericht wird erst die Sektions-Evidence persistiert, dann das Markdown. Storage- und Permission-Fehler dürfen nicht still geschluckt werden.",
+      "scope": [
+        "backend/app/services/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "regressionstest",
+      "rule": "Jede Verhaltensänderung braucht einen Regressionstest im selben PR. Abgeschwächte Assertions, neue Skips und neue '# pragma: no cover' sind Befunde.",
+      "scope": [
+        "backend/**",
+        "frontend/src/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "doku-nachziehen",
+      "rule": "Ändert ein PR Persistenz, Migrationen, Env-Defaults oder den Compose-Stack, muss docs/runbooks/upgrade.md im selben PR angepasst sein. Jeder PR, der das Verhalten des Produkts ändert (Backend, Frontend, Simulation, Bericht, Deployment), bringt ein Fragment unter changelog.d/ mit und hält docs/STATUS.md aktuell; CHANGELOG.md wird nie direkt editiert. Reine Werkzeug- und Repo-Konfiguration (Review-Bot, Editor, CI-Kommentare) braucht keinen Eintrag in docs/STATUS.md.",
+      "severity": "low"
+    },
+    {
+      "id": "prompt-wording-ist-verhalten",
+      "rule": "Wording in Prompts ist funktionales Verhalten, kein Stil. Schlage keine Umformulierung, Kürzung oder Entfernung von Prompt-Blöcken als Lesbarkeitsverbesserung vor. Eine Prompt-Änderung ohne begleitenden Test oder Eval-Beleg ist ein Befund.",
+      "scope": [
+        "backend/app/services/report_prompts/**",
+        "backend/app/services/**/prompts*.py"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "snapshots-eingefroren",
+      "rule": "Evaluations-Snapshots sind eingefroren. Eine Änderung daran ist eine Verhaltensänderung und braucht eine eigene Begründung im PR. Ein Snapshot, der nur angepasst wurde, damit ein Test wieder grün ist, ist ein Befund.",
+      "scope": [
+        "backend/tests/eval/snapshots/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "embedding-ssot",
+      "rule": "Die persistente Embedding-Konfiguration liegt im EmbeddingConfigurationStore (ADR-0007). Ein neuer Consumer, der Config.EMBEDDING_* oder Umgebungsvariablen direkt liest, ist ein Befund. Ausgenommen ist der in ADR-0007 vorgesehene Legacy-Adapter backend/app/services/embedding_configurations/legacy.py, der diese Werte lesend auswertet, ohne in den Store zu schreiben. Chat-Routing und Embedding-Konfiguration bleiben getrennt.",
+      "scope": [
+        "backend/app/**"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "keine-token-in-url",
+      "rule": "Keine neuen Query-Token-Parameter (?token=). URL-Authentifizierung läuft ausschließlich über signierte Tickets.",
+      "scope": [
+        "backend/app/api/**",
+        "frontend/src/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "frontend-i18n-a11y",
+      "rule": "Vue 3 mit TypeScript und Pinia. Hartkodierte UI-Texte sind ein Befund, vue-i18n ist Pflicht. Prüfe Fokus, Rollen und Labels. AiModelPicker.vue ist die kanonische Modellauswahl; ein zweiter Picker ist ein Befund.",
+      "scope": [
+        "frontend/src/**/*.vue"
+      ],
+      "severity": "medium"
+    },
+    {
+      "id": "zod-spiegel",
+      "rule": "Dateien unter frontend/src/contracts/ spiegeln die Pydantic-Verträge. Jede Abweichung vom Backend-Vertrag ist ein Fehler, keine Vereinfachung.",
+      "scope": [
+        "frontend/src/contracts/**",
+        "schemas/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "ci-gates-nicht-aufweichen",
+      "rule": "Gates dürfen nicht aufgeweicht werden: Required Checks, Schema-Drift-Prüfung und Secret-Scanning nicht überspringen und nicht auf continue-on-error setzen.",
+      "scope": [
+        ".github/workflows/**",
+        "scripts/pre-push-gate.sh"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "adr-superseding",
+      "rule": "Eine akzeptierte ADR wird inhaltlich nicht bearbeitet. Änderungen erfolgen über eine neue, ablösende ADR.",
+      "scope": [
+        "docs/decisions/**"
+      ],
+      "severity": "medium"
+    }
+  ]
+}
