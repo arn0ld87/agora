@@ -795,3 +795,120 @@ def test_restart_simulation_prepare_cancelled_ends_stopped(env):
     new_run = new_runs[0]
     assert new_run["status"] == "stopped"
     assert new_run["termination_reason"] == "user_cancel"
+
+
+# ---------------------------------------------------------------------------
+# Issue #1778: Der Restart einer Vorbereitung hat keinen Request-Payload. Eine
+# Streitfrage, die der Nutzer vorgegeben hatte, ging dabei verloren — der
+# Konfigurations-Assistent leitete stattdessen eine eigene ab.
+# ---------------------------------------------------------------------------
+
+_USER_STATEMENT = "Die Geburtshilfe in Brenkhausen wird zum 30. Juni 2027 geschlossen."
+
+
+def _restart_prepare_with(env, *, run_metadata, simulation_config):
+    """Startet den Restart synchron; liefert (prepare-kwargs, create_run-kwargs)."""
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+        metadata=run_metadata,
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value="store-resolved-key"),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = simulation_config
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_cq_1"}
+        mock_registry.update_run.return_value = None
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            _run_restart_prepare_sync(run)
+
+        return (
+            MockMgr.return_value.prepare_simulation.call_args.kwargs,
+            mock_registry.create_run.call_args.kwargs,
+        )
+
+
+def test_restart_simulation_prepare_keeps_the_user_contested_question_from_the_run(env):
+    """Scheiterte die Vorbereitung vor der Konfiguration, kennt nur der Run die Vorgabe."""
+    prepare_kwargs, create_kwargs = _restart_prepare_with(
+        env,
+        run_metadata={"contested_question": _USER_STATEMENT},
+        simulation_config={"llm_model": "gpt-4o"},
+    )
+
+    assert prepare_kwargs["contested_question_override"] == _USER_STATEMENT
+    # Der neue Run trägt sie weiter, damit auch ein zweiter Restart sie kennt.
+    assert create_kwargs["metadata"]["contested_question"] == _USER_STATEMENT
+
+
+def test_restart_simulation_prepare_keeps_the_user_contested_question_from_the_config(env):
+    """Ohne Vermerk am Run gilt die gespeicherte Konfiguration mit origin=user."""
+    prepare_kwargs, create_kwargs = _restart_prepare_with(
+        env,
+        run_metadata={},
+        simulation_config={
+            "llm_model": "gpt-4o",
+            "contested_question": {
+                "statement": _USER_STATEMENT,
+                "origin": "user",
+                "absence_reason": None,
+            },
+        },
+    )
+
+    assert prepare_kwargs["contested_question_override"] == _USER_STATEMENT
+    assert create_kwargs["metadata"]["contested_question"] == _USER_STATEMENT
+
+
+def test_restart_simulation_prepare_does_not_pin_an_assistant_contested_question(env):
+    """Ein Vorschlag des Assistenten ist keine Nutzervorgabe: er wird neu abgeleitet."""
+    prepare_kwargs, create_kwargs = _restart_prepare_with(
+        env,
+        run_metadata={},
+        simulation_config={
+            "llm_model": "gpt-4o",
+            "contested_question": {
+                "statement": _USER_STATEMENT,
+                "origin": "assistant",
+                "absence_reason": None,
+            },
+        },
+    )
+
+    assert prepare_kwargs["contested_question_override"] is None
+    assert "contested_question" not in create_kwargs["metadata"]

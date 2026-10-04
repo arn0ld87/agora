@@ -308,6 +308,9 @@ def _begin_prepare_run(
             "llm_provider": routing.llm_runtime.redacted_metadata() or None,
             # Budget-Config (Issue #764) — nur Limits, keine Secrets
             **({"budget": req.budget_config.model_dump(mode="json")} if req.budget_config else {}),
+            # #1778: Nutzervorgabe für die Streitfrage. Der Restart hat keinen
+            # Request-Payload und liest sie hier (``runs.py``).
+            **({"contested_question": req.contested_question} if req.contested_question else {}),
         },
     )
 

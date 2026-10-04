@@ -532,6 +532,28 @@ def test_begin_prepare_run_carries_budget_metadata(app_ctx, monkeypatch):
 
     metadata = registry.create_run.call_args.kwargs["metadata"]
     assert metadata["budget"]["max_tokens"] == 1000
+    assert "contested_question" not in metadata
+
+
+def test_begin_prepare_run_carries_the_user_contested_question(app_ctx, monkeypatch):
+    """#1778: Der Restart hat keinen Request-Payload und liest die Nutzervorgabe hier."""
+    registry = MagicMock()
+    registry.create_run.return_value = {"run_id": "run-1"}
+    monkeypatch.setattr(mod, "run_registry", registry)
+    monkeypatch.setattr(mod, "_simulation_run_artifacts", lambda _sid: [])
+    req = mod._PrepareRequest(
+        simulation_id=VALID_SIM_ID,
+        ai_model_ref=None,
+        budget_config=None,
+        force_regenerate=False,
+        contested_question="Die Geburtshilfe in Brenkhausen wird geschlossen.",
+    )
+
+    with mod._begin_prepare_run(req, _state(), _routing()):
+        pass
+
+    metadata = registry.create_run.call_args.kwargs["metadata"]
+    assert metadata["contested_question"] == "Die Geburtshilfe in Brenkhausen wird geschlossen."
 
 
 # ---------------------------------------------------------------------------

@@ -82,7 +82,7 @@ Die Simulations-API ist nach Verantwortlichkeiten aufgeteilt:
 - `simulation_compare.py` — Branch-/Run-Vergleich
 - `simulation_budget.py` — Budget-Preflight (`POST /api/simulation/preflight-estimate`; optional `platform` = `parallel` (Standard) | `twitter` | `reddit`, seit #1772; `400` bei anderem Wert)
 
-`POST /api/simulation/prepare` nimmt seit #1778 das optionale Feld `contested_question` entgegen: die Streitfrage des Laufs als Aussage mit 10 bis 300 Zeichen. Ist es gesetzt, übernimmt die Simulationskonfiguration sie mit `origin="user"`, und der Konfigurations-Assistent leitet keine eigene ab. Fehlt es oder ist es leer, schlägt der Assistent eine Streitfrage vor (`origin="assistant"`) oder hält fest, dass es keine gibt (`origin="none"`). Ein Wert außerhalb der Längengrenzen oder ein Nicht-String antwortet mit `400`.
+`POST /api/simulation/prepare` nimmt seit #1778 das optionale Feld `contested_question` entgegen: die Streitfrage des Laufs als Aussage mit 10 bis 300 Zeichen. Ist es gesetzt, übernimmt die Simulationskonfiguration sie mit `origin="user"`, und der Konfigurations-Assistent leitet keine eigene ab. Fehlt es oder ist es leer, schlägt der Assistent eine Streitfrage vor (`origin="assistant"`) oder hält fest, dass es keine gibt (`origin="none"`). Ein Wert außerhalb der Längengrenzen oder ein Nicht-String antwortet mit `400`. Die Vorgabe steht als `metadata.contested_question` am Prepare-Run; `POST /api/runs/<id>/resume` reicht sie beim Neustart der Vorbereitung erneut durch.
 
 Wichtige Konfliktcodes:
 
