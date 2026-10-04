@@ -135,6 +135,7 @@
             {
               "enum": [
                 "simulation_consensus",
+                "simulation_single_voice",
                 "evidence",
                 "empirical"
               ],

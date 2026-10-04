@@ -84,6 +84,8 @@ def render_segment_table(segments: list[Segment]) -> str:
 # verhindern.
 _CONFIDENCE_SCOPE_LABELS = {
     "simulation_consensus": "Simulationskonsens",
+    # Issue #1766: eine einzelne simulierte Perspektive ist kein Konsens.
+    "simulation_single_voice": "Einzelstimme (Simulation)",
     "evidence": "Quellenbindung",
     "empirical": "Empirische Daten",
 }

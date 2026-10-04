@@ -116,7 +116,15 @@ class Claim(BaseModel):
     #
     # ``empirical`` wird nie automatisch vergeben: Agora erhebt keine realen
     # empirischen Daten. Der Wert bleibt fuer manuell kuratierte Reports.
-    confidence_scope: Literal["simulation_consensus", "evidence", "empirical"] | None = None
+    #
+    # Issue #1766: ``simulation_single_voice`` — genau eine simulierte Stimme
+    # (eine Persona, auch ueber mehrere Evidence-Items) stuetzt den Claim. Das
+    # ist keine Uebereinstimmung und darf nicht als ``simulation_consensus``
+    # erscheinen. Bestandsartefakte mit ``simulation_consensus`` bleiben
+    # gueltig; der Wert wird nicht rueckwirkend umgeschrieben.
+    confidence_scope: Literal[
+        "simulation_consensus", "simulation_single_voice", "evidence", "empirical"
+    ] | None = None
     # Issue #1012: Stufe, unter der der ``statement``-Wortlaut entstanden
     # ist. Gesetzt nur, wenn der Claim nachtraeglich abgestuft wurde —
     # dann deckt seine Formulierung eine hoehere Sicherheit ab, als das

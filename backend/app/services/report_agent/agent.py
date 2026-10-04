@@ -41,6 +41,7 @@ from .search_dedup import (
 )
 from .postprocess_timing import PostprocessPhaseTracker
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
+from .takeaway_confidence import cap_section_key_takeaways
 from .sections import (
     action_content as sections_action_content,
     attach_provenance,
@@ -1677,6 +1678,13 @@ class ReportAgent:
                 # Dritter Versuch: scheitert er erneut, ist etwas anderes kaputt —
                 # die Exception läuft bewusst ungefangen weiter (Issue #1006).
                 validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+        # Issue #1766: Kernaussagen haben kein eigenes Confidence-Urteil. Sie
+        # entstehen vor der Claim-Bindung (``generate_section_metadata``) und
+        # werden hier — nach Validierung und Reparatur, direkt vor dem
+        # Schreiben — auf das hoechste Label der verbliebenen Claims dieses
+        # Abschnitts gedeckelt. ``structured_metadata`` ist untypisiert, die
+        # Validierung oben bleibt davon unberuehrt.
+        cap_section_key_takeaways(validated, section_index)
         self.evidence_map = validated
         ReportManager.save_evidence_map(report_id, validated)
         if phase_tracker is not None:

@@ -88,8 +88,14 @@ export const ClaimSchema = z
     // Optional/nullable, weil report-v3.json aus der Zeit davor das Feld
     // nicht traegt — nicht erfasst ist nicht dasselbe wie
     // "simulation_consensus" und darf deshalb keinen Default bekommen.
+    // Issue #1766: "simulation_single_voice" = genau eine simulierte Stimme.
     confidence_scope: z
-      .enum(["simulation_consensus", "evidence", "empirical"])
+      .enum([
+        "simulation_consensus",
+        "simulation_single_voice",
+        "evidence",
+        "empirical",
+      ])
       .optional()
       .nullable(),
     // Issue #1012: Stufe, unter der der statement-Wortlaut entstand. Nur
