@@ -31,6 +31,8 @@ import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Mapping, Optional
 
+from .throttle import InputTokenRateLimiter
+
 STAGE_ID = "simulation_rounds"
 # Stage fuer physische Modellaufruf-Versuche, die im Auftrag eines Report-Runs
 # ueber ein IPC-Interview-Kommando ausgeloest werden (#1478 Codex P1, Runde 6).
@@ -59,10 +61,15 @@ class SubprocessBudgetGuard:
         simulation_dir: str,
         run_id: str,
         budget_config: Optional[dict] = None,
+        rate_limiter: Optional[InputTokenRateLimiter] = None,
     ):
         self.simulation_dir = simulation_dir
         self.run_id = run_id
         self.budget_config = budget_config or {}
+        # Eingabe-Tokens-pro-Minute-Limiter (#1772): einziger Punkt, an dem
+        # jeder Simulations-Aufruf beider Plattformen vorbeikommt (ein Guard,
+        # ein Eventloop). ``None`` = keine Drosselung.
+        self.rate_limiter = rate_limiter
         self.enforcement = self.budget_config.get("enforcement", "soft")
         self._started_monotonic = time.monotonic()
         self._calls = 0
@@ -94,7 +101,29 @@ class SubprocessBudgetGuard:
             config = None
         except (json.JSONDecodeError, OSError):
             config = None
-        return cls(simulation_dir, run_id, config)
+        return cls(
+            simulation_dir,
+            run_id,
+            config,
+            rate_limiter=InputTokenRateLimiter.from_environment(),
+        )
+
+    # -- Drosselung (#1772) ---------------------------------------------------
+
+    async def _acquire_rate_slot(self) -> None:
+        """Vor einem physischen Aufruf auf freie Token-Fensterkapazitaet warten.
+
+        Nur ``await asyncio.sleep`` (siehe ``throttle.py``): Abbruch und
+        Stop-Signale kommen sofort durch. Ohne Limiter ein No-Op.
+        """
+        limiter = self.rate_limiter
+        if limiter is not None:
+            await limiter.acquire()
+
+    def _release_rate_slot(self, input_tokens: Optional[int]) -> None:
+        limiter = self.rate_limiter
+        if limiter is not None:
+            limiter.release(input_tokens)
 
     def _invocation_logger(self, run_id: str):
         logger = self._loggers.get(run_id)
@@ -207,8 +236,13 @@ class SubprocessBudgetGuard:
         prompt_tokens: Optional[int] = None,
         completion_tokens: Optional[int] = None,
         error_type: Optional[str] = None,
+        cached_input_tokens: Optional[int] = None,
     ) -> None:
         """Einen CAMEL-Call in den gemeinsamen Ledger verbuchen.
+
+        ``cached_input_tokens`` (Issue #1772) landet nur im Call-Event; die
+        lokalen Zaehler (``_prompt_tokens``) und damit die Budgetpruefung
+        rechnen weiter mit den VOLLEN Eingabe-Tokens (konservativ).
 
         Ohne aktive :meth:`attribute_to`-Zuordnung geht der Call wie bisher an
         ``self.run_id``/``STAGE_ID`` und zaehlt in die lokalen Runden-Zaehler
@@ -244,6 +278,7 @@ class SubprocessBudgetGuard:
                 error_type=error_type,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                cached_input_tokens=cached_input_tokens,
             )
         except Exception as exc:  # noqa: BLE001 — Recording darf die Sim nicht stören
             print(f"[budget-guard] usage recording failed: {exc}", flush=True)
@@ -340,6 +375,12 @@ class _UsageTrackingModelProxy:
     aus ChatCompletion-Resultaten (falls der Provider sie liefert — sonst
     bleibt die Messung ehrlich unbekannt).
 
+    Issue #1772: ``arun``/``_arun`` laufen zusaetzlich durch den
+    Eingabe-Tokens-pro-Minute-Limiter des Guards (``await``-Wartezeit, kein
+    ``time.sleep``). Die synchronen ``run``/``_run`` werden bewusst nicht
+    gedrosselt: OASIS/CAMEL nutzt im Eventloop ausschliesslich die
+    asynchronen Pfade, sync laeuft nur der einzelne Preflight-Probe-Aufruf.
+
     Issue #764 (Review) — Protokoll-Audit:
         CAMEL/OASIS ruft ModelBackends ausschließlich über die vier
         Methoden ``run`` / ``_run`` / ``arun`` / ``_arun`` auf
@@ -401,6 +442,32 @@ class _UsageTrackingModelProxy:
             completion if isinstance(completion, int) else None,
         )
 
+    @staticmethod
+    def _extract_cached_input_tokens(result: Any) -> Optional[int]:
+        """Gecachte Eingabe-Tokens aus ``usage.prompt_tokens_details.cached_tokens``.
+
+        OpenAI-kompatible Antworten tragen den Wert dort (Pydantic-Objekt oder
+        Mapping). ``None`` = Provider hat keine Angabe geliefert -- nie ``0``
+        erfinden. Eigene Funktion statt Erweiterung von :meth:`_extract_usage`,
+        damit dessen Zwei-Tupel-Rueckgabe fuer bestehende Aufrufer stabil bleibt.
+        """
+        usage = getattr(result, "usage", None)
+        if usage is None:
+            return None
+        if isinstance(usage, Mapping):
+            details = usage.get("prompt_tokens_details")
+        else:
+            details = getattr(usage, "prompt_tokens_details", None)
+        if details is None:
+            return None
+        if isinstance(details, Mapping):
+            cached = details.get("cached_tokens")
+        else:
+            cached = getattr(details, "cached_tokens", None)
+        if isinstance(cached, bool) or not isinstance(cached, int) or cached < 0:
+            return None
+        return cached
+
     def run(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
@@ -416,11 +483,13 @@ class _UsageTrackingModelProxy:
             )
             raise
         prompt, completion = self._extract_usage(result)
+        cached = self._extract_cached_input_tokens(result)
         guard.record_call(
             latency_ms=(time.monotonic() - started) * 1000,
             success=True,
             prompt_tokens=prompt,
             completion_tokens=completion,
+            cached_input_tokens=cached,
         )
         return result
 
@@ -439,56 +508,74 @@ class _UsageTrackingModelProxy:
             )
             raise
         prompt, completion = self._extract_usage(result)
+        cached = self._extract_cached_input_tokens(result)
         guard.record_call(
             latency_ms=(time.monotonic() - started) * 1000,
             success=True,
             prompt_tokens=prompt,
             completion_tokens=completion,
+            cached_input_tokens=cached,
         )
         return result
 
     async def arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
+        # Budget ZUERST: ``BudgetExceededError`` darf nie hinter einer
+        # Drosselungs-Wartezeit verschwinden.
         guard._enforce_before_physical_call()
-        started = time.monotonic()
+        await guard._acquire_rate_slot()
+        prompt: Optional[int] = None
         try:
-            result = await target.arun(messages, *args, **kwargs)
-        except Exception as exc:
+            started = time.monotonic()
+            try:
+                result = await target.arun(messages, *args, **kwargs)
+            except Exception as exc:
+                guard.record_call(
+                    latency_ms=(time.monotonic() - started) * 1000,
+                    success=False,
+                    error_type=exc.__class__.__name__,
+                )
+                raise
+            prompt, completion = self._extract_usage(result)
+            cached = self._extract_cached_input_tokens(result)
             guard.record_call(
                 latency_ms=(time.monotonic() - started) * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
+                success=True,
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                cached_input_tokens=cached,
             )
-            raise
-        prompt, completion = self._extract_usage(result)
-        guard.record_call(
-            latency_ms=(time.monotonic() - started) * 1000,
-            success=True,
-            prompt_tokens=prompt,
-            completion_tokens=completion,
-        )
-        return result
+            return result
+        finally:
+            guard._release_rate_slot(prompt)
 
     async def _arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
         guard._enforce_before_physical_call()
-        started = time.monotonic()
+        await guard._acquire_rate_slot()
+        prompt: Optional[int] = None
         try:
-            result = await target._arun(messages, *args, **kwargs)
-        except Exception as exc:
+            started = time.monotonic()
+            try:
+                result = await target._arun(messages, *args, **kwargs)
+            except Exception as exc:
+                guard.record_call(
+                    latency_ms=(time.monotonic() - started) * 1000,
+                    success=False,
+                    error_type=exc.__class__.__name__,
+                )
+                raise
+            prompt, completion = self._extract_usage(result)
+            cached = self._extract_cached_input_tokens(result)
             guard.record_call(
                 latency_ms=(time.monotonic() - started) * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
+                success=True,
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                cached_input_tokens=cached,
             )
-            raise
-        prompt, completion = self._extract_usage(result)
-        guard.record_call(
-            latency_ms=(time.monotonic() - started) * 1000,
-            success=True,
-            prompt_tokens=prompt,
-            completion_tokens=completion,
-        )
-        return result
+            return result
+        finally:
+            guard._release_rate_slot(prompt)

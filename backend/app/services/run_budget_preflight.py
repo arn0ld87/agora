@@ -28,6 +28,24 @@ logger = get_logger("agora.run_budget_preflight")
 
 # Heuristiken, wenn keine historischen Messwerte vorliegen. Bewusst
 # konservativ und als solche in warnings dokumentiert.
+#
+# Issue #1772: Die frueheren pauschalen 1.000-5.000 Tokens je Aufruf galten fuer
+# kurze Einzelprompts (Graph, Persona, Bericht), nicht fuer die Simulation. Dort
+# waechst der Kontext je Agentenschritt mit der Runde, solange das Agenten-
+# Gedaechtnis nicht begrenzt ist. Gemessen am Lauf ``sim_cc6067a70603``
+# (2026-10-04, ``gpt-6-luna``, 24 Runden, 52 Agenten, Twitter+Reddit, 1.059
+# erfolgreiche Aufrufe): Mittel 33.700 Eingabe-Tokens je erfolgreichem Aufruf
+# (Median 20.600; Median der ersten Laufphase 3.800, der letzten 91.900),
+# rund 50 Ausgabe-Tokens. Das lineare Modell
+#     Eingabe-Tokens(Runde r) = BASE + GROWTH * r      (r = 1..Runden)
+# ist darauf kalibriert: Runde 1 ~5.200 (gemessen 3.800), Mittel bei 24 Runden
+# 2.000 + 3.200 * 12,5 = 42.000 (gemessen 33.700, bewusst konservativ ueber dem
+# Mittel), Runde 24 ~78.800 (gemessen 91.900 in der letzten Phase -- das
+# lineare Modell unterschaetzt das Ende, ueberschaetzt dafuer die Mitte).
+_SIM_CONTEXT_BASE_TOKENS = 2_000
+_SIM_CONTEXT_GROWTH_PER_ROUND = 3_200
+_SIM_OUTPUT_TOKENS_PER_CALL = 50
+# Fallback fuer andere Stages ohne eigenes Modell (nicht mehr fuer die Simulation).
 _HEURISTIC_TOKENS_PER_CALL_LOW = 1_000
 _HEURISTIC_TOKENS_PER_CALL_HIGH = 5_000
 _HEURISTIC_LATENCY_S_PER_CALL_LOW = 2.0
@@ -55,6 +73,32 @@ class _HistoryStats:
         self.runs_used = 0
         self.tokens_per_call: list[float] = []
         self.latency_s_per_call: list[float] = []
+
+
+def _fmt(value: float) -> str:
+    """Ganzzahl mit Punkt als Tausendertrenner (deutsche Schreibweise)."""
+    return f"{round(value):,}".replace(",", ".")
+
+
+def simulation_tokens_per_agent_step(
+    rounds: int, memory_context_cap_tokens: Optional[int] = None
+) -> float:
+    """Mittlere Eingabe-Tokens je Agentenschritt ueber ``rounds`` Runden.
+
+    Modell siehe Konstanten oben: Kontext je Schritt waechst linear mit der
+    Runde. ``memory_context_cap_tokens`` ist die Kontext-Obergrenze eines
+    begrenzten Agenten-Gedaechtnisses (``None`` = unbegrenzt, Standard): ab
+    der Runde, in der die Kurve die Obergrenze erreicht, bleibt der Kontext
+    konstant, die Gesamtsumme waechst danach linear in den Runden.
+    """
+    if rounds <= 0:
+        return 0.0
+    cap = memory_context_cap_tokens
+    total = 0.0
+    for round_number in range(1, rounds + 1):
+        context = _SIM_CONTEXT_BASE_TOKENS + _SIM_CONTEXT_GROWTH_PER_ROUND * round_number
+        total += min(context, cap) if cap is not None else context
+    return total / rounds
 
 
 def collect_historical_stats(limit: int = 30) -> _HistoryStats:
@@ -89,6 +133,55 @@ def collect_historical_stats(limit: int = 30) -> _HistoryStats:
     return stats
 
 
+def _tokens_per_call_estimate(
+    history: _HistoryStats,
+    *,
+    has_history: bool,
+    max_rounds: int,
+    memory_context_cap_tokens: Optional[int],
+) -> tuple[float, float, float, list[str]]:
+    """Tokens je Aufruf (untere/obere Schaetzung), Eingabeanteil und Warnungen.
+
+    Mit Verlaufsdaten gilt deren Median, sonst das Messwertmodell der Simulation.
+    """
+    warnings: list[str] = []
+    # ``input_share``: Anteil der Eingabe-Tokens an der Tokensumme (Kostenmodell).
+    input_share = 2 / 3
+    if history.tokens_per_call:
+        median_tokens = statistics.median(history.tokens_per_call)
+        tokens_per_call_low = median_tokens * 0.5
+        tokens_per_call_high = median_tokens * 2.0
+        if not has_history:
+            warnings.append(
+                f"Wenig historische Daten ({history.runs_used} Runs) — "
+                "Tokenschätzung unsicher."
+            )
+    else:
+        input_per_call = simulation_tokens_per_agent_step(
+            max_rounds, memory_context_cap_tokens
+        )
+        modelled_tokens_per_call = input_per_call + _SIM_OUTPUT_TOKENS_PER_CALL
+        tokens_per_call_low = modelled_tokens_per_call
+        tokens_per_call_high = modelled_tokens_per_call
+        input_share = input_per_call / modelled_tokens_per_call
+        if memory_context_cap_tokens is None:
+            memory_note = (
+                "Gedächtnis unbegrenzt angenommen: der Kontext wächst mit jeder Runde"
+            )
+        else:
+            memory_note = (
+                f"Gedächtnis auf {_fmt(memory_context_cap_tokens)} Kontext-Tokens begrenzt"
+            )
+        warnings.append(
+            "Keine historischen Verbrauchsdaten — Tokenschätzung basiert auf einer "
+            "Heuristik aus Messwerten (Lauf sim_cc6067a70603, 24 Runden, 52 Agenten, "
+            "2 Plattformen; Mittel 33.700 Eingabe-Tokens je Aufruf). "
+            f"{memory_note}; Schätzung ≈ {_fmt(input_per_call)} Eingabe-Tokens "
+            "je Agentenschritt."
+        )
+    return tokens_per_call_low, tokens_per_call_high, input_share, warnings
+
+
 def estimate_run(
     *,
     num_agents: int,
@@ -96,8 +189,25 @@ def estimate_run(
     models: Optional[list[PreflightModelRef]] = None,
     pricing: Optional[PricingRegistry] = None,
     history: Optional[_HistoryStats] = None,
+    platforms: int = 2,
+    memory_context_cap_tokens: Optional[int] = None,
+    default_token_cap: Optional[int] = None,
 ) -> PreflightEstimate:
-    """Preflight-Schätzung für einen Simulations-Run berechnen."""
+    """Preflight-Schätzung für einen Simulations-Run berechnen.
+
+    ``platforms``: Zahl der Plattformen, auf denen jeder Agent handelt (Standard
+    2 = Twitter+Reddit im Parallelrunner; 1 bei ``twitter_only``/``reddit_only``).
+    ``memory_context_cap_tokens``: Kontext-Obergrenze bei begrenztem
+    Agenten-Gedaechtnis; ``None`` (Standard) = unbegrenzt, Kontext waechst mit
+    der Runde (siehe ``simulation_tokens_per_agent_step``).
+    ``default_token_cap``: ein ggf. greifender Standard-Tokendeckel; liegt die
+    untere Schaetzung darueber, steht eine Warnung in der Antwort.
+
+    Annahme (kein Fehler): Der Budget-Zaehler ``budget_guard.record_call`` zaehlt
+    nur ERFOLGREICHE Aufrufe. Mit ``RateLimitError`` gescheiterte Versuche
+    verbrauchen real Eingabe-Tokens beim Anbieter, gehen aber nicht in die
+    Tokensumme ein -- Schaetzung und Deckel beziehen sich auf erfolgreiche Aufrufe.
+    """
     pricing = pricing or get_pricing_registry()
     models = models or []
     warnings: list[str] = []
@@ -119,22 +229,20 @@ def estimate_run(
     )
 
     # --- Tokens pro Call -----------------------------------------------------
-    if history.tokens_per_call:
-        median_tokens = statistics.median(history.tokens_per_call)
-        tokens_per_call_low = median_tokens * 0.5
-        tokens_per_call_high = median_tokens * 2.0
-        if not has_history:
-            warnings.append(
-                f"Wenig historische Daten ({history.runs_used} Runs) — "
-                "Tokenschätzung unsicher."
-            )
-    else:
-        tokens_per_call_low = _HEURISTIC_TOKENS_PER_CALL_LOW
-        tokens_per_call_high = _HEURISTIC_TOKENS_PER_CALL_HIGH
-        warnings.append(
-            "Keine historischen Verbrauchsdaten — Tokenschätzung basiert auf "
-            "konservativen Heuristiken."
+    tokens_per_call_low, tokens_per_call_high, input_share, token_warnings = (
+        _tokens_per_call_estimate(
+            history,
+            has_history=has_history,
+            max_rounds=max_rounds,
+            memory_context_cap_tokens=memory_context_cap_tokens,
         )
+    )
+    warnings.extend(token_warnings)
+    warnings.append(
+        "Der Budget-Zähler zählt nur erfolgreiche Modellaufrufe; mit "
+        "RateLimitError gescheiterte Versuche verbrauchen beim Anbieter "
+        "Eingabe-Tokens, erscheinen aber nicht in der Tokensumme."
+    )
 
     # --- Latenz pro Call -----------------------------------------------------
     if history.latency_s_per_call:
@@ -146,11 +254,13 @@ def estimate_run(
         latency_high = _HEURISTIC_LATENCY_S_PER_CALL_HIGH
 
     # --- Geplante Calls ------------------------------------------------------
-    calls_low = num_agents * max_rounds * _ACTIVE_RATIO_LOW
-    calls_high = num_agents * max_rounds * _ACTIVE_RATIO_HIGH
+    platform_count = max(1, int(platforms))
+    calls_low = num_agents * platform_count * max_rounds * _ACTIVE_RATIO_LOW
+    calls_high = num_agents * platform_count * max_rounds * _ACTIVE_RATIO_HIGH
     warnings.append(
         "LLM-Aufrufe pro Runde sind lastabhängig (Aktivierungsrate der "
-        "Agenten) — berechnet mit 30–100 % aktiven Agenten pro Runde."
+        f"Agenten) — berechnet mit 30–100 % aktiven Agenten pro Runde auf "
+        f"{platform_count} Plattform(en)."
     )
 
     tokens_low = _round_sig(calls_low * tokens_per_call_low)
@@ -193,7 +303,8 @@ def estimate_run(
         ) -> int:
             """Summenbildung über die bepreisten Modelle mit gemeinsamem Anteil.
 
-            Annahme: 2/3 Input, 1/3 Output (lange Agent-Kontexte). Defensive
+            Annahme: ``input_share`` Input (Standard 2/3, bei der Simulation aus
+            dem Messwertmodell ~99,9 %), der Rest Output. Defensive
             Validierung statt ``assert``: ``assert`` wird unter ``python -O``
             wegoptimiert, und die PricingRegistry-Quotes können theoretisch
             halbierte Felder liefern. Fehlende Preise fuehren zu ``0`` (kein
@@ -207,7 +318,7 @@ def estimate_run(
                 out_mtok = q.output_per_mtok_micros
                 if not isinstance(in_mtok, (int, float)) or not isinstance(out_mtok, (int, float)):
                     continue
-                blended = (2 * in_mtok + out_mtok) / 3
+                blended = input_share * in_mtok + (1 - input_share) * out_mtok
                 total += int(round(tokens * share * blended / 1_000_000))
             return total
 
@@ -245,6 +356,14 @@ def estimate_run(
                 "Für mindestens ein Modell liegt kein Richtpreis vor — "
                 "Kosten unbekannt (nicht 0)."
             )
+
+    if default_token_cap is not None and tokens_low > default_token_cap:
+        warnings.append(
+            f"Der Standard-Tokendeckel von {_fmt(default_token_cap)} würde diesen "
+            f"Lauf voraussichtlich abbrechen (untere Schätzung {_fmt(tokens_low)}); "
+            "ohne begrenztes Gedächtnis oder einen höheren Deckel endet er mit "
+            "budget_tokens."
+        )
 
     if has_history:
         data_quality = "medium" if cost_status == "unknown" else "high"

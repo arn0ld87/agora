@@ -80,7 +80,7 @@ Die Simulations-API ist nach Verantwortlichkeiten aufgeteilt:
 - `simulation_history.py` — historische Posts/Kommentare/Feeds und Profilgenerierung
 - `simulation_metrics.py` — Simulationsmetriken und Export
 - `simulation_compare.py` — Branch-/Run-Vergleich
-- `simulation_budget.py` — Budget-Preflight
+- `simulation_budget.py` — Budget-Preflight (`POST /api/simulation/preflight-estimate`; optional `platform` = `parallel` (Standard) | `twitter` | `reddit`, seit #1772; `400` bei anderem Wert)
 
 Wichtige Konfliktcodes:
 
@@ -169,7 +169,7 @@ Die Run-API umfasst unter anderem:
 - Export
 - Manifest
 - Replay
-- Usage/Budget
+- Usage/Budget (ohne `budget` im Start-Aufruf gilt seit #1772 ein harter Standard-Tokendeckel, `AGORA_SIM_DEFAULT_MAX_TOKENS`, Standard 20 Mio., `0` = aus; sichtbar in `metadata.budget`)
 - LLM-Routing je Run bzw. Stage
 
 Ungültige Filterparameter von `GET /api/runs` (z. B. `limit` außerhalb 1–200, unbekannter `status`) liefern `400` mit `code: "validation_error"`, einem Text in `error` und den Pydantic-Details unter `details` (#1679).

@@ -79,6 +79,12 @@ try:
 except ImportError:  # direct script execution
     from sim_runtime.run_control import RoundAction, RoundBoundaryControl
 
+# Parallelitaet der Modellaufrufe je Plattform (#1772).
+try:
+    from .throttle import resolve_sim_max_concurrency
+except ImportError:  # direct script execution
+    from sim_runtime.throttle import resolve_sim_max_concurrency
+
 # Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
 from app.services.simulation_activity_policy import (
     TWITTER_FOLLOWING_POST_COUNT,
@@ -540,7 +546,8 @@ class SinglePlatformRunner:
             agent_graph=self.agent_graph,
             platform=platform_arg,
             database_path=db_path,
-            semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
+            # Gleichzeitige LLM-Aufrufe dieser Plattform, konfigurierbar (#1772).
+            semaphore=resolve_sim_max_concurrency(),
         )
 
         await self.env.reset()

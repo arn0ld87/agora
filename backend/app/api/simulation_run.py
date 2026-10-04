@@ -232,6 +232,31 @@ def _parse_ai_model_ref(data: "dict[str, Any]") -> "AiModelRef | None":
     return ai_model_ref
 
 
+def _effective_start_budget(
+    user_budget: "RunBudgetConfig | None", run_id: str
+) -> "RunBudgetConfig | None":
+    """Wirksames Budget eines frischen Simulationsstarts (Issue #1772).
+
+    Ein vom Nutzer (oder dem Demo-Limit) gesetztes Budget gewinnt immer und
+    wird nicht ergaenzt -- auch dann nicht, wenn es keinen Tokendeckel enthaelt.
+    Ohne Nutzerbudget gilt der harte Standard-Tokendeckel
+    (``AGORA_SIM_DEFAULT_MAX_TOKENS``, ``0`` = abgeschaltet -> ``None``). Nur der
+    Startpfad ruft das auf: Replay, Neustart und Branch geben das Budget des
+    Ursprungslaufs weiter und bekommen keinen nachtraeglichen Deckel.
+    """
+    if user_budget is not None:
+        return user_budget
+    from ..services.run_budget import default_simulation_budget
+
+    default_budget = default_simulation_budget()
+    if default_budget is not None:
+        logger.info(
+            "Standard-Tokendeckel %s fuer %s gesetzt (kein Nutzerbudget)",
+            default_budget.max_tokens, run_id,
+        )
+    return default_budget
+
+
 def _parse_budget_config(data: "dict[str, Any]") -> "RunBudgetConfig | None":
     """Run-Budget (Issue #764): optionale Token-/Kosten-/Zeit-/Aufruflimits."""
     raw_budget = data.get('budget')
@@ -820,8 +845,9 @@ def start_simulation():
             # Alt-Artefakte (budget_abort.json eines früheren Runs) werden
             # entfernt, damit ein Neustart nicht sofort wieder abbricht.
             from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+            effective_budget = _effective_start_budget(req.budget_config, run_id)
             _apply_budget_to_simulation(
-                req.simulation_id, run_id, req.budget_config, _set_run_budget_config
+                req.simulation_id, run_id, effective_budget, _set_run_budget_config
             )
 
             resolved_route, resolved_api_key = _resolve_start_route(run_id, req.llm_runtime)

@@ -65,6 +65,8 @@ class _Bucket:
         "duration_ms",
         "input_tokens",
         "output_tokens",
+        "cached_input_tokens",
+        "events_with_cached_tokens",
         "events_with_tokens",
         "events_without_tokens",
         "failed_calls",
@@ -80,6 +82,8 @@ class _Bucket:
         self.duration_ms = 0
         self.input_tokens = 0
         self.output_tokens = 0
+        self.cached_input_tokens = 0
+        self.events_with_cached_tokens = 0
         self.events_with_tokens = 0
         self.events_without_tokens = 0
         self.failed_calls = 0
@@ -122,6 +126,13 @@ class _Bucket:
             self.output_tokens += completion if isinstance(completion, int) else 0
         else:
             self.events_without_tokens += 1
+
+        # Issue #1772: gecachte Eingabe-Tokens, rein informativ. Altbestand und
+        # Provider ohne Angabe liefern das Feld nicht -> zaehlt nicht mit.
+        cached = event.get("cached_input_tokens")
+        if isinstance(cached, int) and not isinstance(cached, bool) and cached >= 0:
+            self.events_with_cached_tokens += 1
+            self.cached_input_tokens += cached
 
         # f001 (Slice `jev-budget`): ein Aufrufer, der seine Kosten bereits
         # selbst ueber dieselbe PricingRegistry beziffert hat, aber auf seiner
@@ -217,6 +228,9 @@ class _Bucket:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
+            cached_input_tokens=(
+                self.cached_input_tokens if self.events_with_cached_tokens > 0 else None
+            ),
             llm_calls=self.llm_calls,
             failed_llm_calls=(
                 self.failed_calls if self.events_without_outcome == 0 else None

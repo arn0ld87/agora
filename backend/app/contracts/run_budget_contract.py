@@ -94,6 +94,14 @@ class UsageMetrics(BaseModel):
     input_tokens: Optional[int] = Field(None, ge=0)
     output_tokens: Optional[int] = Field(None, ge=0)
     total_tokens: Optional[int] = Field(None, ge=0)
+    # Davon aus dem Prompt-Cache bedienter Anteil der Eingabe-Tokens
+    # (``usage.prompt_tokens_details.cached_tokens`` OpenAI-kompatibler
+    # Antworten, Issue #1772). Rein informativ: Budget und Kosten rechnen
+    # weiter mit den vollen ``input_tokens`` (konservativ). ``None`` = kein
+    # Aufruf hat die Angabe geliefert (Altbestand, Provider ohne Cache-Angabe);
+    # sonst die Summe der GEMELDETEN Werte -- bei gemischten Daten eine
+    # Untergrenze, nie eine Gesamtaussage ueber alle Aufrufe.
+    cached_input_tokens: Optional[int] = Field(None, ge=0)
     llm_calls: int = Field(0, ge=0)
     # Davon fehlgeschlagene Providerattempts (``success=False`` im Ledger,
     # Issue #1766). ``None`` = unbekannt: Summaries aus der Zeit vor diesem

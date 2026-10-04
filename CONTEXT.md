@@ -242,6 +242,8 @@ Run-Budgets können Zeit, Tokens, Kosten und LLM-Aufrufe begrenzen. Die Durchset
 
 Seit #1478 werden Text-, Tool-, Vision- und Interview-Pfade pro physischem Provider-Versuch geprüft und im Ledger erfasst. `BudgetExceededError` ist ein harter Laufzustand und darf nicht zu einer freundlichen Fallback-Antwort weichgespült werden.
 
+Seit #1772 gilt für eine Simulation ohne Nutzerbudget ein harter Standard-Tokendeckel (`AGORA_SIM_DEFAULT_MAX_TOKENS`, Standard 20 Mio., `0` = aus). Die Schätzung vor dem Start rechnet für die Simulation mit wachsendem Kontext je Runde und nennt als Annahme, dass der Budget-Zähler nur erfolgreiche Aufrufe zählt.
+
 ---
 
 ## 8. Reproduzierbarkeit
