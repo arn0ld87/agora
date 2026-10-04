@@ -67,7 +67,10 @@ from .search_dedup import (
     registry_for,
 )
 from .section_coverage import section_has_sufficient_evidence
-from .simulation_snapshot import capture_simulation_snapshot
+from .simulation_snapshot import (
+    capture_simulation_snapshot,
+    load_simulation_llm_call_stats,
+)
 from .text_verification import verify_prose
 from .threshold_deviation import prior_threshold_lines, threshold_conflict_findings
 from .schemas import (
@@ -1706,12 +1709,19 @@ def _build_partial_report(
     missing_section_count = max(
         len(outline.sections) - len(completed_section_titles), 0
     )
+    # Issue #1766: auch der Teil-Report muss ausweisen, wenn die Simulation
+    # an fehlgeschlagenen LLM-Aufrufen litt.
+    sim_llm_total, sim_llm_failed = load_simulation_llm_call_stats(
+        report.simulation_id
+    )
     report.run_degradations = collect_run_degradations(
         persona_fallback_count=persona_fallbacks,
         persona_total=persona_total,
         failed_section_indices=failed_section_indices or [],
         fallback_outline_used=events_for(agent).fallback_outline_used,
         cancelled_missing_section_count=missing_section_count,
+        simulation_llm_calls_total=sim_llm_total,
+        simulation_llm_calls_failed=sim_llm_failed,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
@@ -2237,8 +2247,16 @@ def generate_report(
         # zustande gekommenen Interviews — jede Komponente tat, was sie sollte,
         # nur zog niemand die Summe.
         persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
+        # Issue #1766: Status und Rundenzahl der Simulation sehen einen Lauf
+        # nicht, dessen LLM-Aufrufe massenhaft scheiterten (Rate-Limits);
+        # nur das Usage-Ledger des Simulations-Jobs kennt die Fehlerzahl.
+        sim_llm_total, sim_llm_failed = load_simulation_llm_call_stats(
+            report.simulation_id
+        )
         report.run_degradations = collect_run_degradations(
             simulation_snapshot=report.simulation_snapshot,
+            simulation_llm_calls_total=sim_llm_total,
+            simulation_llm_calls_failed=sim_llm_failed,
             # Issue #1419: Ein Lauf, dessen Personas saemtlich Platzhalter
             # waren, meldete sich bis hierher als vollstaendig. Die
             # Vorbereitung erfasst den Ausfall bereits — nur zog ihn niemand

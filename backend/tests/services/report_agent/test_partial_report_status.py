@@ -124,6 +124,27 @@ def test_all_sections_present_without_degradation_stays_completed(tmp_path):
     assert result.status == ReportStatus.COMPLETED
 
 
+def test_simulation_llm_failure_rate_reaches_the_partial_report(tmp_path):
+    """Issue #1766: auch der Teil-Report weist die Ausfallquote aus."""
+    with patch(
+        "app.services.report_agent.workflow.load_simulation_llm_call_stats",
+        return_value=(3284, 2225),
+    ) as mock_stats:
+        result = _run_partial(
+            tmp_path,
+            outline_sections=2,
+            completed=["Section 1", "Section 2"],
+        )
+
+    mock_stats.assert_called_once_with("sim_test")
+    entries = [e for e in result.run_degradations if e["component"] == "simulation"]
+    assert [e["reason"] for e in entries] == [
+        "2225_of_3284_simulation_llm_calls_failed"
+    ]
+    assert entries[0]["severity"] == "blocking"
+    assert result.status == ReportStatus.INCOMPLETE
+
+
 # ---------------------------------------------------------------------------
 # Szenario 3: Fallback-Outline hinterlässt eine Warnung
 # ---------------------------------------------------------------------------

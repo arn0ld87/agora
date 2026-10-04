@@ -79,6 +79,60 @@ def _simulation_degradations(
     return found
 
 
+#: Ab diesem Anteil fehlgeschlagener LLM-Aufrufe der Simulation (Issue #1766)
+#: weist der Bericht eine Warnung aus. Darunter gelten vereinzelte Ausfaelle
+#: als Betriebsrauschen.
+SIMULATION_LLM_FAILURE_WARNING_RATIO = 0.10
+
+#: Ab diesem Anteil ist die Simulation faktisch ohne Modellantwort geblieben;
+#: der Bericht beruht dann auf einer ausgedünnten Grundlage und stuft ab.
+SIMULATION_LLM_FAILURE_BLOCKING_RATIO = 0.50
+
+
+def _simulation_llm_failure_degradations(
+    total: Optional[int],
+    failed: Optional[int],
+) -> List[Dict[str, Any]]:
+    """Fehlgeschlagene LLM-Aufrufe der Simulation (Issue #1766).
+
+    Im Lauf ``sim_cc6067a70603`` scheiterten 2.225 von 3.284 Aufrufen an
+    Rate-Limits (68 %), 640 Agentenschritte blieben ohne Antwort — und die
+    Simulation endete trotzdem ``completed`` mit allen Runden. Status und
+    Rundenzahl sehen so einen Lauf nicht; nur der Aufrufzaehler des Ledgers
+    kennt den Ausfall.
+
+    Gezaehlt werden physische Providerattempts (inkl. Wiederholungen), nicht
+    logische Agentenschritte. ``None`` heisst "Fehlerzahl unbekannt" (Altbestand
+    ohne ``failed_llm_calls``) und erzeugt bewusst keinen Eintrag — weder eine
+    Warnung noch eine Aussage "alles in Ordnung".
+    """
+    if total is None or failed is None or total <= 0 or failed <= 0:
+        return []
+
+    ratio = failed / total
+    if ratio < SIMULATION_LLM_FAILURE_WARNING_RATIO:
+        return []
+
+    percent = f"{ratio * 100:.1f}".replace(".", ",")
+    return [
+        _entry(
+            "simulation",
+            f"{failed}_of_{total}_simulation_llm_calls_failed",
+            (
+                f"{failed} von {total} LLM-Aufrufen der zugrunde liegenden "
+                f"Simulation sind fehlgeschlagen ({percent} %, Wiederholungs"
+                "versuche eingerechnet). Die Beiträge der betroffenen "
+                "Agentenschritte fehlen im Simulationsverlauf."
+            ),
+            severity=(
+                "blocking"
+                if ratio >= SIMULATION_LLM_FAILURE_BLOCKING_RATIO
+                else "warning"
+            ),
+        )
+    ]
+
+
 def _persona_degradations(
     fallback_count: int,
     total: int,
@@ -205,6 +259,8 @@ def collect_run_degradations(
     contract_validation_errors: Sequence[Any] = (),
     fallback_outline_used: bool = False,
     cancelled_missing_section_count: int = 0,
+    simulation_llm_calls_total: Optional[int] = None,
+    simulation_llm_calls_failed: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Alle deterministisch feststellbaren Qualitätsmängel eines Laufs.
 
@@ -212,6 +268,11 @@ def collect_run_degradations(
     inhaltlich beruht, steht vor dem, was beim Erzeugen schiefging.
     """
     found: List[Dict[str, Any]] = _simulation_degradations(simulation_snapshot)
+    found.extend(
+        _simulation_llm_failure_degradations(
+            simulation_llm_calls_total, simulation_llm_calls_failed
+        )
+    )
     found.extend(_outline_degradations(fallback_outline_used))
     # Reihenfolge nach Schwere fuer den Leser: worauf der Bericht beruht,
     # steht vor dem, was beim Erzeugen schiefging. Die Personas sind die

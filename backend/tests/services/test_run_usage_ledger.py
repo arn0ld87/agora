@@ -112,6 +112,91 @@ class TestAggregation:
         assert usage.totals.cost_micros is not None  # bekannter Anteil ausgewiesen
 
 
+class TestFailedLlmCalls:
+    """Issue #1766: fehlgeschlagene Providerattempts sind im Summary sichtbar."""
+
+    def test_failures_are_counted_next_to_total_calls(self, pricing):
+        events = [
+            _event(),
+            _event(),
+            _event(success=False, prompt_tokens=None, completion_tokens=None,
+                   error_type="RateLimitError"),
+            _event(success=False, prompt_tokens=None, completion_tokens=None,
+                   error_type="RateLimitError"),
+            _event(success=False, prompt_tokens=None, completion_tokens=None,
+                   error_type="RateLimitError", stage="simulation_rounds"),
+        ]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+
+        assert usage.totals.llm_calls == 5
+        assert usage.totals.failed_llm_calls == 3
+        assert usage.by_stage["report_generation"].failed_llm_calls == 2
+        assert usage.by_stage["simulation_rounds"].failed_llm_calls == 1
+        assert usage.by_stage["simulation_rounds"].llm_calls == 1
+
+    def test_measured_zero_failures_is_zero_not_unknown(self, pricing):
+        usage = aggregate_usage("run_x", events=[_event(), _event()], pricing=pricing)
+
+        assert usage.totals.failed_llm_calls == 0
+
+    def test_event_without_outcome_makes_failure_count_unknown(self, pricing):
+        """Altbestand ohne ``success`` darf nie als "0 Fehler" erscheinen."""
+        legacy = _event()
+        del legacy["success"]
+        usage = aggregate_usage(
+            "run_x", events=[legacy, _event(success=False)], pricing=pricing
+        )
+
+        assert usage.totals.llm_calls == 2
+        assert usage.totals.failed_llm_calls is None
+
+    def test_summary_from_before_the_field_loads_with_unknown_failures(
+        self, tmp_path, monkeypatch
+    ):
+        run_id = "run_legacy"
+        monkeypatch.setattr(
+            run_usage_ledger.ArtifactLocator, "run_dir", lambda _rid: str(tmp_path)
+        )
+        legacy_summary = {
+            "schema_version": 1,
+            "totals": {
+                "llm_calls": 3284,
+                "tokens_status": "partial",
+                "cost_status": "unknown",
+                "duration_ms": 0,
+            },
+        }
+        (tmp_path / run_usage_ledger.USAGE_SUMMARY_FILENAME).write_text(
+            json.dumps(legacy_summary), encoding="utf-8"
+        )
+
+        usage = run_usage_ledger.load_usage_summary(run_id)
+
+        assert usage is not None
+        assert usage.totals.llm_calls == 3284
+        assert usage.totals.failed_llm_calls is None
+
+    def test_persisted_summary_round_trips_the_failure_count(
+        self, tmp_path, monkeypatch, pricing
+    ):
+        run_id = "run_round_trip"
+        monkeypatch.setattr(
+            run_usage_ledger.ArtifactLocator, "run_dir", lambda _rid: str(tmp_path)
+        )
+        monkeypatch.setattr(run_usage_ledger, "get_pricing_registry", lambda: pricing)
+        lines = [json.dumps(_event()), json.dumps(_event(success=False))]
+        (tmp_path / run_usage_ledger.EVENTS_FILENAME).write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+
+        run_usage_ledger.persist_usage_summary(run_id)
+        restored = run_usage_ledger.load_usage_summary(run_id)
+
+        assert restored is not None
+        assert restored.totals.llm_calls == 2
+        assert restored.totals.failed_llm_calls == 1
+
+
 class TestReportedCostMicros:
     """f001 (Slice `jev-budget`): ein Aufrufer ohne Rohtoken auf seiner
     Schicht (Jev-Decision über ``DecisionResult.cost_micros``, siehe
