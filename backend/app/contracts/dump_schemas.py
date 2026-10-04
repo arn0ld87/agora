@@ -27,6 +27,7 @@ from app.contracts.readiness_contract import (
     PostgresReadinessCheck,
 )
 from app.contracts.report_status_contract import ReportStatusResponse
+from app.contracts.contested_question_contract import ContestedQuestion
 from app.contracts.simulation_status_contract import SimulationStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
@@ -150,6 +151,8 @@ CONTRACTS: dict[str, type] = {
     "branch-comparison.schema.json": BranchComparison,
     # Branch-Overrides fuer POST /api/simulation/<id>/branch (Issue #886)
     "branch-overrides.schema.json": BranchOverrides,
+    # Streitfrage eines Laufs (Issue #1778, Schritt 1.4)
+    "contested-question.schema.json": ContestedQuestion,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)

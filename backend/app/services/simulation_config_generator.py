@@ -17,6 +17,7 @@ from typing import Dict, Any, List, Optional, Callable
 
 
 from ..config import Config
+from ..contracts.contested_question_contract import ContestedQuestion
 from ..contracts.provider_types import PROVIDER_CLAUDE_CLI, PROVIDER_CODEX_CLI
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
@@ -36,6 +37,7 @@ from . import simulation_config_events as _simulation_config_events
 from . import simulation_config_agents as _simulation_config_agents
 from . import simulation_stance_graph as _stance_graph
 from .degradation_collector import DegradationCollector
+from .simulation_config_contested_question import generate_contested_question
 
 logger = get_logger("agora.simulation_config")
 
@@ -240,6 +242,7 @@ class SimulationConfigGenerator:
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
         contested_topic_types: Optional[Collection[str]] = None,
         degradations: Optional[DegradationCollector] = None,
+        contested_question_override: Optional[str] = None,
     ) -> SimulationParameters:
         """
         Intelligently generate complete simulation configuration (step-by-step generation)
@@ -258,6 +261,9 @@ class SimulationConfigGenerator:
                 (Issue #1759). ``None`` liest sie aus der Ontologie des Projekts;
                 leer bedeutet: bisheriges Stance-Verhalten ohne Graph-Ableitung.
             degradations: Optionaler Sammler für sichtbare Stance-Warnungen.
+            contested_question_override: Nutzervorgabe für die Streitfrage
+                (#1778). Nichtleer: übernimmt sie unverändert mit
+                ``origin="user"``; sonst leitet der Assistent sie per LLM ab.
 
         Returns:
             SimulationParameters: Complete simulation parameters
@@ -275,8 +281,8 @@ class SimulationConfigGenerator:
         # Calculate total steps
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
         total_steps = (
-            3 + num_batches
-        )  # time config + event config + N batch agents + platform config
+            4 + num_batches
+        )  # Streitfrage + time + event + N batch agents + platform config
         current_step = 0
 
         def report_progress(step: int, message: str):
@@ -293,17 +299,28 @@ class SimulationConfigGenerator:
             entities=entities,
         )
 
+        # ========== Schritt 0: Streitfrage des Laufs bestimmen (#1778) ==========
+        report_progress(1, "Streitfrage wird bestimmt...")
+        if contested_question_override and contested_question_override.strip():
+            cq = ContestedQuestion(
+                statement=contested_question_override.strip(), origin="user"
+            )
+        else:
+            cq = generate_contested_question(
+                self._call_llm_with_retry, simulation_requirement
+            )
+
         reasoning_parts = []
 
         # ========== Step 1: Generate time configuration ==========
-        report_progress(1, "Generating time configuration...")
+        report_progress(2, "Generating time configuration...")
         num_entities = len(entities)
         time_config_result = self._generate_time_config(context, num_entities)
         time_config = self._parse_time_config(time_config_result, num_entities)
         reasoning_parts.append(f"Time config: {time_config_result.get('reasoning', 'Success')}")
 
         # ========== Step 2: Generate event configuration ==========
-        report_progress(2, "Generating event configuration and hot topics...")
+        report_progress(3, "Generating event configuration and hot topics...")
         event_config_result = self._generate_event_config(context, simulation_requirement, entities)
         event_config = self._parse_event_config(event_config_result)
         reasoning_parts.append(f"Event config: {event_config_result.get('reasoning', 'Success')}")
@@ -325,7 +342,7 @@ class SimulationConfigGenerator:
             ]
 
             report_progress(
-                3,
+                4,
                 f"Generating agent configuration in {num_batches} parallel "
                 f"batch(es) (1-{len(entities)}/{len(entities)})...",
             )
@@ -338,7 +355,7 @@ class SimulationConfigGenerator:
             )
 
             report_progress(
-                2 + num_batches,
+                3 + num_batches,
                 f"Agent configuration batches complete ({len(all_agent_configs)}/{len(entities)})...",
             )
 
@@ -411,6 +428,7 @@ class SimulationConfigGenerator:
             neo4j_uri=Config.NEO4J_URI,
             neo4j_user=Config.NEO4J_USER,
             generation_reasoning=" | ".join(reasoning_parts),
+            contested_question=cq.model_dump(),
         )
 
         logger.info(

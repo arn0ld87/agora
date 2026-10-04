@@ -109,3 +109,11 @@ class AgentActivityConfigSchema(BaseModel):
 
 class AgentConfigsResponse(BaseModel):
     agent_configs: list[AgentActivityConfigSchema] = Field(default_factory=list)
+
+
+class ContestedQuestionResponse(BaseModel):
+    """LLM-Antwortschema für die Streitfrage des Laufs (Issue #1778, Schritt 1.4)."""
+
+    has_contested_question: bool
+    statement: str | None = None
+    absence_reason: str | None = None

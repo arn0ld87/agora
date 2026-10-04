@@ -1,0 +1,46 @@
+{
+  "$id": "https://alexle135.de/schemas/contested-question.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "absence_reason": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Absence Reason"
+    },
+    "origin": {
+      "default": "none",
+      "enum": [
+        "assistant",
+        "user",
+        "none"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "statement": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "minLength": 10,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Statement"
+    }
+  },
+  "title": "ContestedQuestion",
+  "type": "object"
+}
