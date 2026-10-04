@@ -391,6 +391,39 @@ def read_actions_from_file(
 # ---------------------------------------------------------------------------
 
 
+def action_log_health(simulation_id: str, base_dir: str | Path) -> tuple[int, int]:
+    """(vorhandene Protokolldateien, unlesbare Zeilen) einer Simulation.
+
+    ``get_all_actions`` überspringt fehlende Dateien und defekte Zeilen
+    stillschweigend. Wer aus der Aktionsliste einen Messwert ableitet
+    (Issue #1778: Positionierungsquote), muss „nichts gesagt" von „nicht
+    lesbar" unterscheiden können. Leere Zeilen zählen nicht als unlesbar.
+    """
+    sim_dir = safe_join_within_root(
+        str(base_dir), validate_path_id(simulation_id, field_name="simulation_id")
+    )
+    log_files = 0
+    unreadable_lines = 0
+    for log_path in (
+        os.path.join(sim_dir, "twitter", "actions.jsonl"),
+        os.path.join(sim_dir, "reddit", "actions.jsonl"),
+        os.path.join(sim_dir, "actions.jsonl"),
+    ):
+        if not os.path.exists(log_path):
+            continue
+        log_files += 1
+        with open(log_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    json.loads(line)
+                except json.JSONDecodeError:
+                    unreadable_lines += 1
+    return log_files, unreadable_lines
+
+
+
 def get_all_actions(
     simulation_id: str,
     base_dir: str | Path,

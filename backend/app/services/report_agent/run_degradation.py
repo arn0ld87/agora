@@ -246,6 +246,40 @@ def _cancellation_degradations(missing_section_count: int) -> List[Dict[str, Any
     ]
 
 
+_STANCE_UNAVAILABLE_DETAILS: Dict[str, str] = {
+    "read_failed": (
+        "Simulationskonfiguration oder Aktionsprotokoll konnten nicht gelesen werden"
+    ),
+    "action_log_missing": "Zu diesem Lauf liegt kein Aktionsprotokoll vor",
+    "action_log_unreadable": "Das Aktionsprotokoll enthält unlesbare Zeilen",
+}
+
+
+def stance_analysis_unavailable(reason: str) -> Dict[str, Any]:
+    """Marker für eine Haltungsanalyse, die nicht gerechnet werden konnte.
+
+    Bleibt im Prozess (Workflow → ``collect_run_degradations``) und wird nicht
+    persistiert; ``reason`` ist ein Schlüssel aus ``_STANCE_UNAVAILABLE_DETAILS``.
+    """
+    return {"unavailable_reason": reason}
+
+
+def _stance_unavailable_degradations(reason: Any) -> List[Dict[str, Any]]:
+    detail = _STANCE_UNAVAILABLE_DETAILS.get(str(reason), "Die Ursache ist unbekannt")
+    return [
+        _entry(
+            "simulation_positioning",
+            f"stance_analysis_unavailable_{reason}",
+            (
+                f"Die Haltungsanalyse ist ausgefallen: {detail}. Eine "
+                "Positionierungsquote liegt für diesen Bericht nicht vor; das "
+                "sagt nichts über den Simulationsverlauf aus."
+            ),
+            severity="warning",
+        )
+    ]
+
+
 def _positioning_degradations(
     analysis: Optional[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -259,7 +293,12 @@ def _positioning_degradations(
     Degradation ist sichtbar. Ohne Analyse oder ohne Streitfrage wird nichts
     behauptet.
     """
-    if not isinstance(analysis, Mapping) or analysis.get("applicable") is not True:
+    if not isinstance(analysis, Mapping):
+        return []
+    # Review PR #1780: ein Ausfall der Analyse bleibt sichtbar.
+    if analysis.get("unavailable_reason"):
+        return _stance_unavailable_degradations(analysis.get("unavailable_reason"))
+    if analysis.get("applicable") is not True:
         return []
 
     positioned = analysis.get("voices_positioned")

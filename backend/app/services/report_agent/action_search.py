@@ -27,7 +27,7 @@ from .sections import action_content, truncate_text
 _MIN_LIMIT = 1
 _MAX_LIMIT = 20
 
-#: Suchwörter unter dieser Länge zählen nicht (Artikel, Füllwörter).
+#: Ab dieser Länge trifft ein Suchwort als Teilstring; kürzere siehe ``_query_terms``.
 _MIN_QUERY_WORD_LENGTH = 4
 
 #: Höchstlänge des Wortlauts im Beleg-Snippet und in der Trefferliste.
@@ -130,31 +130,40 @@ def text_contributions(actions: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]
     ]
 
 
-def _is_abbreviation(word: str) -> bool:
-    """Kurze Namen und Abkürzungen wie „AfD", „EU" oder „G7".
-
-    Erkannt an der Schreibweise der Suchanfrage: ein Großbuchstabe nach dem
-    ersten Zeichen oder eine Ziffer. „die" und „Die" sind damit keine.
-    """
-    return len(word) >= 2 and (
-        any(char.isupper() for char in word[1:]) or any(char.isdigit() for char in word)
-    )
+#: Kurze Funktionswörter, die kein Suchwort sind. Alle anderen Wörter unter
+#: vier Zeichen gelten als Kürzel („AfD", „EU", „G7") — unabhängig von der
+#: Schreibweise der Anfrage, damit „afd" dasselbe findet wie „AfD".
+_SHORT_STOPWORDS = frozenset(
+    {
+        # Deutsch
+        "ab", "als", "am", "an", "auf", "aus", "bei", "bin", "bis", "da", "das", "dem",
+        "den", "der", "des", "die", "du", "ein", "er", "es", "für", "hat", "ich", "ihm",
+        "ihn", "ihr", "im", "in", "ist", "ja", "man", "mir", "mit", "nie", "nun", "nur",
+        "ob", "oft", "so", "um", "und", "uns", "vom", "von", "vor", "war", "was", "wem",
+        "wen", "wer", "wie", "wir", "wo", "zu", "zum", "zur",
+        # Englisch
+        "a", "all", "and", "any", "are", "as", "at", "be", "but", "by", "can", "did", "do",
+        "for", "had", "has", "he", "her", "him", "his", "how", "i", "if", "is", "it",
+        "its", "me", "my", "no", "nor", "not", "of", "on", "or", "our", "out", "she",
+        "the", "to", "too", "up", "us", "we", "who", "why", "you",
+    }
+)
 
 
 def _query_terms(query: str) -> tuple[List[str], List[str]]:
-    """Suchwörter der Anfrage: (Wörter für Teilstring-Treffer, Abkürzungen).
+    """Suchwörter der Anfrage: (Wörter für Teilstring-Treffer, Kürzel).
 
-    Wörter ab vier Zeichen treffen als Teilstring. Kürzere zählen nur, wenn
-    sie eine Abkürzung sind, und treffen dann nur als ganzes Wort — sonst
-    fände „EU" jeden Beitrag mit „neu".
+    Wörter ab vier Zeichen treffen als Teilstring. Kürzere Wörter sind Kürzel,
+    sofern sie kein Funktionswort sind, und treffen nur als ganzes Wort —
+    sonst fände „EU" jeden Beitrag mit „neu".
     """
     words: List[str] = []
     abbreviations: List[str] = []
-    for word in _WORD_RE.findall(query or ""):
+    for word in _WORD_RE.findall((query or "").lower()):
         if len(word) >= _MIN_QUERY_WORD_LENGTH:
-            words.append(word.lower())
-        elif _is_abbreviation(word):
-            abbreviations.append(word.lower())
+            words.append(word)
+        elif len(word) >= 2 and word not in _SHORT_STOPWORDS:
+            abbreviations.append(word)
     return words, abbreviations
 
 
@@ -190,8 +199,8 @@ def search_simulation_actions(
 
     Filter: ``agent_name`` als Teilstring ohne Groß-/Kleinschreibung,
     ``round_from``/``round_to`` einschließlich. ``query`` wird in Wörter mit
-    mindestens vier Zeichen zerlegt, dazu kommen kürzere Abkürzungen wie
-    „AfD" als ganzes Wort (``_query_terms``); die Punktzahl eines Beitrags ist
+    mindestens vier Zeichen zerlegt, dazu kommen kürzere Kürzel wie „AfD"
+    als ganzes Wort, unabhängig von der Schreibweise (``_query_terms``); die Punktzahl eines Beitrags ist
     die Zahl der Suchwörter, die in seinem Text vorkommen, Beiträge ohne
     Treffer fallen heraus. Eine leere ``query`` filtert nicht nach Text.
 

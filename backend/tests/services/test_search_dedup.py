@@ -317,3 +317,38 @@ def test_beitragssuche_mit_treffern_wird_nicht_gemerkt():
     assert is_empty_result(ActionSearchResult(query="AfD")) is True
     assert is_empty_result(ActionSearchResult(query="AfD", total_matching=2, total_actions=9)) is False
     assert dedup_key("quick_search", {"query": "AfD"}) == "AfD"
+
+
+def test_hinweis_zur_beitragssuche_behauptet_keine_allgemeine_datenluecke():
+    """Review PR #1780: leer waren nur die Beiträge, nicht der Datenbestand."""
+    from app.services.report_agent.search_dedup import (
+        REPEATED_EMPTY_ACTION_SEARCH_MSG,
+        repeated_empty_search_message,
+    )
+
+    text = repeated_empty_search_message(
+        "search_simulation_actions",
+        {"query": "AfD", "agent_name": "Hebamme"},
+        tool_calls_count=2,
+        max_tool_calls=5,
+    )
+
+    assert text == REPEATED_EMPTY_ACTION_SEARCH_MSG.format(
+        query="AfD", tool_calls_count=2, max_tool_calls=5
+    )
+    assert "in den Simulationsbeiträgen" in text
+    assert "Der Gegenstand kommt im Datenbestand dieser Simulation nicht vor" not in text
+    assert "Graph" in text
+    assert "2/5" in text
+
+
+def test_hinweis_zur_graph_suche_bleibt_unveraendert():
+    from app.services.report_agent.search_dedup import repeated_empty_search_message
+
+    text = repeated_empty_search_message(
+        "quick_search", {"query": "aufnehmende Betriebe"}, tool_calls_count=3, max_tool_calls=5
+    )
+
+    assert text == REPEATED_EMPTY_SEARCH_MSG.format(
+        query="aufnehmende Betriebe", tool_calls_count=3, max_tool_calls=5
+    )

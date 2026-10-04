@@ -253,6 +253,38 @@ def test_resolve_prepare_routing_maps_runtime_value_error_to_400(app_ctx):
 # Phase 3 — Kurzschluss
 # ---------------------------------------------------------------------------
 
+
+class _ConfigStore:
+    def __init__(self, config):
+        self._config = config
+
+    def read_json(self, simulation_id, name, default=None):
+        assert name == "simulation_config"
+        return self._config if self._config is not None else default
+
+
+@pytest.mark.parametrize(
+    ("persisted", "requested", "expected"),
+    [
+        # Review PR #1780: eine neue Streitfrage darf nicht am Kurzschluss scheitern.
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"},
+         "Die Kita am Tal wird geschlossen.", True),
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "assistant"},
+         "Die Kita am Tal wird geschlossen.", True),
+        ({"statement": None, "origin": "none"}, "Die Kita am Tal wird geschlossen.", True),
+        (None, "Die Kita am Tal wird geschlossen.", True),
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"},
+         "Die Kita am Berg wird geschlossen.", False),
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"}, None, False),
+    ],
+)
+def test_contested_question_changed(monkeypatch, persisted, requested, expected):
+    config = None if persisted is None else {"contested_question": persisted}
+    monkeypatch.setattr(mod, "resolve_default_store", lambda: _ConfigStore(config))
+
+    assert mod._contested_question_changed(VALID_SIM_ID, requested) is expected
+
+
 def test_already_prepared_response_returns_none_when_unprepared(app_ctx, monkeypatch):
     monkeypatch.setattr(mod, "_check_simulation_prepared", lambda _sid: (False, {"reason": "x"}))
 

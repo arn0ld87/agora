@@ -153,6 +153,11 @@ def _contested_statement(simulation_config: Optional[Mapping[str, Any]]) -> Opti
     return statement.strip() if isinstance(statement, str) and statement.strip() else None
 
 
+def has_contested_statement(simulation_config: Optional[Mapping[str, Any]]) -> bool:
+    """Ob der Lauf eine Streitfrage hat, die Analyse also anwendbar ist."""
+    return _contested_statement(simulation_config) is not None
+
+
 def _camp_of(contribution_classes: Sequence[StanceClass]) -> StanceClass:
     """Lager einer Stimme: die häufigere Seite, bei Gleichstand ``undecided``."""
     counts = Counter(contribution_classes)

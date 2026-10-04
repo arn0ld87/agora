@@ -54,6 +54,22 @@ class TestGenerateContestedQuestion:
         assert cq.statement is None
         assert cq.absence_reason == "Offene Wahrnehmungsfrage."
 
+    @pytest.mark.parametrize(
+        "response",
+        [
+            {"has_contested_question": True, "statement": "Zu kurz.", "absence_reason": None},
+            {"has_contested_question": True, "statement": "x" * 301, "absence_reason": None},
+            {"has_contested_question": False, "statement": None, "absence_reason": "y" * 301},
+        ],
+    )
+    def test_vertragswidrige_modellantwort_fuehrt_auf_origin_none(self, response):
+        """Review PR #1780: die Vorbereitung bricht daran nicht ab."""
+        cq = generate_contested_question(_stub_call_llm(response), "Anforderung")
+
+        assert cq.origin == "none"
+        assert cq.statement is None
+        assert cq.absence_reason == "Streitfrage konnte nicht ermittelt werden."
+
     def test_budget_exceeded_wird_durchgereicht(self):
         def call_llm(prompt: str, system_prompt: str, schema: Any) -> dict:
             raise BudgetExceededError("calls", 101, 100)

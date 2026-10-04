@@ -270,6 +270,7 @@ def test_workflow_berechnet_die_analyse_mit_dem_llm_client_des_agenten(monkeypat
             lambda *_a, **_k: [_Stored(_action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern."))]
         ),
     )
+    monkeypatch.setattr(workflow, "action_log_health", lambda *_a, **_k: (1, 0))
     llm = _StubLLM(_by_keyword)
 
     result = workflow._compute_stance_analysis(_Agent(llm), "report-1")
@@ -311,3 +312,94 @@ def test_analyse_wird_als_stance_analysis_json_gespeichert(tmp_path):
     assert path == str(tmp_path / "stance_analysis.json")
     stored = json.loads((tmp_path / "stance_analysis.json").read_text(encoding="utf-8"))
     assert StanceAnalysis.model_validate(stored) == analysis
+
+
+class _FailingStore:
+    def read_json(self, simulation_id: str, name: str, default: Any = None) -> Any:
+        raise PermissionError("simulation_config.json")
+
+
+def _workflow_with(monkeypatch, tmp_path, *, store: Any, actions: List[Dict[str, Any]], health):
+    from app.services.report_agent import workflow
+    from app.services.report_agent.manager import ReportManager
+    from app.services.simulation_runner import SimulationRunner
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    monkeypatch.setattr(workflow, "resolve_default_store", lambda: store)
+    monkeypatch.setattr(
+        SimulationRunner,
+        "get_all_actions",
+        staticmethod(lambda *_a, **_k: [_Stored(action) for action in actions]),
+    )
+    monkeypatch.setattr(workflow, "action_log_health", lambda *_a, **_k: health)
+    return workflow
+
+
+def test_workflow_meldet_einen_lesefehler_statt_zu_schweigen(monkeypatch, tmp_path):
+    """Review PR #1780 (P0): ein Lese- oder Rechtefehler bleibt sichtbar."""
+    workflow = _workflow_with(monkeypatch, tmp_path, store=_FailingStore(), actions=[], health=(1, 0))
+    llm = _StubLLM(_by_keyword)
+
+    result = workflow._compute_stance_analysis(_Agent(llm), "report-1")
+
+    assert result == {"unavailable_reason": "read_failed"}
+    assert llm.calls == []
+    assert not (tmp_path / "report-1" / "stance_analysis.json").exists()
+
+
+def test_workflow_misst_keine_quote_ohne_aktionsprotokoll(monkeypatch, tmp_path):
+    """Review PR #1780: ein fehlendes Protokoll ist keine Quote von null."""
+    workflow = _workflow_with(
+        monkeypatch, tmp_path, store=_Store(_config("opposing", "neutral")), actions=[], health=(0, 0)
+    )
+    llm = _StubLLM(_by_keyword)
+
+    assert workflow._compute_stance_analysis(_Agent(llm), "report-1") == {
+        "unavailable_reason": "action_log_missing"
+    }
+    assert llm.calls == []
+
+
+def test_workflow_misst_keine_quote_bei_beschaedigten_protokollzeilen(monkeypatch, tmp_path):
+    workflow = _workflow_with(
+        monkeypatch,
+        tmp_path,
+        store=_Store(_config("opposing", "neutral")),
+        actions=[_action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern.")],
+        health=(1, 3),
+    )
+    llm = _StubLLM(_by_keyword)
+
+    assert workflow._compute_stance_analysis(_Agent(llm), "report-1") == {
+        "unavailable_reason": "action_log_unreadable"
+    }
+    assert llm.calls == []
+
+
+def test_workflow_ohne_streitfrage_prueft_das_protokoll_nicht(monkeypatch, tmp_path):
+    workflow = _workflow_with(
+        monkeypatch,
+        tmp_path,
+        store=_Store(_config("opposing", statement=None)),
+        actions=[],
+        health=(0, 0),
+    )
+
+    result = workflow._compute_stance_analysis(_Agent(_StubLLM(_by_keyword)), "report-1")
+
+    assert result is not None
+    assert result["applicable"] is False
+
+
+def test_action_log_health_zaehlt_dateien_und_unlesbare_zeilen(tmp_path):
+    from app.services.sim.action_log_reader import action_log_health
+
+    sim_dir = tmp_path / "sim-1"
+    (sim_dir / "twitter").mkdir(parents=True)
+    (sim_dir / "twitter" / "actions.jsonl").write_text(
+        '{"agent_id": 0, "round": 1}\n\n{"agent_id": 1, "rou\nnicht json\n', encoding="utf-8"
+    )
+
+    assert action_log_health("sim-1", tmp_path) == (1, 2)
+    (tmp_path / "sim-2").mkdir()
+    assert action_log_health("sim-2", tmp_path) == (0, 0)

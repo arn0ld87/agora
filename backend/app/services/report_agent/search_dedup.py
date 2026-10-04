@@ -189,9 +189,44 @@ REPEATED_EMPTY_SEARCH_MSG = (
     "({tool_calls_count}/{max_tool_calls})."
 )
 
+#: Hinweis für eine wiederholte, bereits ergebnislose Beitragssuche. Leer waren
+#: nur die Simulationsbeiträge — über Graph-Fakten sagt das nichts aus
+#: (Review PR #1780).
+REPEATED_EMPTY_ACTION_SEARCH_MSG = (
+    "Observation: Die Beitragssuche nach \"{query}\" wurde nicht erneut "
+    "ausgeführt — sie war in diesem Abschnitt mit denselben Filtern bereits "
+    "ergebnislos. Der Gegenstand kommt in den Simulationsbeiträgen so nicht "
+    "vor. Das sagt nichts über den Graphen aus: Graph-Fakten dazu können "
+    "weiterhin vorliegen. Schreibe keine Aussage darüber, was in der "
+    "Simulation öffentlich gesagt wurde, ohne Beleg. Dieser Versuch zählt "
+    "nicht gegen dein Tool-Budget ({tool_calls_count}/{max_tool_calls})."
+)
+
+
+def repeated_empty_search_message(
+    tool_name: str,
+    parameters: Dict[str, Any],
+    *,
+    tool_calls_count: int,
+    max_tool_calls: int,
+) -> str:
+    """Der Hinweis an das Modell für eine unterdrückte Wiederholung."""
+    template = (
+        REPEATED_EMPTY_ACTION_SEARCH_MSG
+        if tool_name == ACTION_SEARCH_TOOL
+        else REPEATED_EMPTY_SEARCH_MSG
+    )
+    return template.format(
+        query=query_of(parameters),
+        tool_calls_count=tool_calls_count,
+        max_tool_calls=max_tool_calls,
+    )
+
 
 __all__ = [
     "ACTION_SEARCH_TOOL",
+    "REPEATED_EMPTY_ACTION_SEARCH_MSG",
+    "repeated_empty_search_message",
     "SEARCH_TOOLS",
     "dedup_key",
     "EmptySearchRegistry",

@@ -909,3 +909,26 @@ def test_a_failed_stance_classification_stays_visible_above_the_threshold():
     found = collect_run_degradations(stance_analysis=analysis)
 
     assert [entry["reason"] for entry in found] == ["stance_classification_failed_5_of_35"]
+
+
+@pytest.mark.parametrize(
+    ("reason", "fragment"),
+    [
+        ("read_failed", "nicht gelesen werden"),
+        ("action_log_missing", "kein Aktionsprotokoll"),
+        ("action_log_unreadable", "unlesbare Zeilen"),
+    ],
+)
+def test_an_unavailable_stance_analysis_is_a_visible_degradation(reason, fragment):
+    """Review PR #1780 (P0): ein Ausfall der Haltungsanalyse bleibt sichtbar."""
+    from app.services.report_agent.run_degradation import stance_analysis_unavailable
+
+    found = collect_run_degradations(stance_analysis=stance_analysis_unavailable(reason))
+
+    assert len(found) == 1
+    entry = RunDegradationModel.model_validate(found[0])
+    assert entry.component == "simulation_positioning"
+    assert entry.reason == f"stance_analysis_unavailable_{reason}"
+    assert entry.severity == "warning"
+    assert fragment in entry.detail
+    assert "Positionierungsquote" in entry.detail

@@ -48,6 +48,13 @@ def generate_contested_question(
     try:
         result = call_llm(prompt, _SYSTEM_PROMPT, ContestedQuestionResponse)
         response = ContestedQuestionResponse.model_validate(result)
+        # Der Vertrag ist enger als das Antwortschema (Längen der Aussage und
+        # der Begründung). Eine vertragswidrige Modellantwort ist derselbe
+        # sichtbare „none"-Fall wie ein fehlgeschlagener Aufruf und bricht die
+        # Vorbereitung nicht ab (Review PR #1780).
+        if response.has_contested_question and response.statement:
+            return ContestedQuestion(statement=response.statement, origin="assistant")
+        return ContestedQuestion(origin="none", absence_reason=response.absence_reason)
     except Exception as exc:  # noqa: BLE001 -- bewusst breit: Fehlschlagen ist sichtbarer "none"-Fall
         # Ein hartes Budget ist kein Fallback-Fall, sondern das Laufende (siehe
         # ``reraise_if_budget_exceeded``): durchreichen, nicht schlucken.
@@ -57,6 +64,3 @@ def generate_contested_question(
             origin="none",
             absence_reason="Streitfrage konnte nicht ermittelt werden.",
         )
-    if response.has_contested_question and response.statement:
-        return ContestedQuestion(statement=response.statement, origin="assistant")
-    return ContestedQuestion(origin="none", absence_reason=response.absence_reason)

@@ -11,6 +11,7 @@ from flask import request
 
 from . import simulation_bp
 from ..models.project import ProjectManager as ProjectManager
+from ..services.artifact_store import resolve_default_store
 from ..services.entity_reader import EntityReader
 from ..services.llm_provider_registry import LlmProviderRegistry
 from ..services.llm_routing_seed import (
@@ -150,6 +151,21 @@ def _ensure_prepare_startable(
 
 
 
+
+
+def _contested_question_changed(simulation_id: str, requested: str | None) -> bool:
+    """Ob die übergebene Streitfrage von der persistierten abweicht.
+
+    Eine neue Nutzervorgabe ist wie ein Modellwechsel ein Grund, eine bereits
+    vorbereitete Simulation erneut vorzubereiten (Review PR #1780). Ohne
+    Vorgabe bleibt der Kurzschluss bestehen.
+    """
+    if not requested:
+        return False
+    config = resolve_default_store().read_json(simulation_id, "simulation_config", default=None)
+    contested = config.get("contested_question") if isinstance(config, dict) else None
+    persisted = contested.get("statement") if isinstance(contested, dict) else None
+    return persisted != requested
 
 
 def _already_prepared_response(simulation_id: str):
@@ -575,7 +591,11 @@ def _prepare_simulation_under_start_lock(
             extra={'simulation_id': simulation_id},
         )
 
-        if not req.force_regenerate and not routing.client_requested_override:
+        if (
+            not req.force_regenerate
+            and not routing.client_requested_override
+            and not _contested_question_changed(simulation_id, req.contested_question)
+        ):
             already_prepared = _already_prepared_response(simulation_id)
             if already_prepared is not None:
                 return already_prepared

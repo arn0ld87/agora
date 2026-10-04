@@ -252,3 +252,20 @@ def test_kurze_abkuerzung_trifft_nur_als_ganzes_wort(monkeypatch):
     )
 
     assert search_simulation_actions("sim-1", query="EU").hits == []
+
+
+def test_kuerzel_wird_unabhaengig_von_der_schreibweise_gefunden(monkeypatch):
+    """Review PR #1780: „afd" fand nichts, obwohl „AfD" im Beitrag steht."""
+    stored = [
+        _action(0, "Stadtrat Weber", 1, "Die AfD stimmt der Schließung zu."),
+        _action(1, "Hebamme Lena", 2, "Niemand hat mit uns geredet."),
+    ]
+    monkeypatch.setattr(
+        SimulationRunner,
+        "get_all_actions",
+        staticmethod(lambda *_a, **_k: [_Stored(action) for action in stored]),
+    )
+
+    for query in ("afd", "AFD", "Afd"):
+        hits = search_simulation_actions("sim-1", query=query).hits
+        assert [hit["agent_name"] for hit in hits] == ["Stadtrat Weber"], query
