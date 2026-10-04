@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import cache
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
 
 from ...contracts import (
     ClaimEvidenceBindingModel,
@@ -23,6 +23,7 @@ from ...contracts import (
     DataGap,
     Threshold,
 )
+from .takeaway_confidence import normalize_takeaway_confidence
 from ..evidence_migrations import (
     CURRENT_SCHEMA_VERSION,
     migrate_v1_to_v2,
@@ -94,10 +95,25 @@ class SectionKeyTakeaway(BaseModel):
     model_config = _STRICT
 
     statement: str = Field(min_length=1)
-    confidence: str = Field(
-        default="medium",
-        description="Einschätzungsqualität: low | medium | high",
+    # Issue #1766: Enum statt freiem String. Die Kernaussage entsteht vor der
+    # Claim-Bindung und hat kein eigenes Urteil: ``takeaway_confidence``
+    # deckelt das Label nachtraeglich auf das hoechste Label der final
+    # validierten Claims des Abschnitts (ohne Claim: ``None``). Ein Wert
+    # ausserhalb des Enums kippt den Abschnitt nicht, sondern wird ``None``.
+    confidence: Literal["low", "medium", "high"] | None = Field(
+        default=None,
+        description=(
+            "Vorläufige Einschätzung: low | medium | high, oder null, wenn "
+            "unklar. Wird nachträglich auf das höchste Confidence-Label der "
+            "belegten Claims des Abschnitts begrenzt; ohne belegten Claim "
+            "entfällt sie."
+        ),
     )
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _unknown_confidence_is_no_judgement(cls, value: object) -> object:
+        return normalize_takeaway_confidence(value)
     confidence_scope: Literal[
         "simulation_consensus", "evidence", "empirical"
     ] = Field(
