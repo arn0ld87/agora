@@ -39,6 +39,23 @@ STAGE_ID = "simulation_rounds"
 REPORT_INTERVIEW_STAGE_ID = "report_interview"
 BUDGET_CONFIG_FILENAME = "budget_config.json"
 BUDGET_ABORT_FILENAME = "budget_abort.json"
+# Anbieterfehler (#1772): eine Logzeile je Fehlerart (Klasse + HTTP-Status) und
+# Minute. Im Lauf sim_c8c6b30aa652 waren es 872 RateLimitError -- ein Log je
+# Aufruf flutete das simulation.log und verschwieg trotzdem die Anbietermeldung.
+FAILURE_LOG_INTERVAL_SECONDS = 60.0
+FAILURE_MESSAGE_MAX_CHARS = 300
+
+
+def _provider_http_status(exc: BaseException) -> Optional[int]:
+    """HTTP-Status eines Anbieterfehlers (``status_code`` oder ``response``), sonst ``None``."""
+    response = getattr(exc, "response", None)
+    for candidate in (
+        getattr(exc, "status_code", None),
+        getattr(response, "status_code", None),
+    ):
+        if isinstance(candidate, int) and not isinstance(candidate, bool) and 100 <= candidate <= 599:
+            return candidate
+    return None
 
 
 def _sanitize_base_url(url: Optional[str]) -> Optional[str]:
@@ -81,6 +98,10 @@ class SubprocessBudgetGuard:
         # ein FREMDES Budget (den Report-Run), nicht an ``self.run_id``/
         # ``STAGE_ID``. ``None`` = Standardpfad, unveraendertes Verhalten.
         self._attribution_override: Optional[tuple[str, str]] = None
+        # Drosselung der Fehlerlogs (#1772): (Klasse, Status) -> [letzte Meldung,
+        # seither unterdrueckte Fehler]. Uhr fuer Tests injizierbar.
+        self._failure_log_clock = time.monotonic
+        self._failure_log_state: dict[tuple[str, Optional[int]], list[float]] = {}
 
     # -- Setup ---------------------------------------------------------------
 
@@ -237,8 +258,12 @@ class SubprocessBudgetGuard:
         completion_tokens: Optional[int] = None,
         error_type: Optional[str] = None,
         cached_input_tokens: Optional[int] = None,
+        http_status: Optional[int] = None,
     ) -> None:
         """Einen CAMEL-Call in den gemeinsamen Ledger verbuchen.
+
+        ``http_status`` (Issue #1772): HTTP-Status eines fehlgeschlagenen
+        Anbieteraufrufs, soweit die Exception ihn traegt; sonst ``None``.
 
         ``cached_input_tokens`` (Issue #1772) landet nur im Call-Event; die
         lokalen Zaehler (``_prompt_tokens``) und damit die Budgetpruefung
@@ -276,6 +301,7 @@ class SubprocessBudgetGuard:
                 latency_ms=latency_ms,
                 success=success,
                 error_type=error_type,
+                http_status=http_status,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 cached_input_tokens=cached_input_tokens,
@@ -289,6 +315,52 @@ class SubprocessBudgetGuard:
             # ``LLMClient._record_provider_success``/``_provider_attempt``
             # (Event zuerst, dann ``_budget_record``/``record_after_call``).
             self._release_report_reservation(target_run_id)
+
+    def record_failure(self, exc: BaseException, *, latency_ms: float) -> None:
+        """Fehlgeschlagenen Anbieteraufruf verbuchen (#1772).
+
+        Schreibt das Call-Event mit ``error_type`` und -- falls die Exception
+        ihn traegt -- ``http_status``. Zusaetzlich eine gedrosselte Logzeile
+        mit der gekuerzten, von Schluesseln bereinigten Anbietermeldung.
+        """
+        status = _provider_http_status(exc)
+        error_type = exc.__class__.__name__
+        self.record_call(
+            latency_ms=latency_ms,
+            success=False,
+            error_type=error_type,
+            http_status=status,
+        )
+        if status is not None or error_type == "RateLimitError":
+            self._log_provider_failure(exc, error_type, status)
+
+    def _log_provider_failure(
+        self, exc: BaseException, error_type: str, status: Optional[int]
+    ) -> None:
+        """Hoechstens eine Zeile je (Fehlerklasse, Status) und Minute, mit Zaehler."""
+        key = (error_type, status)
+        now = self._failure_log_clock()
+        state = self._failure_log_state.get(key)
+        if state is not None and now - state[0] < FAILURE_LOG_INTERVAL_SECONDS:
+            state[1] += 1
+            return
+        suppressed = int(state[1]) if state is not None else 0
+        self._failure_log_state[key] = [now, 0]
+        try:
+            from app.utils.logger import get_logger
+            from app.utils.provider_message import redacted_provider_message
+
+            message = redacted_provider_message(exc, max_chars=FAILURE_MESSAGE_MAX_CHARS)
+            get_logger("agora.sim_runtime.budget_guard").warning(
+                "[budget-guard] Anbieterfehler %s (HTTP %s): %s "
+                "(%d gleichartige Fehler seit der letzten Meldung unterdrueckt)",
+                error_type,
+                status if status is not None else "unbekannt",
+                message,
+                suppressed,
+            )
+        except Exception:  # noqa: BLE001 — Logging darf die Simulation nicht stoeren
+            return
 
     def wrap_model(self, model: Any) -> Any:
         """CAMEL-Modell mit Usage-Tracking-Proxy umgeben."""
@@ -476,11 +548,7 @@ class _UsageTrackingModelProxy:
         try:
             result = target.run(messages, *args, **kwargs)
         except Exception as exc:
-            guard.record_call(
-                latency_ms=(time.monotonic() - started) * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
-            )
+            guard.record_failure(exc, latency_ms=(time.monotonic() - started) * 1000)
             raise
         prompt, completion = self._extract_usage(result)
         cached = self._extract_cached_input_tokens(result)
@@ -501,11 +569,7 @@ class _UsageTrackingModelProxy:
         try:
             result = target._run(messages, *args, **kwargs)
         except Exception as exc:
-            guard.record_call(
-                latency_ms=(time.monotonic() - started) * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
-            )
+            guard.record_failure(exc, latency_ms=(time.monotonic() - started) * 1000)
             raise
         prompt, completion = self._extract_usage(result)
         cached = self._extract_cached_input_tokens(result)
@@ -531,10 +595,8 @@ class _UsageTrackingModelProxy:
             try:
                 result = await target.arun(messages, *args, **kwargs)
             except Exception as exc:
-                guard.record_call(
-                    latency_ms=(time.monotonic() - started) * 1000,
-                    success=False,
-                    error_type=exc.__class__.__name__,
+                guard.record_failure(
+                    exc, latency_ms=(time.monotonic() - started) * 1000
                 )
                 raise
             prompt, completion = self._extract_usage(result)
@@ -561,10 +623,8 @@ class _UsageTrackingModelProxy:
             try:
                 result = await target._arun(messages, *args, **kwargs)
             except Exception as exc:
-                guard.record_call(
-                    latency_ms=(time.monotonic() - started) * 1000,
-                    success=False,
-                    error_type=exc.__class__.__name__,
+                guard.record_failure(
+                    exc, latency_ms=(time.monotonic() - started) * 1000
                 )
                 raise
             prompt, completion = self._extract_usage(result)

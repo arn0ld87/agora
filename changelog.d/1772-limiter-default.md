@@ -9,6 +9,15 @@
 
 ### Fixed
 
+- Simulation: Fehlgeschlagene Anbieteraufrufe tragen ihren HTTP-Status jetzt im
+  Call-Event (`http_status`, bisher immer `null`), und das `simulation.log` nennt
+  die gekürzte Anbietermeldung (z. B. welches Limit gerissen wurde: Limit, Used,
+  Requested). Je Fehlerklasse und Status erscheint höchstens eine Zeile pro Minute
+  mit der Zahl der unterdrückten gleichartigen Fehler; Schlüssel (`sk-…`,
+  `Bearer …`, `api_key=…`) werden vorher entfernt, Prompt und Header nie gelesen.
+  Die Redaktion ist aus dem Report-Workflow nach `app/utils/provider_message.py`
+  verschoben (Verhalten unverändert).
+
 - Simulation: Der Limiter ließ bei leerem Fenster alle gleichzeitig wartenden Aufrufe
   durch (zwei Plattformen mit Parallelität 8 starteten 16 Aufrufe, bevor ein
   Messwert existierte). Jetzt läuft zuerst eine Sonde allein, danach reserviert jeder
