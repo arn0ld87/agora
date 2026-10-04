@@ -31,6 +31,8 @@ import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Mapping, Optional
 
+from .throttle import InputTokenRateLimiter
+
 STAGE_ID = "simulation_rounds"
 # Stage fuer physische Modellaufruf-Versuche, die im Auftrag eines Report-Runs
 # ueber ein IPC-Interview-Kommando ausgeloest werden (#1478 Codex P1, Runde 6).
@@ -59,10 +61,15 @@ class SubprocessBudgetGuard:
         simulation_dir: str,
         run_id: str,
         budget_config: Optional[dict] = None,
+        rate_limiter: Optional[InputTokenRateLimiter] = None,
     ):
         self.simulation_dir = simulation_dir
         self.run_id = run_id
         self.budget_config = budget_config or {}
+        # Eingabe-Tokens-pro-Minute-Limiter (#1772): einziger Punkt, an dem
+        # jeder Simulations-Aufruf beider Plattformen vorbeikommt (ein Guard,
+        # ein Eventloop). ``None`` = keine Drosselung.
+        self.rate_limiter = rate_limiter
         self.enforcement = self.budget_config.get("enforcement", "soft")
         self._started_monotonic = time.monotonic()
         self._calls = 0
@@ -94,7 +101,29 @@ class SubprocessBudgetGuard:
             config = None
         except (json.JSONDecodeError, OSError):
             config = None
-        return cls(simulation_dir, run_id, config)
+        return cls(
+            simulation_dir,
+            run_id,
+            config,
+            rate_limiter=InputTokenRateLimiter.from_environment(),
+        )
+
+    # -- Drosselung (#1772) ---------------------------------------------------
+
+    async def _acquire_rate_slot(self) -> None:
+        """Vor einem physischen Aufruf auf freie Token-Fensterkapazitaet warten.
+
+        Nur ``await asyncio.sleep`` (siehe ``throttle.py``): Abbruch und
+        Stop-Signale kommen sofort durch. Ohne Limiter ein No-Op.
+        """
+        limiter = self.rate_limiter
+        if limiter is not None:
+            await limiter.acquire()
+
+    def _release_rate_slot(self, input_tokens: Optional[int]) -> None:
+        limiter = self.rate_limiter
+        if limiter is not None:
+            limiter.release(input_tokens)
 
     def _invocation_logger(self, run_id: str):
         logger = self._loggers.get(run_id)
@@ -340,6 +369,12 @@ class _UsageTrackingModelProxy:
     aus ChatCompletion-Resultaten (falls der Provider sie liefert — sonst
     bleibt die Messung ehrlich unbekannt).
 
+    Issue #1772: ``arun``/``_arun`` laufen zusaetzlich durch den
+    Eingabe-Tokens-pro-Minute-Limiter des Guards (``await``-Wartezeit, kein
+    ``time.sleep``). Die synchronen ``run``/``_run`` werden bewusst nicht
+    gedrosselt: OASIS/CAMEL nutzt im Eventloop ausschliesslich die
+    asynchronen Pfade, sync laeuft nur der einzelne Preflight-Probe-Aufruf.
+
     Issue #764 (Review) — Protokoll-Audit:
         CAMEL/OASIS ruft ModelBackends ausschließlich über die vier
         Methoden ``run`` / ``_run`` / ``arun`` / ``_arun`` auf
@@ -450,45 +485,57 @@ class _UsageTrackingModelProxy:
     async def arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
+        # Budget ZUERST: ``BudgetExceededError`` darf nie hinter einer
+        # Drosselungs-Wartezeit verschwinden.
         guard._enforce_before_physical_call()
-        started = time.monotonic()
+        await guard._acquire_rate_slot()
+        prompt: Optional[int] = None
         try:
-            result = await target.arun(messages, *args, **kwargs)
-        except Exception as exc:
+            started = time.monotonic()
+            try:
+                result = await target.arun(messages, *args, **kwargs)
+            except Exception as exc:
+                guard.record_call(
+                    latency_ms=(time.monotonic() - started) * 1000,
+                    success=False,
+                    error_type=exc.__class__.__name__,
+                )
+                raise
+            prompt, completion = self._extract_usage(result)
             guard.record_call(
                 latency_ms=(time.monotonic() - started) * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
+                success=True,
+                prompt_tokens=prompt,
+                completion_tokens=completion,
             )
-            raise
-        prompt, completion = self._extract_usage(result)
-        guard.record_call(
-            latency_ms=(time.monotonic() - started) * 1000,
-            success=True,
-            prompt_tokens=prompt,
-            completion_tokens=completion,
-        )
-        return result
+            return result
+        finally:
+            guard._release_rate_slot(prompt)
 
     async def _arun(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
         guard._enforce_before_physical_call()
-        started = time.monotonic()
+        await guard._acquire_rate_slot()
+        prompt: Optional[int] = None
         try:
-            result = await target._arun(messages, *args, **kwargs)
-        except Exception as exc:
+            started = time.monotonic()
+            try:
+                result = await target._arun(messages, *args, **kwargs)
+            except Exception as exc:
+                guard.record_call(
+                    latency_ms=(time.monotonic() - started) * 1000,
+                    success=False,
+                    error_type=exc.__class__.__name__,
+                )
+                raise
+            prompt, completion = self._extract_usage(result)
             guard.record_call(
                 latency_ms=(time.monotonic() - started) * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
+                success=True,
+                prompt_tokens=prompt,
+                completion_tokens=completion,
             )
-            raise
-        prompt, completion = self._extract_usage(result)
-        guard.record_call(
-            latency_ms=(time.monotonic() - started) * 1000,
-            success=True,
-            prompt_tokens=prompt,
-            completion_tokens=completion,
-        )
-        return result
+            return result
+        finally:
+            guard._release_rate_slot(prompt)

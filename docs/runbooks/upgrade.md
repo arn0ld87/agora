@@ -52,6 +52,10 @@ Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0
 
 **`AGORA_JEV_TIMEOUT_S`** (float, Default `2.0`, gültiger Bereich `0 < Wert <= 30`, von `Config.validate()` erzwungen). Timeout-Budget für genau einen Jev-Aufruf im `authoritative`-Pfad. Wirkt nur, wenn `AGORA_DECISION_LAYER_MODE=authoritative` gesetzt ist; da `local-search-relevance` ein heißer Retrieval-Pfad ist, blockiert ein hängender Jev-Aufruf lokale Suchen höchstens um dieses Budget (plus ein interner Retry mit demselben Timeout), bevor der Rule-Rückfall greift. Kein Upgrade-Schritt nötig — reiner Opt-in über `AGORA_DECISION_LAYER_MODE`.
 
+**`AGORA_SIM_MAX_CONCURRENCY`** ([#1772](https://github.com/arn0ld87/agora/issues/1772)). Gleichzeitige Modellaufrufe je Simulationsplattform. Der Wert war bis dahin fest `30`; der neue Default ist `8` (gültig 1 bis 256). Twitter und Reddit laufen parallel, die Gesamtlast ist daher bis zu doppelt so hoch wie der Wert. **Verhaltenswechsel ohne Zutun:** Simulationsrunden laufen mit dem neuen Default langsamer, dafür gehen weniger Agentenschritte an `RateLimitError` verloren (Messung `sim_cc6067a70603`: bei 30 + 30 scheiterten 68 % der Aufrufe). Wer einen Anbieter ohne enges Minutenlimit nutzt, setzt den Wert in `.env` zurück auf `30`. Ungültige Werte fallen mit Warnung im `simulation.log` auf `8`.
+
+**`AGORA_SIM_INPUT_TOKENS_PER_MINUTE`** ([#1772](https://github.com/arn0ld87/agora/issues/1772)). Default `0` (aus), kein Verhaltenswechsel. Ein Wert größer 0 begrenzt die Eingabe-Tokens der Simulations-Aufrufe auf ein gleitendes 60-Sekunden-Fenster (Wert unter dem Minutenlimit des Anbieters wählen). Das Limit gilt je Simulationsprozess; im Standard-Parallelrunner teilen sich Twitter und Reddit es.
+
 ---
 
 ## 0.9.x → 0.10

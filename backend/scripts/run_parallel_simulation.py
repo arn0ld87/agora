@@ -146,6 +146,11 @@ try:
     from .sim_runtime.ipc import report_attribution
 except ImportError:  # direct script execution
     from sim_runtime.ipc import report_attribution
+# Parallelitaet der Modellaufrufe je Plattform (#1772).
+try:
+    from .sim_runtime.throttle import resolve_sim_max_concurrency
+except ImportError:  # direct script execution
+    from sim_runtime.throttle import resolve_sim_max_concurrency
 
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
@@ -1590,15 +1595,16 @@ async def run_twitter_simulation(
         agent_graph=result.agent_graph,
         platform=twitter_platform,
         database_path=db_path,
-        semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
+        # Gleichzeitige LLM-Aufrufe je Plattform, konfigurierbar (#1772).
+        semaphore=resolve_sim_max_concurrency(),
     )
-    
+
     await result.env.reset()
     log_info("Environment started")
-    
+
     if action_logger:
         action_logger.log_simulation_start(config)
-    
+
     total_actions = 0
     last_rowid = 0  # Track last processed row in Database (use rowid to avoid created_at format differences)
 
@@ -1942,15 +1948,16 @@ async def run_reddit_simulation(
         agent_graph=result.agent_graph,
         platform=oasis.DefaultPlatformType.REDDIT,
         database_path=db_path,
-        semaphore=30,  # Limit maximum concurrent LLM requests to prevent API overload
+        # Gleichzeitige LLM-Aufrufe je Plattform, konfigurierbar (#1772).
+        semaphore=resolve_sim_max_concurrency(),
     )
-    
+
     await result.env.reset()
     log_info("Environment started")
-    
+
     if action_logger:
         action_logger.log_simulation_start(config)
-    
+
     total_actions = 0
     last_rowid = 0  # Track last processed row in Database (use rowid to avoid created_at format differences)
 
