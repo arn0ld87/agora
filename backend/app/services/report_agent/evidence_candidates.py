@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
-from ..evidence_binder import EmbedFn, _cosine, candidate_text
+from ..evidence_binder import EmbedFn, candidate_text, retrieval_score
 
 #: Wie viele Kandidaten pro Claim an den Binder gehen. Der Binder filtert
 #: danach per Threshold und kuerzt auf ``top_k`` — diese Grenze begrenzt
@@ -138,10 +138,18 @@ class EvidenceCandidatePool:
         claim_vector = self._embed_cached(claim)
         scored: List[tuple[float, int, Dict[str, Any]]] = []
         for position, (item, text) in enumerate(self._items):
+            # Gleicher Score wie im Binder: bei langen Texten das beste
+            # Satzfenster (#1766). Sonst rutschte ein langes Interview an der
+            # Vorauswahl vorbei, bevor der Binder es je sieht. Die Fenster
+            # laufen durch denselben memoisierten Embedder und kosten im
+            # Binder nichts mehr.
             try:
-                score = _cosine(claim_vector, self._embed_cached(text))
+                best = retrieval_score(
+                    claim_vector, item, text, self._embed_cached
+                )
             except Exception:  # noqa: BLE001 — ein defektes Item darf die Section nicht kippen
-                score = 0.0
+                best = None
+            score = 0.0 if best is None else best
             # position als Tiebreaker: gleiche Scores behalten die
             # Erhebungsreihenfolge, damit die Auswahl deterministisch ist.
             scored.append((-score, position, item))

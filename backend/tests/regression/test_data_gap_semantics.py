@@ -107,6 +107,71 @@ def test_a_topic_absent_from_every_source_is_a_real_data_gap():
     )
 
 
+def _interview_record(*, with_statement: bool) -> Dict[str, Any]:
+    """Ein Interview, dessen Aussage erst hinter Zeichen 300 steht (#1766).
+
+    ``snippet`` und ``quote`` sind gekürzt; die volle Antwort liegt in
+    ``raw["response"]``. Der Data-Gap-Pool las ``raw`` bisher gar nicht.
+    """
+    filler = (
+        "Die Gemeindeverwaltung hat im Frühjahr mehrere Gesprächsrunden mit "
+        "Vereinen veranstaltet. Besonders ausführlich wurde über die "
+        "Öffnungszeiten der Bibliothek gesprochen. Teilnehmerinnen schilderten, "
+        "wie sich der Alltag im Dorf über die Jahre verändert hat. Der "
+        "Sportverein lobte die neue Turnhalle und erinnerte an die lange "
+        "Planungsphase. "
+    )
+    statement = (
+        "Der Landfrauenverband verweist auf die fehlende nächtliche "
+        "Busverbindung von Moorhagen nach Hollerau. "
+        if with_statement
+        else "Die Feuerwehr betonte die gute Zusammenarbeit mit den Nachbarn. "
+    )
+    response = filler + filler + statement + filler
+    # Die Aussage beginnt hinter snippet (300) und quote (500).
+    assert len(filler) * 2 > 500
+    return {
+        "evidence_id": "ev_interview",
+        "source_kind": "persona_interview",
+        "snippet": response[:300] + "…",
+        "quote": response[:500] + "…",
+        "raw": {
+            "question": "Wie bewerten Sie die Anbindung im Nahverkehr?",
+            "response": response,
+        },
+    }
+
+
+_INTERVIEW_CLAIM = (
+    "Der Landfrauenverband verweist auf die fehlende nächtliche Busverbindung "
+    "von Moorhagen nach Hollerau."
+)
+
+
+def test_a_statement_only_in_the_full_interview_answer_is_a_binding_failure():
+    """Steht die Aussage nur in ``raw["response"]``, ist das kein Data Gap."""
+    assert (
+        classify_claim_gap(
+            _INTERVIEW_CLAIM,
+            related_evidence_count=0,
+            evidence_pool=[_interview_record(with_statement=True)],
+        )
+        is ClaimGapKind.BINDING_FAILURE
+    )
+
+
+def test_an_interview_without_the_statement_stays_a_real_data_gap():
+    """Gegenprobe: ein Interview zu anderem Thema macht keine Lücke zur Bindung."""
+    assert (
+        classify_claim_gap(
+            _INTERVIEW_CLAIM,
+            related_evidence_count=0,
+            evidence_pool=[_interview_record(with_statement=False)],
+        )
+        is ClaimGapKind.SOURCE_INFORMATION_ABSENT
+    )
+
+
 def test_an_empty_source_pool_leaves_everything_absent():
     assert (
         classify_claim_gap(

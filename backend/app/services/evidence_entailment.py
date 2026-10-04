@@ -41,6 +41,7 @@ from .quantifier_claims import (
     evidence_backs_quantifier,
     quantifier_label,
 )
+from .evidence_text import evidence_text
 from .sentence_splitter import split_sentences
 
 
@@ -995,16 +996,9 @@ EntailmentJudge = Callable[[str, str], str]
 
 
 def _evidence_text(item: Dict[str, Any]) -> str:
-    parts = [str(item.get("snippet") or ""), str(item.get("quote") or ""), str(item.get("value") or "")]
-    raw = item.get("raw")
-    if isinstance(raw, dict):
-        for key in ("content", "text", "snippet", "summary"):
-            val = raw.get(key)
-            if isinstance(val, str) and val:
-                parts.append(val)
-    elif isinstance(raw, str):
-        parts.append(raw)
-    return " ".join(p for p in parts if p).strip()
+    # Eine Textprojektion für Bindung, Entailment und Data-Gap (#1766):
+    # einschließlich der vollen Interviewantwort aus ``raw["response"]``.
+    return evidence_text(item)
 
 
 def facts_are_comparable(left: NumericFact, right: NumericFact) -> Optional[str]:

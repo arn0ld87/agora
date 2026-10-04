@@ -34,6 +34,7 @@ from enum import Enum
 from typing import Any, Dict, Sequence
 
 from ..evidence_entailment import coverage_ratio
+from ..evidence_text import evidence_text
 from ..numeric_evidence import source_mentions_claim_numbers
 
 #: Ab welcher Deckung eine Quelle als "zum Thema vorhanden" gilt.
@@ -62,11 +63,9 @@ def _pool_texts(evidence_pool: Sequence[Dict[str, Any]]) -> list[str]:
     for item in evidence_pool:
         if not isinstance(item, dict):
             continue
-        parts = [
-            str(item.get(key) or "")
-            for key in ("snippet", "quote", "value", "content", "text")
-        ]
-        joined = " ".join(part for part in parts if part).strip()
+        # Dieselbe Textprojektion wie Bindung und Entailment (#1766): ohne
+        # ``raw`` galt eine Aussage hinter dem gekürzten Snippet als Lücke.
+        joined = evidence_text(item)
         if joined:
             texts.append(joined)
     return texts
