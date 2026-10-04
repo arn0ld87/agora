@@ -215,6 +215,10 @@ Startup-Reconciliation korrigiert persistierte Simulation-Runs mit toter PID. Si
 | `PERSONA_REVIEW_ENABLED` | Review-Gate |
 | `ENABLE_AGENT_TOOLS` | Agent-Tools aktivieren |
 | `MAX_TOOL_CALLS_PER_ACTION` | Tool-Limit pro Aktion |
+| `AGORA_SIM_MEMORY_PRUNE_FEEDS` | Feeds älterer Aktivierungen aus dem Agentengedächtnis nehmen (Default `true`, `false` = alter Zustand) |
+| `AGORA_SIM_MEMORY_KEEP_FEEDS` | Feeds der letzten N Aktivierungen bleiben vollständig (Default `4`, Minimum `1`) |
+| `AGORA_SIM_FEED_MAX_COMMENTS` | Je Post im Agenten-Feed höchstens die neuesten N Kommentare, der Rest als `omitted_comments` gezählt (Default `5`, `0` = aus: alle Kommentare, OASIS-JSON mit Einrückung) |
+| `AGORA_SIM_MEMORY_TOKEN_CAP` | Obergrenze für das Gedächtnis-Token-Limit je Agent (Default `32000`, `0` = aus, nie unter `8192`); getrennt vom Floor (`LLM_CONTEXT_LIMIT`), der vor zu kleinen Limits schützt |
 
 Ein persistierter `random_seed` ist derzeit **noch kein vollständiger Reproduktionsanker**. Siehe #763/#1274.
 

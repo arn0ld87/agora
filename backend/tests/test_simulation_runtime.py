@@ -80,6 +80,10 @@ def test_attach_tools_to_agents_patches_context_and_sanity(monkeypatch):
 
     monkeypatch.setenv("LLM_CONTEXT_LIMIT", "262144")
     monkeypatch.setenv("LLM_MODEL_CONTEXT_LIMITS_JSON", '{"qwen3-coder-next:cloud": 131072}')
+    # Dieser Test prueft das aufgeloeste Modell-Budget (Floor). Die Obergrenze
+    # (#1772) ist abgeschaltet; ihr Verhalten pruefen
+    # tests/scripts/test_agent_memory.py.
+    monkeypatch.setenv("AGORA_SIM_MEMORY_TOKEN_CAP", "0")
 
     class DummyTool:
         def __init__(self, name):
@@ -266,6 +270,9 @@ def test_enforce_memory_token_limit_without_tools(monkeypatch):
         "LLM_MODEL_CONTEXT_LIMITS_JSON",
         '{"qwen3-coder-next:cloud": 262144}',
     )
+    # Dieser Test prueft den Floor. Die Obergrenze (#1772) ist abgeschaltet;
+    # ihr Verhalten pruefen tests/scripts/test_agent_memory.py.
+    monkeypatch.setenv("AGORA_SIM_MEMORY_TOKEN_CAP", "0")
 
     class DummyCreator:
         def __init__(self):

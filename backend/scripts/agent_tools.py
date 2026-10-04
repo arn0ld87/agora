@@ -40,6 +40,11 @@ try:
 except ImportError:  # direct script execution
     from _sim_common import is_workspace_credential_scope
 
+try:
+    from .agent_memory import cap_memory_token_limit, next_memory_token_limit
+except ImportError:  # direct script execution
+    from agent_memory import cap_memory_token_limit, next_memory_token_limit
+
 # Load .env for Neo4j credentials — but never for a workspace-scoped run
 # (#1688, Finding H5 sibling): the runners already skip this via
 # ``load_project_env`` before importing this module, but this module is
@@ -1580,14 +1585,18 @@ def enforce_memory_token_limit(agent_graph) -> int:
             if creator is None or not hasattr(creator, "_token_limit"):
                 continue
             old_limit = getattr(creator, "token_limit", None)
-            if old_limit is None or old_limit < ctx_limit:
-                creator._token_limit = ctx_limit
+            # Floor (zu kleines Limit anheben) UND Obergrenze (#1772: ein
+            # ungebremst grosses Limit, z. B. CAMELs 999_999_999-Fallback,
+            # absenken) in einer Entscheidung.
+            new_limit = next_memory_token_limit(old_limit, ctx_limit)
+            if new_limit is not None:
+                creator._token_limit = new_limit
                 patched += 1
                 logger.info(
                     "[enforce_memory_token_limit] agent %s: %s -> %s (model=%s)",
                     agent_id,
                     old_limit,
-                    ctx_limit,
+                    new_limit,
                     model_name or "?",
                 )
         except Exception as exc:
@@ -1664,7 +1673,8 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
         # `_token_limit`, so patch the live creator instance instead.
         try:
             model_name = str(getattr(getattr(agent, "model_backend", None), "model_type", "") or "")
-            ctx_limit = _resolve_memory_token_limit(model_name)
+            # #1772: aufgeloestes Modell-Budget, begrenzt durch die Obergrenze.
+            ctx_limit = cap_memory_token_limit(_resolve_memory_token_limit(model_name))
             memory = getattr(agent, "memory", None)
             if memory and hasattr(memory, "get_context_creator"):
                 creator = memory.get_context_creator()
