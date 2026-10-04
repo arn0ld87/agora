@@ -146,6 +146,59 @@ def set_run_budget_config(run_id: str, config: RunBudgetConfig) -> None:
     )
 
 
+# Standard-Tokendeckel fuer Simulationen (Issue #1772). Der Lauf
+# ``sim_cc6067a70603`` (24 Runden, 52 Agenten, Twitter+Reddit) verbrauchte ohne
+# Gedaechtnisbegrenzung rund 36 Mio. Eingabe-Tokens bei ~1.000 Agentenschritten.
+# Ohne Nutzerbudget bekommt eine Simulation deshalb einen HARTEN Deckel;
+# ``0`` in ``AGORA_SIM_DEFAULT_MAX_TOKENS`` schaltet ihn ab. Der Zaehler
+# (``budget_guard``) zaehlt nur erfolgreiche Aufrufe und prueft nur an
+# Rundengrenzen -- eine einzelne Runde kann den Deckel ueberschreiten.
+ENV_DEFAULT_SIM_MAX_TOKENS = "AGORA_SIM_DEFAULT_MAX_TOKENS"
+DEFAULT_SIM_MAX_TOKENS = 20_000_000
+
+
+def resolve_default_simulation_token_cap(read: Any = None) -> Optional[int]:
+    """Wirksamer Standard-Tokendeckel der Simulation; ``None`` = abgeschaltet.
+
+    Liest ``AGORA_SIM_DEFAULT_MAX_TOKENS`` ueber die Settings-Schicht (Env,
+    ``instance/settings.json``, Override). ``0`` schaltet den Deckel ab; ein
+    negativer oder nicht ganzzahliger Wert faellt mit Warnung auf den Standard.
+    """
+    if read is None:
+        from app.services.settings_layer import get_default_service
+
+        read = get_default_service().effective_value
+    raw = read(ENV_DEFAULT_SIM_MAX_TOKENS)
+    if raw is None:
+        return DEFAULT_SIM_MAX_TOKENS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = -1
+    if value < 0 or isinstance(raw, bool):
+        logger.warning(
+            "run_budget: %s=%r ist ungültig (erwartet ganze Zahl >= 0); Standard %d",
+            ENV_DEFAULT_SIM_MAX_TOKENS, raw, DEFAULT_SIM_MAX_TOKENS,
+        )
+        return DEFAULT_SIM_MAX_TOKENS
+    return value or None
+
+
+def default_simulation_budget(read: Any = None) -> Optional[RunBudgetConfig]:
+    """Harter Standard-Tokendeckel fuer eine Simulation ohne Nutzerbudget.
+
+    ``None``, wenn der Deckel per ``AGORA_SIM_DEFAULT_MAX_TOKENS=0`` abgeschaltet
+    ist. Das Ergebnis traegt NUR ``max_tokens`` (hart); Kosten-, Zeit- und
+    Aufruflimits setzt der Standard nie. Ein Ueberschreiten endet den Lauf wie
+    jedes harte Tokenbudget mit ``termination_reason="budget_tokens"``
+    (``DIMENSION_TO_REASON``) -- nie als freundliche Fallback-Antwort.
+    """
+    cap = resolve_default_simulation_token_cap(read)
+    if cap is None:
+        return None
+    return RunBudgetConfig(max_tokens=cap, enforcement="hard")
+
+
 def set_termination_reason(run_id: str, reason: TerminationReason) -> None:
     """Abbruchgrund top-level ins Manifest schreiben (RunDetail-Contract)."""
     from app.services.run_registry import RunRegistry

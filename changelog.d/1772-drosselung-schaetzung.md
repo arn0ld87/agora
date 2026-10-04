@@ -25,3 +25,19 @@
   und wird erst mit 0,4/0,7 wieder erreicht. Gültig ist `0 < min ≤ max ≤ 1`, sonst
   Rückfall auf den Standard mit Warnung. Bereits gespeicherte
   `simulation_config.json` bleiben unverändert.
+- Budget: Die Preflight-Schätzung der Simulation (`POST /api/simulation/preflight-estimate`)
+  rechnet ohne Verlaufsdaten nicht mehr mit 1.000 bis 5.000 Tokens je Aufruf, sondern
+  mit einem Messwertmodell: der Kontext je Agentenschritt wächst mit der Runde, solange
+  das Agenten-Gedächtnis nicht begrenzt ist (Kalibrierung am Lauf `sim_cc6067a70603`,
+  Mittel 33.700 Eingabe-Tokens je Aufruf). Der Referenzlauf (52 Agenten, 24 Runden, zwei
+  Plattformen) wird mit rund 31 bis 100 Mio. Tokens statt rund 6 Mio. angezeigt. Neu:
+  optionaler Body-Parameter `platform` (`parallel` Standard, `twitter`, `reddit`), die
+  Antwort nennt als Annahme, dass der Budget-Zähler nur erfolgreiche Aufrufe zählt, und
+  warnt, wenn die untere Schätzung über dem Standard-Tokendeckel liegt.
+- Budget: Eine Simulation ohne Nutzerbudget bekommt einen **harten Standard-Tokendeckel**
+  von 20 Mio. Tokens (`AGORA_SIM_DEFAULT_MAX_TOKENS`, `0` = abgeschaltet, auch in den
+  Einstellungen unter OASIS). **Verhaltenswechsel:** Große Läufe ohne begrenztes Gedächtnis
+  (wie der Referenzlauf mit rund 36 Mio. Tokens) enden jetzt mit
+  `termination_reason=budget_tokens`, geprüft wird an den Rundengrenzen. Ein vom Nutzer
+  gesetztes Budget gewinnt und wird nicht um einen Tokendeckel ergänzt; Replay, Neustart und
+  Branch erben das Budget des Ursprungslaufs und bekommen keinen nachträglichen Deckel.

@@ -152,6 +152,49 @@ class TestPreflightEstimate:
         )
         assert resp.status_code == 400
 
+    def test_estimate_platform_scales_agent_steps(self, env):
+        """Issue #1772: ``platform`` bestimmt die Zahl der Plattformen (Standard parallel = 2)."""
+        def tokens(**extra):
+            resp = env["client"].post(
+                "/api/simulation/preflight-estimate",
+                json={"num_agents": 52, "max_rounds": 24, **extra},
+            )
+            assert resp.status_code == 200
+            return resp.get_json()["data"]["estimated_tokens_high"]
+
+        both = tokens()
+        assert both == tokens(platform="parallel")
+        single = tokens(platform="twitter")
+        assert single == tokens(platform="reddit")
+        assert both == pytest.approx(2 * single, rel=0.06)  # Schätzwerte sind auf 2 signifikante Stellen gerundet
+
+    def test_estimate_unknown_platform_returns_400(self, env):
+        resp = env["client"].post(
+            "/api/simulation/preflight-estimate",
+            json={"num_agents": 5, "max_rounds": 10, "platform": "mastodon"},
+        )
+        assert resp.status_code == 400
+        assert resp.get_json()["success"] is False
+
+    def test_estimate_warns_when_default_cap_would_abort(self, env, monkeypatch):
+        """Referenzlauf (52 Agenten, 24 Runden) liegt ueber dem Standarddeckel von 20 Mio."""
+        monkeypatch.delenv("AGORA_SIM_DEFAULT_MAX_TOKENS", raising=False)
+        resp = env["client"].post(
+            "/api/simulation/preflight-estimate",
+            json={"num_agents": 52, "max_rounds": 24},
+        )
+        warnings = resp.get_json()["data"]["warnings"]
+        assert any("Standard-Tokendeckel" in w for w in warnings)
+
+    def test_estimate_has_no_cap_warning_when_cap_disabled(self, env, monkeypatch):
+        monkeypatch.setenv("AGORA_SIM_DEFAULT_MAX_TOKENS", "0")
+        resp = env["client"].post(
+            "/api/simulation/preflight-estimate",
+            json={"num_agents": 52, "max_rounds": 24},
+        )
+        warnings = resp.get_json()["data"]["warnings"]
+        assert not any("Standard-Tokendeckel" in w for w in warnings)
+
 
 class TestRunDetailEnrichment:
     def test_detail_contains_budget_and_usage(self, env):

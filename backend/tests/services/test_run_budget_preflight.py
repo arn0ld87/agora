@@ -12,6 +12,7 @@ from app.services.run_budget_preflight import (
     _HistoryStats,
     _round_sig,
     estimate_run,
+    simulation_tokens_per_agent_step,
 )
 
 
@@ -299,3 +300,90 @@ class TestCostDistributionAcrossModels:
         assert est.cost_status == "unknown"
         assert est.estimated_cost_micros_low is None
         assert est.estimated_cost_micros_high is None
+
+
+class TestSimulationTokenModel:
+    """Issue #1772: Schaetzung aus Messwerten statt pauschal 1.000-5.000 Tokens/Aufruf.
+
+    Referenz: Lauf ``sim_cc6067a70603`` (2026-10-04), 24 Runden, 52 Agenten,
+    zwei Plattformen, 1.059 erfolgreiche Aufrufe mit im Mittel 33.700
+    Eingabe-Tokens, also rund 35,7 Mio. Eingabe-Tokens insgesamt.
+    """
+
+    MEASURED_TOTAL_INPUT_TOKENS = 1_059 * 33_700
+
+    def test_reference_run_lands_in_30_to_120_million(self, pricing):
+        est = estimate_run(
+            num_agents=52,
+            max_rounds=24,
+            platforms=2,
+            models=[],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert 30_000_000 <= est.estimated_tokens_low
+        assert est.estimated_tokens_high <= 120_000_000
+        # Der gemessene Verbrauch liegt innerhalb der Spanne.
+        assert est.estimated_tokens_low <= self.MEASURED_TOTAL_INPUT_TOKENS <= est.estimated_tokens_high
+
+    def test_old_heuristic_was_an_order_of_magnitude_too_low(self):
+        # Alte Rechnung: 52 Agenten * 24 Runden * 1.0 * 5.000 = 6,2 Mio. (ohne Plattformfaktor).
+        assert 52 * 24 * 5_000 < self.MEASURED_TOTAL_INPUT_TOKENS / 5
+
+    def test_unbounded_memory_context_grows_with_the_round(self):
+        # Mehr Runden => nicht nur mehr Schritte, sondern auch groesserer Kontext je Schritt.
+        assert simulation_tokens_per_agent_step(48) > simulation_tokens_per_agent_step(24)
+        total_24 = 24 * simulation_tokens_per_agent_step(24)
+        total_48 = 48 * simulation_tokens_per_agent_step(48)
+        assert total_48 > 3 * total_24  # quadratisch statt linear
+
+    def test_bounded_memory_is_linear_in_rounds(self):
+        cap = 16_000
+        total_100 = 100 * simulation_tokens_per_agent_step(100, cap)
+        total_200 = 200 * simulation_tokens_per_agent_step(200, cap)
+        total_300 = 300 * simulation_tokens_per_agent_step(300, cap)
+        # Ab Erreichen der Obergrenze kommen je Runde exakt `cap` Tokens je Schritt dazu.
+        assert total_200 - total_100 == 100 * cap
+        assert total_300 - total_200 == 100 * cap
+
+    def test_bounded_memory_is_cheaper_than_unbounded(self, pricing):
+        common = dict(num_agents=52, max_rounds=24, platforms=2, models=[], pricing=pricing,
+                      history=_empty_history())
+        unbounded = estimate_run(**common)
+        bounded = estimate_run(**common, memory_context_cap_tokens=12_000)
+        assert bounded.estimated_tokens_high < unbounded.estimated_tokens_high
+        # Mit Obergrenze 12.000: hoechstens 12.000 Eingabe-Tokens je Schritt.
+        assert bounded.estimated_tokens_high <= 52 * 2 * 24 * (12_000 + 50) * 1.01
+
+    def test_tokens_scale_with_platform_count(self, pricing):
+        common = dict(num_agents=52, max_rounds=24, models=[], pricing=pricing,
+                      history=_empty_history())
+        both = estimate_run(**common, platforms=2)
+        single = estimate_run(**common, platforms=1)
+        assert both.estimated_tokens_high == pytest.approx(2 * single.estimated_tokens_high, rel=0.06)  # 2 signifikante Stellen
+
+    def test_documents_the_successful_calls_only_assumption(self, pricing):
+        est = estimate_run(num_agents=10, max_rounds=5, models=[], pricing=pricing,
+                           history=_empty_history())
+        assert any("nur erfolgreiche" in w for w in est.warnings)
+        assert any("Keine historischen Verbrauchsdaten" in w and "Heuristik" in w
+                   for w in est.warnings)
+
+    def test_cost_uses_input_dominated_token_mix(self, pricing):
+        # Simulationsschritte sind ~99,9 % Eingabe; 2/3-Annahme wuerde den
+        # (teureren) Output-Tarif ueberbewerten.
+        est = estimate_run(num_agents=52, max_rounds=24, platforms=2,
+                           models=[_PRICED_MODEL], pricing=pricing, history=_empty_history())
+        tokens = est.estimated_tokens_high
+        input_only = tokens * 150_000 / 1_000_000  # gpt-4o-mini: 150000 micros/MTok Eingabe
+        assert est.estimated_cost_micros_high == pytest.approx(input_only, rel=0.02)
+
+    def test_default_cap_warning(self, pricing):
+        common = dict(num_agents=52, max_rounds=24, platforms=2, models=[], pricing=pricing,
+                      history=_empty_history())
+        over = estimate_run(**common, default_token_cap=20_000_000)
+        assert any("Standard-Tokendeckel" in w and "20.000.000" in w for w in over.warnings)
+        under = estimate_run(**common, default_token_cap=500_000_000)
+        assert not any("Standard-Tokendeckel" in w for w in under.warnings)
+        none = estimate_run(**common)
+        assert not any("Standard-Tokendeckel" in w for w in none.warnings)

@@ -18,6 +18,10 @@ from ..utils.validation import validate_simulation_id
 from .simulation_common import get_artifact_store, logger
 
 
+# Plattformen je ``platform``-Wert des Startpfads (Issue #1772).
+_PLATFORM_COUNTS = {"parallel": 2, "twitter": 1, "reddit": 1}
+
+
 def _quote_cost_status(quote_status: str) -> str:
     """Pricing-Status auf Contract-CostStatus mappen (Schätzung bleibt Schätzung)."""
     return {"priced": "estimated", "free": "free"}.get(quote_status, "unknown")
@@ -91,6 +95,8 @@ def preflight_estimate():
         prepared simulation_config.json, wenn nicht explizit überschrieben.
       num_agents / max_rounds (optional): explizite Überschreibung.
       ai_model_ref (optional): explizite Modellwahl (AiModelRef).
+      platform (optional): parallel (Standard, zwei Plattformen), twitter
+        oder reddit. Skaliert die geschätzte Zahl der Agentenschritte.
 
     Antwort: PreflightEstimate (Contract, schema_version=1). Alle Werte sind
     Schätzbereiche; unbekannte Kosten werden als unknown ausgewiesen.
@@ -162,9 +168,23 @@ def preflight_estimate():
             message="ai_model_ref ist ungültig",
         )
 
+    # Issue #1772: Plattformen. ``parallel`` (Standard des Startpfads) = zwei
+    # Plattformen, jeder Agent handelt auf beiden.
+    platform = data.get("platform", "parallel")
+    if platform not in _PLATFORM_COUNTS:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="platform muss parallel, twitter oder reddit sein",
+        )
+
+    from ..services.run_budget import resolve_default_simulation_token_cap
+
     estimate = estimate_run(
         num_agents=num_agents,
         max_rounds=max_rounds,
         models=models,
+        platforms=_PLATFORM_COUNTS[platform],
+        default_token_cap=resolve_default_simulation_token_cap(),
     )
     return json_success(estimate.model_dump(mode="json"))

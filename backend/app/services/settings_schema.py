@@ -185,6 +185,10 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
               default=0.25, min_value=0.01, max_value=1.0),
     FieldSpec('AGORA_SIM_AGENTS_PER_HOUR_MAX_RATIO', 'oasis', 'float',
               default=0.5, min_value=0.01, max_value=1.0),
+    # #1772: harter Standard-Tokendeckel fuer Simulationen ohne Nutzerbudget
+    # (0 = abgeschaltet). Default = ``DEFAULT_SIM_MAX_TOKENS`` in run_budget.py.
+    FieldSpec('AGORA_SIM_DEFAULT_MAX_TOKENS', 'oasis', 'int',
+              default=20_000_000, min_value=0, max_value=1_000_000_000_000),
 
     # ===== Security / Secrets =====
     FieldSpec('SECRET_KEY', 'security', 'string', default='',
