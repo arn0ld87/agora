@@ -62,6 +62,7 @@ from ..evidence_entailment import (
     classify_evidence,
     extract_numeric_facts,
 )
+from ..sentence_splitter import split_sentences
 
 #: Sichtbare Kennzeichnung einer Aussage, für die sich kein Beleg finden ließ.
 #: Bewusst als Klartext und nicht als HTML-Tag: der Abschnitt wird auch als
@@ -203,23 +204,6 @@ assert set(_ENUMERATION_ORDINALS) == set(ENUMERATION_WORDS), (
 #: Code-Fence. Innerhalb eines Blocks wird nichts geprüft und nichts entfernt.
 _FENCE = re.compile(r"^\s*(```|~~~)")
 
-#: Abkürzungen, deren Punkt kein Satzende ist. Einzelne Buchstaben ("z. B.",
-#: "u. a.") deckt die Längenprüfung in :func:`_is_false_boundary` ab.
-_ABBREVIATIONS = frozenset({
-    "bzw", "ca", "vgl", "ggf", "evtl", "inkl", "exkl", "max", "min",
-    "nr", "abs", "art", "bspw", "etc", "usw", "sog", "insb", "zzgl",
-    "jan", "feb", "mrz", "apr", "jun", "jul", "aug", "sep", "okt", "nov", "dez",
-})
-
-#: Monatsnamen. Ein großgeschriebenes Wort hinter einer Zahl beendet den Satz
-#: normalerweise ("umfasste 14. Danach …"); ein Monat tut das nicht ("14. Juni").
-_MONTHS = frozenset({
-    "januar", "februar", "märz", "maerz", "april", "mai", "juni", "juli",
-    "august", "september", "oktober", "november", "dezember",
-    "jan", "feb", "mrz", "apr", "jun", "jul", "aug", "sep", "sept", "okt", "nov", "dez",
-})
-
-
 def is_markup_or_quote_line(stripped: str) -> bool:
     """Leere Zeile, Zitatblock-Präfix oder vollständig getaggte Zeile.
 
@@ -243,87 +227,6 @@ def _is_structural(line: str) -> bool:
     if is_markup_or_quote_line(stripped):
         return True
     return bool(re.fullmatch(r"\*\*[^*]+\*\*:?", stripped))
-
-
-def _is_ordinal_boundary(text: str, dot_index: int, token_start: int) -> bool:
-    """Ist die Ziffernfolge vor dem Punkt eine Ordinalzahl statt eines Satzendes?
-
-    Eine Zahl allein entscheidet das nicht — ``Die Stichprobe umfasste 14.``
-    endet einen Satz, ``am 14. Juni`` nicht. Würde jede Ziffer die Satzgrenze
-    unterdrücken, verschmölzen zwei Sätze zu einer Prüfeinheit, und ein
-    widerlegter Fakt im zweiten risse den ersten mit heraus (Codex-Review
-    PR #1360, P2). Entschieden wird deshalb am Kontext:
-
-    * Ziffer am Zeilenanfang — ein Aufzählungsmarker ("1. Erfolgreicher …").
-    * Folgewort kleingeschrieben — Ordinalzahl ("3. bis 14. Juni").
-    * Folgewort ist ein Monatsname — Datum ("14. Juni").
-
-    Sonst ist der Punkt ein Satzende, auch nach einer Zahl.
-    """
-    if not text[:token_start].strip():
-        return True
-    following = re.match(r"\s*(\S+)", text[dot_index + 1:])
-    if not following:
-        return False
-    word = following.group(1).strip(",.;:()\"'„»")
-    if not word:
-        return False
-    if word[:1].islower():
-        return True
-    return word.lower().rstrip(".") in _MONTHS
-
-
-def _is_false_boundary(text: str, dot_index: int) -> bool:
-    """Steht der Punkt an ``dot_index`` für eine Abkürzung statt ein Satzende?
-
-    Drei Fälle, alle im Referenzlauf belegt: eine Ordinalzahl ("14. Juni",
-    "3. bis"), eine Listennummer ("1. Erfolgreicher …") und eine Abkürzung
-    ("z. B.", "Nr. 3"). Jeder von ihnen zerlegte einen intakten Satz in zwei
-    Fragmente, von denen eines die Zahlen trug und deshalb verschwand.
-    """
-    match = re.search(r"(\S+)$", text[:dot_index])
-    if not match:
-        return False
-    # Öffnende Klammern und Anführungszeichen gehören nicht zum Token:
-    # in "(3. bis 14. Juni" ist die Ordinalzahl sonst "(3" und damit keine
-    # Ziffer mehr — genau daran zerbrach der Satz im Referenzlauf.
-    token = match.group(1).lstrip("([{\"'„»‚‹")
-    if not token:
-        return False
-    if token.isdigit():
-        # ``token_start`` zeigt hinter die abgestreiften Klammern — nur so
-        # erkennt die Zeilenanfangs-Prüfung einen echten Aufzählungsmarker.
-        token_start = match.end() - len(token)
-        return _is_ordinal_boundary(text, dot_index, token_start)
-    # Nur *einzelne* Buchstaben sind Abkürzungspunkte ("z. B.", "u. a.").
-    # Zwei Buchstaben deckt die Liste ab — "ab", "an", "zu" sind gewöhnliche
-    # Wörter und dürfen ein Satzende nicht verhindern.
-    if len(token) == 1 and token.isalpha():
-        return True
-    return token.lower() in _ABBREVIATIONS
-
-
-def split_sentences(line: str) -> List[str]:
-    """Zerlegt eine Zeile in Sätze, ohne Ordinalzahlen zu zerreißen.
-
-    Gibt die Sätze getrimmt zurück; leere Fragmente entfallen. Ein falsch
-    zusammengelassener Satz kostet höchstens Prüfschärfe, ein falsch
-    getrennter dagegen zerstört den gelesenen Text — die Heuristik ist
-    deshalb bewusst konservativ.
-    """
-    sentences: List[str] = []
-    start = 0
-    for match in re.finditer(r"[.!?]+\s+", line):
-        if _is_false_boundary(line, match.start()):
-            continue
-        chunk = line[start:match.end()].strip()
-        if chunk:
-            sentences.append(chunk)
-        start = match.end()
-    tail = line[start:].strip()
-    if tail:
-        sentences.append(tail)
-    return sentences
 
 
 def _fact_probe(fact: NumericFact) -> str:

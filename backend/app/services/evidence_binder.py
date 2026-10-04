@@ -19,6 +19,9 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
 
+from .evidence_text import evidence_text
+from .sentence_splitter import split_sentences
+
 if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung
     from .evidence_entailment import EntailmentJudge
 
@@ -41,20 +44,117 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
 
 
 def candidate_text(item: Dict[str, Any]) -> str:
-    """Verwendet die textuell aussagekräftigsten Felder eines Evidence-Items."""
-    parts = [
-        str(item.get("snippet") or ""),
-        str(item.get("value") or ""),
-    ]
-    raw = item.get("raw")
-    if isinstance(raw, dict):
-        for key in ("content", "snippet", "summary", "name"):
-            val = raw.get(key)
-            if isinstance(val, str) and val:
-                parts.append(val)
-    elif isinstance(raw, str):
-        parts.append(raw)
-    return " ".join(p for p in parts if p).strip()
+    """Der vollständige Vergleichstext eines Evidence-Items (#1766).
+
+    Dünner Zugang zu :func:`app.services.evidence_text.evidence_text`, der
+    einzigen Textprojektion — einschließlich der vollen Interviewantwort aus
+    ``raw["response"]``.
+    """
+    return evidence_text(item)
+
+
+#: Ab wie vielen Zeichen der Retrieval-Score nicht mehr gegen den ganzen Text
+#: gebildet wird. Ein langer Text verdünnt den Cosine-Wert gegen einen
+#: Ein-Satz-Claim: derselbe Satz erreicht im 300-Zeichen-Snippet 0.7 und in der
+#: 2400-Zeichen-Antwort 0.2.
+LONG_TEXT_CHARS = 600
+
+#: Satzfenster für lange Texte: drei Sätze, zwei Sätze Schrittweite, höchstens
+#: zwölf Fenster je Item. Der Deckel begrenzt die Embedding-Aufrufe; bei mehr
+#: Fenstern werden sie gleichmäßig über den Text verteilt.
+RETRIEVAL_WINDOW_SENTENCES = 3
+RETRIEVAL_WINDOW_STEP = 2
+MAX_RETRIEVAL_WINDOWS = 12
+
+
+def _sentence_windows(text: str) -> List[str]:
+    """Überlappende Satzfenster, gleichmäßig auf ``MAX_RETRIEVAL_WINDOWS`` gedeckelt."""
+    sentences = split_sentences(text)
+    size = RETRIEVAL_WINDOW_SENTENCES
+    if len(sentences) <= size:
+        return [" ".join(sentences)] if sentences else []
+    starts = list(range(0, len(sentences) - size + 1, RETRIEVAL_WINDOW_STEP))
+    # Der Schwanz gehört dazu, auch wenn die Schrittweite ihn überspringt.
+    if starts[-1] + size < len(sentences):
+        starts.append(len(sentences) - size)
+    windows = [" ".join(sentences[start:start + size]) for start in starts]
+    if len(windows) <= MAX_RETRIEVAL_WINDOWS:
+        return windows
+    last = len(windows) - 1
+    picked = sorted({
+        round(position * last / (MAX_RETRIEVAL_WINDOWS - 1))
+        for position in range(MAX_RETRIEVAL_WINDOWS)
+    })
+    return [windows[position] for position in picked]
+
+
+def retrieval_texts(item: Dict[str, Any], text: str) -> List[str]:
+    """Die Texte, gegen die der Retrieval-Score eines Items gebildet wird.
+
+    Kurze Texte werden als Ganzes eingebettet. Bei langen Texten sind es der
+    bisherige Kurztext (``snippet`` + ``value``, damit nichts schlechter wird
+    als vor #1766) und die Satzfenster des Volltexts.
+    """
+    if len(text) <= LONG_TEXT_CHARS:
+        return [text]
+    short = " ".join(
+        part for part in (str(item.get("snippet") or ""), str(item.get("value") or "")) if part
+    ).strip()
+    texts = [short] if short else []
+    texts.extend(_sentence_windows(text))
+    return texts or [text]
+
+
+def retrieval_score(
+    claim_vec: Sequence[float],
+    item: Dict[str, Any],
+    text: str,
+    embed: EmbedFn,
+) -> "float | None":
+    """Bester Cosine-Wert des Claims gegen die Retrieval-Texte eines Items.
+
+    ``None``, wenn kein Text eingebettet werden konnte. Ein einzelner
+    scheiternder Text (etwa ein Fenster über dem Kontextfenster des
+    Embedders) kostet nur sich selbst, nicht das Item.
+    """
+    best: "float | None" = None
+    for candidate in retrieval_texts(item, text):
+        try:
+            cand_vec = embed(candidate)
+        except Exception as exc:  # noqa: BLE001, PERF203 — ein defekter Text darf das Item nicht kippen
+            # Ein erschöpftes Run-Budget ist das Ende des Laufs, kein
+            # defekter Text. Lokaler Import: ``run_budget`` zieht diesen
+            # Modul-Baum sonst zirkulär.
+            from .run_budget import reraise_if_budget_exceeded  # noqa: PLC0415
+
+            reraise_if_budget_exceeded(exc)
+            continue
+        score = _cosine(claim_vec, cand_vec)
+        if best is None or score > best:
+            best = score
+    return best
+
+
+def _memoized(embed: EmbedFn) -> EmbedFn:
+    """Einbettung je Text nur einmal pro Aufruf; Fehlschläge werden mitgemerkt."""
+    cache: Dict[str, "Sequence[float] | None"] = {}
+
+    def cached(text: str) -> Sequence[float]:
+        key = text.strip()
+        if key in cache:
+            vector = cache[key]
+            if vector is None:
+                raise RuntimeError("embedding previously failed for this text")
+            return vector
+        try:
+            vector = embed(key)
+        except Exception:
+            cache[key] = None
+            raise
+        cache[key] = vector
+        return vector
+
+    return cached
 
 
 #: Alias fuer Alt-Aufrufer; ``candidate_text`` ist seit #1217 die oeffentliche
@@ -102,6 +202,11 @@ def bind_evidence_to_claim(
     if not (claim_text or "").strip() or not candidates:
         return []
 
+    # Ein Embedding je Text und Aufruf, auch wenn der Aufrufer keinen
+    # memoisierenden Embedder reicht: lange Items bringen bis zu zwölf Fenster
+    # mit, und dasselbe Fenster darf nicht zweimal bezahlt werden. Es wird
+    # immer die übergebene Funktion benutzt, damit das Budget-Ledger greift.
+    embed = _memoized(embed)
     claim_vec = embed(claim_text.strip())
     # Der numerische Treffer gehört in die Sortierung, nicht in die Bindung:
     # ``ClaimEvidenceBindingModel`` ist ``extra="forbid"``, und ein
@@ -120,11 +225,12 @@ def bind_evidence_to_claim(
         # weil ihre Quellen die Retrieval-Schwelle nicht erreichten. Ob die
         # Quelle den Claim *trägt*, entscheidet unverändert das Entailment.
         numeric_hit = shares_numeric_fact(claim_text, text)
-        try:
-            cand_vec = embed(text)
-        except Exception:  # pragma: no cover - safety net  # noqa: BLE001 — safety net; caller handles empty result
+        # Bei langen Texten zählt das beste Satzfenster statt des verdünnten
+        # Gesamttexts (#1766). ``None``: nichts davon war einbettbar.
+        best_score = retrieval_score(claim_vec, item, text, embed)
+        if best_score is None:
             continue
-        score = _cosine(claim_vec, cand_vec)
+        score = best_score
         if score < threshold and not numeric_hit:
             continue
 
