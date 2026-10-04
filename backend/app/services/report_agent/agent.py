@@ -36,8 +36,8 @@ from .planning import plan_outline as plan_outline_impl
 from .search_dedup import (
     EmptySearchRegistry,
     is_empty_result,
+    dedup_key,
     is_search_tool,
-    query_of,
     registry_for,
 )
 from .postprocess_timing import PostprocessPhaseTracker
@@ -499,7 +499,7 @@ class ReportAgent:
         # Leertreffer wird hier gemerkt, damit dieselbe Suche im selben
         # Abschnitt nicht mit einem anderen Werkzeug wiederholt wird.
         if is_search_tool(tool_name) and is_empty_result(structured_result):
-            registry_for(self).record_empty(query_of(parameters))
+            registry_for(self).record_empty(dedup_key(tool_name, parameters))
         # Kanonische Identität für Fakten aus dem Graphen: der Fakt-Text selbst
         # ist die deterministische Quelle (kein freier LLM-Text), die Query
         # bleibt außen vor — derselbe Fakt über verschiedene Queries ist

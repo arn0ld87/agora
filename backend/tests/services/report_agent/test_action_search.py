@@ -215,3 +215,40 @@ def test_suchtreffer_werden_als_agent_action_belege_registriert(monkeypatch):
     expected = build_action_evidence_item(action)
     assert {key: recorded[0][key] for key in expected} == expected
     assert recorded[0]["tool_name"] == "search_simulation_actions"
+
+
+def test_kurze_abkuerzungen_sind_suchwoerter(monkeypatch):
+    """Review PR #1780: „AfD" fiel unter die Vier-Zeichen-Grenze und fand nichts."""
+    stored = [
+        _action(0, "Stadtrat Weber", 1, "Die AfD stimmt der Schließung zu."),
+        _action(1, "Hebamme Lena", 2, "Niemand hat mit uns geredet."),
+        _action(2, "Klinikleitung", 3, "Die EU-Vorgaben lassen keine Wahl."),
+    ]
+    monkeypatch.setattr(
+        SimulationRunner,
+        "get_all_actions",
+        staticmethod(lambda *_a, **_k: [_Stored(action) for action in stored]),
+    )
+
+    assert [hit["agent_name"] for hit in search_simulation_actions("sim-1", query="AfD").hits] == [
+        "Stadtrat Weber"
+    ]
+    assert [hit["agent_name"] for hit in search_simulation_actions("sim-1", query="EU").hits] == [
+        "Klinikleitung"
+    ]
+
+
+def test_kurze_fuellwoerter_bleiben_ohne_wirkung(actions):
+    """„die" ist kein Suchwort: sonst träfe fast jeder Beitrag."""
+    assert search_simulation_actions("sim-1", query="die").hits == []
+
+
+def test_kurze_abkuerzung_trifft_nur_als_ganzes_wort(monkeypatch):
+    stored = [_action(0, "Anna", 1, "Die Neubauten kosten viel.")]
+    monkeypatch.setattr(
+        SimulationRunner,
+        "get_all_actions",
+        staticmethod(lambda *_a, **_k: [_Stored(action) for action in stored]),
+    )
+
+    assert search_simulation_actions("sim-1", query="EU").hits == []

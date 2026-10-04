@@ -875,3 +875,37 @@ def test_a_low_positioning_ratio_does_not_downgrade_the_status():
     found = collect_run_degradations(stance_analysis=_stance_analysis(3, 10))
 
     assert apply_run_degradation_downgrade(ReportStatus.COMPLETED, found) == ReportStatus.COMPLETED
+
+
+def test_a_failed_stance_classification_is_not_reported_as_low_positioning():
+    """Review PR #1780: ein Auswertungsausfall ist kein Befund über die Simulation."""
+    analysis = {
+        **_stance_analysis(3, 10),
+        "classified_total": 12,
+        "classification_failed": 25,
+    }
+
+    found = collect_run_degradations(stance_analysis=analysis)
+
+    assert len(found) == 1
+    entry = RunDegradationModel.model_validate(found[0])
+    assert entry.component == "simulation_positioning"
+    assert entry.reason == "stance_classification_failed_25_of_37"
+    assert entry.severity == "warning"
+    assert entry.detail == (
+        "Die Haltung von 25 von 37 Simulationsbeiträgen konnte nicht bestimmt "
+        "werden. Die Positionierungsquote (3 von 10 Stimmen) ist deshalb nur "
+        "eine Untergrenze und sagt nichts über den Simulationsverlauf aus."
+    )
+
+
+def test_a_failed_stance_classification_stays_visible_above_the_threshold():
+    analysis = {
+        **_stance_analysis(6, 10),
+        "classified_total": 30,
+        "classification_failed": 5,
+    }
+
+    found = collect_run_degradations(stance_analysis=analysis)
+
+    assert [entry["reason"] for entry in found] == ["stance_classification_failed_5_of_35"]

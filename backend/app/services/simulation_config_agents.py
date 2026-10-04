@@ -176,7 +176,10 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
             self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23)))
         )
         config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0))
-        config.sentiment_bias = _align_sentiment_sign(config.stance, config.sentiment_bias)
+        # Die Vorzeichenregel steht nur im Prompt mit Streitfrage; ohne
+        # Streitfrage bleibt der Lauf wie zuvor (Review PR #1780).
+        if contested_statement:
+            config.sentiment_bias = _align_sentiment_sign(config.stance, config.sentiment_bias)
         configs.append(config)
     return configs
 

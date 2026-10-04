@@ -261,14 +261,39 @@ def _positioning_degradations(
     """
     if not isinstance(analysis, Mapping) or analysis.get("applicable") is not True:
         return []
+
+    positioned = analysis.get("voices_positioned")
+    total = analysis.get("voices_total")
+
+    # Ein Auswertungsausfall ist kein Befund über die Simulation (Review
+    # PR #1780): Beiträge ohne Klassifikation zählen nicht als positioniert,
+    # die Quote ist dann nur eine Untergrenze. Der Ausfall bleibt sichtbar,
+    # die Aussage „trägt wenig bei" unterbleibt.
+    failed = analysis.get("classification_failed")
+    if isinstance(failed, int) and not isinstance(failed, bool) and failed > 0:
+        classified = analysis.get("classified_total")
+        contributions = failed + (classified if isinstance(classified, int) else 0)
+        return [
+            _entry(
+                "simulation_positioning",
+                f"stance_classification_failed_{failed}_of_{contributions}",
+                (
+                    f"Die Haltung von {failed} von {contributions} "
+                    "Simulationsbeiträgen konnte nicht bestimmt werden. Die "
+                    f"Positionierungsquote ({positioned} von {total} Stimmen) ist "
+                    "deshalb nur eine Untergrenze und sagt nichts über den "
+                    "Simulationsverlauf aus."
+                ),
+                severity="warning",
+            )
+        ]
+
     ratio = analysis.get("positioning_ratio")
     if not isinstance(ratio, (int, float)) or isinstance(ratio, bool):
         return []
     if ratio >= Config.REPORT_POSITIONING_RATIO_MIN:
         return []
 
-    positioned = analysis.get("voices_positioned")
-    total = analysis.get("voices_total")
     percent = round(ratio * 100)
     return [
         _entry(

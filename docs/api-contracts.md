@@ -215,7 +215,7 @@ Für Consumer gilt:
 - `section_generation`
 - `outline_planning`
 - `run_cancellation`
-- `simulation_positioning` (seit #1778: die Positionierungsquote liegt unter `AGORA_REPORT_POSITIONING_RATIO_MIN`, Standard 0,5; `reason="positioning_ratio_<positioniert>_of_<gesamt>"`, immer `warning`; ohne Streitfrage kein Eintrag)
+- `simulation_positioning` (seit #1778: die Positionierungsquote liegt unter `AGORA_REPORT_POSITIONING_RATIO_MIN`, Standard 0,5; `reason="positioning_ratio_<positioniert>_of_<gesamt>"`, immer `warning`; ohne Streitfrage kein Eintrag. Fiel die Haltungsklassifikation für Beiträge aus, steht stattdessen `reason="stance_classification_failed_<ausgefallen>_of_<beiträge>"`: die Quote ist dann nur eine Untergrenze, und der Eintrag sagt nichts über den Simulationsverlauf)
 
 Der Zweck ist nicht, jeden Fehler mit einem neuen Status zu erschlagen, sondern technische Ausführung und fachliche Ergebnisqualität getrennt sichtbar zu machen.
 

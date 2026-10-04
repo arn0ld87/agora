@@ -292,3 +292,14 @@ class TestContestedQuestionInAgentConfigPrompt:
         generator._generate_agent_configs_batch("ctx", [self._entity()], 0, "Was passiert?")
 
         assert "Contested question" not in prompts[0]
+
+    def test_ohne_streitfrage_bleibt_das_vorzeichen_des_bias_unveraendert(self):
+        """Review PR #1780: Läufe ohne Streitfrage ändern ihr Verhalten nicht."""
+        generator = self._generator([])
+
+        configs = generator._generate_agent_configs_batch(
+            "ctx", [self._entity()], 0, "Was passiert?"
+        )
+
+        assert configs[0].stance == "opposing"
+        assert configs[0].sentiment_bias == 0.65

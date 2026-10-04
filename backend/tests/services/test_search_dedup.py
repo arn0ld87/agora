@@ -252,3 +252,68 @@ def test_hinweis_benennt_datenluecke_und_budgetfreiheit():
     assert "Datenlücke" in text
     assert "nicht gegen dein Tool-Budget" in text
     assert "3/5" in text
+
+
+# ---------------------------------------------------------------------------
+# 6. Beitragssuche hat eine eigene Merkliste (Issue #1778, Review PR #1780)
+#
+# ``search_simulation_actions`` durchsucht die Simulationsbeiträge, nicht den
+# Graphen. Ein Leertreffer im Graphen sagt nichts über die Beiträge aus und
+# umgekehrt; die Filter (Agent, Runden) gehören zur Identität der Suche.
+# ---------------------------------------------------------------------------
+
+
+def _record_empty_action_search(agent: "_AgentStub", parameters: Dict[str, Any]) -> None:
+    from app.services.report_agent.action_search import ActionSearchResult
+
+    ReportAgent._record_tool_evidence(
+        agent,
+        "search_simulation_actions",
+        parameters,
+        ActionSearchResult(query=str(parameters.get("query") or "")),
+        "",
+        6,
+    )
+
+
+def test_leertreffer_im_graphen_sperrt_die_beitragssuche_nicht():
+    from app.services.report_agent.search_dedup import dedup_key
+
+    agent = _AgentStub()
+    ReportAgent._record_tool_evidence(
+        agent,
+        "quick_search",
+        {"query": "AfD"},
+        _FakeSearchResult(total_count=0, facts=[]),
+        "Search Query: AfD\nFound 0 related results",
+        6,
+    )
+
+    registry = registry_for(agent)
+    assert registry.was_empty(dedup_key("panorama_search", {"query": "AfD"})) is True
+    assert registry.was_empty(dedup_key("search_simulation_actions", {"query": "AfD"})) is False
+
+
+def test_leere_beitragssuche_sperrt_nur_dieselbe_beitragssuche():
+    from app.services.report_agent.search_dedup import dedup_key
+
+    agent = _AgentStub()
+    _record_empty_action_search(agent, {"query": "AfD", "agent_name": "Hebamme"})
+
+    registry = registry_for(agent)
+    assert registry.was_empty(
+        dedup_key("search_simulation_actions", {"query": "afd", "agent_name": "Hebamme"})
+    ) is True
+    # Ohne den Agentenfilter ist es eine andere Suche.
+    assert registry.was_empty(dedup_key("search_simulation_actions", {"query": "AfD"})) is False
+    # Und über den Graphen sagt sie nichts.
+    assert registry.was_empty(dedup_key("quick_search", {"query": "AfD"})) is False
+
+
+def test_beitragssuche_mit_treffern_wird_nicht_gemerkt():
+    from app.services.report_agent.action_search import ActionSearchResult
+    from app.services.report_agent.search_dedup import dedup_key
+
+    assert is_empty_result(ActionSearchResult(query="AfD")) is True
+    assert is_empty_result(ActionSearchResult(query="AfD", total_matching=2, total_actions=9)) is False
+    assert dedup_key("quick_search", {"query": "AfD"}) == "AfD"

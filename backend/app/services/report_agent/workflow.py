@@ -63,6 +63,7 @@ from .section_pipeline import (
 )
 from .search_dedup import (
     REPEATED_EMPTY_SEARCH_MSG,
+    dedup_key,
     is_search_tool,
     query_of,
     registry_for,
@@ -1211,7 +1212,11 @@ def generate_section_react(
             # Iteration ein und der Iterationsanschlag kommt genauso.
             _call_params = call.get("parameters", {}) or {}
             _call_query = query_of(_call_params)
-            if is_search_tool(call["name"]) and registry_for(agent).was_empty(_call_query):
+            # Issue #1778: die Beitragssuche hat einen eigenen Schlüsselraum —
+            # ein Leertreffer im Graphen sperrt sie nicht (``dedup_key``).
+            if is_search_tool(call["name"]) and registry_for(agent).was_empty(
+                dedup_key(call["name"], _call_params)
+            ):
                 logger.info(
                     "section %r: Suche %r uebersprungen — in diesem Abschnitt "
                     "bereits ergebnislos (Werkzeug %s)",
