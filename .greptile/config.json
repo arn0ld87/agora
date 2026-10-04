@@ -120,7 +120,7 @@
     },
     {
       "id": "doku-nachziehen",
-      "rule": "Ändert ein PR Persistenz, Migrationen, Env-Defaults oder den Compose-Stack, muss docs/runbooks/upgrade.md im selben PR angepasst sein. Jeder PR mit Verhaltensänderung bringt ein Fragment unter changelog.d/ mit und hält docs/STATUS.md aktuell; CHANGELOG.md wird nie direkt editiert.",
+      "rule": "Ändert ein PR Persistenz, Migrationen, Env-Defaults oder den Compose-Stack, muss docs/runbooks/upgrade.md im selben PR angepasst sein. Jeder PR, der das Verhalten des Produkts ändert (Backend, Frontend, Simulation, Bericht, Deployment), bringt ein Fragment unter changelog.d/ mit und hält docs/STATUS.md aktuell; CHANGELOG.md wird nie direkt editiert. Reine Werkzeug- und Repo-Konfiguration (Review-Bot, Editor, CI-Kommentare) braucht keinen Eintrag in docs/STATUS.md.",
       "severity": "low"
     },
     {
@@ -142,7 +142,7 @@
     },
     {
       "id": "embedding-ssot",
-      "rule": "embedding_service.py und embedding_migration.py sind der einzige Lese- und Schreibpfad für die Embedding-Konfiguration (ADR-0007). Chat-Routing und Embedding-Konfiguration bleiben getrennt; ein neuer Consumer, der Config.EMBEDDING_* oder Umgebungsvariablen direkt liest, ist ein Befund.",
+      "rule": "Die persistente Embedding-Konfiguration liegt im EmbeddingConfigurationStore (ADR-0007). Ein neuer Consumer, der Config.EMBEDDING_* oder Umgebungsvariablen direkt liest, ist ein Befund. Ausgenommen ist der in ADR-0007 vorgesehene Legacy-Adapter backend/app/services/embedding_configurations/legacy.py, der diese Werte lesend auswertet, ohne in den Store zu schreiben. Chat-Routing und Embedding-Konfiguration bleiben getrennt.",
       "scope": [
         "backend/app/**"
       ],
