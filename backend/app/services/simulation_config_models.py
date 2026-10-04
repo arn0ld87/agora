@@ -157,6 +157,16 @@ class SimulationParameters:
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     generation_reasoning: str = ""  # LLM reasoning explanation
 
+    # Streitfrage des Laufs (#1778): Vertrag ``ContestedQuestion`` als Dict.
+    # Die Datei bleibt Dataclass — keine Pydantic-Migration in diesem Schritt.
+    contested_question: Dict[str, Any] = field(
+        default_factory=lambda: {
+            "statement": None,
+            "origin": "none",
+            "absence_reason": None,
+        }
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         time_dict = asdict(self.time_config)
@@ -179,6 +189,7 @@ class SimulationParameters:
             "neo4j_user": self.neo4j_user,
             "generated_at": self.generated_at,
             "generation_reasoning": self.generation_reasoning,
+            "contested_question": self.contested_question,
         }
 
     def to_json(self, indent: int = 2) -> str:

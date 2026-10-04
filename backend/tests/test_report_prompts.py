@@ -329,3 +329,18 @@ def test_format_required_sections_renders_numbered_markdown():
     out = report_prompts.format_required_sections(sections)
     assert "1. **A** — alpha" in out
     assert "2. **B** — beta" in out
+
+
+def test_section_prompt_nennt_die_beitragssuche_fuer_oeffentliche_aussagen():
+    """Issue #1778: Prompt-Änderung aus Schritt 1.7, abgesichert gegen stilles Entfernen."""
+    template = report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE
+
+    assert (
+        "- search_simulation_actions: Search the posts and comments the agents actually "
+        "wrote during the simulation. Use it for what was said publicly and how the "
+        "debate developed."
+    ) in template
+    # Die Zeile steht in der Werkzeugliste, nicht im harten Evidence-Gating-Block.
+    start = template.index('<evidence_gating priority="hard">')
+    end = template.index("</evidence_gating>", start)
+    assert "search_simulation_actions" not in template[start:end]

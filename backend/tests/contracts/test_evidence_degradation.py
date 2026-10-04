@@ -403,3 +403,83 @@ def test_report_generation_liefert_incomplete_statt_zu_scheitern():
         "ReportGenerationService entscheidet nicht mehr ueber is_deliverable_report_status — "
         "ein degradierter Report wuerde wieder als Fehlschlag zugestellt."
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. #1778 Schritt 1.1 — speculative bleibt speculative, kein enum-Eintrag
+# ---------------------------------------------------------------------------
+
+
+def _speculative_claim() -> dict:
+    """Claim mit der fünften Confidence-Stufe (Score 0,3).
+
+    Vor der Enum-Erweiterung lehnte der Contract den Wert mit einem
+    ``enum``-Fehler ab; die Degradation hat ihn auf ``low`` gesetzt.
+    """
+    return {
+        "claim_id": "claim_01",
+        "claim_text": "Ein Claim mit speculative-Label und Score unter 0,45.",
+        "confidence_label": "speculative",
+        "confidence_score": 0.3,
+        "evidence": [
+            {
+                "evidence_id": _SEED_EVIDENCE_ID,
+                "supports_claim": True,
+            },
+        ],
+        "audit_trail": [],
+    }
+
+
+def test_speculative_claim_bleibt_speculative_ohne_enum_eintrag():
+    """Der Degradationspfad stuft einen speculative-Claim nicht mehr ab."""
+    sections = [
+        {
+            "section_index": 1,
+            "section_title": "Sektion mit speculative-Claim",
+            "section_summary": "Zusammenfassung des Abschnitts.",
+            "claims": [
+                _speculative_claim(),
+                {**_seed_only_medium_claim(), "claim_id": "claim_02"},
+            ],
+            "hypotheses": [],
+            "hypotheses_appendix": [],
+            "data_gaps": [],
+            "structured_metadata": {},
+            "generation_failed": False,
+        },
+    ]
+    payload = {
+        "schema_version": 3,
+        "report_id": "r-speculative",
+        "simulation_id": "sim-speculative",
+        "evidence_index": {
+            _SEED_EVIDENCE_ID: {
+                "evidence_id": _SEED_EVIDENCE_ID,
+                "producer_key": "seed_dokument_01#speculative-fixture",
+                "type": "graph_fact",
+                "source": "seed_dokument_01",
+                "snippet": "Beleg-Snippet aus dem Seed-Korpus.",
+                "source_kind": "seed_corpus",
+            }
+        },
+        "global_evidence_refs": [],
+        "sections": sections,
+    }
+
+    # Der Medium-Claim verletzt agent_grounded_for_medium und liefert den
+    # Fehler, der die Degradation auslöst — der speculative-Claim selbst
+    # validiert jetzt unverändert durch den Contract.
+    with pytest.raises(ValidationError) as exc_info:
+        EvidenceMapModel.model_validate(payload)
+
+    repaired, violations = degrade_sections_for_violations(
+        sections, exc_info.value, logger=None
+    )
+
+    speculative = next(c for c in repaired[0]["claims"] if c["claim_id"] == "claim_01")
+    assert speculative["confidence_label"] == "speculative"
+    assert not any(
+        v.get("violation") == "enum" and v.get("claim_id") == "claim_01"
+        for v in violations
+    )

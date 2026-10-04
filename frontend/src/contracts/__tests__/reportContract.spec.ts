@@ -273,6 +273,14 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
     }
   });
 
+  it('begrenzt voice_key wie der Backend-Vertrag auf 64 Zeichen (#1778)', () => {
+    const item = { type: 'agent_action', source: 'simulation_actions', snippet: 'Beitrag.' };
+    expect(EvidenceItemSchema.safeParse({ ...item, voice_key: 'agent:7' }).success).toBe(true);
+    const tooLong = `agent:${'1'.repeat(59)}`;
+    expect(tooLong.length).toBe(65);
+    expect(EvidenceItemSchema.safeParse({ ...item, voice_key: tooLong }).success).toBe(false);
+  });
+
   it('parses sample without optional fields (Task 12 backward compat)', () => {
     const item = {
       type: 'graph_fact',
@@ -497,6 +505,7 @@ describe('RunDegradationSchema — Persona-Komponente (#1419)', () => {
       'contract_export',
       'outline_planning',
       'run_cancellation',
+      'simulation_positioning',
     ]);
   });
 

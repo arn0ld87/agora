@@ -119,6 +119,10 @@ const EvidenceSourceSchema = z.object({
   // Herkunft ist abgeleitet, nicht belegt. Spiegelt den Backend-Default.
   source_kind: EvidenceSourceKindSchema.default("inferred"),
   persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
+  // Issue #1778 (Schritt 1.2): Stimme — Schlüssel der Persona, von der der
+  // Beleg stammt ("agent:<agent_id>"). Null bei Belegen ohne Persona
+  // (Seed, Graph, Web). Pendant zu EvidenceItemModel.voice_key.
+  voice_key: z.string().max(64).regex(/^agent:\d+$/).nullable().optional(),
   persona_role_family: z.string().min(1).max(120).optional().nullable(),
   // Slice 8 (2026-05-16) — Provider+Modell, das diese Evidence-Zeile
   // extrahiert hat. Pendant zu EvidenceItemModel.source_model. Format
@@ -356,6 +360,9 @@ export const RunDegradationSchema = z.object({
     // Issue #1479: die Section-Schleife erreichte nach einem Nutzer-Abbruch
     // nicht mehr alle Outline-Sections (severity="blocking").
     'run_cancellation',
+    // Issue #1778: zu wenige Stimmen beziehen in der Simulation Stellung zur
+    // Streitfrage (severity="warning").
+    'simulation_positioning',
   ]),
   reason: z.string().min(1),
   detail: z.string().default(''),

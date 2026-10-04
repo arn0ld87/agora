@@ -41,6 +41,7 @@ from .requirement_checker import (
     find_missing_requirements,
 )
 from .run_degradation import (
+    stance_analysis_unavailable,
     apply_run_degradation_downgrade,
     assert_run_invariants,
     collect_run_degradations,
@@ -62,12 +63,22 @@ from .section_pipeline import (
     process_section,
 )
 from .search_dedup import (
-    REPEATED_EMPTY_SEARCH_MSG,
+    dedup_key,
     is_search_tool,
     query_of,
+    repeated_empty_search_message,
     registry_for,
 )
 from .section_coverage import section_has_sufficient_evidence
+from .stance_analysis import (
+    build_stance_analysis,
+    contested_statement_of,
+    has_contested_statement,
+    load_stance_analysis,
+    save_stance_analysis,
+)
+from ..run_budget import reraise_if_budget_exceeded
+from ..sim.action_log_reader import action_log_health
 from .simulation_snapshot import (
     capture_simulation_snapshot,
     load_simulation_llm_call_stats,
@@ -135,6 +146,81 @@ def _load_persona_count(agent: Any) -> int:
         )
         return 0
     return len(profiles) if isinstance(profiles, list) else 0
+
+
+def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, Any]]:
+    """Haltung je Beitrag und Positionierungsquote des Laufs (Issue #1778).
+
+    Läuft einmal vor dem ersten Abschnitt. Die Klassifikation nutzt den
+    LLM-Client des Report-Agenten, damit ihre Aufrufe im Budget-Ledger des
+    Berichts landen; ``BudgetExceededError`` wird nicht gefangen.
+
+    Kann die Analyse nicht gerechnet werden, bleibt das sichtbar
+    (``stance_analysis_unavailable``, Review PR #1780): ein Lese- oder
+    Rechtefehler, ein fehlendes Aktionsprotokoll oder beschädigte
+    Protokollzeilen sind keine Quote von null. Nur ohne Simulationskonfiguration
+    wird nichts behauptet (``None``) — dann ist nicht bekannt, ob der Lauf
+    überhaupt eine Streitfrage hat.
+    """
+    simulation_id = getattr(agent, "simulation_id", "<unknown>")
+    report_folder = ReportManager._get_report_folder(report_id)
+    actions: list[Dict[str, Any]] = []
+    try:
+        from ..simulation_runner import SimulationRunner
+
+        config = resolve_default_store().read_json(
+            agent.simulation_id,
+            "simulation_config",
+            default=None,
+        )
+        if not isinstance(config, dict):
+            return None
+        # Ein Resume derselben ``report_id`` übernimmt die gespeicherte
+        # Analyse, statt alle Beiträge erneut zu klassifizieren (Budget des
+        # Resumes) — aber nur, wenn sie zur aktuellen Streitfrage gehört.
+        stored = load_stance_analysis(report_folder)
+        if stored is not None and stored.contested_statement == contested_statement_of(config):
+            return stored.model_dump(mode="json")
+        # Ohne Streitfrage ist die Analyse nicht anwendbar: das Protokoll
+        # wird dann gar nicht erst gelesen.
+        if has_contested_statement(config):
+            actions = [
+                action.to_dict()
+                for action in SimulationRunner.get_all_actions(agent.simulation_id)
+            ]
+            log_files, unreadable_lines = action_log_health(
+                agent.simulation_id, SimulationRunner.RUN_STATE_DIR
+            )
+            if log_files == 0:
+                logger.warning("stance analysis: no action log for simulation %s", simulation_id)
+                return stance_analysis_unavailable("action_log_missing")
+            if unreadable_lines:
+                logger.warning(
+                    "stance analysis: %d unreadable action log lines for simulation %s",
+                    unreadable_lines,
+                    simulation_id,
+                )
+                return stance_analysis_unavailable("action_log_unreadable")
+    except Exception as exc:  # noqa: BLE001 — logged; surfaced as run degradation
+        reraise_if_budget_exceeded(exc)
+        logger.warning(
+            "stance analysis: failed to read config or actions for simulation %s: %r",
+            simulation_id,
+            exc,
+        )
+        return stance_analysis_unavailable("read_failed")
+
+    analysis = build_stance_analysis(
+        agent.simulation_id, config, actions, None, agent.llm
+    )
+    save_stance_analysis(report_folder, analysis)
+    return analysis.model_dump(mode="json")
+
+
+def _stance_analysis_of(agent: Any) -> Optional[Dict[str, Any]]:
+    """Die am Agenten abgelegte Analyse; ein Test-Double liefert ``None``."""
+    analysis = getattr(agent, "stance_analysis", None)
+    return analysis if isinstance(analysis, dict) else None
 
 
 def _load_persona_fallback_stats(agent: Any) -> tuple[int, int]:
@@ -973,7 +1059,13 @@ def generate_section_react(
     # zurueck und wuerde alle Tool-Calls unterdruecken.
     registry_for(agent).reset()
     used_tools = set()
-    all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+    all_tools = {
+        "insight_forge",
+        "panorama_search",
+        "quick_search",
+        "interview_agents",
+        "search_simulation_actions",
+    }
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
 
     # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten
@@ -1158,7 +1250,11 @@ def generate_section_react(
             # Iteration ein und der Iterationsanschlag kommt genauso.
             _call_params = call.get("parameters", {}) or {}
             _call_query = query_of(_call_params)
-            if is_search_tool(call["name"]) and registry_for(agent).was_empty(_call_query):
+            # Issue #1778: die Beitragssuche hat einen eigenen Schlüsselraum —
+            # ein Leertreffer im Graphen sperrt sie nicht (``dedup_key``).
+            if is_search_tool(call["name"]) and registry_for(agent).was_empty(
+                dedup_key(call["name"], _call_params)
+            ):
                 logger.info(
                     "section %r: Suche %r uebersprungen — in diesem Abschnitt "
                     "bereits ergebnislos (Werkzeug %s)",
@@ -1169,8 +1265,9 @@ def generate_section_react(
                 messages.append({"role": "assistant", "content": response})
                 messages.append({
                     "role": "user",
-                    "content": REPEATED_EMPTY_SEARCH_MSG.format(
-                        query=_call_query,
+                    "content": repeated_empty_search_message(
+                        call["name"],
+                        _call_params,
                         tool_calls_count=tool_calls_count,
                         max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
                     ),
@@ -1698,6 +1795,7 @@ def _build_partial_report(
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
+        stance_analysis=_stance_analysis_of(agent),
     )
     report.status = apply_run_degradation_downgrade(
         report.status, report.run_degradations
@@ -1966,6 +2064,10 @@ def generate_report(
             agent.evidence_map = EvidenceMapModel.model_validate(
                 agent.evidence_map
             ).model_dump(mode="json")
+
+        # Issue #1778: Haltung je Beitrag einmal vor dem ersten Abschnitt
+        # bestimmen; das Ergebnis geht in die Degradationssumme des Laufs.
+        agent.stance_analysis = _compute_stance_analysis(agent, report_id)
 
         _restore_work_trace_markers(agent, report_id)
 
@@ -2248,6 +2350,7 @@ def generate_report(
                 agent
             ).work_trace_removed_sections,
             metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
+            stance_analysis=_stance_analysis_of(agent),
         )
         report.status = apply_run_degradation_downgrade(
             report.status, report.run_degradations

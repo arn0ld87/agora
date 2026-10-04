@@ -391,6 +391,58 @@ def read_actions_from_file(
 # ---------------------------------------------------------------------------
 
 
+def _log_file_health(log_path: str) -> tuple[int, int]:
+    """(unlesbare Zeilen, Aktionszeilen) einer Protokolldatei."""
+    unreadable_lines = 0
+    action_lines = 0
+    with open(log_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                unreadable_lines += 1
+                continue
+            if isinstance(data, dict) and "agent_id" in data and "event_type" not in data:
+                action_lines += 1
+    return unreadable_lines, action_lines
+
+
+def action_log_health(simulation_id: str, base_dir: str | Path) -> tuple[int, int]:
+    """(vorhandene Protokolldateien, unlesbare Zeilen) einer Simulation.
+
+    ``get_all_actions`` überspringt fehlende Dateien und defekte Zeilen
+    stillschweigend. Wer aus der Aktionsliste einen Messwert ableitet
+    (Issue #1778: Positionierungsquote), muss „nichts gesagt" von „nicht
+    lesbar" unterscheiden können. Leere Zeilen zählen nicht als unlesbar.
+    """
+    sim_dir = safe_join_within_root(
+        str(base_dir), validate_path_id(simulation_id, field_name="simulation_id")
+    )
+    platform_logs = [
+        path
+        for path in (
+            os.path.join(sim_dir, "twitter", "actions.jsonl"),
+            os.path.join(sim_dir, "reddit", "actions.jsonl"),
+        )
+        if os.path.exists(path)
+    ]
+    platform_health = [_log_file_health(path) for path in platform_logs]
+    # Wie ``get_all_actions``: das alte Einzelprotokoll wird genau dann
+    # gelesen, wenn die Plattformprotokolle keine Aktion liefern. Geprüft
+    # wird das Protokoll, aus dem die Aktionen tatsächlich stammen.
+    legacy_log = os.path.join(sim_dir, "actions.jsonl")
+    if not any(actions for _unreadable, actions in platform_health) and os.path.exists(legacy_log):
+        legacy_unreadable, legacy_actions = _log_file_health(legacy_log)
+        if legacy_actions or not platform_logs:
+            return 1, legacy_unreadable
+    log_files = len(platform_logs)
+    unreadable_lines = sum(unreadable for unreadable, _actions in platform_health)
+    return log_files, unreadable_lines
+
+
+
 def get_all_actions(
     simulation_id: str,
     base_dir: str | Path,

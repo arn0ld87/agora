@@ -841,6 +841,27 @@ def _restart_graph_build(run: dict):
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
 
+def _restart_contested_question(run: dict, config: dict) -> Optional[str]:
+    """Die Streitfrage, die der Nutzer für diese Vorbereitung vorgegeben hat (#1778).
+
+    Der Restart hat keinen Request-Payload. Zuerst gilt der Vermerk am
+    Ursprungs-Run: er existiert auch dann, wenn die Vorbereitung vor der
+    Konfiguration scheiterte. Sonst gilt die gespeicherte Konfiguration, aber
+    nur mit ``origin="user"`` — einen Vorschlag des Assistenten leitet der
+    Restart wie jede Vorbereitung neu ab.
+    """
+    from_run = (run.get("metadata") or {}).get("contested_question")
+    if isinstance(from_run, str) and from_run.strip():
+        return from_run.strip()
+
+    persisted = config.get("contested_question")
+    if isinstance(persisted, dict) and persisted.get("origin") == "user":
+        statement = persisted.get("statement")
+        if isinstance(statement, str) and statement.strip():
+            return statement.strip()
+    return None
+
+
 def _restart_simulation_prepare(run: dict):
     simulation_id = _linked_or_entity_id(run, "simulation_id", "simulation_id")
     manager = SimulationManager()
@@ -859,6 +880,7 @@ def _restart_simulation_prepare(run: dict):
         raise ValueError("GraphStorage not initialized")
 
     config = manager.get_simulation_config(simulation_id) or {}
+    contested_question = _restart_contested_question(run, config)
     # Issue #841/#844/#1183: Anlage-Fenster hinter RunLifecycle — Markierung,
     # Task-Reihenfolge und strikte Persistenzsemantik liegen im Kontextmanager.
     with RunLifecycle.begin(
@@ -874,7 +896,13 @@ def _restart_simulation_prepare(run: dict):
         artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
-        metadata={"graph_id": state.graph_id, "branch_name": state.branch_name, **workspace_credential_metadata()},
+        metadata={
+            "graph_id": state.graph_id,
+            "branch_name": state.branch_name,
+            **workspace_credential_metadata(),
+            # #1778: weitertragen, damit auch ein zweiter Restart sie kennt.
+            **({"contested_question": contested_question} if contested_question else {}),
+        },
     ) as lifecycle:
         new_run = lifecycle.record
         run_id = new_run["run_id"]
@@ -967,6 +995,9 @@ def _restart_simulation_prepare(run: dict):
                     language=config.get("language"),
                     max_agents=config.get("max_agents"),
                     quota_plan=quota_plan,
+                    # #1778: Nutzervorgabe für die Streitfrage erneut
+                    # durchreichen; None heißt, der Assistent schlägt eine vor.
+                    contested_question_override=contested_question,
                     run_id=run_id,
                 )
                 task_manager.complete_task(task_id, result=result_state.to_simple_dict())

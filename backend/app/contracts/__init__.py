@@ -199,6 +199,7 @@ from .report_v3 import (
     Segment,
     TrustSignal,
 )
+from .contested_question_contract import ContestedQuestion
 
 __all__ = [
     "ApiKeyCreateRequest",
@@ -218,6 +219,7 @@ __all__ = [
     "ComparisonDeltas",
     "ClaimType",
     "ConfidenceLabel",
+    "ContestedQuestion",
     "DecisionQuestion",
     "DecisionResult",
     "DecisionState",

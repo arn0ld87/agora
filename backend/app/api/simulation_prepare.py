@@ -11,6 +11,7 @@ from flask import request
 
 from . import simulation_bp
 from ..models.project import ProjectManager as ProjectManager
+from ..services.artifact_store import resolve_default_store
 from ..services.entity_reader import EntityReader
 from ..services.llm_provider_registry import LlmProviderRegistry
 from ..services.llm_routing_seed import (
@@ -55,6 +56,7 @@ from .simulation_prepare_contracts import (
     _collect_prepare_inputs as _collect_prepare_inputs,
     _load_prepare_project as _load_prepare_project,
     _parse_prepare_budget as _parse_prepare_budget,
+    _parse_prepare_contested_question as _parse_prepare_contested_question,
     _parse_prepare_identity as _parse_prepare_identity,
     _parse_quota_plan as _parse_quota_plan,
     _read_client_choice as _read_client_choice,
@@ -149,6 +151,24 @@ def _ensure_prepare_startable(
 
 
 
+
+
+def _contested_question_changed(simulation_id: str, requested: str | None) -> bool:
+    """Ob die übergebene Streitfrage von der persistierten abweicht.
+
+    Eine neue Nutzervorgabe ist wie ein Modellwechsel ein Grund, eine bereits
+    vorbereitete Simulation erneut vorzubereiten (Review PR #1780). Ohne
+    Vorgabe bleibt der Kurzschluss bestehen.
+    """
+    if not requested:
+        return False
+    config = resolve_default_store().read_json(simulation_id, "simulation_config", default=None)
+    contested = config.get("contested_question") if isinstance(config, dict) else None
+    if not isinstance(contested, dict):
+        return True
+    # Derselbe Wortlaut als Nutzervorgabe ändert die Herkunft: aus einem
+    # Vorschlag des Assistenten wird ``origin="user"``.
+    return contested.get("statement") != requested or contested.get("origin") != "user"
 
 
 def _already_prepared_response(simulation_id: str):
@@ -307,6 +327,9 @@ def _begin_prepare_run(
             "llm_provider": routing.llm_runtime.redacted_metadata() or None,
             # Budget-Config (Issue #764) — nur Limits, keine Secrets
             **({"budget": req.budget_config.model_dump(mode="json")} if req.budget_config else {}),
+            # #1778: Nutzervorgabe für die Streitfrage. Der Restart hat keinen
+            # Request-Payload und liest sie hier (``runs.py``).
+            **({"contested_question": req.contested_question} if req.contested_question else {}),
         },
     )
 
@@ -560,6 +583,7 @@ def _prepare_simulation_under_start_lock(
             ai_model_ref=ai_model_ref,
             budget_config=_parse_prepare_budget(data),
             force_regenerate=data.get('force_regenerate', False),
+            contested_question=_parse_prepare_contested_question(data),
         )
         project = _load_prepare_project(state)
         routing = _resolve_prepare_routing(data, project, ai_model_ref)
@@ -570,7 +594,11 @@ def _prepare_simulation_under_start_lock(
             extra={'simulation_id': simulation_id},
         )
 
-        if not req.force_regenerate and not routing.client_requested_override:
+        if (
+            not req.force_regenerate
+            and not routing.client_requested_override
+            and not _contested_question_changed(simulation_id, req.contested_question)
+        ):
             already_prepared = _already_prepared_response(simulation_id)
             if already_prepared is not None:
                 return already_prepared

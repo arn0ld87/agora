@@ -36,7 +36,7 @@ from app.contracts.graph_diff import ClusterSummary  # Single Source of Truth ‚Ä
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 # Typisierter Literal-Typ f√ºr Confidence-Distribution-Keys
-_ConfidenceKey = Literal["low", "medium", "high", "verified"]
+_ConfidenceKey = Literal["speculative", "low", "medium", "high", "verified"]
 
 
 class SegmentReach(BaseModel):

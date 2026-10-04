@@ -824,3 +824,154 @@ def test_a_degraded_run_marked_incomplete_violates_nothing():
         )
         == []
     )
+
+
+# ---------------------------------------------------------------------------
+# Positionierungsquote (Issue #1778, Schritt 1.8)
+# ---------------------------------------------------------------------------
+
+
+def _stance_analysis(positioned: int, total: int, *, applicable: bool = True) -> Dict[str, Any]:
+    return {
+        "applicable": applicable,
+        "voices_total": total,
+        "voices_positioned": positioned,
+        "positioning_ratio": positioned / total if applicable and total else None,
+    }
+
+
+def test_a_low_positioning_ratio_becomes_a_visible_warning():
+    found = collect_run_degradations(stance_analysis=_stance_analysis(3, 10))
+
+    assert len(found) == 1
+    entry = RunDegradationModel.model_validate(found[0])
+    assert entry.component == "simulation_positioning"
+    assert entry.reason == "positioning_ratio_3_of_10"
+    assert entry.severity == "warning"
+    assert entry.detail == (
+        "Nur 3 von 10 Stimmen (30 %) beziehen in der Simulation Stellung zur "
+        "Streitfrage. Der Simulationsverlauf trägt deshalb wenig zum Bericht bei."
+    )
+
+
+def test_a_sufficient_positioning_ratio_is_no_degradation():
+    assert collect_run_degradations(stance_analysis=_stance_analysis(6, 10)) == []
+
+
+def test_a_run_without_contested_question_has_no_positioning_degradation():
+    assert (
+        collect_run_degradations(stance_analysis=_stance_analysis(0, 10, applicable=False))
+        == []
+    )
+
+
+def test_a_missing_stance_analysis_is_no_degradation():
+    assert collect_run_degradations(stance_analysis=None) == []
+    # Ein Test-Double am Agenten darf keine Degradation vortäuschen.
+    assert collect_run_degradations(stance_analysis=MagicMock()) == []
+
+
+def test_a_low_positioning_ratio_does_not_downgrade_the_status():
+    found = collect_run_degradations(stance_analysis=_stance_analysis(3, 10))
+
+    assert apply_run_degradation_downgrade(ReportStatus.COMPLETED, found) == ReportStatus.COMPLETED
+
+
+def test_a_failed_stance_classification_is_not_reported_as_low_positioning():
+    """Review PR #1780: ein Auswertungsausfall ist kein Befund über die Simulation."""
+    analysis = {
+        **_stance_analysis(3, 10),
+        "classified_total": 12,
+        "classification_failed": 25,
+    }
+
+    found = collect_run_degradations(stance_analysis=analysis)
+
+    assert len(found) == 1
+    entry = RunDegradationModel.model_validate(found[0])
+    assert entry.component == "simulation_positioning"
+    assert entry.reason == "stance_classification_failed_25_of_37"
+    assert entry.severity == "warning"
+    assert entry.detail == (
+        "Die Haltung von 25 von 37 Simulationsbeiträgen konnte nicht bestimmt "
+        "werden. Die Positionierungsquote (3 von 10 Stimmen) ist deshalb nur "
+        "eine Untergrenze und sagt nichts über den Simulationsverlauf aus."
+    )
+
+
+def test_a_failed_stance_classification_stays_visible_above_the_threshold():
+    analysis = {
+        **_stance_analysis(6, 10),
+        "classified_total": 30,
+        "classification_failed": 5,
+    }
+
+    found = collect_run_degradations(stance_analysis=analysis)
+
+    assert [entry["reason"] for entry in found] == ["stance_classification_failed_5_of_35"]
+
+
+@pytest.mark.parametrize(
+    ("reason", "fragment"),
+    [
+        ("read_failed", "nicht gelesen werden"),
+        ("action_log_missing", "kein Aktionsprotokoll"),
+        ("action_log_unreadable", "unlesbare Zeilen"),
+    ],
+)
+def test_an_unavailable_stance_analysis_is_a_visible_degradation(reason, fragment):
+    """Review PR #1780 (P0): ein Ausfall der Haltungsanalyse bleibt sichtbar."""
+    from app.services.report_agent.run_degradation import stance_analysis_unavailable
+
+    found = collect_run_degradations(stance_analysis=stance_analysis_unavailable(reason))
+
+    assert len(found) == 1
+    entry = RunDegradationModel.model_validate(found[0])
+    assert entry.component == "simulation_positioning"
+    assert entry.reason == f"stance_analysis_unavailable_{reason}"
+    assert entry.severity == "warning"
+    assert fragment in entry.detail
+    assert "Positionierungsquote" in entry.detail
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (0.8, 0.8),
+        ("0.25", 0.25),
+        (0, 0.0),
+        (1, 1.0),
+        # CLI-Review PR #1780: ungültige Werte fallen auf den Standard zurück.
+        (None, 0.5),
+        ("", 0.5),
+        ("viel", 0.5),
+        (1.5, 0.5),
+        (-0.1, 0.5),
+        (True, 0.5),
+        (float("nan"), 0.5),
+    ],
+)
+def test_positioning_threshold_comes_from_the_settings_layer(raw, expected):
+    from app.services.report_agent.run_degradation import resolve_positioning_ratio_min
+
+    assert resolve_positioning_ratio_min(lambda _key: raw) == expected
+
+
+def test_a_stored_threshold_changes_the_positioning_warning(monkeypatch):
+    from app.services.report_agent import run_degradation
+
+    monkeypatch.setattr(run_degradation, "resolve_positioning_ratio_min", lambda: 0.2)
+    assert collect_run_degradations(stance_analysis=_stance_analysis(3, 10)) == []
+
+    monkeypatch.setattr(run_degradation, "resolve_positioning_ratio_min", lambda: 0.9)
+    found = collect_run_degradations(stance_analysis=_stance_analysis(6, 10))
+    assert [entry["reason"] for entry in found] == ["positioning_ratio_6_of_10"]
+
+
+@pytest.mark.parametrize("raw", ["", "viel", "7", "-1", "nan"])
+def test_an_invalid_threshold_env_does_not_break_config_import(raw):
+    from app.config import _env_ratio
+
+    assert _env_ratio({"X": raw}, "X", 0.5) == 0.5
+    assert _env_ratio({"X": "0.3"}, "X", 0.5) == 0.3
+    assert _env_ratio({}, "X", 0.5) == 0.5

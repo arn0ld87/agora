@@ -30,7 +30,7 @@ from app.utils.logger import get_logger
 logger = get_logger("agora.compare_service")
 
 # Literal-Typ für Confidence-Keys (gespiegelt aus branch_comparison.py)
-_CONFIDENCE_KEYS = ("low", "medium", "high", "verified")
+_CONFIDENCE_KEYS = ("speculative", "low", "medium", "high", "verified")
 
 
 # ---------------------------------------------------------------------------

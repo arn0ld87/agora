@@ -20,9 +20,11 @@ import { useOperatorAccess } from '../../../composables/useOperatorAccess'
 import EnvSetupModelPanel from '../../step2/EnvSetupModelPanel.vue'
 import SimulationStartConfig from '../../step2/SimulationStartConfig.vue'
 import AgentCapControl from '../../step2/AgentCapControl.vue'
+import ContestedQuestionField from '../../step2/ContestedQuestionField.vue'
 import {
   buildQuotaPlanFromEntries,
 } from '../../../contracts/personaQuotaContract'
+import { ContestedQuestionSchema } from '../../../contracts/contestedQuestionContract'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 
 const { t } = useI18n()
@@ -110,6 +112,34 @@ const STORAGE_MAX_AGENTS = 'agora.maxAgents'
 const useAgentCap = ref(false)
 const maxAgents = ref(Number(localStorage.getItem(STORAGE_MAX_AGENTS)) || 50)
 watch(maxAgents, (v) => { localStorage.setItem(STORAGE_MAX_AGENTS, String(v)) })
+
+// ----- Streitfrage (#1778) -----
+// Eingabe vor der Vorbereitung; leer heißt, der Assistent schlägt eine vor.
+const contestedQuestionInput = ref('')
+
+// Geltende Streitfrage aus der erzeugten Konfiguration. Vertragswidrige oder
+// fehlende Daten (Altbestand) zeigen nichts an, statt einen Fehler zu werfen.
+const appliedContestedQuestion = computed(() => {
+  const parsed = ContestedQuestionSchema.safeParse(simulationConfig.value?.contested_question)
+  if (!parsed.success) return null
+  const { origin, statement, absence_reason: reason } = parsed.data
+  if (origin === 'none') {
+    return {
+      text: reason
+        ? t('step2.contestedQuestion.none', { reason })
+        : t('step2.contestedQuestion.noneWithoutReason'),
+      origin: '',
+    }
+  }
+  return {
+    text: t('step2.contestedQuestion.applied', { statement }),
+    origin: t(
+      origin === 'user'
+        ? 'step2.contestedQuestion.originUser'
+        : 'step2.contestedQuestion.originAssistant',
+    ),
+  }
+})
 
 // ----- Persona-Quota-Plan -----
 const {
@@ -199,6 +229,10 @@ async function triggerPrepare() {
   if (useAgentCap.value && maxAgents.value > 0) {
     payload.max_agents = Math.max(10, maxAgents.value)
   }
+  const contestedQuestion = contestedQuestionInput.value.trim()
+  if (contestedQuestion) {
+    payload.contested_question = contestedQuestion
+  }
   if (useQuotaPlan.value) {
     if (quotaValidationError.value) {
       addLog(`${t('errors.personaGenFailed')}: ${quotaValidationError.value}`)
@@ -263,6 +297,20 @@ onMounted(async () => {
           :agent-tools-enabled="agentToolsEnabled"
           :max-tool-calls-per-action="maxToolCallsPerAction"
         />
+
+        <!-- Streitfrage (#1778): Eingabe vor, Anzeige nach der Vorbereitung -->
+        <ContestedQuestionField
+          v-model="contestedQuestionInput"
+          :is-preparing="isPreparing"
+        />
+        <p
+          v-if="appliedContestedQuestion"
+          class="contested-question-applied"
+          data-testid="contested-question-applied"
+        >
+          {{ appliedContestedQuestion.text }}
+          <span v-if="appliedContestedQuestion.origin" class="meta">{{ appliedContestedQuestion.origin }}</span>
+        </p>
 
         <!-- Agent cap (optional) -->
         <AgentCapControl
@@ -457,6 +505,7 @@ onMounted(async () => {
   padding-bottom: var(--s-3);
 }
 .card-desc { color: var(--fg-body); margin: 0; }
+.contested-question-applied { color: var(--fg-body); margin: 0; }
 .hint {
   font-family: var(--font-sans);
   font-size: 11px;

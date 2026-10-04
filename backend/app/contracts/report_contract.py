@@ -39,6 +39,7 @@ _STRICT = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class ConfidenceLabel(str, Enum):
+    speculative = "speculative"
     low = "low"
     medium = "medium"
     high = "high"
@@ -236,6 +237,9 @@ class EvidenceItemModel(BaseModel):
     persona_stakeholder_group: Optional[str] = Field(
         default=None, min_length=1, max_length=200
     )
+    #: Stimme: eindeutiger Schlüssel der Persona, von der der Beleg stammt.
+    #: Form ``agent:<agent_id>``. ``None`` bei Belegen ohne Persona (Seed, Graph, Web).
+    voice_key: Optional[str] = Field(default=None, max_length=64, pattern=r"^agent:\d+$")
     # Issue #1248: Kontrolliertes Rollenfamilien-Label aus dem Entitaetstyp der
     # Quellentitaet. Der Jobtitel oben bleibt Anzeigetext; gezaehlt wird dieses
     # Feld. Optional, weil Artefakte aus Laeufen vor diesem Slice es nicht
@@ -317,6 +321,8 @@ class EvidenceRecordModel(BaseModel):
     persona_stakeholder_group: Optional[str] = Field(
         default=None, min_length=1, max_length=200
     )
+    #: Stimme (Issue #1778, Schritt 1.2), siehe EvidenceItemModel.voice_key.
+    voice_key: Optional[str] = Field(default=None, max_length=64, pattern=r"^agent:\d+$")
     # Issue #1248, siehe EvidenceItemModel.
     persona_role_family: Optional[str] = Field(
         default=None, min_length=1, max_length=120
@@ -462,7 +468,7 @@ class ReportClaimModel(BaseModel):
         # nachvollziehbaren Evidence-Anker. Low-Orphans bleiben fuer alte
         # Artefakte lesbar, werden beim Schreiben aber in hypotheses/data_gaps
         # geroutet.
-        if self.confidence_label != ConfidenceLabel.low and not self.evidence:
+        if self.confidence_label not in (ConfidenceLabel.speculative, ConfidenceLabel.low) and not self.evidence:
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt mindestens "
                 "eine Evidence mit nachvollziehbarem Anker."
@@ -633,7 +639,7 @@ class IndexedReportClaimModel(BaseModel):
 
     @model_validator(mode="after")
     def require_binding_for_non_low_claim(self) -> "IndexedReportClaimModel":
-        if self.confidence_label != ConfidenceLabel.low and not self.evidence:
+        if self.confidence_label not in (ConfidenceLabel.speculative, ConfidenceLabel.low) and not self.evidence:
             raise ValueError(
                 f"Label '{self.confidence_label.value}' verlangt mindestens ein Evidence-Binding."
             )
@@ -909,6 +915,10 @@ class RunDegradationModel(BaseModel):
         # Nutzer-Abbruch (Cancel) nicht mehr alle Outline-Sections —
         # additiv ergaenzt, blockierend (severity="blocking").
         "run_cancellation",
+        # Issue #1778: zu wenige Stimmen beziehen in der Simulation Stellung
+        # zur Streitfrage (Positionierungsquote unter der Schwelle) —
+        # additiv ergänzt (severity="warning").
+        "simulation_positioning",
     ]
     reason: str = Field(
         min_length=1,

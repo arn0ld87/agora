@@ -34,11 +34,14 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Set
 
-#: Werkzeuge, deren Leertreffer gemerkt werden. ``interview_agents`` fehlt
+#: Werkzeuge, deren Leertreffer gemerkt werden. ``search_simulation_actions``
+#: hat dabei einen eigenen Schlüsselraum, siehe ``dedup_key``. ``interview_agents`` fehlt
 #: bewusst: ein Interview ohne Ergebnis ist kein Suchtreffer-Problem, sondern
 #: ein Persona-Pool-Problem — und ein zweiter Versuch mit anderem Zuschnitt
 #: kann dort sehr wohl etwas liefern.
-SEARCH_TOOLS = frozenset({"insight_forge", "panorama_search", "quick_search"})
+SEARCH_TOOLS = frozenset(
+    {"insight_forge", "panorama_search", "quick_search", "search_simulation_actions"}
+)
 
 _PUNCTUATION_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
@@ -69,6 +72,31 @@ def query_of(parameters: Dict[str, Any]) -> str:
     return str(raw)
 
 
+#: Die Beitragssuche durchsucht die Simulationsbeiträge, nicht den Graphen.
+ACTION_SEARCH_TOOL = "search_simulation_actions"
+
+
+def dedup_key(tool_name: str, parameters: Dict[str, Any]) -> str:
+    """Unter welchem Schlüssel ein Leertreffer gemerkt und geprüft wird.
+
+    Die Graph-Werkzeuge teilen sich die Query als Schlüssel: eine erfolglose
+    ``panorama_search`` nach X macht eine ``quick_search`` nach X zur
+    Wiederholung (Issue #1191).
+
+    Die Beitragssuche hat einen eigenen Schlüsselraum (Issue #1778): ein
+    Leertreffer im Graphen sagt nichts über die Simulationsbeiträge aus und
+    umgekehrt. Ihre Filter gehören zur Identität der Suche — dieselbe Query
+    ohne Agentenfilter ist eine andere Suche.
+    """
+    if tool_name != ACTION_SEARCH_TOOL:
+        return query_of(parameters)
+    return (
+        f"{ACTION_SEARCH_TOOL} query={parameters.get('query') or ''} "
+        f"agent={parameters.get('agent_name') or ''} "
+        f"rounds={parameters.get('round_from') or ''}-{parameters.get('round_to') or ''}"
+    )
+
+
 def is_search_tool(tool_name: str) -> bool:
     return tool_name in SEARCH_TOOLS
 
@@ -92,6 +120,8 @@ def is_empty_result(structured_result: Any) -> bool:
         "total_facts",
         "total_entities",
         "total_relationships",
+        # ``ActionSearchResult`` der Beitragssuche (Issue #1778).
+        "total_matching",
     )
     seen_any = False
     for field_name in count_fields:
@@ -159,9 +189,46 @@ REPEATED_EMPTY_SEARCH_MSG = (
     "({tool_calls_count}/{max_tool_calls})."
 )
 
+#: Hinweis für eine wiederholte, bereits ergebnislose Beitragssuche. Leer waren
+#: nur die Simulationsbeiträge — über Graph-Fakten sagt das nichts aus
+#: (Review PR #1780).
+REPEATED_EMPTY_ACTION_SEARCH_MSG = (
+    "Observation: Die Beitragssuche nach \"{query}\" wurde nicht erneut "
+    "ausgeführt — sie war in diesem Abschnitt mit denselben Filtern bereits "
+    "ergebnislos. Der Gegenstand kommt in den Simulationsbeiträgen so nicht "
+    "vor. Das sagt nichts über den Graphen aus: Graph-Fakten dazu können "
+    "weiterhin vorliegen. Schreibe keine Aussage darüber, was in der "
+    "Simulation öffentlich gesagt wurde, ohne Beleg. Dieser Versuch zählt "
+    "nicht gegen dein Tool-Budget ({tool_calls_count}/{max_tool_calls})."
+)
+
+
+def repeated_empty_search_message(
+    tool_name: str,
+    parameters: Dict[str, Any],
+    *,
+    tool_calls_count: int,
+    max_tool_calls: int,
+) -> str:
+    """Der Hinweis an das Modell für eine unterdrückte Wiederholung."""
+    template = (
+        REPEATED_EMPTY_ACTION_SEARCH_MSG
+        if tool_name == ACTION_SEARCH_TOOL
+        else REPEATED_EMPTY_SEARCH_MSG
+    )
+    return template.format(
+        query=query_of(parameters),
+        tool_calls_count=tool_calls_count,
+        max_tool_calls=max_tool_calls,
+    )
+
 
 __all__ = [
+    "ACTION_SEARCH_TOOL",
+    "REPEATED_EMPTY_ACTION_SEARCH_MSG",
+    "repeated_empty_search_message",
     "SEARCH_TOOLS",
+    "dedup_key",
     "EmptySearchRegistry",
     "REPEATED_EMPTY_SEARCH_MSG",
     "is_empty_result",

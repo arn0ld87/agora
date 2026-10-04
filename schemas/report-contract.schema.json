@@ -137,6 +137,7 @@
     },
     "ConfidenceLabel": {
       "enum": [
+        "speculative",
         "low",
         "medium",
         "high",
@@ -596,6 +597,20 @@
           ],
           "default": null,
           "title": "Value"
+        },
+        "voice_key": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^agent:\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Key"
         }
       },
       "required": [
@@ -1150,7 +1165,8 @@
             "requirement_checker",
             "contract_export",
             "outline_planning",
-            "run_cancellation"
+            "run_cancellation",
+            "simulation_positioning"
           ],
           "title": "Component",
           "type": "string"

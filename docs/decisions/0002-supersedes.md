@@ -100,3 +100,11 @@ Stichprobe. Ist der Judge zu großzügig, kehrt der AURORA-Fall zurück; ist er
 zu streng, bricht die Claim-Zahl ein. Beides ist an den Checks
 (`high_claim_coverage`, `judge`, `grey_zone_unjudged`) im
 `gate_decision_log` ablesbar und ohne Vertragsänderung nachjustierbar.
+
+---
+
+## 2026-10-04: Stufe speculative im Enum ConfidenceLabel
+
+Das Enum bekommt die Stufe `speculative` unterhalb von `low`. Grund: Rechner, ReportV3-Vertrag, Prompt-Block (`max_confidence="speculative"`) und Frontend kennen sie bereits, nur das Enum nicht; acht Claims je Bericht wurden deshalb fälschlich auf `low` gesetzt. Kein Validator für `high` oder `verified` ändert sich.
+
+Freigabe: Maintainer, 2026-10-04.

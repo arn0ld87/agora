@@ -549,3 +549,32 @@ def test_der_deckel_sieht_die_claims_nach_der_reparatur() -> None:
     saved = section["structured_metadata"]["key_takeaways"][0]["confidence"]
     assert saved == (remaining[0] if remaining else None)
     assert remaining in ([], ["low"])
+
+
+# ---------------------------------------------------------------------------
+# #1778 Schritt 1.1 — speculative als fünfte Stufe in ConfidenceLabel
+# ---------------------------------------------------------------------------
+
+
+def test_speculative_claim_passes_contract() -> None:
+    """Ein speculative-Claim mit stützendem Beleg validiert ohne Fehler."""
+    claim = ReportClaimModel(
+        claim_id="claim_01",
+        claim_text="Die Zielgruppe reagiert zurueckhaltend auf den Preis.",
+        confidence_label="speculative",
+        confidence_score=0.3,
+        evidence=[_agent_quote("Buerger")],  # type: ignore[arg-type]
+    )
+    assert claim.confidence_label == ConfidenceLabel.speculative
+
+
+def test_speculative_claim_without_evidence_passes() -> None:
+    """speculative braucht wie low keine Evidence — der Claim bleibt gültig."""
+    claim = ReportClaimModel(
+        claim_id="claim_01",
+        claim_text="Die Zielgruppe reagiert zurueckhaltend auf den Preis.",
+        confidence_label="speculative",
+        confidence_score=0.3,
+        evidence=[],
+    )
+    assert claim.confidence_label == ConfidenceLabel.speculative

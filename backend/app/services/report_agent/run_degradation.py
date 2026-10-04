@@ -18,7 +18,13 @@ Einschätzung.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+import math
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
+
+from ...config import Config
+from ...utils.logger import get_logger
+
+logger = get_logger("agora.report_agent.run_degradation")
 
 #: Simulationsstatus, bei denen die Simulation nicht regulär endete.
 #:
@@ -244,6 +250,152 @@ def _cancellation_degradations(missing_section_count: int) -> List[Dict[str, Any
     ]
 
 
+ENV_POSITIONING_RATIO_MIN = "AGORA_REPORT_POSITIONING_RATIO_MIN"
+
+
+def _as_ratio(value: Any) -> Optional[float]:
+    """Zahl in ``0..1`` oder ``None`` (ungültig); ``bool``/NaN/Text sind ungültig."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and 0.0 <= number <= 1.0 else None
+
+
+def resolve_positioning_ratio_min(
+    read: Optional[Callable[[str], Any]] = None,
+) -> float:
+    """Wirksame Warnschwelle der Positionierungsquote (Standard 0.5).
+
+    Liest ``AGORA_REPORT_POSITIONING_RATIO_MIN`` über die Settings-Schicht
+    (Env, ``instance/settings.json``, Laufzeit-Override), damit ein in den
+    Einstellungen gespeicherter Wert wirkt. Ungültige Werte fallen mit
+    Warnung auf den Standard zurück.
+    """
+    if read is None:
+        from ..settings_layer import get_default_service
+
+        read = get_default_service().effective_value
+    raw = read(ENV_POSITIONING_RATIO_MIN)
+    ratio = _as_ratio(raw)
+    if ratio is None:
+        if raw is not None:
+            logger.warning(
+                "%s=%r ist ungültig (erwartet Zahl 0..1); Standard %s wird verwendet",
+                ENV_POSITIONING_RATIO_MIN,
+                raw,
+                Config.REPORT_POSITIONING_RATIO_MIN,
+            )
+        return Config.REPORT_POSITIONING_RATIO_MIN
+    return ratio
+
+
+_STANCE_UNAVAILABLE_DETAILS: Dict[str, str] = {
+    "read_failed": (
+        "Simulationskonfiguration oder Aktionsprotokoll konnten nicht gelesen werden"
+    ),
+    "action_log_missing": "Zu diesem Lauf liegt kein Aktionsprotokoll vor",
+    "action_log_unreadable": "Das Aktionsprotokoll enthält unlesbare Zeilen",
+}
+
+
+def stance_analysis_unavailable(reason: str) -> Dict[str, Any]:
+    """Marker für eine Haltungsanalyse, die nicht gerechnet werden konnte.
+
+    Bleibt im Prozess (Workflow → ``collect_run_degradations``) und wird nicht
+    persistiert; ``reason`` ist ein Schlüssel aus ``_STANCE_UNAVAILABLE_DETAILS``.
+    """
+    return {"unavailable_reason": reason}
+
+
+def _stance_unavailable_degradations(reason: Any) -> List[Dict[str, Any]]:
+    detail = _STANCE_UNAVAILABLE_DETAILS.get(str(reason), "Die Ursache ist unbekannt")
+    return [
+        _entry(
+            "simulation_positioning",
+            f"stance_analysis_unavailable_{reason}",
+            (
+                f"Die Haltungsanalyse ist ausgefallen: {detail}. Eine "
+                "Positionierungsquote liegt für diesen Bericht nicht vor; das "
+                "sagt nichts über den Simulationsverlauf aus."
+            ),
+            severity="warning",
+        )
+    ]
+
+
+def _positioning_degradations(
+    analysis: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Zu wenige Stimmen beziehen Stellung zur Streitfrage (Issue #1778).
+
+    Im Referenzlauf ``sim_c8c6b30aa652`` beruhten 3 von 164 stützenden Belegen
+    auf Simulationsaktionen. Ob die Simulation überhaupt etwas zur Streitfrage
+    beiträgt, zeigt die Positionierungsquote aus ``stance_analysis``.
+
+    Der Schweregrad ist bewusst ``warning``: der Bericht bleibt lesbar, die
+    Degradation ist sichtbar. Ohne Analyse oder ohne Streitfrage wird nichts
+    behauptet.
+    """
+    if not isinstance(analysis, Mapping):
+        return []
+    # Review PR #1780: ein Ausfall der Analyse bleibt sichtbar.
+    if analysis.get("unavailable_reason"):
+        return _stance_unavailable_degradations(analysis.get("unavailable_reason"))
+    if analysis.get("applicable") is not True:
+        return []
+
+    positioned = analysis.get("voices_positioned")
+    total = analysis.get("voices_total")
+
+    # Ein Auswertungsausfall ist kein Befund über die Simulation (Review
+    # PR #1780): Beiträge ohne Klassifikation zählen nicht als positioniert,
+    # die Quote ist dann nur eine Untergrenze. Der Ausfall bleibt sichtbar,
+    # die Aussage „trägt wenig bei" unterbleibt.
+    failed = analysis.get("classification_failed")
+    if isinstance(failed, int) and not isinstance(failed, bool) and failed > 0:
+        classified = analysis.get("classified_total")
+        contributions = failed + (classified if isinstance(classified, int) else 0)
+        return [
+            _entry(
+                "simulation_positioning",
+                f"stance_classification_failed_{failed}_of_{contributions}",
+                (
+                    f"Die Haltung von {failed} von {contributions} "
+                    "Simulationsbeiträgen konnte nicht bestimmt werden. Die "
+                    f"Positionierungsquote ({positioned} von {total} Stimmen) ist "
+                    "deshalb nur eine Untergrenze und sagt nichts über den "
+                    "Simulationsverlauf aus."
+                ),
+                severity="warning",
+            )
+        ]
+
+    ratio = analysis.get("positioning_ratio")
+    if not isinstance(ratio, (int, float)) or isinstance(ratio, bool):
+        return []
+    if ratio >= resolve_positioning_ratio_min():
+        return []
+
+    percent = round(ratio * 100)
+    return [
+        _entry(
+            "simulation_positioning",
+            f"positioning_ratio_{positioned}_of_{total}",
+            (
+                f"Nur {positioned} von {total} Stimmen ({percent} %) beziehen in "
+                "der Simulation Stellung zur Streitfrage. Der Simulationsverlauf "
+                "trägt deshalb wenig zum Bericht bei."
+            ),
+            severity="warning",
+        )
+    ]
+
+
 def collect_run_degradations(
     *,
     simulation_snapshot: Optional[Mapping[str, Any]] = None,
@@ -261,6 +413,7 @@ def collect_run_degradations(
     cancelled_missing_section_count: int = 0,
     simulation_llm_calls_total: Optional[int] = None,
     simulation_llm_calls_failed: Optional[int] = None,
+    stance_analysis: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Alle deterministisch feststellbaren Qualitätsmängel eines Laufs.
 
@@ -273,6 +426,9 @@ def collect_run_degradations(
             simulation_llm_calls_total, simulation_llm_calls_failed
         )
     )
+    # Issue #1778: Die Positionierungsquote beschreibt, was die Simulation
+    # zur Streitfrage beiträgt — sie gehört zu den Mängeln der Grundlage.
+    found.extend(_positioning_degradations(stance_analysis))
     found.extend(_outline_degradations(fallback_outline_used))
     # Reihenfolge nach Schwere fuer den Leser: worauf der Bericht beruht,
     # steht vor dem, was beim Erzeugen schiefging. Die Personas sind die

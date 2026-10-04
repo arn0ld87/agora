@@ -33,8 +33,14 @@ class TestSimulationConfigGeneratorRefactored:
         }
 
         # With 30 entities and batch size of 8 (default), we have math.ceil(30/8) = 4 batches of agents.
-        # Total calls to chat_json: 1 (time) + 1 (event) + 4 (agent batches) = 6 calls.
+        # Total calls to chat_json: 1 (Streitfrage #1778) + 1 (time) + 1 (event) + 4 (agent batches) = 7 calls.
         mock_client.chat_json.side_effect = [
+            # 0. Contested Question (#1778): erste LLM-Antwort der Konfiguration
+            {
+                "has_contested_question": False,
+                "statement": None,
+                "absence_reason": "Offene Wahrnehmungsfrage ohne entscheidbare Aussage.",
+            },
             # 1. Time Config
             time_data,
             # 2. Event Config

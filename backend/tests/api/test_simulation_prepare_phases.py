@@ -91,6 +91,7 @@ def _inputs(**overrides) -> mod._PrepareInputs:
         max_agents=overrides.get("max_agents"),
         quota_plan=overrides.get("quota_plan"),
         agent_language_override=overrides.get("agent_language_override"),
+        contested_question=overrides.get("contested_question"),
     )
 
 
@@ -252,6 +253,41 @@ def test_resolve_prepare_routing_maps_runtime_value_error_to_400(app_ctx):
 # Phase 3 — Kurzschluss
 # ---------------------------------------------------------------------------
 
+
+class _ConfigStore:
+    def __init__(self, config):
+        self._config = config
+
+    def read_json(self, simulation_id, name, default=None):
+        assert name == "simulation_config"
+        return self._config if self._config is not None else default
+
+
+@pytest.mark.parametrize(
+    ("persisted", "requested", "expected"),
+    [
+        # Review PR #1780: eine neue Streitfrage darf nicht am Kurzschluss scheitern.
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"},
+         "Die Kita am Tal wird geschlossen.", True),
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "assistant"},
+         "Die Kita am Tal wird geschlossen.", True),
+        ({"statement": None, "origin": "none"}, "Die Kita am Tal wird geschlossen.", True),
+        (None, "Die Kita am Tal wird geschlossen.", True),
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"},
+         "Die Kita am Berg wird geschlossen.", False),
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "user"}, None, False),
+        # CLI-Review PR #1780: derselbe Wortlaut als Nutzervorgabe ändert die Herkunft.
+        ({"statement": "Die Kita am Berg wird geschlossen.", "origin": "assistant"},
+         "Die Kita am Berg wird geschlossen.", True),
+    ],
+)
+def test_contested_question_changed(monkeypatch, persisted, requested, expected):
+    config = None if persisted is None else {"contested_question": persisted}
+    monkeypatch.setattr(mod, "resolve_default_store", lambda: _ConfigStore(config))
+
+    assert mod._contested_question_changed(VALID_SIM_ID, requested) is expected
+
+
 def test_already_prepared_response_returns_none_when_unprepared(app_ctx, monkeypatch):
     monkeypatch.setattr(mod, "_check_simulation_prepared", lambda _sid: (False, {"reason": "x"}))
 
@@ -332,6 +368,52 @@ def test_collect_prepare_inputs_tolerates_non_string_language(app_ctx, monkeypat
     inputs = mod._collect_prepare_inputs({"language": 5}, _project(), _state())
 
     assert inputs.agent_language_override is None
+
+
+def test_collect_prepare_inputs_keeps_the_given_contested_question(app_ctx, monkeypatch):
+    """#1778 Schritt 1.6: Die Nutzervorgabe kommt bereinigt bei den Eingaben an."""
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    inputs = mod._collect_prepare_inputs(
+        {"contested_question": "  Die Kita am Berg wird geschlossen.  "},
+        _project(),
+        _state(),
+    )
+
+    assert inputs.contested_question == "Die Kita am Berg wird geschlossen."
+
+
+@pytest.mark.parametrize("payload", [{}, {"contested_question": None}, {"contested_question": "   "}])
+def test_collect_prepare_inputs_without_contested_question_is_none(app_ctx, monkeypatch, payload):
+    """Leer heißt: der Assistent schlägt eine Streitfrage vor."""
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    inputs = mod._collect_prepare_inputs(payload, _project(), _state())
+
+    assert inputs.contested_question is None
+
+
+@pytest.mark.parametrize("value", ["zu kurz", "x" * 301, 5, {"statement": "Die Kita schließt."}])
+def test_collect_prepare_inputs_rejects_invalid_contested_question(app_ctx, monkeypatch, value):
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    with pytest.raises(mod._PrepareRejected) as excinfo:
+        mod._collect_prepare_inputs({"contested_question": value}, _project(), _state())
+
+    assert _status(excinfo) == 400
+    assert "contested_question" in _body(excinfo)["error"]
+
+
+def test_prepare_request_validates_the_contested_question():
+    from pydantic import ValidationError
+
+    req = mod._PrepareRequest(
+        simulation_id=VALID_SIM_ID, contested_question="Die Kita am Berg wird geschlossen."
+    )
+    assert req.contested_question == "Die Kita am Berg wird geschlossen."
+    assert mod._PrepareRequest(simulation_id=VALID_SIM_ID).contested_question is None
+    with pytest.raises(ValidationError):
+        mod._PrepareRequest(simulation_id=VALID_SIM_ID, contested_question="zu kurz")
 
 
 def test_read_client_choice_tolerates_non_string_fields(app_ctx):
@@ -485,6 +567,28 @@ def test_begin_prepare_run_carries_budget_metadata(app_ctx, monkeypatch):
 
     metadata = registry.create_run.call_args.kwargs["metadata"]
     assert metadata["budget"]["max_tokens"] == 1000
+    assert "contested_question" not in metadata
+
+
+def test_begin_prepare_run_carries_the_user_contested_question(app_ctx, monkeypatch):
+    """#1778: Der Restart hat keinen Request-Payload und liest die Nutzervorgabe hier."""
+    registry = MagicMock()
+    registry.create_run.return_value = {"run_id": "run-1"}
+    monkeypatch.setattr(mod, "run_registry", registry)
+    monkeypatch.setattr(mod, "_simulation_run_artifacts", lambda _sid: [])
+    req = mod._PrepareRequest(
+        simulation_id=VALID_SIM_ID,
+        ai_model_ref=None,
+        budget_config=None,
+        force_regenerate=False,
+        contested_question="Die Geburtshilfe in Brenkhausen wird geschlossen.",
+    )
+
+    with mod._begin_prepare_run(req, _state(), _routing()):
+        pass
+
+    metadata = registry.create_run.call_args.kwargs["metadata"]
+    assert metadata["contested_question"] == "Die Geburtshilfe in Brenkhausen wird geschlossen."
 
 
 # ---------------------------------------------------------------------------
@@ -739,6 +843,30 @@ def test_prepare_job_runs_service_and_completes_task(app_ctx):
     result = task_manager.complete_task.call_args.kwargs["result"]
     assert result["simulation_id"] == VALID_SIM_ID
     assert result["degradations"] is not None
+
+
+def test_prepare_job_passes_the_contested_question_to_the_service(app_ctx):
+    """#1778 Schritt 1.6: Die Nutzervorgabe erreicht den Konfigurations-Assistenten."""
+    manager = MagicMock()
+    manager.prepare_simulation.return_value = MagicMock(
+        to_simple_dict=MagicMock(return_value={"simulation_id": VALID_SIM_ID})
+    )
+
+    job = mod._make_prepare_job(
+        manager=manager,
+        task_manager=MagicMock(),
+        task_id="task-1",
+        simulation_id=VALID_SIM_ID,
+        inputs=_inputs(contested_question="Die Kita am Berg wird geschlossen."),
+        storage=MagicMock(),
+        llm_model="gpt-4o",
+        run_record={"run_id": "run_test_1"},
+        effective_llm_runtime=RuntimeLlmConfig(),
+    )
+    job()
+
+    service_kwargs = manager.prepare_simulation.call_args.kwargs
+    assert service_kwargs["contested_question_override"] == "Die Kita am Berg wird geschlossen."
 
 
 def test_prepare_job_marks_simulation_failed_on_error(app_ctx):

@@ -120,7 +120,7 @@ def test_evidence_source_kind_enum_werte():
 def test_confidence_label_enum_stufen():
     """Drift-Guard: ConfidenceLabel enthält die vier erwarteten Stufen."""
     stufen = {e.value for e in ConfidenceLabel}
-    assert stufen == {"low", "medium", "high", "verified"}
+    assert stufen == {"speculative", "low", "medium", "high", "verified"}
 
 
 # ---------------------------------------------------------------------------

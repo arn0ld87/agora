@@ -27,6 +27,7 @@ from .evidence import (
     register_evidence_record,
     resolve_embedder,
 )
+from .action_search import ActionSearchResult, build_action_evidence_item
 from .data_gap import ClaimGapKind, classify_claim_gap
 from .evidence_ledger import ledger_for
 from .evidence_candidates import EvidenceCandidatePool
@@ -35,15 +36,14 @@ from .planning import plan_outline as plan_outline_impl
 from .search_dedup import (
     EmptySearchRegistry,
     is_empty_result,
+    dedup_key,
     is_search_tool,
-    query_of,
     registry_for,
 )
 from .postprocess_timing import PostprocessPhaseTracker
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, normalize_persisted_evidence_map
 from .takeaway_confidence import cap_section_key_takeaways
 from .sections import (
-    action_content as sections_action_content,
     attach_provenance,
     atomize_claim_chunk,
     build_source_id_anchor,
@@ -237,6 +237,38 @@ def _typed_confidence(
             "source": "confidence_calculator.apply_claim_type_floor",
         })
     return claim_type, floored[0], floored[1]
+
+
+def _record_action_search_hits(
+    record_evidence_item: Any,
+    result: ActionSearchResult,
+    tool_name: str,
+    section_index: int,
+) -> Optional[Dict[int, str]]:
+    """Registriert die Treffer der Beitragssuche als Belege ``agent_action``.
+
+    Issue #1778 (Schritt 1.7): gleiche Form und Identität wie in der
+    Stichprobe (``_collect_simulation_evidence_items``). Wie beim Interview
+    (#1300) werden die IDs je Trefferindex zurückgegeben, damit
+    ``execute_tool`` die Trefferliste damit anreichert — sonst ist ein Treffer
+    nicht zitierbar.
+    """
+    evidence_ids: Dict[int, str] = {}
+    for hit_index, action in enumerate(result.hits):
+        item = build_action_evidence_item(action)
+        item["tool_name"] = tool_name
+        if result.query:
+            item["query"] = result.query
+        item["agent_log_ref"] = {
+            "section_index": section_index,
+            "action": "tool_result",
+            "tool_name": tool_name,
+        }
+        item.setdefault("source", "report_tool")
+        evidence_id = record_evidence_item(item)
+        if evidence_id:
+            evidence_ids[hit_index] = evidence_id
+    return evidence_ids or None
 
 
 class ReportAgent:
@@ -470,37 +502,10 @@ class ReportAgent:
             _skipped_foreign = len(action_dicts) - len(eligible_actions)
             sampled_actions = self._sample_actions_timeseries(eligible_actions, k=8)
             for action in sampled_actions:
-                action_type = action.get("action_type") or "action"
-                agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
-                platform = action.get("platform") or "unknown"
-                round_num = action.get("round_num")
-                # Issue #1304 (S2): Der Snippet war reine Metabeschreibung —
-                # "Agent X create_post on reddit in round 3". Gegen so einen
-                # Text kann kein Entailment eine Aussage stuetzen, egal wie gut
-                # gesampelt wurde. Der Beitragstext selbst gehoert hinein; ohne
-                # ihn bleibt die Aktion Dekoration.
-                action_text = sections_action_content(action)
-                snippet = f"{agent} {action_type} on {platform} in round {round_num}"
-                if action_text:
-                    snippet = f"{snippet}: {self._truncate(action_text, 600)}"
-                items.append(EvidenceItem(
-                    type="agent_action",
-                    source="simulation_actions",
-                    value=action_type,
-                    snippet=snippet,
-                    raw=action,
-                ).to_dict())
-                action_identity = (
-                    action.get("platform"),
-                    action.get("round_num"),
-                    action.get("agent_id"),
-                    action.get("action_type"),
-                    action.get("timestamp"),
-                )
-                if all(value is not None and str(value).strip() for value in action_identity):
-                    items[-1]["producer_key"] = "simulation-action:" + ":".join(
-                        str(value) for value in action_identity
-                    )
+                # Issue #1778 (Schritt 1.7): gemeinsame Quelle mit dem
+                # Suchwerkzeug — dieselbe Aktion bekommt in Stichprobe und
+                # Suche dieselbe Evidence-ID.
+                items.append(build_action_evidence_item(action))
             if _skipped_foreign:
                 logger.info(
                     "report_evidence: %d action(s) with foreign role conflict skipped "
@@ -526,7 +531,7 @@ class ReportAgent:
         # Leertreffer wird hier gemerkt, damit dieselbe Suche im selben
         # Abschnitt nicht mit einem anderen Werkzeug wiederholt wird.
         if is_search_tool(tool_name) and is_empty_result(structured_result):
-            registry_for(self).record_empty(query_of(parameters))
+            registry_for(self).record_empty(dedup_key(tool_name, parameters))
         # Kanonische Identität für Fakten aus dem Graphen: der Fakt-Text selbst
         # ist die deterministische Quelle (kein freier LLM-Text), die Query
         # bleibt außen vor — derselbe Fakt über verschiedene Queries ist
@@ -580,6 +585,11 @@ class ReportAgent:
             if role:
                 item["document_role"] = role
             return item
+
+        if isinstance(structured_result, ActionSearchResult) and structured_result.hits:
+            return _record_action_search_hits(
+                self._record_evidence_item, structured_result, tool_name, section_index
+            )
 
         items: List[Dict[str, Any]] = []
         # Issue #1300 (Review-Finding Codex, P1): der ReACT-Loop sieht nur den
@@ -721,6 +731,9 @@ class ReportAgent:
                     # gegensaetzlich zum Thema stehen — der Claim wuerde sonst
                     # abgewertet, obwohl sie sich in ihm einig sind.
                     "topic_stance": getattr(interview, "topic_stance", None),
+                    # Issue #1778 (Schritt 1.2): Stimme des Belegs. Post und
+                    # Interview derselben Persona tragen denselben voice_key.
+                    "voice_key": f"agent:{interview.agent_id}" if getattr(interview, "agent_id", None) is not None else None,
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                     "producer_key": build_producer_key(
                         f"interview:s{section_index}",

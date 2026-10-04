@@ -194,6 +194,12 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
     # (0 = abgeschaltet). Default = ``DEFAULT_SIM_MAX_TOKENS`` in run_budget.py.
     FieldSpec('AGORA_SIM_DEFAULT_MAX_TOKENS', 'oasis', 'int',
               default=20_000_000, min_value=0, max_value=1_000_000_000_000),
+    # #1778: Mindestanteil der Stimmen, die in der Simulation Stellung zur
+    # Streitfrage beziehen. Darunter weist der Bericht die Degradation
+    # ``simulation_positioning`` aus. Default =
+    # ``Config.REPORT_POSITIONING_RATIO_MIN``.
+    FieldSpec('AGORA_REPORT_POSITIONING_RATIO_MIN', 'oasis', 'float',
+              default=0.5, min_value=0.0, max_value=1.0),
 
     # ===== Security / Secrets =====
     FieldSpec('SECRET_KEY', 'security', 'string', default='',

@@ -733,6 +733,9 @@ class SinglePlatformRunner:
                             sentiment_bias=agent_cfg.get("sentiment_bias"),
                             posts_per_hour=agent_cfg.get("posts_per_hour"),
                             comments_per_hour=agent_cfg.get("comments_per_hour"),
+                            contested_statement=(
+                                self.config.get("contested_question") or {}
+                            ).get("statement"),
                         )
                         actions[agent] = action
                     except Exception as e:

@@ -304,8 +304,9 @@ def _stub_report_v3() -> dict[str, Any]:
 
 
 # Deterministischer Tool-Return für ReACT-Schleife.
-# Nur die vier Tools, die report_agent/tools.py tatsächlich registriert:
-# insight_forge, panorama_search, quick_search, interview_agents.
+# Nur die fünf Tools, die report_agent/tools.py tatsächlich registriert:
+# insight_forge, panorama_search, quick_search, interview_agents,
+# search_simulation_actions.
 _STUB_TOOL_RETURNS: dict[str, dict[str, Any]] = {
     "insight_forge": {
         "insights": [
@@ -342,6 +343,8 @@ _STUB_TOOL_RETURNS: dict[str, dict[str, Any]] = {
             }
         ]
     },
+    # Issue #1778: Suche in Simulationsbeiträgen — im Stub ohne Treffer.
+    "search_simulation_actions": {"results": []},
 }
 
 _STUB_TOOL_DEFAULT: dict[str, Any] = {"ok": True, "stub": True}

@@ -21,6 +21,7 @@ VALID_TOOL_NAMES: FrozenSet[str] = frozenset({
     "panorama_search",
     "quick_search",
     "interview_agents",
+    "search_simulation_actions",
 })
 
 
