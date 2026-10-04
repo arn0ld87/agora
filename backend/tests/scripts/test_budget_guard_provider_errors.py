@@ -225,7 +225,8 @@ class TestThrottledProviderMessageLog:
 
 class TestNoSecretsInLog:
     def test_keys_in_provider_message_are_redacted(self, run_ledger, guard_records):
-        secret = "sk-abcDEF1234567890xyz"
+        # Zur Laufzeit zusammengesetzt, damit der Secret-Scan den erfundenen Wert nicht meldet.
+        secret = "sk-" + "abcDEF" + "1234567890xyz"
         message = (
             f"Incorrect API key provided: {secret}. "
             "Authorization: Bearer tok.en-123456 api_key=hunter2hunter2"
