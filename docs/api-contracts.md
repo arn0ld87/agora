@@ -207,6 +207,7 @@ Für Consumer gilt:
 
 `RunDegradationModel.component` ist ein striktes Literal-Vokabular. Neue Komponenten müssen gleichzeitig in Backend, Zod und Tests ergänzt werden. Aktuelle Beispiele umfassen unter anderem:
 
+- `simulation` (Status, unvollständige Runden und seit #1766 die Ausfallquote der Simulations-LLM-Aufrufe: `reason="<failed>_of_<total>_simulation_llm_calls_failed"`, ab 10 % `warning`, ab 50 % `blocking`; Quelle ist `UsageMetrics.failed_llm_calls` des Simulations-Jobs, `null` = unbekannt erzeugt keinen Eintrag)
 - `persona_generation`
 - `requirement_checker`
 - `section_generation`

@@ -95,6 +95,8 @@ export const UsageMetricsSchema = z
     output_tokens: z.number().int().min(0).nullable().optional(),
     total_tokens: z.number().int().min(0).nullable().optional(),
     llm_calls: z.number().int().min(0).default(0),
+    // null/fehlend = Fehlerzahl unbekannt (Altbestand), nie "0 Fehler" (#1766)
+    failed_llm_calls: z.number().int().min(0).nullable().optional(),
     cost_micros: z.number().int().min(0).nullable().optional(),
     cost_status: CostStatusSchema.default("unknown"),
     tokens_status: TokensStatusSchema.default("unknown"),

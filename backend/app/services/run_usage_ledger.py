@@ -10,6 +10,9 @@ Ehrlichkeitsregeln:
   - Kosten werden nur aus gemessenen Tokens + versionierter Preistabelle
     berechnet; unbekannte Preise bleiben unknown.
   - Lokale Modelle werden als free (0 Micros, ehrlich bepreist) geführt.
+  - ``failed_llm_calls`` zaehlt Events mit ``success=False`` (Issue #1766);
+    fehlt die Erfolgsangabe in einer Zeile, bleibt die Fehlerzahl unbekannt
+    (None), nie 0.
   - Fehlerhafte oder alte Event-Zeilen (ohne Token-Felder, Schema v0) werden
     tolerant gelesen und als unknown gewertet.
 """
@@ -64,6 +67,8 @@ class _Bucket:
         "output_tokens",
         "events_with_tokens",
         "events_without_tokens",
+        "failed_calls",
+        "events_without_outcome",
         "cost_micros_known",
         "saw_priced",
         "saw_free",
@@ -77,6 +82,8 @@ class _Bucket:
         self.output_tokens = 0
         self.events_with_tokens = 0
         self.events_without_tokens = 0
+        self.failed_calls = 0
+        self.events_without_outcome = 0
         self.cost_micros_known = 0
         self.saw_priced = False
         self.saw_free = False
@@ -95,6 +102,16 @@ class _Bucket:
         latency = event.get("latency_ms")
         if isinstance(latency, (int, float)):
             self.duration_ms += int(latency)
+
+        # Issue #1766: Fehlschlaege sichtbar zaehlen. Eine Zeile ohne boolesches
+        # ``success`` (Altbestand) sagt nichts ueber den Ausgang — sie wird
+        # weder als Erfolg noch als Fehler gewertet, sondern macht die
+        # Fehlerzahl dieses Buckets unbekannt (siehe ``to_metrics``).
+        success = event.get("success")
+        if success is False:
+            self.failed_calls += 1
+        elif success is not True:
+            self.events_without_outcome += 1
 
         prompt = event.get("prompt_tokens")
         completion = event.get("completion_tokens")
@@ -201,6 +218,9 @@ class _Bucket:
             output_tokens=output_tokens,
             total_tokens=total_tokens,
             llm_calls=self.llm_calls,
+            failed_llm_calls=(
+                self.failed_calls if self.events_without_outcome == 0 else None
+            ),
             cost_micros=cost_micros,
             cost_status=cost_status,  # type: ignore[arg-type]
             tokens_status=tokens_status,  # type: ignore[arg-type]
