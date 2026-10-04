@@ -2,16 +2,24 @@
 
 Stand 2026-10-04. Nur lesende Analyse: kein Produktcode geändert, kein Deployment, keine neue Simulation, keine LLM-Aufrufe.
 
-Dieses Dokument ist die Synthese. Die Belege im Detail stehen in vier Teilberichten:
+> **Historischer Stand.** Dieses Dokument beschreibt den Lauf `report_a8fa9ff9fad0` und den Code vom 04.10.2026. Ein Teil des Reparaturplans ist seitdem auf `main`; siehe Abschnitt „Stand der Umsetzung" direkt unter dieser Einleitung. Abschnitt 4 und Abschnitt 10 sind als damalige Planung zu lesen, nicht als offene Arbeit.
 
-| Teil | Datei | Inhalt |
+Dieses Dokument ist die Synthese einer Analyse, deren Detailbelege **nicht im Repository liegen**: vier Teilberichte (A Laufforensik, B Code-Ursachen, C Recherche, D Doku/Issues/Tooling), ein Manifest des eingefrorenen Laufs (91 Dateien) und Repro-Skripte. Sie entstanden in einer Arbeitssitzung außerhalb des Repos und wurden nicht eingecheckt. Verweise wie „Teil B", „Nr. in B" oder „Befehle stehen in Teil D" beziehen sich darauf und lassen sich aus dem Repository nicht nachvollziehen.
+
+Aus dem Repository prüfbar sind die Fundstellen mit `Datei:Zeile` in Abschnitt 3 (gegen den Stand vom 04.10.2026) und die in „Stand der Umsetzung" genannten PRs mit ihren Regressionstests.
+
+## Stand der Umsetzung (05.10.2026)
+
+| AP | Stand | Beleg |
 |---|---|---|
-| A | `teilberichte/A-laufforensik.md` | Laufsteckbrief, Modellroute, Verlustmatrix auf Artefaktebene, Refusal-Zählung, Modellliste |
-| B | `teilberichte/B-code-ursachen.md` | Ursachen mit `Datei:Zeile`, drei Mermaid-Diagramme, Regressionstests, Mutationskandidaten, import-linter-Entwurf |
-| C | `recherche/C-deep-research.md` | Recherche, Quellenregister, Suchprotokoll, Rerun Inputs |
-| D | `teilberichte/D-doku-issues-tooling.md` | Zuordnung zu Issues/PRs, Tooling-Inventar, Eval-Bestand |
+| 1 Segmentierung (U4) | umgesetzt | #1768: gemeinsamer Satzsplitter `backend/app/services/sentence_splitter.py::split_sentences`, genutzt von `claim_atomizer`, `evidence_entailment`, `evidence_binder` und `text_verification` |
+| 2 Interviewtext (U1) | umgesetzt | #1768: eine Volltextprojektion `backend/app/services/evidence_text.py::evidence_text` für Binder, Entailment und Data-Gap |
+| 3 Rate-Limit-Verlust (U2) | umgesetzt | #1767: Degradation für fehlgeschlagene Simulations-LLM-Aufrufe (`run_degradation.py::_simulation_llm_failure_degradations`); Limiter standardmäßig an, Meldung des Anbieters sichtbar (#1776) |
+| 4 Confidence-Flächen (U5) | teilweise | #1770: Kernaussagen-Confidence gedeckelt, Konsens-Label erst ab zwei Stimmen |
+| U9 Aktionen als Evidence | teilweise | #1780: Werkzeug `search_simulation_actions`, Treffer als zitierbare Belege |
+| 5 bis 10 | nicht geprüft | Stand gegen `main` vor Arbeitsbeginn neu feststellen |
 
-Manifest: `snapshot/MANIFEST.tsv` (91 Dateien, 83 von 83 geprüften Server-Hashes gleich). Repro-Skripte: `repro/`.
+Offen ist der Wirknachweis: Der Bericht wurde seit diesen Reparaturen nicht aus der eingefrorenen Simulation neu erzeugt und gegen die Abnahmematrix (Abschnitt 5) gemessen.
 
 **Wie belastbar sind die Aussagen hier?** Jede Ursache trägt einen Status:
 
@@ -95,7 +103,7 @@ Zeilenangaben gelten für `3e941738` und `c97616de` gleichermaßen. Pfade relati
 - Im Lauf ist der Vergleichstext bei allen 57 Interviews 303 Zeichen lang. Der Nachtbus-Satz steht bei Zeichen 657 von 2.380 in `ev_41539b715b4058a44d33bf8234f5bfa8`. Laut Gate-Log hatte der Claim keinen einzigen Kandidaten.
 - Der Binder sieht 13 % des Interviewtexts, das Entailment 33 %. Es gibt drei abweichende Evidence-Text-Projektionen: `candidate_text`, `evidence_entailment._evidence_text` (`:997`) und `data_gap._pool_texts`.
 - **Einschränkung:** Auch mit vollem Text erreicht der Nachtbus-Satz im Repro nur eine Deckung von 0,38, also `RELATED_ONLY`. Die Kürzung zu beheben ist notwendig, aber nicht hinreichend; danach entscheidet der Judge.
-- Prüffall: `repro/repro_binding_numbers.py`.
+- Prüffall: `repro/repro_binding_numbers.py` (nicht im Repository, siehe Einleitung).
 
 ### U2 (hoch, bestätigt): Simulation zu zwei Dritteln ausgefallen, unsichtbar
 
@@ -118,7 +126,7 @@ Zeilenangaben gelten für `3e941738` und `c97616de` gleichermaßen. Pfade relati
 - Aus „zum 30. Juni 2027 aufgibt." werden „…zum 30." und „Juni 2027 aufgibt.". Fragmente unter `MIN_ATOM_TOKENS` (`:43`) fallen still weg; `evidence_ledger.py:86` schreibt Fragmente als Fakt.
 - Im Lauf: sechs Hypothesen und mehrere Ledger-Einträge mit diesen Fragmenten.
 - `text_verification.py:306` löst das Problem bereits, wird hier aber nicht verwendet.
-- Prüffall: `repro/repro_segmentation.py`.
+- Prüffall: `repro/repro_segmentation.py` (nicht im Repository, siehe Einleitung).
 
 ### U5 (hoch, statisch und beobachtet): Zwei unverbundene Confidence-Urteile
 
@@ -140,7 +148,7 @@ Zeilenangaben gelten für `3e941738` und `c97616de` gleichermaßen. Pfade relati
 
 - `G3_01` und `G5_01` entstehen aus Satzfragmenten (U4) und einem Wortüberdeckungsmaß; bester Wert im Repro 0,077.
 - Es gibt keinen Typ „Aussagegrenze". Eine im Seed vorhandene Information landet als Gap, weil die Paraphrase die Wortüberdeckung verfehlt. Das ist ein Binding-Problem, kein Data Gap.
-- Prüffall: `repro/repro_data_gap.py`.
+- Prüffall: `repro/repro_data_gap.py` (nicht im Repository, siehe Einleitung).
 
 ### U8 (mittel, statisch): Provenienz und Zitattreue
 
@@ -311,6 +319,10 @@ Ein grünes Tool belegt keinen belastbaren Bericht. Die semantischen Verluste hi
 ---
 
 ## 10. Drei nächste Schritte
+
+**Aktueller Stand (05.10.2026):** AP 1, AP 2 und AP 3 sind auf `main` (siehe „Stand der Umsetzung"). Der nächste Schritt ist deshalb nicht ihre Umsetzung, sondern ihr Wirknachweis: den Bericht aus der eingefrorenen Simulation `sim_cc6067a70603` neu erzeugen und gegen die Abnahmematrix messen. Schritt 3 unten (Hollerau annotieren) ist unverändert offen.
+
+Die folgende Liste ist die Planung vom 04.10.2026:
 
 1. **AP 1 und AP 2 umsetzen**, jeweils mit den Regressionstests 1, 2 und 4. Danach den Bericht aus der eingefrorenen Simulation `sim_cc6067a70603` neu erzeugen und gegen die Abnahmematrix messen.
 2. **AP 3 umsetzen**: den Rate-Limit-Verlust als Degradation ausweisen und die Parallelität der Simulation drosseln. Ohne das ist jeder weitere Lauf auf dieser Route zu zwei Dritteln leer.
