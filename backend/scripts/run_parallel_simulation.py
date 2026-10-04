@@ -271,6 +271,13 @@ def init_logging_for_simulation(simulation_dir: str):
 
 from action_logger import SimulationLogManager, PlatformActionLogger
 
+# Agentengedaechtnis begrenzen (#1772): Feed-Pruning zwischen den Runden und
+# Obergrenze fuer das Memory-Token-Limit. Reines Python, keine camel/oasis-Abhaengigkeit.
+try:
+    from .agent_memory import describe_memory_policy, prune_graph_memories
+except ImportError:  # direct script execution
+    from agent_memory import describe_memory_policy, prune_graph_memories
+
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
@@ -1551,6 +1558,7 @@ async def run_twitter_simulation(
             enforce_memory_token_limit(result.agent_graph)
         except Exception as e:
             log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
+    log_info(describe_memory_policy())
 
     # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
     # to every SocialAgent. OASIS triggers these through its normal LLMAction()
@@ -1769,6 +1777,8 @@ async def run_twitter_simulation(
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
+        # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
+        prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
 
         # Get actual executed actions from Database and log
         actual_actions, last_rowid = fetch_new_actions_from_db(
@@ -1917,6 +1927,7 @@ async def run_reddit_simulation(
             enforce_memory_token_limit(result.agent_graph)
         except Exception as e:
             log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
+    log_info(describe_memory_policy())
 
     # Native CAMEL function-calling for Reddit agents (see Twitter branch).
     if enable_tools and AGENT_TOOLS_AVAILABLE:
@@ -2112,6 +2123,8 @@ async def run_reddit_simulation(
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
+        # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
+        prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
 
         # Get actual executed actions from Database and log
         actual_actions, last_rowid = fetch_new_actions_from_db(

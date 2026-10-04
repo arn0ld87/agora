@@ -127,6 +127,20 @@ class TestSubprocessEnvIncludesOptionalConnectionKeys:
             "REDIS_URL fehlt in SAFE_ENV_KEYS — Redis-Bridge im OASIS-Subprozess funktioniert nicht"
         )
 
+    def test_safe_env_keys_includes_agent_memory_limits(self, tmp_path, monkeypatch) -> None:
+        """#1772: Die Begrenzung des Agentengedaechtnisses greift nur, wenn die Werte im Subprozess ankommen."""
+        for key, value in (
+            ("AGORA_SIM_MEMORY_PRUNE_FEEDS", "false"),
+            ("AGORA_SIM_MEMORY_KEEP_FEEDS", "3"),
+            ("AGORA_SIM_MEMORY_TOKEN_CAP", "24000"),
+        ):
+            assert key in SAFE_ENV_KEYS
+            monkeypatch.setenv(key, value)
+        captured = _run_start_simulation(tmp_path, monkeypatch)
+        assert captured.get("AGORA_SIM_MEMORY_PRUNE_FEEDS") == "false"
+        assert captured.get("AGORA_SIM_MEMORY_KEEP_FEEDS") == "3"
+        assert captured.get("AGORA_SIM_MEMORY_TOKEN_CAP") == "24000"
+
     def test_safe_env_keys_includes_hf_token(self) -> None:
         """HF_TOKEN muss in SAFE_ENV_KEYS sein, sonst scheitern private HF-Modell-Loads."""
         assert "HF_TOKEN" in SAFE_ENV_KEYS, (

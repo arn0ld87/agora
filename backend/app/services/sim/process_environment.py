@@ -23,6 +23,10 @@ SAFE_ENV_KEYS: frozenset[str] = frozenset(
         "OLLAMA_THINKING", "REDIS_URL", "HF_TOKEN",
         "AGORA_CODEX_CLI_BIN", "AGORA_CODEX_CLI_TIMEOUT_SECONDS",
         "AGORA_CLAUDE_CLI_BIN", "AGORA_CLAUDE_CLI_TIMEOUT_SECONDS",
+        # #1772: Begrenzung des Agentengedaechtnisses (scripts/agent_memory.py).
+        # Reine Zahlen-/Schalterwerte, keine Secrets.
+        "AGORA_SIM_MEMORY_PRUNE_FEEDS", "AGORA_SIM_MEMORY_KEEP_FEEDS",
+        "AGORA_SIM_MEMORY_TOKEN_CAP",
     }
 )
 

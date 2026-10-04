@@ -108,6 +108,7 @@ except ImportError:
 # ``actions.jsonl`` — ``action_logger``/``oasis_action_ingest`` liegen wie
 # ``agent_tools`` auf Ebene ``scripts/`` und sind dort bare-importierbar.
 from action_logger import PlatformActionLogger
+from agent_memory import describe_memory_policy, prune_graph_memories
 from oasis_action_ingest import (
     fetch_new_actions_from_db,
     get_agent_names_from_config,
@@ -508,6 +509,7 @@ class SinglePlatformRunner:
             enforce_memory_token_limit(self.agent_graph)
         except Exception as e:
             print(f"enforce_memory_token_limit ({self.PLATFORM_SLUG}-single) failed: {e}", flush=True)
+        logger.info(describe_memory_policy())
 
         # Databasepath
         db_path = self._get_db_path()
@@ -736,6 +738,8 @@ class SinglePlatformRunner:
 
             # Execute action
             await self.env.step(actions)
+            # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
+            prune_graph_memories(self.agent_graph, round_num=round_num + 1, log=logger.info)
 
             # Get actual executed actions from Database and log (#1713)
             round_actions, last_rowid = self._log_round_actions(
