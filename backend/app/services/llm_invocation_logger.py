@@ -33,6 +33,7 @@ class LlmInvocationLogger:
         prompt_tokens: Optional[int] = None,
         completion_tokens: Optional[int] = None,
         reported_cost_micros: Optional[int] = None,
+        cached_input_tokens: Optional[int] = None,
     ) -> None:
         """Append a call event to the log file.
 
@@ -45,6 +46,9 @@ class LlmInvocationLogger:
         ``prompt_tokens``/``completion_tokens`` + Preistabelle zu
         rekonstruieren. ``None`` (Default) aendert nichts am bisherigen
         token-basierten Pfad.
+
+        ``cached_input_tokens`` (Issue #1772): gecachter Anteil von
+        ``prompt_tokens``; ``None`` = Provider hat nichts gemeldet.
 
         Codex-Review (PR #1742): die Zeile geht jetzt durch
         ``contracts.llm_call_event_contract.LlmCallEvent`` statt als
@@ -70,6 +74,7 @@ class LlmInvocationLogger:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             reported_cost_micros=reported_cost_micros,
+            cached_input_tokens=cached_input_tokens,
         )
 
         # Ensure log directory exists

@@ -94,6 +94,8 @@ export const UsageMetricsSchema = z
     input_tokens: z.number().int().min(0).nullable().optional(),
     output_tokens: z.number().int().min(0).nullable().optional(),
     total_tokens: z.number().int().min(0).nullable().optional(),
+    // Gecachter Anteil der Eingabe-Tokens (#1772); rein informativ, null/fehlend = nicht gemeldet
+    cached_input_tokens: z.number().int().min(0).nullable().optional(),
     llm_calls: z.number().int().min(0).default(0),
     // null/fehlend = Fehlerzahl unbekannt (Altbestand), nie "0 Fehler" (#1766)
     failed_llm_calls: z.number().int().min(0).nullable().optional(),

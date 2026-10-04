@@ -236,8 +236,13 @@ class SubprocessBudgetGuard:
         prompt_tokens: Optional[int] = None,
         completion_tokens: Optional[int] = None,
         error_type: Optional[str] = None,
+        cached_input_tokens: Optional[int] = None,
     ) -> None:
         """Einen CAMEL-Call in den gemeinsamen Ledger verbuchen.
+
+        ``cached_input_tokens`` (Issue #1772) landet nur im Call-Event; die
+        lokalen Zaehler (``_prompt_tokens``) und damit die Budgetpruefung
+        rechnen weiter mit den VOLLEN Eingabe-Tokens (konservativ).
 
         Ohne aktive :meth:`attribute_to`-Zuordnung geht der Call wie bisher an
         ``self.run_id``/``STAGE_ID`` und zaehlt in die lokalen Runden-Zaehler
@@ -273,6 +278,7 @@ class SubprocessBudgetGuard:
                 error_type=error_type,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
+                cached_input_tokens=cached_input_tokens,
             )
         except Exception as exc:  # noqa: BLE001 — Recording darf die Sim nicht stören
             print(f"[budget-guard] usage recording failed: {exc}", flush=True)
@@ -436,6 +442,32 @@ class _UsageTrackingModelProxy:
             completion if isinstance(completion, int) else None,
         )
 
+    @staticmethod
+    def _extract_cached_input_tokens(result: Any) -> Optional[int]:
+        """Gecachte Eingabe-Tokens aus ``usage.prompt_tokens_details.cached_tokens``.
+
+        OpenAI-kompatible Antworten tragen den Wert dort (Pydantic-Objekt oder
+        Mapping). ``None`` = Provider hat keine Angabe geliefert -- nie ``0``
+        erfinden. Eigene Funktion statt Erweiterung von :meth:`_extract_usage`,
+        damit dessen Zwei-Tupel-Rueckgabe fuer bestehende Aufrufer stabil bleibt.
+        """
+        usage = getattr(result, "usage", None)
+        if usage is None:
+            return None
+        if isinstance(usage, Mapping):
+            details = usage.get("prompt_tokens_details")
+        else:
+            details = getattr(usage, "prompt_tokens_details", None)
+        if details is None:
+            return None
+        if isinstance(details, Mapping):
+            cached = details.get("cached_tokens")
+        else:
+            cached = getattr(details, "cached_tokens", None)
+        if isinstance(cached, bool) or not isinstance(cached, int) or cached < 0:
+            return None
+        return cached
+
     def run(self, messages, *args, **kwargs):
         target = object.__getattribute__(self, "_target")
         guard = object.__getattribute__(self, "_guard")
@@ -451,11 +483,13 @@ class _UsageTrackingModelProxy:
             )
             raise
         prompt, completion = self._extract_usage(result)
+        cached = self._extract_cached_input_tokens(result)
         guard.record_call(
             latency_ms=(time.monotonic() - started) * 1000,
             success=True,
             prompt_tokens=prompt,
             completion_tokens=completion,
+            cached_input_tokens=cached,
         )
         return result
 
@@ -474,11 +508,13 @@ class _UsageTrackingModelProxy:
             )
             raise
         prompt, completion = self._extract_usage(result)
+        cached = self._extract_cached_input_tokens(result)
         guard.record_call(
             latency_ms=(time.monotonic() - started) * 1000,
             success=True,
             prompt_tokens=prompt,
             completion_tokens=completion,
+            cached_input_tokens=cached,
         )
         return result
 
@@ -502,11 +538,13 @@ class _UsageTrackingModelProxy:
                 )
                 raise
             prompt, completion = self._extract_usage(result)
+            cached = self._extract_cached_input_tokens(result)
             guard.record_call(
                 latency_ms=(time.monotonic() - started) * 1000,
                 success=True,
                 prompt_tokens=prompt,
                 completion_tokens=completion,
+                cached_input_tokens=cached,
             )
             return result
         finally:
@@ -530,11 +568,13 @@ class _UsageTrackingModelProxy:
                 )
                 raise
             prompt, completion = self._extract_usage(result)
+            cached = self._extract_cached_input_tokens(result)
             guard.record_call(
                 latency_ms=(time.monotonic() - started) * 1000,
                 success=True,
                 prompt_tokens=prompt,
                 completion_tokens=completion,
+                cached_input_tokens=cached,
             )
             return result
         finally:

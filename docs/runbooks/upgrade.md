@@ -44,6 +44,11 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Upgrade:** Es ist kein Schritt nötig.
 - **Rollback-Implikation:** Ältere Versionen lehnen einen Checkpoint **mit** den neuen Feldern ab (`extra="forbid"`) und behandeln ihn als nicht vorhanden; die Vorbereitung startet neu, ohne Abbruch. Die Zusatzfelder der Ontologie ignorieren ältere Versionen.
 
+**Gecachte Eingabe-Tokens in Call-Events und Usage-Summary** ([#1772](https://github.com/arn0ld87/agora/issues/1772)). `instance/runs/<run_id>/llm_call_events.jsonl` bekommt je Zeile das optionale Feld `cached_input_tokens` (`null`, wenn der Provider keine Angabe liefert), und `usage_summary.json` führt in `totals` und den Aufschlüsselungen das Feld `cached_input_tokens`. Die Run-API (`/api/runs/<id>`, Usage, Runs-Liste) liefert es mit; die Schemas unter `schemas/` und der Zod-Spiegel `frontend/src/contracts/runBudgetContract.ts` sind nachgezogen.
+
+- **Upgrade:** Es ist kein Schritt nötig. Altbestand ohne das Feld bleibt lesbar und liefert `null`, nie 0; das Feld erscheint erst in neu geschriebenen Events und Summaries.
+- **Rollback-Implikation:** Ältere Versionen lehnen ein `usage_summary.json` **mit** dem Feld ab (`UsageMetrics` ist dort `extra="forbid"`) und behandeln die Zusammenfassung als nicht vorhanden; Zeilen in `llm_call_events.jsonl` liest die Leseseite tolerant. Abhilfe ist, `cached_input_tokens` aus `usage_summary.json` zu entfernen oder die Datei neu aggregieren zu lassen. Das Frontend vor diesem Stand (strikter Zod-Spiegel) lehnt Run-Antworten mit dem Feld ab, solange Backend und Frontend nicht gemeinsam zurückgerollt werden.
+
 ## Env-Default-Änderungen außerhalb des Versionssprungs
 
 Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).

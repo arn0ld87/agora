@@ -57,6 +57,11 @@ class LlmCallEvent(BaseModel):
     remote_request_id: Optional[str] = None
     prompt_tokens: Optional[int] = Field(default=None, ge=0)
     completion_tokens: Optional[int] = Field(default=None, ge=0)
+    #: Issue #1772: gecachte Eingabe-Tokens (``usage.prompt_tokens_details
+    #: .cached_tokens``), Teilmenge von ``prompt_tokens``. ``None`` (Default) =
+    #: der Provider hat keine Angabe geliefert; alte Events ohne das Feld
+    #: bleiben lesbar (die Leseseite wertet ueber ``.get(...)`` aus).
+    cached_input_tokens: Optional[int] = Field(default=None, ge=0)
     #: f001 (Slice `jev-budget`): für Aufrufer, die ihre Kosten bereits selbst
     #: über dieselbe ``PricingRegistry`` beziffert haben, aber auf dieser
     #: Schicht keine Rohtoken mehr kennen (z. B. ``DecisionResult.cost_micros``

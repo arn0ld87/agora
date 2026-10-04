@@ -41,3 +41,9 @@
   `termination_reason=budget_tokens`, geprüft wird an den Rundengrenzen. Ein vom Nutzer
   gesetztes Budget gewinnt und wird nicht um einen Tokendeckel ergänzt; Replay, Neustart und
   Branch erben das Budget des Ursprungslaufs und bekommen keinen nachträglichen Deckel.
+- Budget: Gecachte Eingabe-Tokens werden erfasst. Der Subprozess-Budget-Guard liest
+  `usage.prompt_tokens_details.cached_tokens` OpenAI-kompatibler Antworten und schreibt sie als
+  optionales Feld `cached_input_tokens` in `llm_call_events.jsonl`; `UsageMetrics` (Usage-Summary,
+  Run-Detail, Runs-Liste, Schemas und Zod-Spiegel) summiert den Wert. `null` heißt „nicht
+  gemeldet“, nie 0; alte Events und Summaries ohne das Feld bleiben lesbar. Budget und Kosten
+  rechnen unverändert mit den vollen Eingabe-Tokens (konservativ).

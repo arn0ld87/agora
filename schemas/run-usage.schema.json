@@ -4,6 +4,19 @@
       "additionalProperties": false,
       "description": "Gemessener Verbrauch eines Runs oder einer Teilmenge (Stage/Provider/Modell).\n\nOptionale Felder bleiben None, wenn die Datenquelle sie nicht liefert \u2014\nder jeweilige Status macht die Datenqualit\u00e4t explizit.",
       "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Tokens"
+        },
         "cost_micros": {
           "anyOf": [
             {
