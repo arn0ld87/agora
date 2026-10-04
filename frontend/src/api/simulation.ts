@@ -43,6 +43,8 @@ export interface PrepareSimulationData {
   llm_provider?: LlmRuntimePayload
   language?: string
   max_agents?: number
+  /** Nutzervorgabe für die Streitfrage (#1778); ohne sie schlägt der Assistent eine vor. */
+  contested_question?: string
 }
 
 /**

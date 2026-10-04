@@ -55,6 +55,7 @@ from .simulation_prepare_contracts import (
     _collect_prepare_inputs as _collect_prepare_inputs,
     _load_prepare_project as _load_prepare_project,
     _parse_prepare_budget as _parse_prepare_budget,
+    _parse_prepare_contested_question as _parse_prepare_contested_question,
     _parse_prepare_identity as _parse_prepare_identity,
     _parse_quota_plan as _parse_quota_plan,
     _read_client_choice as _read_client_choice,
@@ -560,6 +561,7 @@ def _prepare_simulation_under_start_lock(
             ai_model_ref=ai_model_ref,
             budget_config=_parse_prepare_budget(data),
             force_regenerate=data.get('force_regenerate', False),
+            contested_question=_parse_prepare_contested_question(data),
         )
         project = _load_prepare_project(state)
         routing = _resolve_prepare_routing(data, project, ai_model_ref)

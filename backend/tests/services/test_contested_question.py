@@ -143,6 +143,79 @@ class TestOverrideImKonfigurationsAssistent:
         }
 
 
+class TestOverrideAusDemPrepareLauf:
+    """Schritt 1.6: Die Nutzervorgabe aus dem Prepare-Request erreicht ``generate_config``."""
+
+    @staticmethod
+    def _run_phase(monkeypatch, **kwargs: Any) -> MagicMock:
+        from app.services import prepare_service
+        from app.services.llm_runtime import RuntimeLlmConfig
+
+        fake_params = MagicMock(
+            to_json=lambda: '{"time_config": {}}', generation_reasoning="ok"
+        )
+        generator = MagicMock(generate_config=MagicMock(return_value=fake_params))
+        monkeypatch.setattr(
+            prepare_service, "SimulationConfigGenerator", lambda **kw: generator
+        )
+        state = MagicMock(
+            project_id="proj_x", graph_id="g_x", enable_twitter=True, enable_reddit=True
+        )
+        prepare_service._phase_generate_config(
+            MagicMock(name="SimulationManager"),
+            state,
+            "sim_xyz",
+            "requirement",
+            "doc",
+            expanded_entities=[],
+            llm_model=None,
+            llm_runtime=RuntimeLlmConfig(
+                provider="custom_openai",
+                api_key="runtime-override-placeholder",
+                base_url="http://llm.invalid/v1",
+            ),
+            language=None,
+            **kwargs,
+        )
+        return generator
+
+    def test_vorgabe_wird_an_generate_config_uebergeben(self, monkeypatch):
+        generator = self._run_phase(
+            monkeypatch, contested_question_override="Die Kita am Berg wird geschlossen."
+        )
+
+        assert (
+            generator.generate_config.call_args.kwargs["contested_question_override"]
+            == "Die Kita am Berg wird geschlossen."
+        )
+
+    def test_ohne_vorgabe_wird_none_uebergeben(self, monkeypatch):
+        generator = self._run_phase(monkeypatch)
+
+        assert generator.generate_config.call_args.kwargs["contested_question_override"] is None
+
+    def test_manager_reicht_die_vorgabe_an_den_service_durch(self, monkeypatch):
+        from app.services import prepare_service
+        from app.services.simulation_manager import SimulationManager
+
+        received: dict[str, Any] = {}
+
+        def fake_prepare_simulation(manager, simulation_id, requirement, document_text, **kwargs):
+            received.update(kwargs)
+            return MagicMock(name="state")
+
+        monkeypatch.setattr(prepare_service, "prepare_simulation", fake_prepare_simulation)
+        SimulationManager.prepare_simulation(
+            MagicMock(),
+            simulation_id="sim_xyz",
+            simulation_requirement="requirement",
+            document_text="doc",
+            contested_question_override="Die Kita am Berg wird geschlossen.",
+        )
+
+        assert received["contested_question_override"] == "Die Kita am Berg wird geschlossen."
+
+
 class TestAlignSentimentSign:
     """Schritt 1.5: Haltung und Vorzeichen von ``sentiment_bias`` passen zusammen.
 

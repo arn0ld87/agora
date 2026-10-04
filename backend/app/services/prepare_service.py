@@ -545,8 +545,12 @@ def _phase_generate_config(
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
     degradations: Optional[DegradationCollector] = None,
+    contested_question_override: Optional[str] = None,
 ) -> None:
     """Phase 3: Simulation-Config per LLM erzeugen + atomar persistieren.
+
+    ``contested_question_override`` (#1778): Nutzervorgabe für die Streitfrage.
+    Gesetzt ersetzt sie den Vorschlag des Konfigurations-Assistenten.
 
     ``degradations`` (#1759 A6): Sammler des Prepare-Laufs. Der Generator
     meldet darüber ``stance_position_unrepresented`` und
@@ -600,6 +604,7 @@ def _phase_generate_config(
         enable_twitter=state.enable_twitter,
         enable_reddit=state.enable_reddit,
         degradations=degradations,
+        contested_question_override=contested_question_override,
     )
 
     if progress_callback:
@@ -793,6 +798,7 @@ def prepare_simulation(
     run_id: Optional[str] = None,
     degradations: Optional[DegradationCollector] = None,
     force_regenerate: bool = False,
+    contested_question_override: Optional[str] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -952,6 +958,7 @@ def prepare_simulation(
             quota_plan=quota_plan,
             run_id=run_id,
             degradations=degradations,
+            contested_question_override=contested_question_override,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to

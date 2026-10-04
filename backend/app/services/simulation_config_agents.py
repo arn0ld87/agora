@@ -50,13 +50,15 @@ def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNo
         gevent daher der kooperative ``gevent.pool.Pool``, sonst
         ``ThreadPoolExecutor``.
         """
+    # Ohne Streitfrage bleibt der Batch-Aufruf exakt der bisherige (#1778).
+    contested_kwargs: Dict[str, Any] = {'contested_statement': contested_statement} if contested_statement else {}
     if len(batch_ranges) == 1:
         start_idx, end_idx = batch_ranges[0]
-        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement, contested_statement=contested_statement)
+        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement, **contested_kwargs)
 
     def run_batch(batch_range: tuple[int, int]) -> List[AgentActivityConfig]:
         start_idx, end_idx = batch_range
-        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement, contested_statement=contested_statement)
+        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement, **contested_kwargs)
     try:
         from gevent import monkey
     except ImportError:

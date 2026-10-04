@@ -91,6 +91,7 @@ def _inputs(**overrides) -> mod._PrepareInputs:
         max_agents=overrides.get("max_agents"),
         quota_plan=overrides.get("quota_plan"),
         agent_language_override=overrides.get("agent_language_override"),
+        contested_question=overrides.get("contested_question"),
     )
 
 
@@ -332,6 +333,52 @@ def test_collect_prepare_inputs_tolerates_non_string_language(app_ctx, monkeypat
     inputs = mod._collect_prepare_inputs({"language": 5}, _project(), _state())
 
     assert inputs.agent_language_override is None
+
+
+def test_collect_prepare_inputs_keeps_the_given_contested_question(app_ctx, monkeypatch):
+    """#1778 Schritt 1.6: Die Nutzervorgabe kommt bereinigt bei den Eingaben an."""
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    inputs = mod._collect_prepare_inputs(
+        {"contested_question": "  Die Kita am Berg wird geschlossen.  "},
+        _project(),
+        _state(),
+    )
+
+    assert inputs.contested_question == "Die Kita am Berg wird geschlossen."
+
+
+@pytest.mark.parametrize("payload", [{}, {"contested_question": None}, {"contested_question": "   "}])
+def test_collect_prepare_inputs_without_contested_question_is_none(app_ctx, monkeypatch, payload):
+    """Leer heißt: der Assistent schlägt eine Streitfrage vor."""
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    inputs = mod._collect_prepare_inputs(payload, _project(), _state())
+
+    assert inputs.contested_question is None
+
+
+@pytest.mark.parametrize("value", ["zu kurz", "x" * 301, 5, {"statement": "Die Kita schließt."}])
+def test_collect_prepare_inputs_rejects_invalid_contested_question(app_ctx, monkeypatch, value):
+    monkeypatch.setattr(mod.ProjectManager, "get_extracted_text", staticmethod(lambda _pid: ""))
+
+    with pytest.raises(mod._PrepareRejected) as excinfo:
+        mod._collect_prepare_inputs({"contested_question": value}, _project(), _state())
+
+    assert _status(excinfo) == 400
+    assert "contested_question" in _body(excinfo)["error"]
+
+
+def test_prepare_request_validates_the_contested_question():
+    from pydantic import ValidationError
+
+    req = mod._PrepareRequest(
+        simulation_id=VALID_SIM_ID, contested_question="Die Kita am Berg wird geschlossen."
+    )
+    assert req.contested_question == "Die Kita am Berg wird geschlossen."
+    assert mod._PrepareRequest(simulation_id=VALID_SIM_ID).contested_question is None
+    with pytest.raises(ValidationError):
+        mod._PrepareRequest(simulation_id=VALID_SIM_ID, contested_question="zu kurz")
 
 
 def test_read_client_choice_tolerates_non_string_fields(app_ctx):
@@ -739,6 +786,30 @@ def test_prepare_job_runs_service_and_completes_task(app_ctx):
     result = task_manager.complete_task.call_args.kwargs["result"]
     assert result["simulation_id"] == VALID_SIM_ID
     assert result["degradations"] is not None
+
+
+def test_prepare_job_passes_the_contested_question_to_the_service(app_ctx):
+    """#1778 Schritt 1.6: Die Nutzervorgabe erreicht den Konfigurations-Assistenten."""
+    manager = MagicMock()
+    manager.prepare_simulation.return_value = MagicMock(
+        to_simple_dict=MagicMock(return_value={"simulation_id": VALID_SIM_ID})
+    )
+
+    job = mod._make_prepare_job(
+        manager=manager,
+        task_manager=MagicMock(),
+        task_id="task-1",
+        simulation_id=VALID_SIM_ID,
+        inputs=_inputs(contested_question="Die Kita am Berg wird geschlossen."),
+        storage=MagicMock(),
+        llm_model="gpt-4o",
+        run_record={"run_id": "run_test_1"},
+        effective_llm_runtime=RuntimeLlmConfig(),
+    )
+    job()
+
+    service_kwargs = manager.prepare_simulation.call_args.kwargs
+    assert service_kwargs["contested_question_override"] == "Die Kita am Berg wird geschlossen."
 
 
 def test_prepare_job_marks_simulation_failed_on_error(app_ctx):

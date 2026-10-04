@@ -120,6 +120,9 @@ def make_prepare_job(
                 language=inputs.agent_language_override,
                 max_agents=inputs.max_agents,
                 quota_plan=inputs.quota_plan,
+                # #1778: Nutzervorgabe für die Streitfrage; None heißt, der
+                # Konfigurations-Assistent schlägt eine vor.
+                contested_question_override=inputs.contested_question,
                 # Budget-Enforcement (#984): dieselbe persistierte run_id wie
                 # der Prepare-Run — Persona- und Config-Generierung bauen ihre
                 # LLM-Clients damit run-gebunden statt budgetfrei.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..contracts import PersonaQuotaPlan
 from ..contracts.ai_provider_contract import AiModelRef
@@ -102,6 +102,10 @@ class PrepareRejected(Exception):
             # landet zuletzt auf dem Run, nach fail_task()).
             self.run_failure_message = run_failure_message
 
+CONTESTED_QUESTION_MIN_LENGTH = 10
+CONTESTED_QUESTION_MAX_LENGTH = 300
+
+
 class PrepareRequest(BaseModel):
     """Volldefinierte Pydantic-Contracts für ``POST /api/simulation/prepare``.
 
@@ -115,6 +119,13 @@ class PrepareRequest(BaseModel):
     ai_model_ref: "AiModelRef | None" = None
     budget_config: "RunBudgetConfig | None" = None
     force_regenerate: bool = False
+    # Nutzervorgabe für die Streitfrage (#1778). ``None`` heißt: der
+    # Konfigurations-Assistent schlägt eine vor.
+    contested_question: Optional[str] = Field(
+        default=None,
+        min_length=CONTESTED_QUESTION_MIN_LENGTH,
+        max_length=CONTESTED_QUESTION_MAX_LENGTH,
+    )
 
     model_config = ConfigDict(str_strip_whitespace=True, str_to_lower=False)
 
@@ -139,6 +150,37 @@ class PrepareInputs:
     max_agents: "int | None"
     quota_plan: Optional[PersonaQuotaPlan]
     agent_language_override: "str | None"
+    contested_question: "str | None" = None
+
+def _parse_prepare_contested_question(data: "dict[str, Any]") -> "str | None":
+    """Nutzervorgabe für die Streitfrage aus dem Body lesen (#1778).
+
+    Fehlend, ``None`` oder nur Leerraum heißt „keine Vorgabe": der
+    Konfigurations-Assistent schlägt dann eine Streitfrage vor. Alles andere
+    muss eine Aussage in den Längengrenzen von ``PrepareRequest`` sein.
+    """
+    raw = data.get("contested_question")
+    if raw is None:
+        return None
+    text = raw.strip() if isinstance(raw, str) else None
+    if text == "":
+        return None
+    if (
+        text is None
+        or not CONTESTED_QUESTION_MIN_LENGTH <= len(text) <= CONTESTED_QUESTION_MAX_LENGTH
+    ):
+        raise PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=(
+                    "contested_question muss eine Aussage mit "
+                    f"{CONTESTED_QUESTION_MIN_LENGTH} bis "
+                    f"{CONTESTED_QUESTION_MAX_LENGTH} Zeichen sein"
+                ),
+            )
+        )
+    return text
 
 def _parse_prepare_identity(data: "dict[str, Any]") -> "tuple[str, AiModelRef | None]":
     """Phase 1a — ``simulation_id`` und optionale ``ai_model_ref`` validieren.
@@ -393,4 +435,5 @@ def _collect_prepare_inputs(data: "dict[str, Any]", project, state) -> PrepareIn
         max_agents=_resolve_max_agents_with_floor(data.get("max_agents")),
         quota_plan=quota_plan,
         agent_language_override=agent_language_override,
+        contested_question=_parse_prepare_contested_question(data),
     )
