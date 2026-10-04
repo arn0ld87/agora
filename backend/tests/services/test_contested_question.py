@@ -141,3 +141,81 @@ class TestOverrideImKonfigurationsAssistent:
             "origin": "user",
             "absence_reason": None,
         }
+
+
+class TestAlignSentimentSign:
+    """Schritt 1.5: Haltung und Vorzeichen von ``sentiment_bias`` passen zusammen.
+
+    Messwert aus dem Referenzlauf: AfD ``opposing`` mit +0,65, Samtgemeinde
+    Ohlendorf ``supportive`` mit -0,4. Die Haltung gewinnt.
+    """
+
+    def test_opposing_mit_positivem_bias_wird_negativ(self):
+        from app.services.simulation_config_agents import _align_sentiment_sign
+
+        assert _align_sentiment_sign("opposing", 0.65) == -0.65
+
+    def test_supportive_mit_negativem_bias_wird_positiv(self):
+        from app.services.simulation_config_agents import _align_sentiment_sign
+
+        assert _align_sentiment_sign("supportive", -0.4) == 0.4
+
+    def test_neutral_bleibt_unveraendert(self):
+        from app.services.simulation_config_agents import _align_sentiment_sign
+
+        assert _align_sentiment_sign("neutral", 0.3) == 0.3
+
+
+class TestContestedQuestionInAgentConfigPrompt:
+    """Schritt 1.5: Der Konfigurations-Prompt bezieht die Haltung auf die Streitfrage."""
+
+    @staticmethod
+    def _generator(prompts: list[str]) -> SimulationConfigGenerator:
+        with patch("app.services.simulation_config_generator.LLMClient", MagicMock()):
+            generator = SimulationConfigGenerator(api_key="k", base_url="http://localhost")
+
+        def call_llm(prompt: str, system_prompt: str, schema: Any) -> dict:
+            prompts.append(prompt)
+            return {
+                "agent_configs": [
+                    {"agent_id": 0, "stance": "opposing", "sentiment_bias": 0.65}
+                ]
+            }
+
+        generator._call_llm_with_retry = call_llm  # type: ignore[method-assign]
+        return generator
+
+    @staticmethod
+    def _entity():
+        from app.services.entity_reader import EntityNode
+
+        return EntityNode(
+            uuid="e-1",
+            name="Betriebsrat",
+            labels=["Entity", "Organization"],
+            summary="Vertretung der Beschäftigten",
+            attributes={},
+            related_edges=[],
+            related_nodes=[],
+        )
+
+    def test_streitfrage_steht_im_prompt_und_bias_folgt_der_haltung(self):
+        prompts: list[str] = []
+        generator = self._generator(prompts)
+
+        configs = generator._generate_agent_configs_batch(
+            "ctx", [self._entity()], 0, "Was passiert?", contested_statement=_STATEMENT
+        )
+
+        assert f"Contested question: {_STATEMENT}" in prompts[0]
+        assert "refer ONLY to this contested question" in prompts[0]
+        assert configs[0].stance == "opposing"
+        assert configs[0].sentiment_bias == -0.65
+
+    def test_ohne_streitfrage_bleibt_der_prompt_unveraendert(self):
+        prompts: list[str] = []
+        generator = self._generator(prompts)
+
+        generator._generate_agent_configs_batch("ctx", [self._entity()], 0, "Was passiert?")
+
+        assert "Contested question" not in prompts[0]

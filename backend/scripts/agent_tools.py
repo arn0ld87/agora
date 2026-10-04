@@ -673,14 +673,34 @@ _STANCE_ATTITUDE = {
 }
 
 
-def _describe_stance(stance: str, sentiment_bias: Optional[float], agent_role: str) -> str:
+def _describe_stance(
+    stance: str,
+    sentiment_bias: Optional[float],
+    agent_role: str,
+    contested_statement: Optional[str] = None,
+) -> str:
     """Haltungssatz aus stance/sentiment_bias, gebunden an die eigene Rolle.
 
     Bewusst ohne fremde Namen/Rollen (Role-Leakage, #1323) und ohne
     Verhaltensvorhersage — beschreibt eine Disposition, kein Ergebnis.
+
+    Hat der Lauf eine Streitfrage (#1778), bezieht sich der Satz auf genau
+    diese Aussage statt auf "das Vorhaben": dieselbe Aussage, auf die sich
+    Startkonfiguration und Interview beziehen.
     """
     bias = sentiment_bias if sentiment_bias is not None else 0.0
     intensity = "sehr " if abs(bias) >= 0.5 else ""
+    if contested_statement:
+        if stance == "observer":
+            return (
+                f"Die Streitfrage „{contested_statement}\" beobachtest du, "
+                "ohne selbst Partei zu sein."
+            )
+        if stance == "supportive":
+            return f"Zur Streitfrage „{contested_statement}\" bist du {intensity}dafür."
+        if stance == "opposing":
+            return f"Zur Streitfrage „{contested_statement}\" bist du {intensity}dagegen."
+        return f"Zur Streitfrage „{contested_statement}\" bist du noch unentschieden."
     # Ohne bekannte Rolle kein Platzhalter wie "als Unknown" im System-Prompt.
     role = (agent_role or "").strip()
     role_clause = (
@@ -725,6 +745,7 @@ def build_stance_section(
     agent_role: str,
     posts_per_hour: Optional[float] = None,
     comments_per_hour: Optional[float] = None,
+    contested_statement: Optional[str] = None,
 ) -> str:
     """Baut den Abschnitt "Deine Haltung" — gemeinsame Quelle für beide Pfade,
     die einen Agenten-Prompt/System-Prompt bauen (#1713 Slice S6):
@@ -743,7 +764,9 @@ def build_stance_section(
     """
     if not stance:
         return ""
-    stance_sentence = _describe_stance(stance, sentiment_bias, agent_role)
+    stance_sentence = _describe_stance(
+        stance, sentiment_bias, agent_role, contested_statement
+    )
     posting_sentence = _describe_posting_tendency(posts_per_hour, comments_per_hour)
     return (
         "## Deine Haltung\n"
@@ -779,7 +802,9 @@ def _profile_prompt_sections(
 
 
 def _augment_twitter_csv_with_stance(
-    profile_path: str, cfg_by_id: Dict[Any, Dict[str, Any]]
+    profile_path: str,
+    cfg_by_id: Dict[Any, Dict[str, Any]],
+    contested_statement: Optional[str] = None,
 ) -> str:
     """Hängt ``build_stance_section`` an die ``user_char``-Spalte einer Kopie
     von ``twitter_profiles.csv`` an — genau das Feld, das
@@ -807,6 +832,7 @@ def _augment_twitter_csv_with_stance(
             agent_role=str(cfg.get("entity_type") or ""),
             posts_per_hour=cfg.get("posts_per_hour"),
             comments_per_hour=cfg.get("comments_per_hour"),
+            contested_statement=contested_statement,
         )
         section = _profile_prompt_sections(
             "twitter",
@@ -834,7 +860,9 @@ def _augment_twitter_csv_with_stance(
 
 
 def _augment_reddit_json_with_stance(
-    profile_path: str, cfg_by_id: Dict[Any, Dict[str, Any]]
+    profile_path: str,
+    cfg_by_id: Dict[Any, Dict[str, Any]],
+    contested_statement: Optional[str] = None,
 ) -> str:
     """Hängt ``build_stance_section`` an das ``persona``-Feld einer Kopie von
     ``reddit_profiles.json`` an — genau das Feld, das
@@ -854,6 +882,7 @@ def _augment_reddit_json_with_stance(
             agent_role=str(item.get("profession") or cfg.get("entity_type") or ""),
             posts_per_hour=cfg.get("posts_per_hour"),
             comments_per_hour=cfg.get("comments_per_hour"),
+            contested_statement=contested_statement,
         )
         section = _profile_prompt_sections(
             "reddit",
@@ -882,6 +911,7 @@ def augment_profile_with_stance(
     profile_path: str,
     agent_configs: List[Dict[str, Any]],
     platform: str,
+    contested_statement: Optional[str] = None,
 ) -> str:
     """Trägt die Haltung aus ``agent_configs`` in eine EIGENE Kopie der
     Profildatei ein, die OASIS beim Aufbau des Agent-Graphs
@@ -924,8 +954,12 @@ def augment_profile_with_stance(
     cfg_by_id = {cfg.get("agent_id"): cfg for cfg in agent_configs}
 
     if platform == "twitter":
-        return _augment_twitter_csv_with_stance(profile_path, cfg_by_id)
-    return _augment_reddit_json_with_stance(profile_path, cfg_by_id)
+        return _augment_twitter_csv_with_stance(
+            profile_path, cfg_by_id, contested_statement
+        )
+    return _augment_reddit_json_with_stance(
+        profile_path, cfg_by_id, contested_statement
+    )
 
 
 def build_agent_prompt_with_tools(
@@ -940,6 +974,7 @@ def build_agent_prompt_with_tools(
     sentiment_bias: Optional[float] = None,
     posts_per_hour: Optional[float] = None,
     comments_per_hour: Optional[float] = None,
+    contested_statement: Optional[str] = None,
 ) -> str:
     """
     Build a prompt that instructs the agent to use tools before acting.
@@ -959,6 +994,8 @@ def build_agent_prompt_with_tools(
         posts_per_hour: Expected own-post frequency, used relative to
             ``comments_per_hour`` to describe posting tendency.
         comments_per_hour: Expected reaction frequency.
+        contested_statement: Streitfrage des Laufs (#1778). When set, the
+            stance sentence refers to this statement.
 
     Returns:
         Prompt string ready for LLM
@@ -968,7 +1005,12 @@ def build_agent_prompt_with_tools(
     lang_instruction = "German" if language == "de" else "English"
 
     stance_section = build_stance_section(
-        stance, sentiment_bias, agent_role, posts_per_hour, comments_per_hour
+        stance,
+        sentiment_bias,
+        agent_role,
+        posts_per_hour,
+        comments_per_hour,
+        contested_statement,
     )
     stance_block = f"\n{stance_section}" if stance_section else ""
 
@@ -1116,6 +1158,7 @@ class ToolAwareActionLoop:
         sentiment_bias: Optional[float] = None,
         posts_per_hour: Optional[float] = None,
         comments_per_hour: Optional[float] = None,
+        contested_statement: Optional[str] = None,
     ) -> Any:
         """
         Decide agent action with optional tool use.
@@ -1137,6 +1180,7 @@ class ToolAwareActionLoop:
             sentiment_bias=sentiment_bias,
             posts_per_hour=posts_per_hour,
             comments_per_hour=comments_per_hour,
+            contested_statement=contested_statement,
         )
 
         messages = [{"role": "user", "content": prompt}]

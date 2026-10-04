@@ -352,6 +352,7 @@ class SimulationConfigGenerator:
                 entities=entities,
                 batch_ranges=batch_ranges,
                 simulation_requirement=simulation_requirement,
+                contested_statement=cq.statement,
             )
 
             report_progress(
@@ -478,11 +479,11 @@ class SimulationConfigGenerator:
     def _assign_initial_post_agents(self, event_config: EventConfig, agent_configs: List[AgentActivityConfig]) -> EventConfig:
         return _simulation_config_events._assign_initial_post_agents(self, event_config, agent_configs)
 
-    def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNode], batch_ranges: List[tuple[int, int]], simulation_requirement: str) -> List[AgentActivityConfig]:
-        return _simulation_config_agents._generate_agent_configs_parallel(self, context, entities, batch_ranges, simulation_requirement)
+    def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNode], batch_ranges: List[tuple[int, int]], simulation_requirement: str, contested_statement: Optional[str] = None) -> List[AgentActivityConfig]:
+        return _simulation_config_agents._generate_agent_configs_parallel(self, context, entities, batch_ranges, simulation_requirement, contested_statement)
 
-    def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str) -> List[AgentActivityConfig]:
-        return _simulation_config_agents._generate_agent_configs_batch(self, context, entities, start_idx, simulation_requirement)
+    def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str, contested_statement: Optional[str] = None) -> List[AgentActivityConfig]:
+        return _simulation_config_agents._generate_agent_configs_batch(self, context, entities, start_idx, simulation_requirement, contested_statement)
 
     @staticmethod
     def _ensure_skeptic_quota(personas: List[AgentActivityConfig], min_ratio: float=0.2) -> List[AgentActivityConfig]:

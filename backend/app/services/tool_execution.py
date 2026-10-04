@@ -37,6 +37,31 @@ _RAW_JSON_TOOLS = frozenset({
 })
 
 
+def _contested_statement(simulation_id: Optional[str]) -> Optional[str]:
+    """Liest die Streitfrage des Laufs aus dem persistierten Simulations-Config.
+
+    Derselbe Leseweg wie ``interview_direct._simulation_context``. Fehlt die
+    Datei oder die Streitfrage, gilt der Interview-Prompt ohne Streitfrage.
+    """
+    if not simulation_id:
+        return None
+    from .artifact_store import resolve_default_store
+
+    try:
+        config = (
+            resolve_default_store().read_json(
+                simulation_id, "simulation_config", default=None
+            )
+            or {}
+        )
+    except Exception as exc:  # noqa: BLE001 — Lesefehler heißt: keine Streitfrage bekannt
+        logger.warning(f"Simulations-Config nicht lesbar ({simulation_id}): {exc}")
+        return None
+    question = config.get("contested_question") if isinstance(config, dict) else None
+    statement = question.get("statement") if isinstance(question, dict) else None
+    return statement if isinstance(statement, str) and statement.strip() else None
+
+
 def _run_interview_agents(
     *,
     graph_tools: Any,
@@ -65,6 +90,7 @@ def _run_interview_agents(
         interview_requirement=interview_topic,
         simulation_requirement=simulation_requirement,
         max_agents=max_agents,
+        contested_statement=_contested_statement(simulation_id),
     )
     if on_terminal_failure is not None and getattr(
         structured_result, "terminal_failure", False

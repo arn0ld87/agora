@@ -434,3 +434,77 @@ class TestTopicTypeResolutionAndSchema:
         event = EventConfig(initial_posts=[{"content": "c", "poster_type": "ihk", "stance": "opposing"}])
         result = generator._assign_initial_post_agents(event, agents)
         assert result.initial_posts[0]["stance"] == "opposing"
+
+
+class TestStanceSectionRefersToContestedQuestion:
+    """Issue #1778, Schritt 1.5: Der Haltungssatz bezieht sich auf die Streitfrage."""
+
+    @staticmethod
+    def _agent_tools():
+        import importlib
+        import sys
+        from pathlib import Path
+
+        scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        return importlib.import_module("agent_tools")
+
+    def test_opposing_stance_names_the_contested_question(self):
+        section = self._agent_tools().build_stance_section(
+            stance="opposing",
+            sentiment_bias=-0.2,
+            agent_role="Betriebsrätin",
+            contested_statement="X wird geschlossen.",
+        )
+        assert "Zur Streitfrage „X wird geschlossen.\" bist du dagegen." in section
+        assert "Du siehst das Vorhaben" not in section
+
+    def test_strong_bias_adds_the_intensity_word(self):
+        section = self._agent_tools().build_stance_section(
+            stance="supportive",
+            sentiment_bias=0.7,
+            agent_role="Betriebsrätin",
+            contested_statement="X wird geschlossen.",
+        )
+        assert "Zur Streitfrage „X wird geschlossen.\" bist du sehr dafür." in section
+
+    def test_neutral_and_observer_get_their_own_sentence(self):
+        tools = self._agent_tools()
+        neutral = tools.build_stance_section(
+            "neutral", 0.0, "Analyst", contested_statement="X wird geschlossen."
+        )
+        observer = tools.build_stance_section(
+            "observer", 0.0, "Redaktion", contested_statement="X wird geschlossen."
+        )
+        assert "Zur Streitfrage „X wird geschlossen.\" bist du noch unentschieden." in neutral
+        assert (
+            "Die Streitfrage „X wird geschlossen.\" beobachtest du, ohne selbst Partei zu sein."
+            in observer
+        )
+
+    def test_without_contested_question_the_old_text_is_unchanged(self):
+        section = self._agent_tools().build_stance_section(
+            stance="opposing", sentiment_bias=-0.7, agent_role="Betriebsrätin"
+        )
+        assert section.startswith(
+            "## Deine Haltung\n"
+            "Du siehst das Vorhaben aus deiner Rolle als Betriebsrätin sehr kritisch."
+        )
+
+    def test_profile_augmentation_passes_the_contested_question(self, tmp_path):
+        import json
+
+        profile = tmp_path / "reddit_profiles.json"
+        profile.write_text(
+            json.dumps([{"user_id": 0, "persona": "Bio", "profession": "Pflege"}]),
+            encoding="utf-8",
+        )
+        out_path = self._agent_tools().augment_profile_with_stance(
+            str(profile),
+            [{"agent_id": 0, "stance": "opposing", "sentiment_bias": -0.6}],
+            platform="reddit",
+            contested_statement="X wird geschlossen.",
+        )
+        persona = json.loads(open(out_path, encoding="utf-8").read())[0]["persona"]
+        assert "Zur Streitfrage „X wird geschlossen.\" bist du sehr dagegen." in persona

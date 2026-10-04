@@ -43,6 +43,25 @@ STANCE_PROMPT_REQUIREMENT = (
 )
 
 
+def stance_prompt_requirement(contested_statement: Optional[str]) -> str:
+    """Prompt-Zusatz, bezogen auf die Streitfrage des Laufs (#1778).
+
+    Ohne Streitfrage gilt die bisherige Konstante. Mit Streitfrage bezieht sich
+    die Skala auf dieselbe Aussage wie Startkonfiguration und Agenten-Prompt.
+    """
+    if not contested_statement:
+        return STANCE_PROMPT_REQUIREMENT
+    return (
+        "7. After your last answer, add one final line in exactly this form:\n"
+        "   STANCE: <number>\n"
+        "   where the number is between -1.0 and 1.0 and expresses your position on this "
+        f"statement: \"{contested_statement}\" "
+        "-1.0 means you clearly want to prevent it, 0.0 undecided or torn, "
+        "1.0 means you clearly want it to happen. Give the number that matches "
+        "what you actually said. Write this line only once, at the very end.\n"
+    )
+
+
 def _clamp(value: float) -> float:
     return max(-1.0, min(1.0, value))
 
@@ -104,4 +123,5 @@ __all__ = [
     "STANCE_PROMPT_REQUIREMENT",
     "extract_stance",
     "split_platform_answers",
+    "stance_prompt_requirement",
 ]

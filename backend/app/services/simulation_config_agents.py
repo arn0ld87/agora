@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import math
 from contextvars import copy_context
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 from ..utils.logger import get_logger
@@ -29,7 +29,7 @@ logger = get_logger("agora.simulation_config")
 
 # Responsibility group: agents
 
-def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNode], batch_ranges: List[tuple[int, int]], simulation_requirement: str) -> List[AgentActivityConfig]:
+def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNode], batch_ranges: List[tuple[int, int]], simulation_requirement: str, contested_statement: Optional[str] = None) -> List[AgentActivityConfig]:
     """Führt die Agent-Config-Batches parallel statt sequentiell aus.
 
         Perf-Fix: ``batch_ranges`` sind disjunkte, vorab berechnete
@@ -52,11 +52,11 @@ def _generate_agent_configs_parallel(self, context: str, entities: List[EntityNo
         """
     if len(batch_ranges) == 1:
         start_idx, end_idx = batch_ranges[0]
-        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement)
+        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement, contested_statement=contested_statement)
 
     def run_batch(batch_range: tuple[int, int]) -> List[AgentActivityConfig]:
         start_idx, end_idx = batch_range
-        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement)
+        return self._generate_agent_configs_batch(context=context, entities=entities[start_idx:end_idx], start_idx=start_idx, simulation_requirement=simulation_requirement, contested_statement=contested_statement)
     try:
         from gevent import monkey
     except ImportError:
@@ -105,7 +105,41 @@ def _resolve_agent_stance(entity: EntityNode, cfg: Dict[str, Any], topic_types: 
     return resolve_stance(entity, cfg.get('stance', 'neutral'), topic_types)
 
 
-def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str) -> List[AgentActivityConfig]:
+def _contested_question_prompt_block(contested_statement: Optional[str]) -> str:
+    """Prompt-Abschnitt, der Haltung und Vorzeichen an die Streitfrage bindet.
+
+    Leerstring ohne Streitfrage: der Prompt bleibt dann unverändert.
+    """
+    if not contested_statement:
+        return ''
+    return (
+        f'Contested question: {contested_statement}\n'
+        'For every entity, `stance` and `sentiment_bias` refer ONLY to this contested question:\n'
+        '- "supportive" and a positive sentiment_bias mean: the entity wants the contested question to come true.\n'
+        '- "opposing" and a negative sentiment_bias mean: the entity wants to prevent it.\n'
+        '- "neutral" means genuinely undecided. "observer" is reserved for media and pure reporting entities.\n'
+        '- stance and the sign of sentiment_bias must agree. Never combine "opposing" with a positive sentiment_bias or "supportive" with a negative one.\n'
+        '- Entities that are directly affected (employees, patients, residents, their associations, political groups) normally have a position. Do not default them to "neutral" or "observer".\n'
+    )
+
+
+def _align_sentiment_sign(stance: str, sentiment_bias: float) -> float:
+    """Bringt das Vorzeichen von ``sentiment_bias`` mit der Haltung in Einklang.
+
+    Die Haltung gewinnt, weil sie nach dem Graph-Abgleich (``resolve_stance``)
+    feststeht. Jede Korrektur wird protokolliert.
+    """
+    if stance == 'opposing' and sentiment_bias > 0:
+        aligned = -abs(sentiment_bias)
+    elif stance == 'supportive' and sentiment_bias < 0:
+        aligned = abs(sentiment_bias)
+    else:
+        return sentiment_bias
+    logger.info('sentiment_bias %s passt nicht zur Haltung %s, korrigiert auf %s', sentiment_bias, stance, aligned)
+    return aligned
+
+
+def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str, contested_statement: Optional[str] = None) -> List[AgentActivityConfig]:
     """Generate agent configurations in batch"""
     entity_list = []
     summary_len = self.AGENT_SUMMARY_LENGTH
@@ -115,7 +149,7 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
         if topic_types:
             entry['graph_edges'] = graph_edge_facts(e, topic_types)
         entity_list.append(entry)
-    prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **activity_level has a hard floor of 0.5** (values below 0.5 are raised automatically) — use it to differentiate degree of engagement above that floor, not to make an entity inactive\n- **Official institutions** (University/GovernmentAgency): Lower engagement within the floor (0.5-0.6), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium-high activity (0.6-0.8), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.7-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium-high activity (0.6-0.8), medium-high influence (1.5-2.0)\n- **active_hours must cover at least 06:00-23:59** (hours outside that range are added automatically) — narrow it only within that window, never to fewer hours overall\n\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.5-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, must include 6-23, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>\n        }},\n        ...\n    ]\n}}'
+    prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n{_contested_question_prompt_block(contested_statement)}\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **activity_level has a hard floor of 0.5** (values below 0.5 are raised automatically) — use it to differentiate degree of engagement above that floor, not to make an entity inactive\n- **Official institutions** (University/GovernmentAgency): Lower engagement within the floor (0.5-0.6), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium-high activity (0.6-0.8), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.7-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium-high activity (0.6-0.8), medium-high influence (1.5-2.0)\n- **active_hours must cover at least 06:00-23:59** (hours outside that range are added automatically) — narrow it only within that window, never to fewer hours overall\n\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.5-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, must include 6-23, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>\n        }},\n        ...\n    ]\n}}'
     if topic_types:
         prompt += _GRAPH_EDGES_PROMPT_HINT
     system_prompt = 'You are a social media behavior analysis expert. Return pure JSON and use DACH / Europe-Berlin activity habits by default.'
@@ -140,6 +174,7 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
             self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23)))
         )
         config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0))
+        config.sentiment_bias = _align_sentiment_sign(config.stance, config.sentiment_bias)
         configs.append(config)
     return configs
 

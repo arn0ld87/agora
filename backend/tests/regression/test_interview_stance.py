@@ -94,6 +94,23 @@ def test_the_prompt_requirement_is_wired_into_the_interview_prompt():
         assert "STANCE_PROMPT_REQUIREMENT" in handle.read()
 
 
+def test_the_requirement_names_the_contested_question_when_the_run_has_one():
+    """#1778 Schritt 1.5: Die Skala bezieht sich auf die Streitfrage des Laufs."""
+    from app.services.interview_stance import stance_prompt_requirement
+
+    requirement = stance_prompt_requirement("X.")
+    assert '"X."' in requirement
+    assert "STANCE:" in requirement
+    assert "only once" in requirement
+
+
+@pytest.mark.parametrize("missing", [None, ""])
+def test_without_a_contested_question_the_requirement_is_the_constant(missing):
+    from app.services.interview_stance import stance_prompt_requirement
+
+    assert stance_prompt_requirement(missing) == STANCE_PROMPT_REQUIREMENT
+
+
 # --- Der Erzeugerpfad ------------------------------------------------------
 
 def _interview(response: str, stance: float | None) -> AgentInterview:

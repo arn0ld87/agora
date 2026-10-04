@@ -24,8 +24,8 @@ from .graph import interview_helpers as _interview_helpers
 # (M11 Phase 5b PR 1 — siehe app/services/graph/graph_dtos.py)
 # Aliased imports satisfy mypy's no-implicit-reexport check (PEP 484 §re-exports).
 from .interview_stance import (
-    STANCE_PROMPT_REQUIREMENT,
     split_platform_answers,
+    stance_prompt_requirement,
 )
 from .graph.graph_dtos import SearchResult as SearchResult  # noqa: PLC0414
 from .graph.graph_dtos import NodeInfo as NodeInfo  # noqa: PLC0414
@@ -288,7 +288,8 @@ class GraphToolsService:
         interview_requirement: str,
         simulation_requirement: str = "",
         max_agents: int = 5,
-        custom_questions: List[str] = None
+        custom_questions: List[str] = None,
+        contested_statement: Optional[str] = None,
     ) -> InterviewResult:
         """
         [InterviewAgents - Deep Interview]
@@ -406,7 +407,9 @@ class GraphToolsService:
             # ``sentiment_score`` stand im Vertrag und war im Referenzlauf bei
             # 0 von 99 Items gesetzt; damit war jede Mengenaussage ueber
             # Stakeholder strukturell unbelegbar.
-            + STANCE_PROMPT_REQUIREMENT
+            # #1778: Mit Streitfrage bezieht sich die Skala auf deren Aussage;
+            # ohne sie liefert die Funktion STANCE_PROMPT_REQUIREMENT.
+            + stance_prompt_requirement(contested_statement)
             + "\n"
         )
         optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
