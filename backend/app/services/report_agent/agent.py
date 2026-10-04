@@ -490,6 +490,10 @@ class ReportAgent:
                     snippet=snippet,
                     raw=action,
                 ).to_dict())
+                # Issue #1778 (Schritt 1.2): Stimme des Belegs — dieselbe
+                # agent_id wie im Interview derselben Persona.
+                if action.get("agent_id") is not None:
+                    items[-1]["voice_key"] = f"agent:{action.get('agent_id')}"
                 action_identity = (
                     action.get("platform"),
                     action.get("round_num"),
@@ -721,6 +725,9 @@ class ReportAgent:
                     # gegensaetzlich zum Thema stehen — der Claim wuerde sonst
                     # abgewertet, obwohl sie sich in ihm einig sind.
                     "topic_stance": getattr(interview, "topic_stance", None),
+                    # Issue #1778 (Schritt 1.2): Stimme des Belegs. Post und
+                    # Interview derselben Persona tragen denselben voice_key.
+                    "voice_key": f"agent:{interview.agent_id}" if getattr(interview, "agent_id", None) is not None else None,
                     "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
                     "producer_key": build_producer_key(
                         f"interview:s{section_index}",

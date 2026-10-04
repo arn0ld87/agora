@@ -361,6 +361,11 @@ class AgentInterview:
     #: zusaetzliche Calls. Dass die Persona sich selbst einschaetzt, ist hier
     #: kein Mangel: gefragt ist ihre Haltung, nicht ein Urteil ueber sie.
     topic_stance: Optional[float] = None
+    # Issue #1778 (Schritt 1.2): Numerische ID des Agenten, der hier
+    # geantwortet hat. Sie ist der verlaessliche Schluessel fuer die Stimme
+    # (``voice_key``) — der Name im Profil kann vom Namen in der
+    # Simulationskonfiguration abweichen, die Zahl nicht.
+    agent_id: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -372,6 +377,7 @@ class AgentInterview:
             "response": self.response,
             "key_quotes": self.key_quotes,
             "topic_stance": self.topic_stance,
+            "agent_id": self.agent_id,
         }
 
     def to_text(self) -> str:

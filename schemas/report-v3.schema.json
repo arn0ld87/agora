@@ -523,6 +523,20 @@
           ],
           "default": null,
           "title": "Value"
+        },
+        "voice_key": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^agent:\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Voice Key"
         }
       },
       "required": [

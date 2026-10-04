@@ -237,6 +237,9 @@ class EvidenceItemModel(BaseModel):
     persona_stakeholder_group: Optional[str] = Field(
         default=None, min_length=1, max_length=200
     )
+    #: Stimme: eindeutiger Schlüssel der Persona, von der der Beleg stammt.
+    #: Form ``agent:<agent_id>``. ``None`` bei Belegen ohne Persona (Seed, Graph, Web).
+    voice_key: Optional[str] = Field(default=None, max_length=64, pattern=r"^agent:\d+$")
     # Issue #1248: Kontrolliertes Rollenfamilien-Label aus dem Entitaetstyp der
     # Quellentitaet. Der Jobtitel oben bleibt Anzeigetext; gezaehlt wird dieses
     # Feld. Optional, weil Artefakte aus Laeufen vor diesem Slice es nicht
@@ -318,6 +321,8 @@ class EvidenceRecordModel(BaseModel):
     persona_stakeholder_group: Optional[str] = Field(
         default=None, min_length=1, max_length=200
     )
+    #: Stimme (Issue #1778, Schritt 1.2), siehe EvidenceItemModel.voice_key.
+    voice_key: Optional[str] = Field(default=None, max_length=64, pattern=r"^agent:\d+$")
     # Issue #1248, siehe EvidenceItemModel.
     persona_role_family: Optional[str] = Field(
         default=None, min_length=1, max_length=120

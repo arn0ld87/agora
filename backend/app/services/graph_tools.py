@@ -542,6 +542,7 @@ class GraphToolsService:
                     response=response_text,
                     key_quotes=key_quotes[:5],
                     topic_stance=topic_stance,
+                    agent_id=agent_idx,
                 )
                 result.interviews.append(interview)
 
