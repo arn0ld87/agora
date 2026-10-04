@@ -133,6 +133,55 @@ def collect_historical_stats(limit: int = 30) -> _HistoryStats:
     return stats
 
 
+def _tokens_per_call_estimate(
+    history: _HistoryStats,
+    *,
+    has_history: bool,
+    max_rounds: int,
+    memory_context_cap_tokens: Optional[int],
+) -> tuple[float, float, float, list[str]]:
+    """Tokens je Aufruf (untere/obere Schaetzung), Eingabeanteil und Warnungen.
+
+    Mit Verlaufsdaten gilt deren Median, sonst das Messwertmodell der Simulation.
+    """
+    warnings: list[str] = []
+    # ``input_share``: Anteil der Eingabe-Tokens an der Tokensumme (Kostenmodell).
+    input_share = 2 / 3
+    if history.tokens_per_call:
+        median_tokens = statistics.median(history.tokens_per_call)
+        tokens_per_call_low = median_tokens * 0.5
+        tokens_per_call_high = median_tokens * 2.0
+        if not has_history:
+            warnings.append(
+                f"Wenig historische Daten ({history.runs_used} Runs) — "
+                "Tokenschätzung unsicher."
+            )
+    else:
+        input_per_call = simulation_tokens_per_agent_step(
+            max_rounds, memory_context_cap_tokens
+        )
+        modelled_tokens_per_call = input_per_call + _SIM_OUTPUT_TOKENS_PER_CALL
+        tokens_per_call_low = modelled_tokens_per_call
+        tokens_per_call_high = modelled_tokens_per_call
+        input_share = input_per_call / modelled_tokens_per_call
+        if memory_context_cap_tokens is None:
+            memory_note = (
+                "Gedächtnis unbegrenzt angenommen: der Kontext wächst mit jeder Runde"
+            )
+        else:
+            memory_note = (
+                f"Gedächtnis auf {_fmt(memory_context_cap_tokens)} Kontext-Tokens begrenzt"
+            )
+        warnings.append(
+            "Keine historischen Verbrauchsdaten — Tokenschätzung basiert auf einer "
+            "Heuristik aus Messwerten (Lauf sim_cc6067a70603, 24 Runden, 52 Agenten, "
+            "2 Plattformen; Mittel 33.700 Eingabe-Tokens je Aufruf). "
+            f"{memory_note}; Schätzung ≈ {_fmt(input_per_call)} Eingabe-Tokens "
+            "je Agentenschritt."
+        )
+    return tokens_per_call_low, tokens_per_call_high, input_share, warnings
+
+
 def estimate_run(
     *,
     num_agents: int,
@@ -180,40 +229,15 @@ def estimate_run(
     )
 
     # --- Tokens pro Call -----------------------------------------------------
-    # ``input_share``: Anteil der Eingabe-Tokens an der Tokensumme (Kostenmodell).
-    input_share = 2 / 3
-    if history.tokens_per_call:
-        median_tokens = statistics.median(history.tokens_per_call)
-        tokens_per_call_low = median_tokens * 0.5
-        tokens_per_call_high = median_tokens * 2.0
-        if not has_history:
-            warnings.append(
-                f"Wenig historische Daten ({history.runs_used} Runs) — "
-                "Tokenschätzung unsicher."
-            )
-    else:
-        input_per_call = simulation_tokens_per_agent_step(
-            max_rounds, memory_context_cap_tokens
+    tokens_per_call_low, tokens_per_call_high, input_share, token_warnings = (
+        _tokens_per_call_estimate(
+            history,
+            has_history=has_history,
+            max_rounds=max_rounds,
+            memory_context_cap_tokens=memory_context_cap_tokens,
         )
-        modelled_tokens_per_call = input_per_call + _SIM_OUTPUT_TOKENS_PER_CALL
-        tokens_per_call_low = modelled_tokens_per_call
-        tokens_per_call_high = modelled_tokens_per_call
-        input_share = input_per_call / modelled_tokens_per_call
-        if memory_context_cap_tokens is None:
-            memory_note = (
-                "Gedächtnis unbegrenzt angenommen: der Kontext wächst mit jeder Runde"
-            )
-        else:
-            memory_note = (
-                f"Gedächtnis auf {_fmt(memory_context_cap_tokens)} Kontext-Tokens begrenzt"
-            )
-        warnings.append(
-            "Keine historischen Verbrauchsdaten — Tokenschätzung basiert auf einer "
-            "Heuristik aus Messwerten (Lauf sim_cc6067a70603, 24 Runden, 52 Agenten, "
-            "2 Plattformen; Mittel 33.700 Eingabe-Tokens je Aufruf). "
-            f"{memory_note}; Schätzung ≈ {_fmt(input_per_call)} Eingabe-Tokens "
-            "je Agentenschritt."
-        )
+    )
+    warnings.extend(token_warnings)
     warnings.append(
         "Der Budget-Zähler zählt nur erfolgreiche Modellaufrufe; mit "
         "RateLimitError gescheiterte Versuche verbrauchen beim Anbieter "
