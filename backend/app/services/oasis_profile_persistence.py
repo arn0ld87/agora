@@ -84,7 +84,12 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
         # Issue #1759 (A7): ``voice_register`` als weitere Spalte, damit der
         # Parallel-Runner die Laengengrenze pro Register setzen kann, ohne das
         # Register aus dem Entitaetstyp zu raten.
-        headers =['user_id','name','username','user_char','description','schema_version','voice_register']
+        # Issue #1778: ``user_id`` ist hier die Zeilenposition (so liest OASIS die
+        # CSV). ``source_user_id`` traegt die Nummer des Agenten in der
+        # Simulationskonfiguration, damit ein Lauf nur mit Twitter die
+        # Konfiguration auch bei fehlenden Profilen richtig zuordnen kann
+        # (``simulation_agent_identity.align_config_to_profiles``).
+        headers =['user_id','name','username','user_char','description','schema_version','voice_register','source_user_id']
         writer .writerow (headers )
 
         # Write data rows
@@ -107,6 +112,7 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
             description ,# description: Short bio (external display)
             PERSONA_SCHEMA_VERSION ,# schema_version: Formatversion (#1663)
             profile .voice_register or "",# voice_register (#1759)
+            profile .user_id if profile .user_id is not None else idx ,# source_user_id (#1778)
             ]
             writer .writerow (row )
 

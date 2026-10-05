@@ -122,10 +122,15 @@ def test_profiles_are_read_in_oasis_order_from_reddit_or_twitter(tmp_path) -> No
 
     (tmp_path / "reddit_profiles.json").unlink()
     with open(tmp_path / "twitter_profiles.csv", "w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["user_id", "name"])
+        writer = csv.DictWriter(handle, fieldnames=["user_id", "name", "source_user_id"])
         writer.writeheader()
-        writer.writerows(_profiles([0, 2]))
-    # Die CSV liefert Zeichenketten; die Zuordnung liest sie als Zahl.
+        # ``user_id`` ist in der Twitter-CSV die Zeilenposition.
+        writer.writerows(
+            [
+                {"user_id": 0, "name": "Profil 0", "source_user_id": 0},
+                {"user_id": 1, "name": "Profil 2", "source_user_id": 2},
+            ]
+        )
     twitter = load_simulation_profiles(str(tmp_path))
     assert position_by_config_agent_id(twitter) == {0: 0, 2: 1}
 
@@ -164,3 +169,41 @@ def test_interview_all_addresses_oasis_positions_and_skips_missing_agents(
     interview_client.interview_all_agents("sim-1", "Frage", run_state_dir=str(tmp_path))
 
     assert sorted(entry["agent_id"] for entry in sent["interviews"]) == [0, 1, 2]
+
+
+def test_twitter_csv_without_source_id_is_never_used_as_identity(tmp_path) -> None:
+    """Review PR #1785: ``user_id`` der Twitter-CSV ist fortlaufend.
+
+    Eine CSV älterer Läufe trägt keine ``source_user_id``. Aus ihrer Position
+    darf keine Zuordnung geraten werden; die Konfiguration bleibt unverändert.
+    """
+    with open(tmp_path / "twitter_profiles.csv", "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["user_id", "name"])
+        writer.writeheader()
+        writer.writerows([{"user_id": 0, "name": "A"}, {"user_id": 1, "name": "C"}])
+    config = _config(["A", "B", "C"])
+
+    profiles = load_simulation_profiles(str(tmp_path))
+
+    assert position_by_config_agent_id(profiles) is None
+    assert align_config_to_profiles(config, profiles) == (config, [])
+
+
+def test_twitter_csv_written_by_prepare_carries_the_config_agent_id(tmp_path) -> None:
+    from app.services.oasis_profile_generator import OasisProfileGenerator
+    from app.services.oasis_profile_models import OasisAgentProfile
+
+    profiles = [
+        OasisAgentProfile(user_id=user_id, user_name=f"user_{user_id}", name=f"Profil {user_id}",
+                          bio="Bio", persona="Persona")
+        for user_id in (0, 2, 3)
+    ]
+    generator = OasisProfileGenerator.__new__(OasisProfileGenerator)
+    path = tmp_path / "twitter_profiles.csv"
+
+    generator.save_profiles(profiles, str(path), platform="twitter")
+
+    with open(path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["user_id"] for row in rows] == ["0", "1", "2"]
+    assert position_by_config_agent_id(load_simulation_profiles(str(tmp_path))) == {0: 0, 2: 1, 3: 2}

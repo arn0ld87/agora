@@ -34,11 +34,22 @@ REDDIT_PROFILE_FILENAME = "reddit_profiles.json"
 TWITTER_PROFILE_FILENAME = "twitter_profiles.csv"
 
 
+#: Spalte der Twitter-CSV mit der Nummer des Agenten in der Konfiguration.
+TWITTER_SOURCE_ID_COLUMN = "source_user_id"
+
+
 def load_simulation_profiles(simulation_dir: str) -> List[Dict[str, Any]]:
     """Die Profile eines Laufs in OASIS-Reihenfolge; leer, wenn keine lesbar sind.
 
-    Beide Plattformdateien führen dieselben Agenten in derselben Reihenfolge.
-    Gelesen wird die Reddit-Datei, ersatzweise die Twitter-Datei.
+    Jedes Profil trägt unter ``user_id`` die Nummer des Agenten in der
+    Konfiguration — oder keine, wenn die Datei sie nicht hergibt.
+
+    Gelesen wird die Reddit-Datei, ersatzweise die Twitter-Datei. In der
+    Twitter-CSV ist ``user_id`` die fortlaufende Zeilenposition und sagt
+    nichts über den Agenten; dort zählt die Spalte ``source_user_id``. Fehlt
+    sie (CSV älterer Läufe), bleibt ``user_id`` leer, und
+    :func:`align_config_to_profiles` lässt die Konfiguration unverändert,
+    statt aus der Position eine Zuordnung zu raten.
     """
     reddit_path = os.path.join(simulation_dir, REDDIT_PROFILE_FILENAME)
     try:
@@ -51,9 +62,12 @@ def load_simulation_profiles(simulation_dir: str) -> List[Dict[str, Any]]:
     twitter_path = os.path.join(simulation_dir, TWITTER_PROFILE_FILENAME)
     try:
         with open(twitter_path, "r", encoding="utf-8", newline="") as handle:
-            return [dict(row) for row in csv.DictReader(handle)]
+            rows = [dict(row) for row in csv.DictReader(handle)]
     except (OSError, ValueError):
         return []
+    for row in rows:
+        row["user_id"] = row.get(TWITTER_SOURCE_ID_COLUMN) or None
+    return rows
 
 
 def _as_int(value: Any) -> Optional[int]:
@@ -148,6 +162,7 @@ def align_config_to_profiles(
 __all__ = [
     "REDDIT_PROFILE_FILENAME",
     "TWITTER_PROFILE_FILENAME",
+    "TWITTER_SOURCE_ID_COLUMN",
     "align_config_to_profiles",
     "load_simulation_profiles",
     "position_by_config_agent_id",
