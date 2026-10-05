@@ -15,12 +15,16 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0006](0006-ai-provider-connections.md) | Kanonische KI-Provider-Verbindungen | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0007](0007-embedding-configuration-and-index-migration.md) | Embedding-Konfiguration und Indexmigration | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0008](0008-single-user-profile-and-onboarding.md) | Single-User-Profil und Erst-Onboarding | Proposed | Onboarding/Provider-Unification Slice 0 |
+| [0009](0009-unified-model-picker.md) | Einheitlicher Model-Picker und Routing-Hierarchie | Accepted (2026-07-13) | — |
 | [0010](0010-vue-v4-route-consolidation.md) | Vue-v4-Referenzrouten und Deep-Link-Lebenszyklus | Proposed | #830 |
 | [0011](0011-evidence-entailment-and-provenance.md) | Evidence-Entailment, Provenance-Trennung und Final-Content-Contract | Accepted (2026-07-27) | Report-Trust-Slice |
 | [0012](0012-run-budgets.md) | Run-Budgets — Micros-Preise, Termination-Reason, ehrliche Unbekannt-Status | Accepted (2026-07-29) | #764 |
 | [0013](0013-seed-corpus-document-anchor.md) | Verifizierter Dokument-Anker für seed_corpus-Evidence | Accepted (2026-08-09) | #1086 |
+| [0014](0014-psycopg-under-gevent-worker.md) | psycopg 3 unter dem gunicorn-gevent-Worker | Accepted (2026-09-18) | — |
+| [0015](0015-single-web-worker-hardstop.md) | Der Webprozess bleibt bei einem Worker | Accepted (2026-09-19) | — |
 | [0018](0018-multi-user-before-1-0.md) | Multi-User vor 1.0: Workspaces, Supabase Auth, RLS, Realtime (löst 0001 ab) | Zeitpunkt abgelöst durch 0019 | #1610 |
 | [0019](0019-multi-user-after-1-0.md) | Multi-User erst nach 1.0; gemergter Code bleibt inaktiv | Accepted (2026-09-25) | #1610 |
+| [0020](0020-isolated-public-demo-before-1-0.md) | Isolierte öffentliche Bewerbungsdemo vor 1.0 | Accepted (2026-09-26) | — |
 | [0021](0021-kompatibilitaet-ab-1-0.md) | Kompatibilitäts- und Deprecation-Policy ab 1.0 | Accepted (2026-10-02, Entscheidung #1657) | #1664 |
 
 ## Geplante ADRs

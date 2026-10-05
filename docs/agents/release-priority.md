@@ -2,14 +2,12 @@
 
 > Verbindliche Reihenfolge und Freigabekriterien: [ROADMAP](../../ROADMAP.md). Verifizierter Istzustand: [STATUS](../STATUS.md).
 
-**Stand:** 02.10.2026, GitHub-Abgleich gegen `main@4cbf0eb8`. `v0.9.6` ist getaggt; nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
+**Stand:** 05.10.2026, GitHub-Abgleich gegen `main@444b2680`. `v0.9.6` ist getaggt; nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
 
 ## Nächste Arbeit
 
-1. **Aktuellen Security-Audit schließen:** CI-Run 36898610864 ist bei `pypdf 6.16.1` rot. [PR #1748](https://github.com/arn0ld87/agora/pull/1748) enthält den Fix, ist beim Abgleich aber offen. Nicht doppelt implementieren; finalen Audit-Nachweis prüfen. Gewöhnliche PR-CI führt den Python-Audit nicht aus.
-2. **Test-Isolation #1632:** Tests dürfen keine Run-Manifeste im echten `uploads`-/`AGORA_DATA_DIR`-Bestand anlegen.
-3. **Weitere Vor-Freeze-Verträge/Gates:** `schema_version` (#1663), Kompatibilitäts-ADR (#1664), Checksummen (#1661), Supabase-Image-Scan/Ausnahmeregister (#1670), Backend-Ratchet (#1671), Frontend-Coverage (#1672).
-4. **Operative Abnahme #1592:** produktiver Metadaten-Cutover ist dokumentiert; formale Beobachtungs-/Drill-Nachweise und echter Embedding-Modellwechsel bleiben offen. Hostzugriff ist nötig.
+1. **Offene Vor-Freeze-Gates:** Supabase-Image-Scan/Ausnahmeregister (#1670) und Frontend-Coverage (#1672).
+2. **Operative Abnahme #1592:** produktiver Metadaten-Cutover ist dokumentiert; formale Beobachtungs-/Drill-Nachweise und echter Embedding-Modellwechsel bleiben offen. Hostzugriff ist nötig.
 
 Ein neuer P0 stoppt den RC-Schnitt. Historische Blockerlisten dürfen geschlossene Issues nicht erneut zur Arbeit erklären.
 
@@ -32,6 +30,8 @@ Ein neuer P0 stoppt den RC-Schnitt. Historische Blockerlisten dürfen geschlosse
 - Twitter-Recommender #1236, Quantor-Evidence #1345, Confidence-/Claim-Typen #1301/#1400, Domänendrift #1471, Single-Platform-Observation-Gate #1224, Budgets und ehrliche `INCOMPLETE`-Reports.
 - Alias-/Entitätsklassen #1470 und Role-Leakage-Markierung #1323: LLM-Koreferenz außerhalb des Scopes, Markieren statt Verwerfen.
 - Manifest-/Replay #763/#1274: Prompt-/Input-/Route-Capture und Parameterübernahme umgesetzt; `random_seed=null` ist die Entscheidung, keine offene RNG-Aufgabe. Keine Garantie identischer Modellantworten.
+- Security-Audit: pypdf-Fix #1748 und Folgebefunde #1751 sind gemergt; `ci.yml` inklusive „Security scans“ ist auf `main@444b2680` grün (CI-Run 37324880033). Der Nachweis am finalen Release-Commit bleibt Pflicht.
+- Test-Isolation #1632, `schema_version` #1663, Kompatibilitäts-ADR #1664, Release-Checksummen #1661 (Nachweis am ersten echten Tag steht aus) und Backend-Ratchet #1671.
 - Neo4j-Backup #1633, Supavisor #1634, Integration-CI #1660, Embedding-SSoT #1417, CodeQL-Triage #1669 und Upgrade-Runbook #1673.
 
 ## Nach 1.0
