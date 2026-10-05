@@ -888,9 +888,20 @@ class ReportAgent:
         # Evidence — sie sind Modell-Output. Sie wandern in das separate
         # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
+        # Issue #1778: Treffer der Beitragssuche gelten berichtsweit. Vorher
+        # sah nur der Abschnitt sie, in dem gesucht wurde — im Abnahmelauf
+        # ``report_89d20c11edc1`` fünf von sieben Abschnitten also gar keine,
+        # nur die acht Aktionen der Stichprobe. Der Pool dedupliziert nach
+        # ``evidence_id``; ob ein Beitrag einen Claim stützt, entscheiden
+        # unverändert Schwelle und Entailment.
+        searched_action_items = [
+            deepcopy(record)
+            for record in evidence_index.values()
+            if isinstance(record, dict) and record.get("type") == "agent_action"
+        ]
         pool = (
             EvidenceCandidatePool(
-                direct_items + global_items,
+                direct_items + global_items + searched_action_items,
                 embedder,
                 reserved_slots=RESERVED_CANDIDATE_SLOTS,
             )

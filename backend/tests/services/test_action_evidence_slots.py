@@ -226,3 +226,57 @@ def test_pool_keeps_reserved_candidates_behind_the_common_limit() -> None:
     assert "ev_action" not in {item["evidence_id"] for item in without}
     assert [item["evidence_id"] for item in with_slots][-1] == "ev_action"
     assert len(with_slots) == 4
+
+
+def _make_agent(section_evidence: List[Dict[str, Any]], index_only: List[Dict[str, Any]]):
+    from unittest.mock import MagicMock
+
+    from app.services.report_agent import ReportAgent
+
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.graph_id = "graph_test"
+    agent.simulation_id = "sim_test"
+    agent.simulation_requirement = "Testreq"
+    agent.llm = MagicMock()
+    agent.web_tools = MagicMock()
+    agent.graph_tools = MagicMock()
+    agent.tools = {}
+    agent.report_logger = None
+    agent.console_logger = None
+    agent._current_section_index = 3
+    agent._active_section_unresolved_evidence = []
+    agent._active_section_evidence = section_evidence
+    agent.evidence_map = {
+        "evidence_index": {
+            item["evidence_id"]: dict(item) for item in [*section_evidence, *index_only]
+        },
+        "global_evidence_refs": [],
+    }
+    return agent
+
+
+def test_search_hit_of_an_earlier_section_is_a_candidate_in_later_sections(monkeypatch) -> None:
+    """Treffer der Beitragssuche gelten berichtsweit.
+
+    Im Abnahmelauf suchte der Report-Agent in zwei von sieben Abschnitten; die
+    21 Treffer waren in den übrigen fünf Abschnitten kein Kandidat.
+    """
+    from app.services.report_agent import ReportAgent
+
+    monkeypatch.setattr(ReportAgent, "_try_get_embedder", lambda self: _bow_embedder())
+    earlier_hit = _action_item(f"ev_{1:032x}", _POST)
+    earlier_hit["tool_name"] = "search_simulation_actions"
+    earlier_hit["agent_log_ref"] = {"section_index": 2, "action": "tool_result"}
+    unrelated = {
+        "evidence_id": f"ev_{2:032x}",
+        "type": "seed_document",
+        "source_kind": "seed_corpus",
+        "snippet": "Der Haushalt des Landkreises wird im Dezember beraten",
+    }
+    agent = _make_agent(section_evidence=[unrelated], index_only=[earlier_hit])
+
+    claims = agent._build_claims_for_section(_CLAIM + ".")
+
+    bound = {entry["evidence_id"]: entry for entry in claims[0]["evidence"]}
+    assert earlier_hit["evidence_id"] in bound
+    assert bound[earlier_hit["evidence_id"]]["supports_claim"] is True
