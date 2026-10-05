@@ -11,12 +11,14 @@ from contextvars import copy_context
 from typing import Any, Dict, List, Optional
 
 
+from ..contracts.simulation_activity_contract import ActorClass
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from .simulation_activity_policy import (
     enforce_active_hours_floor,
     enforce_activity_level_floor,
 )
+from .simulation_activity_model import coerce_actor_class, fallback_actor_class
 from .simulation_config_models import (
     AgentActivityConfig,
 )
@@ -107,6 +109,35 @@ def _resolve_agent_stance(entity: EntityNode, cfg: Dict[str, Any], topic_types: 
     return resolve_stance(entity, cfg.get('stance', 'neutral'), topic_types)
 
 
+_ACTOR_CLASS_PROMPT_BLOCK = (
+    '- **actor_class** (exactly one of: individual, politician, authority, organisation, media): '
+    'individual = a private person such as a citizen, employee, patient, student or expert; '
+    'politician = a person holding or running for elected or party-political office; '
+    'authority = a government agency, ministry or other public body; '
+    'organisation = an association, union, company, clinic, initiative or any other collective; '
+    'media = a news outlet or editorial account. '
+    'Only choose the class. Posting rates are set by the system from the class, never by you.'
+)
+
+
+def _resolve_actor_class(agent_id: int, entity: EntityNode, cfg: Dict[str, Any]) -> ActorClass:
+    """Akteursklasse des Assistenten; ohne gültigen Wert der Regel-Fallback (#1779).
+
+    Fehlt der Wert oder liegt er außerhalb des Enums, gilt die vorhandene
+    Unterscheidung Einzelperson/Kollektiv, sonst ``individual``. Der Fallback
+    wird protokolliert: die Klasse bestimmt die Schreibrate des Agenten.
+    """
+    actor_class = coerce_actor_class(cfg.get('actor_class'))
+    if actor_class is not None:
+        return actor_class
+    actor_class = fallback_actor_class(entity.get_entity_type())
+    logger.info(
+        'actor_class fehlt oder ist ungültig für agent_id=%s (%r), Regel-Fallback %s',
+        agent_id, cfg.get('actor_class'), actor_class.value,
+    )
+    return actor_class
+
+
 def _contested_question_prompt_block(contested_statement: Optional[str]) -> str:
     """Prompt-Abschnitt, der Haltung und Vorzeichen an die Streitfrage bindet.
 
@@ -151,7 +182,7 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
         if topic_types:
             entry['graph_edges'] = graph_edge_facts(e, topic_types)
         entity_list.append(entry)
-    prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n{_contested_question_prompt_block(contested_statement)}\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **activity_level has a hard floor of 0.5** (values below 0.5 are raised automatically) — use it to differentiate degree of engagement above that floor, not to make an entity inactive\n- **Official institutions** (University/GovernmentAgency): Lower engagement within the floor (0.5-0.6), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium-high activity (0.6-0.8), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.7-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium-high activity (0.6-0.8), medium-high influence (1.5-2.0)\n- **active_hours must cover at least 06:00-23:59** (hours outside that range are added automatically) — narrow it only within that window, never to fewer hours overall\n\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.5-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, must include 6-23, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>\n        }},\n        ...\n    ]\n}}'
+    prompt = f'Based on the following information, generate social media activity configuration for each entity.\n\nSimulation Requirements: {simulation_requirement}\n{_contested_question_prompt_block(contested_statement)}\n## Entity List\n```json\n{json.dumps(entity_list, ensure_ascii=False, indent=2)}\n```\n\n## Task\nGenerate activity configuration for each entity, noting:\n- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22\n- **activity_level has a hard floor of 0.5** (values below 0.5 are raised automatically) — use it to differentiate degree of engagement above that floor, not to make an entity inactive\n- **Official institutions** (University/GovernmentAgency): Lower engagement within the floor (0.5-0.6), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)\n- **Media** (MediaOutlet): Medium-high activity (0.6-0.8), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)\n- **Individuals** (Student/Person/Alumni): High activity (0.7-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)\n- **Public figures/Experts**: Medium-high activity (0.6-0.8), medium-high influence (1.5-2.0)\n- **active_hours must cover at least 06:00-23:59** (hours outside that range are added automatically) — narrow it only within that window, never to fewer hours overall\n{_ACTOR_CLASS_PROMPT_BLOCK}\nReturn JSON format (no markdown):\n{{\n    "agent_configs": [\n        {{\n            "agent_id": <must match input>,\n            "activity_level": <0.5-1.0>,\n            "posts_per_hour": <posting frequency>,\n            "comments_per_hour": <comment frequency>,\n            "active_hours": [<active hours list, must include 6-23, consider DACH / Europe-Berlin habits>],\n            "response_delay_min": <minimum response delay minutes>,\n            "response_delay_max": <maximum response delay minutes>,\n            "sentiment_bias": <-1.0 to 1.0>,\n            "stance": "<supportive/opposing/neutral/observer>",\n            "influence_weight": <influence weight>,\n            "actor_class": "<individual/politician/authority/organisation/media>"\n        }},\n        ...\n    ]\n}}'
     if topic_types:
         prompt += _GRAPH_EDGES_PROMPT_HINT
     system_prompt = 'You are a social media behavior analysis expert. Return pure JSON and use DACH / Europe-Berlin activity habits by default.'
@@ -175,7 +206,7 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
         active_hours = enforce_active_hours_floor(
             self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23)))
         )
-        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0))
+        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0), actor_class=_resolve_actor_class(agent_id, entity, cfg).value)
         # Die Vorzeichenregel steht nur im Prompt mit Streitfrage; ohne
         # Streitfrage bleibt der Lauf wie zuvor (Review PR #1780).
         if contested_statement:

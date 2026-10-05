@@ -30,6 +30,7 @@ from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.contested_question_contract import ContestedQuestion
 from app.contracts.stance_analysis_contract import StanceAnalysis
 from app.contracts.evidence_density_contract import EvidenceDensity
+from app.contracts.simulation_activity_contract import ActivityModelConfig
 from app.contracts.simulation_status_contract import SimulationStatusResponse
 from app.contracts.pipeline_degradation_contract import (
     PipelineDegradationModel,
@@ -159,6 +160,8 @@ CONTRACTS: dict[str, type] = {
     "stance-analysis.schema.json": StanceAnalysis,
     # Belegdichte der Claims eines Berichts (Issue #1779, Schritt 2.1)
     "evidence-density.schema.json": EvidenceDensity,
+    # Aktivitätsmodell einer Simulation, time_config.activity_model (Issue #1779, Schritt 2.4)
+    "simulation-activity-model.schema.json": ActivityModelConfig,
     "graph-diff.schema.json": GraphDiff,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)

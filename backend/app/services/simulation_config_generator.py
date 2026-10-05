@@ -243,6 +243,7 @@ class SimulationConfigGenerator:
         contested_topic_types: Optional[Collection[str]] = None,
         degradations: Optional[DegradationCollector] = None,
         contested_question_override: Optional[str] = None,
+        activity_mode: Optional[str] = None,
     ) -> SimulationParameters:
         """
         Intelligently generate complete simulation configuration (step-by-step generation)
@@ -264,6 +265,10 @@ class SimulationConfigGenerator:
             contested_question_override: Nutzervorgabe für die Streitfrage
                 (#1778). Nichtleer: übernimmt sie unverändert mit
                 ``origin="user"``; sonst leitet der Assistent sie per LLM ab.
+            activity_mode: Aktivitätsmodus der Simulation (#1779, ``realistic``
+                oder ``active``). ``None`` liest ``AGORA_SIM_ACTIVITY_MODE``,
+                Standard ``realistic``. Bestimmt den Ratensatz in
+                ``time_config.activity_model``.
 
         Returns:
             SimulationParameters: Complete simulation parameters
@@ -316,7 +321,7 @@ class SimulationConfigGenerator:
         report_progress(2, "Generating time configuration...")
         num_entities = len(entities)
         time_config_result = self._generate_time_config(context, num_entities)
-        time_config = self._parse_time_config(time_config_result, num_entities)
+        time_config = self._parse_time_config(time_config_result, num_entities, activity_mode)
         reasoning_parts.append(f"Time config: {time_config_result.get('reasoning', 'Success')}")
 
         # ========== Step 2: Generate event configuration ==========
@@ -467,8 +472,15 @@ class SimulationConfigGenerator:
     def _coerce_int_list(value: Any, default: List[int]) -> List[int]:
         return _simulation_config_time._coerce_int_list(value, default)
 
-    def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
-        return _simulation_config_time._parse_time_config(self, result, num_entities)
+    def _parse_time_config(
+        self,
+        result: Dict[str, Any],
+        num_entities: int,
+        activity_mode: Optional[str] = None,
+    ) -> TimeSimulationConfig:
+        return _simulation_config_time._parse_time_config(
+            self, result, num_entities, activity_mode
+        )
 
     def _generate_event_config(self, context: str, simulation_requirement: str, entities: List[EntityNode]) -> Dict[str, Any]:
         return _simulation_config_events._generate_event_config(self, context, simulation_requirement, entities)

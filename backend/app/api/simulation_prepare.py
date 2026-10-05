@@ -45,6 +45,7 @@ from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 
 if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
     from ..contracts.ai_provider_contract import AiModelRef
+    from ..contracts.simulation_activity_contract import ActivityMode
 
 
 from .simulation_prepare_contracts import (
@@ -55,6 +56,7 @@ from .simulation_prepare_contracts import (
     PrepareRouting as _PrepareRouting,
     _collect_prepare_inputs as _collect_prepare_inputs,
     _load_prepare_project as _load_prepare_project,
+    _parse_prepare_activity_mode as _parse_prepare_activity_mode,
     _parse_prepare_budget as _parse_prepare_budget,
     _parse_prepare_contested_question as _parse_prepare_contested_question,
     _parse_prepare_identity as _parse_prepare_identity,
@@ -169,6 +171,23 @@ def _contested_question_changed(simulation_id: str, requested: str | None) -> bo
     # Derselbe Wortlaut als Nutzervorgabe ändert die Herkunft: aus einem
     # Vorschlag des Assistenten wird ``origin="user"``.
     return contested.get("statement") != requested or contested.get("origin") != "user"
+
+
+def _activity_mode_changed(simulation_id: str, requested: "ActivityMode | None") -> bool:
+    """Ob der übergebene Aktivitätsmodus vom persistierten abweicht (#1779).
+
+    Wie bei der Streitfrage: ein ausdrücklich anderer Modus ist ein Grund, eine
+    bereits vorbereitete Simulation erneut vorzubereiten. Ohne Vorgabe bleibt der
+    Kurzschluss bestehen. Eine Konfiguration ohne Aktivitätsmodell gilt als
+    abweichend.
+    """
+    if requested is None:
+        return False
+    config = resolve_default_store().read_json(simulation_id, "simulation_config", default=None)
+    time_config = config.get("time_config") if isinstance(config, dict) else None
+    model = time_config.get("activity_model") if isinstance(time_config, dict) else None
+    persisted = model.get("mode") if isinstance(model, dict) else None
+    return persisted != requested.value
 
 
 def _already_prepared_response(simulation_id: str):
@@ -330,6 +349,8 @@ def _begin_prepare_run(
             # #1778: Nutzervorgabe für die Streitfrage. Der Restart hat keinen
             # Request-Payload und liest sie hier (``runs.py``).
             **({"contested_question": req.contested_question} if req.contested_question else {}),
+            # #1779: Aktivitätsmodus, aus demselben Grund (Restart ohne Payload).
+            **({"activity_mode": req.activity_mode.value} if req.activity_mode else {}),
         },
     )
 
@@ -584,6 +605,7 @@ def _prepare_simulation_under_start_lock(
             budget_config=_parse_prepare_budget(data),
             force_regenerate=data.get('force_regenerate', False),
             contested_question=_parse_prepare_contested_question(data),
+            activity_mode=_parse_prepare_activity_mode(data),
         )
         project = _load_prepare_project(state)
         routing = _resolve_prepare_routing(data, project, ai_model_ref)
@@ -598,6 +620,7 @@ def _prepare_simulation_under_start_lock(
             not req.force_regenerate
             and not routing.client_requested_override
             and not _contested_question_changed(simulation_id, req.contested_question)
+            and not _activity_mode_changed(simulation_id, req.activity_mode)
         ):
             already_prepared = _already_prepared_response(simulation_id)
             if already_prepared is not None:

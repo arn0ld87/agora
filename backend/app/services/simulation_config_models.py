@@ -50,6 +50,13 @@ class AgentActivityConfig:
     # Influence weight (determines probability of their speech being seen by other agents)
     influence_weight: float = 1.0
 
+    # Akteursklasse (#1779): ``individual``, ``politician``, ``authority``,
+    # ``organisation`` oder ``media``. Sie bestimmt die Tagesrate im
+    # Aktivitätsmodell (``ActorClass`` in simulation_activity_contract.py);
+    # ``activity_level`` und ``posts_per_hour`` bleiben im Artefakt, steuern die
+    # Auswahl aber nur noch in Konfigurationen ohne ``time_config.activity_model``.
+    actor_class: str = "individual"
+
 
 @dataclass
 class TimeSimulationConfig:
@@ -80,6 +87,12 @@ class TimeSimulationConfig:
     # Work hours
     work_hours: List[int] = field(default_factory=lambda: [9, 10, 11, 12, 13, 14, 15, 16])
     work_activity_multiplier: float = 0.6
+
+    # Aktivitätsmodell (#1779): serialisiertes ``ActivityModelConfig``
+    # (app/contracts/simulation_activity_contract.py). ``None`` = Altkonfiguration;
+    # die Auswahl der aktiven Agenten nutzt dann den bisherigen Pfad. Die Datei
+    # bleibt Dataclass — das Modell selbst ist Pydantic, hier nur sein Dict.
+    activity_model: Optional[Dict[str, Any]] = None
 
 
 @dataclass

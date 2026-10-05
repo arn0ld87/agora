@@ -15,6 +15,7 @@ from .simulation_activity_policy import (
     enforce_agents_per_hour_floor,
     resolve_agents_per_hour_ratios,
 )
+from .simulation_activity_model import activity_model_dict, resolve_activity_mode
 from .simulation_config_models import (
     DEFAULT_MINUTES_PER_ROUND,
     DEFAULT_TOTAL_SIMULATION_HOURS,
@@ -198,8 +199,19 @@ def _coerce_int_list(value: Any, default: List[int]) -> List[int]:
     return out or default
 
 
-def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
-    """Parse time configuration result and verify agents_per_hour doesn't exceed total agents"""
+def _parse_time_config(
+    self,
+    result: Dict[str, Any],
+    num_entities: int,
+    activity_mode: Optional[str] = None,
+) -> TimeSimulationConfig:
+    """Parse time configuration result and verify agents_per_hour doesn't exceed total agents
+
+    ``activity_mode`` (#1779): ``realistic`` oder ``active``; ``None`` liest
+    ``AGORA_SIM_ACTIVITY_MODE``. Der Modus bestimmt nur den Ratensatz in
+    ``activity_model``; ``agents_per_hour_*`` und die Untergrenzen bleiben im
+    Artefakt (Rückwärtskompatibilität), steuern die Auswahl dann aber nicht mehr.
+    """
     agents_per_hour_min = self._coerce_int(result.get('agents_per_hour_min'), max(1, num_entities // 15))
     agents_per_hour_max = self._coerce_int(result.get('agents_per_hour_max'), max(5, num_entities // 5))
     if agents_per_hour_min > num_entities:
@@ -223,4 +235,5 @@ def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeS
         self._coerce_int(result.get('total_simulation_hours'), DEFAULT_TOTAL_SIMULATION_HOURS),
         self._coerce_int(result.get('minutes_per_round'), DEFAULT_MINUTES_PER_ROUND),
     )
-    return TimeSimulationConfig(total_simulation_hours=total_hours, minutes_per_round=minutes_per_round, agents_per_hour_min=agents_per_hour_min, agents_per_hour_max=agents_per_hour_max, peak_hours=self._coerce_int_list(result.get('peak_hours'), [19, 20, 21, 22]), off_peak_hours=self._coerce_int_list(result.get('off_peak_hours'), [0, 1, 2, 3, 4, 5]), off_peak_activity_multiplier=0.05, morning_hours=self._coerce_int_list(result.get('morning_hours'), [6, 7, 8]), morning_activity_multiplier=0.4, work_hours=self._coerce_int_list(result.get('work_hours'), list(range(9, 19))), work_activity_multiplier=0.7, peak_activity_multiplier=1.5)
+    activity_model = activity_model_dict(resolve_activity_mode(activity_mode))
+    return TimeSimulationConfig(activity_model=activity_model, total_simulation_hours=total_hours, minutes_per_round=minutes_per_round, agents_per_hour_min=agents_per_hour_min, agents_per_hour_max=agents_per_hour_max, peak_hours=self._coerce_int_list(result.get('peak_hours'), [19, 20, 21, 22]), off_peak_hours=self._coerce_int_list(result.get('off_peak_hours'), [0, 1, 2, 3, 4, 5]), off_peak_activity_multiplier=0.05, morning_hours=self._coerce_int_list(result.get('morning_hours'), [6, 7, 8]), morning_activity_multiplier=0.4, work_hours=self._coerce_int_list(result.get('work_hours'), list(range(9, 19))), work_activity_multiplier=0.7, peak_activity_multiplier=1.5)
