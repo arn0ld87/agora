@@ -10,9 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ..contracts import PersonaQuotaPlan
 from ..contracts.ai_provider_contract import AiModelRef
 from ..contracts.run_budget_contract import RunBudgetConfig
+from ..contracts.simulation_activity_contract import ActivityMode
 from ..models.project import ProjectManager
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.report_agent import MIN_SIMULATION_AGENTS
+from ..services.simulation_activity_model import parse_activity_mode
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error
 from ..utils.validation import validate_simulation_id
@@ -126,6 +128,9 @@ class PrepareRequest(BaseModel):
         min_length=CONTESTED_QUESTION_MIN_LENGTH,
         max_length=CONTESTED_QUESTION_MAX_LENGTH,
     )
+    # Aktivitätsmodus der Simulation (#1779). ``None`` heißt: Einstellung
+    # ``AGORA_SIM_ACTIVITY_MODE``, Standard ``realistic``.
+    activity_mode: Optional[ActivityMode] = None
 
     model_config = ConfigDict(str_strip_whitespace=True, str_to_lower=False)
 
@@ -151,6 +156,27 @@ class PrepareInputs:
     quota_plan: Optional[PersonaQuotaPlan]
     agent_language_override: "str | None"
     contested_question: "str | None" = None
+    activity_mode: "ActivityMode | None" = None
+
+def _parse_prepare_activity_mode(data: "dict[str, Any]") -> "ActivityMode | None":
+    """Aktivitätsmodus aus dem Body lesen (#1779).
+
+    Fehlend, ``None`` oder leer heißt „keine Vorgabe" (Einstellung/Standard).
+    Ein anderer Wert als ``realistic`` oder ``active`` ist ein Client-Fehler.
+    """
+    raw = data.get("activity_mode")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    mode = parse_activity_mode(raw)
+    if mode is None:
+        raise PrepareRejected(
+            json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="activity_mode muss " + " oder ".join(item.value for item in ActivityMode) + " sein",
+            )
+        )
+    return mode
 
 def _parse_prepare_contested_question(data: "dict[str, Any]") -> "str | None":
     """Nutzervorgabe für die Streitfrage aus dem Body lesen (#1778).
@@ -436,4 +462,5 @@ def _collect_prepare_inputs(data: "dict[str, Any]", project, state) -> PrepareIn
         quota_plan=quota_plan,
         agent_language_override=agent_language_override,
         contested_question=_parse_prepare_contested_question(data),
+        activity_mode=_parse_prepare_activity_mode(data),
     )

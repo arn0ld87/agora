@@ -72,6 +72,10 @@ manuelle Prüfung bzw. Folgearbeit.
 
 ---
 
+### Geltung der Zielwerte seit dem Aktivitätsmodell ([#1779](https://github.com/arn0ld87/agora/issues/1779))
+
+Die Zielwerte L1 (mindestens 0,6 Aktionen je Agent und Runde) und L2 (mindestens 40 % aktive Agenten je Runde) stammen aus #1713 und beschreiben das bisherige Aktivitätsmuster. Sie behaupten nichts über reales Stakeholder-Verhalten. Simulationen mit `time_config.activity_model` richten die Aktivität an belegten Tagesraten aus (siehe [`docs/research/simulation-aktivitaet-belege.md`](../research/simulation-aktivitaet-belege.md)) und **verfehlen L1 und L2 mit Absicht**: Bei rund einem Textbeitrag je Akteur und Tag ist in den meisten Stunden nur ein kleiner Teil der Agenten aktiv. Für solche Läufe sind L1 und L2 keine Qualitätsziele. Sinnvolle Prüfgrößen sind dort die gemessenen Textbeiträge je Agent und simuliertem Tag gegen die Rate der Akteursklasse und die Zahl der nicht ausgeführten Aktionen in den Logzeilen `[activation-limit]`. Die übrigen Kennzahlen (L3 bis L8) hängen nicht an der Menge und gelten weiter. Die Hebel aus dem Abschnitt „Aktivitätskonfiguration und Feed-Parameter" (`AGORA_SIM_AGENTS_PER_HOUR_*`, `activity_level`-Untergrenze) wirken nur noch für Simulationen ohne Aktivitätsmodell.
+
 ## Interpretationsentscheidungen (dokumentiert, nicht selbstverständlich)
 
 - **L4 `max_chain_length`** ist die längste Beitrags-Antwortkette, nicht der

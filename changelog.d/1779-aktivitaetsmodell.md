@@ -1,0 +1,3 @@
+### Changed (Aktivitätsmodell der Simulation — 2026-10-05)
+
+- **Simulation:** Neu vorbereitete Simulationen wählen die aktiven Agenten nach belegten Tagesraten für Textbeiträge je Akteursklasse statt nach einer festen Quote je Stunde. Zwei Modi: `realistic` (Standard) und `active`, wählbar je Simulation (`activity_mode` in `POST /api/simulation/prepare`, Auswahl in der Oberfläche) oder über `AGORA_SIM_ACTIVITY_MODE`. Je Aktivierung führt ein Agent höchstens einen Textbeitrag und zwei Reaktionen aus, ein Agent ist je Runde auf höchstens einer Plattform aktiv. Es entstehen deutlich weniger Aktionen je Runde als bisher. Bereits vorbereitete Simulationen laufen unverändert. Herkunft der Werte: `docs/research/simulation-aktivitaet-belege.md`. (#1779)

@@ -95,7 +95,11 @@ from app.services.simulation_activity_policy import (
     TWITTER_FOLLOWING_POST_COUNT,
     TWITTER_MAX_REC_POST_LEN,
     TWITTER_REFRESH_REC_POST_COUNT,
-    select_active_agent_ids,
+)
+from app.services.simulation_activity_model import (
+    RUNTIME_PLATFORMS_KEY,
+    for_platform,
+    select_round_agent_ids_from_config,
 )
 
 # CAMEL/Oasis — harte Abhängigkeit wie in den Runner-Skripten.
@@ -119,6 +123,11 @@ except ImportError:
 # ``actions.jsonl`` — ``action_logger``/``oasis_action_ingest`` liegen wie
 # ``agent_tools`` auf Ebene ``scripts/`` und sind dort bare-importierbar.
 from action_logger import PlatformActionLogger
+from activation_limit import (
+    append_activity_limits_to_prompts,
+    install_activation_limits_from_config,
+    round_activation_limits,
+)
 from agent_feed import install_feed_comment_cap
 from agent_memory import describe_memory_policy, prune_graph_memories
 from oasis_action_ingest import (
@@ -222,6 +231,7 @@ class SinglePlatformRunner:
         self.agent_graph = None
         self.ipc_handler = None
         self.tool_loop = None
+        self.activation_limits = None  # Obergrenze je Aktivierung (#1779), gesetzt in run()
         self.redis_bridge = None  # Issue #17: optional Redis Pub/Sub listener
         self.action_logger = None  # Issue #1713: gesetzt in run()
 
@@ -294,6 +304,9 @@ class SinglePlatformRunner:
         model_cfg: dict = build_camel_completion_params(
             model=llm_model,
             completion_max_tokens=completion_max_tokens,
+            # Wie im Parallel-Runner: ohne die URL erkennt der Helper OpenRouter
+            # nicht und sendet kein ``reasoning_effort`` (Review #1779).
+            base_url=llm_base_url or None,
         )
 
         if platform == ModelPlatformType.GEMINI:
@@ -368,11 +381,18 @@ class SinglePlatformRunner:
         Returns:
             activatedAgentlist
         """
-        time_config = self.config.get("time_config", {})
-        agent_configs = self.config.get("agent_configs", [])
-
         # Geteilte Auswahl-Logik mit run_parallel_simulation.py (#1713 Slice S4).
-        selected_ids = select_active_agent_ids(time_config, agent_configs, current_hour)
+        # Eine einzelne Plattform bekommt alle Aktiven (#1779); ohne
+        # ``time_config.activity_model`` gilt der bisherige Pfad.
+        selected_ids = select_round_agent_ids_from_config(
+            for_platform(
+                {**self.config, RUNTIME_PLATFORMS_KEY: [self.PLATFORM_SLUG or "twitter"]},
+                self.PLATFORM_SLUG or "twitter",
+            ),
+            current_hour,
+            round_num,
+            fallback_seed=self.random_seed,
+        )
 
         # Convert to Agent objects
         active_agents = []
@@ -531,6 +551,12 @@ class SinglePlatformRunner:
             print(f"enforce_memory_token_limit ({self.PLATFORM_SLUG}-single) failed: {e}", flush=True)
         logger.info(describe_memory_policy())
         install_feed_comment_cap(self.agent_graph, log=logger.info)
+        # #1779: Obergrenze je Aktivierung samt Satz im Agenten-Prompt (nur mit
+        # time_config.activity_model).
+        self.activation_limits = install_activation_limits_from_config(
+            self.agent_graph, self.config, log=logger.info
+        )
+        append_activity_limits_to_prompts(self.agent_graph, self.config, log=logger.info)
 
         # Databasepath
         db_path = self._get_db_path()
@@ -761,8 +787,9 @@ class SinglePlatformRunner:
                     for _, agent in active_agents
                 }
 
-            # Execute action
-            await self.env.step(actions)
+            # Execute action; Zaehler je Agent nur um diese Aktivierung (#1779).
+            with round_activation_limits(self.activation_limits, round_num + 1):
+                await self.env.step(actions)
             # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
             prune_graph_memories(self.agent_graph, round_num=round_num + 1, log=logger.info)
 

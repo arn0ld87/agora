@@ -88,6 +88,7 @@ try:
         build_parallel_parser,
         compute_post_sim_time,
         compute_start_hour_offset,
+        derive_simulation_seed,
         detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
@@ -113,6 +114,7 @@ except ImportError:  # direct script execution
         build_parallel_parser,
         compute_post_sim_time,
         compute_start_hour_offset,
+        derive_simulation_seed,
         detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
@@ -209,7 +211,16 @@ from app.services.simulation_activity_policy import (
     TWITTER_FOLLOWING_POST_COUNT,
     TWITTER_MAX_REC_POST_LEN,
     TWITTER_REFRESH_REC_POST_COUNT,
-    select_active_agent_ids,
+)
+# Aktivitaetsmodell (#1779): Auswahl nach belegter Rate, eine Ziehung je Runde
+# fuer beide Plattformen; Altkonfigurationen ohne ``activity_model`` behalten
+# den bisherigen Pfad (``select_active_agent_ids``) unveraendert.
+from app.services.simulation_activity_model import (
+    activity_limits_sentence,
+    activity_platforms,
+    activity_runtime_context,
+    for_platform,
+    select_round_agent_ids_from_config,
 )
 
 # Issue #1423: CLI-Transport (codex_cli). Erst hier importierbar — das Modul
@@ -324,6 +335,12 @@ try:
     from .agent_feed import install_feed_comment_cap
 except ImportError:  # direct script execution
     from agent_feed import install_feed_comment_cap
+
+# Obergrenze je Aktivierung (#1779): umhuellt die Aktions-Tools der Agenten.
+try:
+    from .activation_limit import install_activation_limits_from_config, round_activation_limits
+except ImportError:  # direct script execution
+    from activation_limit import install_activation_limits_from_config, round_activation_limits
 
 
 # ---------------------------------------------------------------------------
@@ -1478,11 +1495,15 @@ def get_active_agents_for_round(
     round_num: int
 ) -> List:
     """Decide which Agents to activate this round based on time and configuration"""
-    time_config = config.get("time_config", {})
-    agent_configs = config.get("agent_configs", [])
-
-    # Geteilte Auswahl-Logik mit platform_runner.py (#1713 Slice S4).
-    selected_ids = select_active_agent_ids(time_config, agent_configs, current_hour)
+    # Geteilte Auswahl-Logik mit platform_runner.py (#1713 Slice S4). Mit
+    # ``time_config.activity_model`` waehlt sie nach Rate, eine Ziehung je Runde
+    # fuer beide Plattformen (#1779); ohne das Feld gilt der bisherige Pfad.
+    selected_ids = select_round_agent_ids_from_config(
+        config,
+        current_hour,
+        round_num,
+        fallback_seed=derive_simulation_seed(config),
+    )
 
     active_agents = []
     for agent_id in selected_ids:
@@ -1577,6 +1598,7 @@ async def run_twitter_simulation(
                 config.get("agent_configs", []),
                 platform="twitter",
                 contested_statement=(config.get("contested_question") or {}).get("statement"),
+                activity_limits=activity_limits_sentence(config),
             )
         except Exception as e:
             log_info(f"augment_profile_with_stance (twitter) failed, using unaugmented profile: {e}")
@@ -1609,6 +1631,13 @@ async def run_twitter_simulation(
             log_info(f"Attached {len(fn_tools)} FunctionTools to Twitter agents ({attached} bindings)")
         except Exception as e:
             log_info(f"Failed to attach native FunctionTools: {e}")
+
+    # #1779: Obergrenze je Aktivierung (nur mit time_config.activity_model).
+    activation_limits = install_activation_limits_from_config(
+        result.agent_graph, config, log=log_info
+    )
+    # Auswahl dieser Plattformschleife: eine Ziehung je Runde fuer beide Plattformen.
+    selection_config = for_platform(config, "twitter")
 
     # Get Agent real name mapping from config (use entity_name instead of default Agent_X)
     agent_names = get_agent_names_from_config(config)
@@ -1767,7 +1796,7 @@ async def run_twitter_simulation(
         simulated_day = simulated_minutes // (60 * 24) + 1
 
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, selection_config, simulated_hour, round_num
         )
 
         # Log round start regardless of active agents
@@ -1817,7 +1846,9 @@ async def run_twitter_simulation(
                     actions[agent] = LLMAction()
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
-        await result.env.step(actions)
+        # #1779: Zaehler je Agent nur um die Aktivierung dieser Runde.
+        with round_activation_limits(activation_limits, round_num + 1):
+            await result.env.step(actions)
         # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
         prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
 
@@ -1954,6 +1985,7 @@ async def run_reddit_simulation(
                 config.get("agent_configs", []),
                 platform="reddit",
                 contested_statement=(config.get("contested_question") or {}).get("statement"),
+                activity_limits=activity_limits_sentence(config),
             )
         except Exception as e:
             log_info(f"augment_profile_with_stance (reddit) failed, using unaugmented profile: {e}")
@@ -1982,6 +2014,13 @@ async def run_reddit_simulation(
             log_info(f"Attached {len(fn_tools)} FunctionTools to Reddit agents ({attached} bindings)")
         except Exception as e:
             log_info(f"Failed to attach native FunctionTools: {e}")
+
+    # #1779: Obergrenze je Aktivierung (nur mit time_config.activity_model).
+    activation_limits = install_activation_limits_from_config(
+        result.agent_graph, config, log=log_info
+    )
+    # Auswahl dieser Plattformschleife: eine Ziehung je Runde fuer beide Plattformen.
+    selection_config = for_platform(config, "reddit")
 
     # Get Agent real name mapping from config (use entity_name instead of default Agent_X)
     agent_names = get_agent_names_from_config(config)
@@ -2119,7 +2158,7 @@ async def run_reddit_simulation(
         simulated_day = simulated_minutes // (60 * 24) + 1
 
         active_agents = get_active_agents_for_round(
-            result.env, config, simulated_hour, round_num
+            result.env, selection_config, simulated_hour, round_num
         )
 
         # Log round start regardless of active agents
@@ -2169,7 +2208,9 @@ async def run_reddit_simulation(
                     actions[agent] = LLMAction()
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
-        await result.env.step(actions)
+        # #1779: Zaehler je Agent nur um die Aktivierung dieser Runde.
+        with round_activation_limits(activation_limits, round_num + 1):
+            await result.env.step(actions)
         # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
         prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
 
@@ -2286,6 +2327,13 @@ async def main():
     # Protokolliert, damit ein Lauf gezielt wiederholbar ist: der Wert gehoert
     # als ``random_seed`` in die simulation_config.json des Re-Runs (#1160 F).
     log_manager.info(f"Random seed: {simulation_seed}")
+    # #1779: Laufkontext der Aktivitaetsauswahl (Seed, aktivierte Plattformen).
+    # Beide Plattformschleifen leiten daraus dieselbe Ziehung je Runde ab.
+    config.update(
+        activity_runtime_context(
+            simulation_seed, activity_platforms(args.twitter_only, args.reddit_only)
+        )
+    )
     log_manager.info(f"Wait mode: {'Enabled' if wait_for_commands else 'Disabled'}")
     log_manager.info("=" * 60)
     

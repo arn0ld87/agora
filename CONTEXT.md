@@ -177,6 +177,7 @@ Enthält die Fragestellung keine entscheidbare Aussage, hat der Lauf keine Strei
 - **Lager:** alle Stimmen mit derselben Haltungsklasse, unabhängig davon, ob sie in der Simulation aufeinander reagiert haben.
 - **Koalition:** mindestens zwei Stimmen aus verschiedenen Rollenfamilien mit derselben Haltungsklasse, die in der Simulation zustimmend aufeinander Bezug genommen haben.
 
+- **Aktivitätsmodell:** Regel, nach der Agenten in einer Runde aktiv werden. Seit #1779 eine Tagesrate für Textbeiträge je **Akteursklasse** (Einzelperson, Politiker, Behörde, Organisation, Medium) mit Stundenprofil, in den Modi `realistic` und `active`; je Aktivierung höchstens ein Textbeitrag und zwei Reaktionen. Die Werte begrenzen, wie viel simulierte Akteure schreiben; sie sagen nicht vorher, wie sich ein realer Akteur verhält.
 - **Belegdichte:** Zahl der stützenden Belege je Claim eines Berichts, festgehalten in `evidence_density.json`. Ein Beleg zählt nur mit `supports_claim: true`; mehrere Belege derselben Stimme sind keine unabhängigen Quellen. Die Datei misst, sie bewertet nicht.
 - **Positionierungsquote:** Anteil der Stimmen, die in mindestens einem Simulationsbeitrag eine Haltung dafür oder dagegen zeigen. Interviews zählen dafür nicht. Eine niedrige Positionierungsquote ist eine Degradation.
 - **Lagerverteilung:** wie sich die positionierten Stimmen auf die Lager verteilen. Eine einseitige Lagerverteilung ist ein Befund, keine Degradation.

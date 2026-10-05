@@ -546,8 +546,12 @@ def _phase_generate_config(
     quota_plan: Optional[PersonaQuotaPlan] = None,
     degradations: Optional[DegradationCollector] = None,
     contested_question_override: Optional[str] = None,
+    activity_mode: Optional[str] = None,
 ) -> None:
     """Phase 3: Simulation-Config per LLM erzeugen + atomar persistieren.
+
+    ``activity_mode`` (#1779): ``realistic`` oder ``active``; ``None`` liest
+    ``AGORA_SIM_ACTIVITY_MODE``.
 
     ``contested_question_override`` (#1778): Nutzervorgabe für die Streitfrage.
     Gesetzt ersetzt sie den Vorschlag des Konfigurations-Assistenten.
@@ -605,6 +609,7 @@ def _phase_generate_config(
         enable_reddit=state.enable_reddit,
         degradations=degradations,
         contested_question_override=contested_question_override,
+        activity_mode=activity_mode,
     )
 
     if progress_callback:
@@ -799,6 +804,7 @@ def prepare_simulation(
     degradations: Optional[DegradationCollector] = None,
     force_regenerate: bool = False,
     contested_question_override: Optional[str] = None,
+    activity_mode: Optional[str] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -959,6 +965,7 @@ def prepare_simulation(
             run_id=run_id,
             degradations=degradations,
             contested_question_override=contested_question_override,
+            activity_mode=activity_mode,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to

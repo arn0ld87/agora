@@ -374,6 +374,7 @@ class SimulationManager:
         degradations: Optional["DegradationCollector"] = None,
         force_regenerate: bool = False,
         contested_question_override: Optional[str] = None,
+        activity_mode: Optional[str] = None,
     ) -> SimulationState:
         return prepare_service.prepare_simulation(
             self,
@@ -394,6 +395,7 @@ class SimulationManager:
             degradations=degradations,
             force_regenerate=force_regenerate,
             contested_question_override=contested_question_override,
+            activity_mode=activity_mode,
         )
 
     

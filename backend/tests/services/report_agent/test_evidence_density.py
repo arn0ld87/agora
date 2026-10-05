@@ -216,24 +216,40 @@ def test_abschluss_ohne_dict_evidence_map_schreibt_nichts(reports_dir):
     assert not (reports_dir / "report-2" / EVIDENCE_DENSITY_FILENAME).exists()
 
 
-def test_schreibfehler_bricht_den_bericht_nicht_ab_und_wird_protokolliert(
+def test_schreibfehler_wird_nicht_geschluckt(reports_dir, monkeypatch):
+    """Speicher- und Berechtigungsfehler beim Schreiben eines Berichtsartefakts
+    brechen den Schreibpfad ab (Review #1779)."""
+    from app.services.report_agent import workflow
+    from app.services.report_agent.manager import ReportManager
+
+    def _boom(*_a: Any, **_k: Any) -> str:
+        raise PermissionError("evidence_density.json")
+
+    monkeypatch.setattr(ReportManager, "save_evidence_density", _boom)
+
+    with pytest.raises(PermissionError):
+        workflow._persist_evidence_density(_Agent(_evidence_map()), "report-3")
+
+
+def test_zaehlfehler_bricht_den_bericht_nicht_ab_und_wird_protokolliert(
     reports_dir, monkeypatch
 ):
     from unittest.mock import MagicMock
 
     from app.services.report_agent import workflow
 
-    def _boom(*_a: Any, **_k: Any) -> str:
-        raise PermissionError("evidence_density.json")
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        raise ValueError("kaputte Evidence-Map")
 
     log = MagicMock()
-    monkeypatch.setattr(workflow, "save_evidence_density", _boom)
+    monkeypatch.setattr(workflow, "compute_evidence_density", _boom)
     monkeypatch.setattr(workflow, "logger", log)
 
     workflow._persist_evidence_density(_Agent(_evidence_map()), "report-3")
 
     log.warning.assert_called_once()
     assert "evidence_density.json" in log.warning.call_args.args[0]
+    assert not (reports_dir / "report-3" / EVIDENCE_DENSITY_FILENAME).exists()
     log.info.assert_not_called()
 
 
@@ -243,7 +259,7 @@ def test_budgetabbruch_wird_nicht_geschluckt(reports_dir, monkeypatch):
     def _budget(*_a: Any, **_k: Any) -> str:
         raise BudgetExceededError("tokens", 10, 5)
 
-    monkeypatch.setattr(workflow, "save_evidence_density", _budget)
+    monkeypatch.setattr(workflow, "compute_evidence_density", _budget)
 
     with pytest.raises(BudgetExceededError):
         workflow._persist_evidence_density(_Agent(_evidence_map()), "report-4")

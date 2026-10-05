@@ -862,6 +862,21 @@ def _restart_contested_question(run: dict, config: dict) -> Optional[str]:
     return None
 
 
+def _restart_activity_mode(run: dict, config: dict) -> Optional[str]:
+    """Der Aktivitätsmodus der ursprünglichen Vorbereitung (#1779).
+
+    Zuerst der Vermerk am Ursprungs-Run, sonst der Modus der gespeicherten
+    Konfiguration. ``None``, wenn keiner bekannt ist (Einstellung/Standard).
+    """
+    from_run = (run.get("metadata") or {}).get("activity_mode")
+    if isinstance(from_run, str) and from_run.strip():
+        return from_run.strip()
+    time_config = config.get("time_config")
+    model = time_config.get("activity_model") if isinstance(time_config, dict) else None
+    persisted = model.get("mode") if isinstance(model, dict) else None
+    return persisted if isinstance(persisted, str) and persisted.strip() else None
+
+
 def _restart_simulation_prepare(run: dict):
     simulation_id = _linked_or_entity_id(run, "simulation_id", "simulation_id")
     manager = SimulationManager()
@@ -881,6 +896,7 @@ def _restart_simulation_prepare(run: dict):
 
     config = manager.get_simulation_config(simulation_id) or {}
     contested_question = _restart_contested_question(run, config)
+    activity_mode = _restart_activity_mode(run, config)
     # Issue #841/#844/#1183: Anlage-Fenster hinter RunLifecycle — Markierung,
     # Task-Reihenfolge und strikte Persistenzsemantik liegen im Kontextmanager.
     with RunLifecycle.begin(
@@ -902,6 +918,8 @@ def _restart_simulation_prepare(run: dict):
             **workspace_credential_metadata(),
             # #1778: weitertragen, damit auch ein zweiter Restart sie kennt.
             **({"contested_question": contested_question} if contested_question else {}),
+            # #1779: Aktivitätsmodus ebenso weitertragen.
+            **({"activity_mode": activity_mode} if activity_mode else {}),
         },
     ) as lifecycle:
         new_run = lifecycle.record
@@ -998,6 +1016,7 @@ def _restart_simulation_prepare(run: dict):
                     # #1778: Nutzervorgabe für die Streitfrage erneut
                     # durchreichen; None heißt, der Assistent schlägt eine vor.
                     contested_question_override=contested_question,
+                    activity_mode=activity_mode,
                     run_id=run_id,
                 )
                 task_manager.complete_task(task_id, result=result_state.to_simple_dict())

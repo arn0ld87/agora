@@ -416,6 +416,19 @@
       "minimumHint": "Mindestmenge für die DACH-Persona-Tabelle: 10 Agenten.",
       "unlimitedHint": "Ohne Begrenzung entsteht pro geeigneter Graph-Entität ein Agent — mindestens jedoch so viele, wie der Report für seine Persona-Tabelle braucht."
     },
+    "activityMode": {
+      "label": "Aktivität der Agenten",
+      "realistic": {
+        "label": "Realistisch",
+        "hint": "Belegte Durchschnittswerte: Die meisten Akteure schreiben etwa einmal am Tag oder seltener. Für viele Beiträge mehr Agenten oder mehr simulierte Tage wählen."
+      },
+      "active": {
+        "label": "Aktiv",
+        "hint": "Oberes Ende der belegten Spannen: zwei bis drei Beiträge je Akteur und Tag."
+      },
+      "applied": "Aktivität der Agenten: {mode}",
+      "legacy": "Bisheriges Aktivitätsmodell"
+    },
     "contestedQuestion": {
       "label": "Streitfrage (optional)",
       "hint": "Eine Aussage, die man bejahen oder verneinen kann. Leer lassen, dann schlägt der Assistent eine vor.",

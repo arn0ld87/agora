@@ -54,6 +54,14 @@ function mountComponent(props = {}) {
 }
 
 describe('SimulationStartConfig (Issue #586)', () => {
+  it('zeigt den wirksamen Aktivitätsmodus nur, wenn er übergeben wird (#1779)', () => {
+    expect(mountComponent().find('[data-testid="applied-activity-mode"]').exists()).toBe(false)
+    const wrapper = mountComponent({ appliedActivityMode: 'Bisheriges Aktivitätsmodell' })
+    expect(wrapper.find('[data-testid="applied-activity-mode"]').text()).toBe(
+      'Bisheriges Aktivitätsmodell',
+    )
+  })
+
   it('rendert nicht wenn phase < 2', () => {
     const wrapper = mountComponent({ phase: 1 })
     expect(wrapper.find('.card').exists()).toBe(false)

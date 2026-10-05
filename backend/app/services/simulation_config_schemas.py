@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Literal, Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from ..contracts.simulation_activity_contract import ActorClass
+from .simulation_activity_model import coerce_actor_class
+
 
 def get_time_config_schema(num_entities: int) -> type[BaseModel]:
     class TimeConfigResponse(BaseModel):
@@ -82,6 +85,16 @@ class AgentActivityConfigSchema(BaseModel):
     sentiment_bias: float = Field(default=0.0, ge=-1.0, le=1.0)
     stance: Literal["supportive", "opposing", "neutral", "observer"] = Field(default="neutral")
     influence_weight: float = Field(default=1.0, ge=0.0)
+    # Akteursklasse (#1779). Fehlend oder ungültig wird ``None``, nie ein Fehler:
+    # ein unlesbarer Wert dürfte nicht die ganze Antwort des Assistenten kippen.
+    # ``_generate_agent_configs_batch`` setzt dann den Regel-Fallback und
+    # protokolliert ihn. Die Raten setzt nie das Modell, nur die Klasse.
+    actor_class: ActorClass | None = None
+
+    @field_validator("actor_class", mode="before")
+    @classmethod
+    def _normalize_actor_class(cls, value: Any) -> ActorClass | None:
+        return coerce_actor_class(value)
 
     @model_validator(mode="before")
     @classmethod

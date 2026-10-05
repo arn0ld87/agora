@@ -315,6 +315,16 @@ class ReportManager:
         return ensure_report_folder(cls.REPORTS_DIR, report_id)
     
     @classmethod
+    def save_evidence_density(cls, report_id: str, density: Any) -> str:
+        """Schreibt ``evidence_density.json`` in den Berichtsordner (Issue #1779).
+
+        Speicher- und Berechtigungsfehler werden nicht abgefangen.
+        """
+        from .evidence_density import save_evidence_density
+
+        return save_evidence_density(cls._ensure_report_folder(report_id), density)
+
+    @classmethod
     def _get_report_path(cls, report_id: str) -> str:
         """getreportmetainformationfile path"""
         return get_report_path(cls.REPORTS_DIR, report_id)

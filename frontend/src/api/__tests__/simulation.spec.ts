@@ -69,6 +69,19 @@ describe('prepareSimulation', () => {
     expect(result).toEqual(mockResponse)
   })
 
+  it('sendet activity_mode nur bei gesetzter Auswahl (Issue #1779)', async () => {
+    mockPost.mockResolvedValue({ success: true, data: {} })
+
+    await prepareSimulation({ simulation_id: 'sim-1', activity_mode: 'active' })
+    expect(mockPost).toHaveBeenLastCalledWith('/api/simulation/prepare', {
+      simulation_id: 'sim-1',
+      activity_mode: 'active',
+    })
+
+    await prepareSimulation({ simulation_id: 'sim-1' })
+    expect(mockPost.mock.calls.at(-1)![1]).not.toHaveProperty('activity_mode')
+  })
+
   it('should propagate errors from service.post', async () => {
     const mockError = new Error('Network Error')
     mockPost.mockRejectedValue(mockError)

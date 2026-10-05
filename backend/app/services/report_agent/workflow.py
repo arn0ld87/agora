@@ -27,7 +27,7 @@ from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .contract_validator import matches_known_preset, validate_required_sections
 from .evidence import validate_quote_anchors
-from .evidence_density import compute_evidence_density, save_evidence_density
+from .evidence_density import compute_evidence_density
 from .manager import ReportManager
 from .output_contract import (
     FinalContentRejected,
@@ -249,8 +249,10 @@ def _persist_evidence_density(agent: Any, report_id: str) -> None:
     """Schreibt ``evidence_density.json`` zur fertigen Evidence-Map (Issue #1779).
 
     Gilt für ``COMPLETED`` und ``INCOMPLETE`` gleichermaßen: die Zählung hängt
-    nur an der Evidence-Map, nicht am Status. Ein Fehler beim Zählen oder
-    Schreiben bricht den Bericht nicht ab, bleibt aber im Log sichtbar;
+    nur an der Evidence-Map, nicht am Status. Ein Fehler beim Zählen bricht den
+    Bericht nicht ab und bleibt im Log sichtbar. Ein Speicher- oder
+    Berechtigungsfehler beim Schreiben wird dagegen nicht abgefangen: Fehler
+    beim Schreiben von Berichtsartefakten werden nie geschluckt (Review #1779).
     ``BudgetExceededError`` wird nie geschluckt.
     """
     evidence_map = getattr(agent, "evidence_map", None)
@@ -258,15 +260,15 @@ def _persist_evidence_density(agent: Any, report_id: str) -> None:
         return
     try:
         density = compute_evidence_density(evidence_map)
-        save_evidence_density(ReportManager._ensure_report_folder(report_id), density)
     except Exception as exc:  # noqa: BLE001 — logged; the report must not fail on a metric
         reraise_if_budget_exceeded(exc)
         logger.warning(
-            "report %s: evidence_density.json konnte nicht geschrieben werden: %r",
+            "report %s: Belegdichte konnte nicht gezählt werden, evidence_density.json fehlt: %r",
             report_id,
             exc,
         )
         return
+    ReportManager.save_evidence_density(report_id, density)
     logger.info(
         "report %s: Belegdichte claims=%d single_support=%s action_support=%s "
         "single_source_cap=%s multi_independent=%s",
