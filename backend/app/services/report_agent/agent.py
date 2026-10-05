@@ -828,6 +828,35 @@ class ReportAgent:
     def _attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
         return attach_provenance(item)
 
+    @staticmethod
+    def _candidate_pool(
+        direct_items: List[Dict[str, Any]],
+        global_items: List[Dict[str, Any]],
+        evidence_index: Dict[str, Any],
+        embedder: Any,
+    ) -> Optional[EvidenceCandidatePool]:
+        """Kandidaten-Pool eines Abschnitts; ``None`` ohne Embedder.
+
+        Issue #1778: Treffer der Beitragssuche gelten berichtsweit. Vorher sah
+        nur der Abschnitt sie, in dem gesucht wurde — im Abnahmelauf
+        ``report_89d20c11edc1`` fünf von sieben Abschnitten also gar keine, nur
+        die acht Aktionen der Stichprobe. Der Pool dedupliziert nach
+        ``evidence_id``; ob ein Beitrag einen Claim stützt, entscheiden
+        unverändert Schwelle und Entailment.
+        """
+        if embedder is None:
+            return None
+        searched_action_items = [
+            deepcopy(record)
+            for record in evidence_index.values()
+            if isinstance(record, dict) and record.get("type") == "agent_action"
+        ]
+        return EvidenceCandidatePool(
+            direct_items + global_items + searched_action_items,
+            embedder,
+            reserved_slots=RESERVED_CANDIDATE_SLOTS,
+        )
+
     def _build_claims_for_section(
         self,
         content: str,
@@ -890,26 +919,7 @@ class ReportAgent:
         # Evidence — sie sind Modell-Output. Sie wandern in das separate
         # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
-        # Issue #1778: Treffer der Beitragssuche gelten berichtsweit. Vorher
-        # sah nur der Abschnitt sie, in dem gesucht wurde — im Abnahmelauf
-        # ``report_89d20c11edc1`` fünf von sieben Abschnitten also gar keine,
-        # nur die acht Aktionen der Stichprobe. Der Pool dedupliziert nach
-        # ``evidence_id``; ob ein Beitrag einen Claim stützt, entscheiden
-        # unverändert Schwelle und Entailment.
-        searched_action_items = [
-            deepcopy(record)
-            for record in evidence_index.values()
-            if isinstance(record, dict) and record.get("type") == "agent_action"
-        ]
-        pool = (
-            EvidenceCandidatePool(
-                direct_items + global_items + searched_action_items,
-                embedder,
-                reserved_slots=RESERVED_CANDIDATE_SLOTS,
-            )
-            if embedder is not None
-            else None
-        )
+        pool = self._candidate_pool(direct_items, global_items, evidence_index, embedder)
         for index, chunk in enumerate(chunks, 1):
             # Issue #1187: dies ist die im gemessenen Lauf bestaetigte
             # lange Nachbearbeitungsschleife (Claim-Extraktion +
