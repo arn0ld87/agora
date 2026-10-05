@@ -397,6 +397,24 @@ describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () =>
     wrapper.unmount()
   })
 
+  it('Aktivitaetsmodus (#1779): Vorauswahl realistic, Wechsel auf active wird gesendet', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-1779-01', projectData: undefined, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+    const realistic = wrapper.find('input[type="radio"][value="realistic"]')
+    expect((realistic.element as HTMLInputElement).checked).toBe(true)
+
+    await triggerPrepare(wrapper)
+    expect(lastPayload().activity_mode).toBe('realistic')
+
+    await wrapper.find('input[type="radio"][value="active"]').setValue(true)
+    await triggerPrepare(wrapper)
+    expect(lastPayload().activity_mode).toBe('active')
+    wrapper.unmount()
+  })
+
   it('Projektprofil gesetzt + keine explizite Auswahl -> KEIN ai_model_ref, llm_profile_id wie bisher', async () => {
     const wrapper = mount(Step2EnvSetup, {
       props: { simulationId: 'sim-890-02', projectData: { llm_profile_id: 'prof-xyz' }, graphData: undefined, systemLogs: [] },

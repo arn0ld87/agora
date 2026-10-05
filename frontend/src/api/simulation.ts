@@ -2,6 +2,7 @@ import service from './index'
 import { z } from 'zod'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
+import type { ActivityMode } from '../contracts/simulationActivityContract'
 import type { AiModelRefPayload } from './report'
 import type { ApiEnvelope } from './envelope'
 import type { BranchOverrides as BranchOverridesContract } from '../contracts/branchOverrides'
@@ -45,6 +46,8 @@ export interface PrepareSimulationData {
   max_agents?: number
   /** Nutzervorgabe für die Streitfrage (#1778); ohne sie schlägt der Assistent eine vor. */
   contested_question?: string
+  /** Aktivitätsmodus (#1779); ohne Angabe gilt die Server-Einstellung. */
+  activity_mode?: ActivityMode
 }
 
 /**

@@ -416,6 +416,19 @@
       "minimumHint": "Minimum for the DACH persona table: 10 agents.",
       "unlimitedHint": "Without a limit, one agent is created per eligible graph entity — but never fewer than the report needs for its persona table."
     },
+    "activityMode": {
+      "label": "Agent activity",
+      "realistic": {
+        "label": "Realistic",
+        "hint": "Documented averages: most actors post about once a day or less. For more posts, choose more agents or more simulated days."
+      },
+      "active": {
+        "label": "Active",
+        "hint": "Upper end of the documented ranges: two to three posts per actor per day."
+      },
+      "applied": "Agent activity: {mode}",
+      "legacy": "Previous activity model"
+    },
     "contestedQuestion": {
       "label": "Contested question (optional)",
       "hint": "A statement one can affirm or deny. Leave empty and the assistant proposes one.",
