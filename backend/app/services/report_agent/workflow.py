@@ -27,6 +27,7 @@ from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .contract_validator import matches_known_preset, validate_required_sections
 from .evidence import validate_quote_anchors
+from .evidence_density import compute_evidence_density, save_evidence_density
 from .manager import ReportManager
 from .output_contract import (
     FinalContentRejected,
@@ -242,6 +243,40 @@ def _stance_analysis_of(agent: Any) -> Optional[Dict[str, Any]]:
     """Die am Agenten abgelegte Analyse; ein Test-Double liefert ``None``."""
     analysis = getattr(agent, "stance_analysis", None)
     return analysis if isinstance(analysis, dict) else None
+
+
+def _persist_evidence_density(agent: Any, report_id: str) -> None:
+    """Schreibt ``evidence_density.json`` zur fertigen Evidence-Map (Issue #1779).
+
+    Gilt für ``COMPLETED`` und ``INCOMPLETE`` gleichermaßen: die Zählung hängt
+    nur an der Evidence-Map, nicht am Status. Ein Fehler beim Zählen oder
+    Schreiben bricht den Bericht nicht ab, bleibt aber im Log sichtbar;
+    ``BudgetExceededError`` wird nie geschluckt.
+    """
+    evidence_map = getattr(agent, "evidence_map", None)
+    if not isinstance(evidence_map, dict):
+        return
+    try:
+        density = compute_evidence_density(evidence_map)
+        save_evidence_density(ReportManager._ensure_report_folder(report_id), density)
+    except Exception as exc:  # noqa: BLE001 — logged; the report must not fail on a metric
+        reraise_if_budget_exceeded(exc)
+        logger.warning(
+            "report %s: evidence_density.json konnte nicht geschrieben werden: %r",
+            report_id,
+            exc,
+        )
+        return
+    logger.info(
+        "report %s: Belegdichte claims=%d single_support=%s action_support=%s "
+        "single_source_cap=%s multi_independent=%s",
+        report_id,
+        density.claims_total,
+        density.single_support_ratio,
+        density.action_support_ratio,
+        density.single_source_cap_ratio,
+        density.multi_independent_ratio,
+    )
 
 
 def _load_persona_fallback_stats(agent: Any) -> tuple[int, int]:
@@ -1954,6 +1989,7 @@ def _build_partial_report(
     _apply_requirement_check(report, agent, report_id)
 
     ReportManager.save_report(report)
+    _persist_evidence_density(agent, report_id)
 
     # Partial-Marker als separates Artifact persistieren
     # (Report-Dataclass hat kein metadata-Feld — Erweiterung ohne Schema-Migration)
@@ -2527,6 +2563,7 @@ def generate_report(
         # Issue #1302: siehe _apply_requirement_check.
         _apply_requirement_check(report, agent, report_id)
         ReportManager.save_report(report)
+        _persist_evidence_density(agent, report_id)
 
         # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
         # Track 3b: ValidationError separat fangen, damit ein durch LLM-Failures
