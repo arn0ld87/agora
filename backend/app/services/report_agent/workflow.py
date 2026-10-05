@@ -1109,6 +1109,29 @@ def _run_post_search(
     return result
 
 
+def _prefetch_into_prompt(
+    agent: Any,
+    section: Any,
+    section_index: int,
+    report_context: str,
+    messages: List[Dict[str, Any]],
+    used_tools: set,
+) -> int:
+    """Hängt die Vorab-Treffer an den ersten Prompt; liefert die Zahl der Suchen."""
+    prefetched_posts, prefetch_calls = _prefetch_simulation_posts(
+        agent, section, section_index, report_context
+    )
+    if prefetch_calls:
+        used_tools.add(_POST_SEARCH_TOOL)
+    if prefetched_posts is not None:
+        messages[-1]["content"] += agent.REACT_PREFETCHED_POSTS_TEMPLATE.format(
+            result=prefetched_posts,
+            tool_calls_count=prefetch_calls,
+            max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
+        )
+    return prefetch_calls
+
+
 def generate_section_react(
     agent: Any,
     section,
@@ -1181,18 +1204,9 @@ def generate_section_react(
     # Issue #1778: die Beitragssuche läuft vorab; jede ausgeführte Suche zählt
     # gegen das Werkzeuglimit des Abschnitts — das Limit selbst bleibt
     # unverändert.
-    prefetched_posts, prefetch_calls = _prefetch_simulation_posts(
-        agent, section, section_index, report_context
+    tool_calls_count += _prefetch_into_prompt(
+        agent, section, section_index, report_context, messages, used_tools
     )
-    if prefetch_calls:
-        tool_calls_count += prefetch_calls
-        used_tools.add(_POST_SEARCH_TOOL)
-    if prefetched_posts is not None:
-        messages[-1]["content"] += agent.REACT_PREFETCHED_POSTS_TEMPLATE.format(
-            result=prefetched_posts,
-            tool_calls_count=tool_calls_count,
-            max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
-        )
 
     # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten
     # andere Casings/Werte einschleusen. Unbekannte Werte fallen auf den Default
