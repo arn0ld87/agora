@@ -86,6 +86,11 @@ except ImportError:  # direct script execution
     from sim_runtime.throttle import resolve_sim_max_concurrency
 
 # Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
+# Zuordnung Konfigurations-Agent → OASIS-Position (#1778).
+from app.services.simulation_agent_identity import (
+    align_config_to_profiles,
+    load_simulation_profiles,
+)
 from app.services.simulation_activity_policy import (
     TWITTER_FOLLOWING_POST_COUNT,
     TWITTER_MAX_REC_POST_LEN,
@@ -221,9 +226,17 @@ class SinglePlatformRunner:
         self.action_logger = None  # Issue #1713: gesetzt in run()
 
     def _load_config(self) -> Dict[str, Any]:
-        """Load configuration file"""
+        """Load configuration file, aligned to OASIS agent positions (#1778).
+
+        OASIS nummeriert die Agenten nach der Position ihres Profils. Fehlt ein
+        Profil, träfe ein Zugriff mit der OASIS-Nummer in ``agent_configs``
+        sonst den falschen Agenten (Name, Aktivität, Haltung, Startbeitrag).
+        """
         with open(self.config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            config = json.load(f)
+        profiles = load_simulation_profiles(os.path.dirname(self.config_path) or ".")
+        aligned, _agents_without_profile = align_config_to_profiles(config, profiles)
+        return aligned
 
     def _get_profile_path(self) -> str:
         """Get Profile file path (platform-spezifischer Dateiname)"""

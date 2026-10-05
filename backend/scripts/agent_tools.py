@@ -874,8 +874,11 @@ def _augment_reddit_json_with_stance(
         data = json.load(f)
 
     changed = False
-    for item in data:
-        cfg = cfg_by_id.get(item.get("user_id"), {})
+    # Issue #1778: Zugriff über die Position, wie im Twitter-Zweig. OASIS
+    # nummeriert die Agenten nach der Position des Profils; der Runner übergibt
+    # eine darauf umgeschriebene Konfiguration (``align_config_to_profiles``).
+    for idx, item in enumerate(data):
+        cfg = cfg_by_id.get(idx, {})
         section = build_stance_section(
             stance=cfg.get("stance"),
             sentiment_bias=cfg.get("sentiment_bias"),

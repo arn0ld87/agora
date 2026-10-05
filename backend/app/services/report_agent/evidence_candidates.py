@@ -25,7 +25,7 @@ Section einmal ``len(items)`` an, plus einen Call je Claim.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..evidence_binder import EmbedFn, candidate_text, retrieval_score
 
@@ -33,6 +33,16 @@ from ..evidence_binder import EmbedFn, candidate_text, retrieval_score
 #: danach per Threshold und kuerzt auf ``top_k`` — diese Grenze begrenzt
 #: also nur die Entailment-Aufrufe, nicht die Bindungschance.
 DEFAULT_CANDIDATE_LIMIT = 12
+
+#: Eigene Plätze je Beleg-Typ, zusätzlich zur gemeinsamen Rangfolge
+#: (Issue #1778). Ein Interview wird über das beste von bis zu zwölf
+#: Satzfenstern bewertet, ein Simulationsbeitrag über einen einzigen Vektor.
+#: In der gemeinsamen Rangfolge verdrängten die Interviews deshalb die
+#: Beiträge: im Abnahmelauf ``report_89d20c11edc1`` lag bei 28 von 73 Claims
+#: ein Beitrag über der Retrieval-Schwelle, bei 21 davon kam er nicht unter die
+#: besten fünf. Reserviert ist nur die Prüfung — Schwelle und Entailment
+#: entscheiden unverändert, ob der Beitrag den Claim stützt.
+RESERVED_CANDIDATE_SLOTS: Mapping[str, int] = {"agent_action": 2}
 
 
 class EvidenceCandidatePool:
@@ -51,9 +61,11 @@ class EvidenceCandidatePool:
         embed: EmbedFn,
         *,
         limit: int = DEFAULT_CANDIDATE_LIMIT,
+        reserved_slots: Optional[Mapping[str, int]] = None,
     ) -> None:
         self._raw_embed = embed
         self._limit = max(1, limit)
+        self._reserved_slots: Mapping[str, int] = dict(reserved_slots or {})
         self._vectors: Dict[str, Optional[Sequence[float]]] = {}
         self._embed_calls = 0
         # Items ohne Text koennen weder eingebettet noch klassifiziert
@@ -126,6 +138,10 @@ class EvidenceCandidatePool:
         des Entailments (Stufe 2). Hier wird nur die Reihenfolge hergestellt,
         in der ein knappes Budget sinnvoll ausgegeben wird.
 
+        Typen mit reservierten Plätzen (``reserved_slots``) rücken hinter dem
+        gemeinsamen Limit nach, wenn sie darin seltener vorkommen als
+        reserviert — sonst sähe der Binder sie nie.
+
         Embedder-Fehler am Claim werden hochgereicht — der Caller faellt
         dann auf seinen generischen Pfad zurueck. Fehler an einem einzelnen
         Kandidaten kosten nur diesen Kandidaten seinen Rang, nicht die
@@ -155,7 +171,15 @@ class EvidenceCandidatePool:
             scored.append((-score, position, item))
 
         scored.sort(key=lambda entry: (entry[0], entry[1]))
-        return [item for _, _, item in scored[: self._limit]]
+        selected = [item for _, _, item in scored[: self._limit]]
+        rest = [item for _, _, item in scored[self._limit:]]
+        for evidence_type, slots in self._reserved_slots.items():
+            missing = slots - sum(1 for item in selected if item.get("type") == evidence_type)
+            if missing > 0:
+                selected.extend(
+                    [item for item in rest if item.get("type") == evidence_type][:missing]
+                )
+        return selected
 
 
-__all__ = ["DEFAULT_CANDIDATE_LIMIT", "EvidenceCandidatePool"]
+__all__ = ["DEFAULT_CANDIDATE_LIMIT", "RESERVED_CANDIDATE_SLOTS", "EvidenceCandidatePool"]

@@ -528,3 +528,38 @@ def test_action_log_health_prueft_das_protokoll_aus_dem_die_aktionen_stammen(tmp
     (broken / "twitter" / "actions.jsonl").write_text("kaputt\n", encoding="utf-8")
     assert action_log_health("sim-2", tmp_path) == (1, 1)
 
+
+
+def test_workflow_rechnet_neu_wenn_die_gespeicherten_stimmen_nicht_zur_konfiguration_passen(
+    monkeypatch, tmp_path
+):
+    """Review PR #1785: Eine Analyse mit verschobenen Agenten-Nummern (#1778)
+    trägt je Stimme Namen und Starthaltung eines anderen Agenten. Ein Resume
+    übernimmt sie nicht."""
+    from app.services.report_agent import workflow
+    from app.services.report_agent.manager import ReportManager
+    from app.services.simulation_runner import SimulationRunner
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        SimulationRunner,
+        "get_all_actions",
+        staticmethod(
+            lambda *_a, **_k: [_Stored(_action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern."))]
+        ),
+    )
+    monkeypatch.setattr(workflow, "action_log_health", lambda *_a, **_k: (1, 0))
+    monkeypatch.setattr(workflow, "resolve_default_store", lambda: _Store(_config("opposing", "neutral")))
+    first = workflow._compute_stance_analysis(_Agent(_StubLLM(_by_keyword)), "report-1")
+    assert first is not None
+
+    # Dieselbe Streitfrage, aber die Stimmen tragen jetzt andere Starthaltungen.
+    monkeypatch.setattr(workflow, "resolve_default_store", lambda: _Store(_config("neutral", "opposing")))
+    llm = _StubLLM(_by_keyword)
+    second = workflow._compute_stance_analysis(_Agent(llm), "report-1")
+
+    assert len(llm.calls) == 1
+    assert second is not None
+    assert [voice["start_class"] for voice in second["voices"]] != [
+        voice["start_class"] for voice in first["voices"]
+    ]

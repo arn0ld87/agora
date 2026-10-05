@@ -17,7 +17,7 @@ Fake einsetzen).
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
 from .evidence_text import evidence_text
 from .sentence_splitter import split_sentences
@@ -88,13 +88,39 @@ def _sentence_windows(text: str) -> List[str]:
     return [windows[position] for position in picked]
 
 
+def _action_post_text(item: Dict[str, Any]) -> str:
+    """Der Wortlaut eines Simulationsbeitrags, ohne Metabeschreibung.
+
+    Das Snippet eines Belegs ``agent_action`` beginnt mit „<Name> CREATE_COMMENT
+    on reddit in round 9:", und ``value`` wiederholt den Aktionstyp. Beides
+    sagt nichts über den Inhalt und drückt den Cosine-Wert gegen einen Claim
+    (Issue #1778: im Mittel 0,025 je Paar). Der Wortlaut steht unter
+    ``raw["action_args"]["content"]``.
+    """
+    if item.get("type") != "agent_action":
+        return ""
+    raw = item.get("raw")
+    args = raw.get("action_args") if isinstance(raw, dict) else None
+    content = args.get("content") if isinstance(args, dict) else None
+    return content.strip() if isinstance(content, str) else ""
+
+
 def retrieval_texts(item: Dict[str, Any], text: str) -> List[str]:
     """Die Texte, gegen die der Retrieval-Score eines Items gebildet wird.
 
     Kurze Texte werden als Ganzes eingebettet. Bei langen Texten sind es der
     bisherige Kurztext (``snippet`` + ``value``, damit nichts schlechter wird
     als vor #1766) und die Satzfenster des Volltexts.
+
+    Ein Simulationsbeitrag wird über seinen Wortlaut gefunden, nicht über die
+    Metabeschreibung im Snippet (Issue #1778). Das betrifft nur das Retrieval:
+    das Entailment liest weiter den vollen Vergleichstext mit Stimme und Runde.
     """
+    post_text = _action_post_text(item)
+    if post_text:
+        if len(post_text) <= LONG_TEXT_CHARS:
+            return [post_text]
+        return _sentence_windows(post_text) or [post_text]
     if len(text) <= LONG_TEXT_CHARS:
         return [text]
     short = " ".join(
@@ -171,6 +197,7 @@ def bind_evidence_to_claim(
     threshold: float = 0.65,
     top_k: int = 5,
     judge: "EntailmentJudge | None" = None,
+    reserved_slots: "Mapping[str, int] | None" = None,
 ) -> List[Dict[str, Any]]:
     """Bindet Evidence an einen Claim — in zwei getrennten Stufen.
 
@@ -190,6 +217,12 @@ def bind_evidence_to_claim(
 
     Items unter dem Threshold fallen raus, der Rest wird nach Score
     absteigend sortiert und auf ``top_k`` gekürzt.
+
+    ``reserved_slots`` (Beleg-Typ → Anzahl) sichert einem Typ eigene Plätze in
+    der Entailment-Stufe: Liegen unter den besten ``top_k`` weniger Items des
+    Typs als reserviert, rücken die nächstbesten dieses Typs nach — sofern sie
+    den Threshold erreichen. Threshold und Entailment gelten für sie
+    unverändert; reserviert ist nur die Prüfung, nicht das Urteil.
 
     Empty/whitespace-only Claim oder keine Kandidaten → leere Liste.
     Embedder-Errors werden hochgereicht; der Caller entscheidet ob er
@@ -263,9 +296,11 @@ def bind_evidence_to_claim(
         reverse=True,
     )
 
+    selected = _with_reserved_slots(scored, top_k, reserved_slots)
+
     results: List[Dict[str, Any]] = []
     classified: List[Tuple[Dict[str, Any], Dict[str, Any], List[str]]] = []
-    for bound, item, _numeric_hit in scored[:top_k]:
+    for bound, item, _numeric_hit in selected:
         result = classify_evidence(
             claim_text,
             item,
@@ -284,6 +319,30 @@ def bind_evidence_to_claim(
     # Claims entscheidet, ob die Kern-Belege ihn gemeinsam tragen (#1345).
     aggregate_quantifier_support(claim_text, classified)
     return results
+
+
+def _with_reserved_slots(
+    scored: List[Tuple[Dict[str, Any], Dict[str, Any], bool]],
+    top_k: int,
+    reserved_slots: "Mapping[str, int] | None",
+) -> List[Tuple[Dict[str, Any], Dict[str, Any], bool]]:
+    """Die besten ``top_k`` plus nachrückende Items reservierter Typen.
+
+    ``scored`` ist bereits absteigend sortiert und enthält nur Items über dem
+    Threshold. Die Reihenfolge bleibt erhalten; Nachrücker stehen hinten.
+    """
+    selected = list(scored[:top_k])
+    if not reserved_slots:
+        return selected
+    rest = scored[top_k:]
+    for evidence_type, slots in reserved_slots.items():
+        missing = slots - sum(1 for _bound, item, _hit in selected if item.get("type") == evidence_type)
+        if missing <= 0:
+            continue
+        selected.extend(
+            [entry for entry in rest if entry[1].get("type") == evidence_type][:missing]
+        )
+    return selected
 
 
 def detect_contradiction_penalty(

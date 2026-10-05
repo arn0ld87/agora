@@ -132,7 +132,9 @@ Der Report besteht grob aus:
 4. **Prose-/Attribution-/Requirement-Gates**
 5. **Persistenz, Export und Degradationsmodell**
 
-Mit dem Werkzeug `search_simulation_actions` sucht der Report-Agent seit #1778 gezielt in den Simulationsbeiträgen (Stichwort, Agentenname, Rundenbereich); jeder Treffer wird ein Beleg vom Typ `agent_action`.
+Mit dem Werkzeug `search_simulation_actions` sucht der Report-Agent seit #1778 gezielt in den Simulationsbeiträgen (Stichwort, Agentenname, Rundenbereich); jeder Treffer wird ein Beleg vom Typ `agent_action`. Die Suche läuft außerdem zu Beginn jedes Abschnitts durch das System (höchstens zweimal) und zählt gegen das Limit von fünf Werkzeugaufrufen; ihre Treffer sind in allen Abschnitten Kandidat für das Evidence-Binding. Beim Binding wird ein Beitrag über seinen reinen Wortlaut gesucht und bekommt bis zu zwei eigene Plätze neben den fünf besten Kandidaten. Das ändert nur, welche Beiträge geprüft werden: ob ein Beitrag einen Claim stützt, entscheidet unverändert die Entailment-Stufe.
+
+Drei Nummern meinen denselben Agenten: `agent_configs[].agent_id` in der Simulationskonfiguration, `user_id` im Profil und die Nummer in OASIS. OASIS vergibt seine Nummer nach der Position des Profils in der Profildatei. Fehlt ein Profil, weichen die Nummern ab; Runner und Bericht lesen die Konfiguration deshalb über `align_config_to_profiles` (`services/simulation_agent_identity.py`). `agent_id` im Aktionsprotokoll und `voice_key` am Beleg sind immer die OASIS-Nummer. In `twitter_profiles.csv` ist `user_id` die Zeilenposition; die Nummer aus der Konfiguration steht dort in `source_user_id`.
 
 Ein Fallback-Outline oder ein Cancel mit fehlenden Sections wird nicht mehr still als vollständig abgeschlossen behandelt. Ein Resume bewahrt relevante Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).
 

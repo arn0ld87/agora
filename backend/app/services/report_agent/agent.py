@@ -30,7 +30,7 @@ from .evidence import (
 from .action_search import ActionSearchResult, build_action_evidence_item
 from .data_gap import ClaimGapKind, classify_claim_gap
 from .evidence_ledger import ledger_for
-from .evidence_candidates import EvidenceCandidatePool
+from .evidence_candidates import RESERVED_CANDIDATE_SLOTS, EvidenceCandidatePool
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
 from .search_dedup import (
@@ -81,6 +81,8 @@ from .prompts import (
     CHAT_OBSERVATION_SUFFIX,
     CHAT_SYSTEM_PROMPT_TEMPLATE,
     REACT_FORCE_FINAL_MSG,
+    REACT_PREFETCH_EMPTY_NOTE,
+    REACT_PREFETCHED_POSTS_TEMPLATE,
     REACT_INSUFFICIENT_TOOLS_MSG,
     REACT_INSUFFICIENT_TOOLS_MSG_ALT,
     REACT_OBSERVATION_TEMPLATE,
@@ -294,6 +296,8 @@ class ReportAgent:
     REACT_TOOL_LIMIT_MSG = REACT_TOOL_LIMIT_MSG
     REACT_UNUSED_TOOLS_HINT = REACT_UNUSED_TOOLS_HINT
     REACT_FORCE_FINAL_MSG = REACT_FORCE_FINAL_MSG
+    REACT_PREFETCHED_POSTS_TEMPLATE = REACT_PREFETCHED_POSTS_TEMPLATE
+    REACT_PREFETCH_EMPTY_NOTE = REACT_PREFETCH_EMPTY_NOTE
     CHAT_SYSTEM_PROMPT_TEMPLATE = CHAT_SYSTEM_PROMPT_TEMPLATE
     CHAT_OBSERVATION_SUFFIX = CHAT_OBSERVATION_SUFFIX
     
@@ -826,6 +830,35 @@ class ReportAgent:
     def _attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
         return attach_provenance(item)
 
+    @staticmethod
+    def _candidate_pool(
+        direct_items: List[Dict[str, Any]],
+        global_items: List[Dict[str, Any]],
+        evidence_index: Dict[str, Any],
+        embedder: Any,
+    ) -> Optional[EvidenceCandidatePool]:
+        """Kandidaten-Pool eines Abschnitts; ``None`` ohne Embedder.
+
+        Issue #1778: Treffer der Beitragssuche gelten berichtsweit. Vorher sah
+        nur der Abschnitt sie, in dem gesucht wurde — im Abnahmelauf
+        ``report_89d20c11edc1`` fünf von sieben Abschnitten also gar keine, nur
+        die acht Aktionen der Stichprobe. Der Pool dedupliziert nach
+        ``evidence_id``; ob ein Beitrag einen Claim stützt, entscheiden
+        unverändert Schwelle und Entailment.
+        """
+        if embedder is None:
+            return None
+        searched_action_items = [
+            deepcopy(record)
+            for record in evidence_index.values()
+            if isinstance(record, dict) and record.get("type") == "agent_action"
+        ]
+        return EvidenceCandidatePool(
+            direct_items + global_items + searched_action_items,
+            embedder,
+            reserved_slots=RESERVED_CANDIDATE_SLOTS,
+        )
+
     def _build_claims_for_section(
         self,
         content: str,
@@ -888,11 +921,7 @@ class ReportAgent:
         # Evidence — sie sind Modell-Output. Sie wandern in das separate
         # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
-        pool = (
-            EvidenceCandidatePool(direct_items + global_items, embedder)
-            if embedder is not None
-            else None
-        )
+        pool = self._candidate_pool(direct_items, global_items, evidence_index, embedder)
         for index, chunk in enumerate(chunks, 1):
             # Issue #1187: dies ist die im gemessenen Lauf bestaetigte
             # lange Nachbearbeitungsschleife (Claim-Extraktion +
@@ -933,6 +962,7 @@ class ReportAgent:
                         threshold=0.55,
                         top_k=5,
                         judge=self._try_get_entailment_judge(),
+                        reserved_slots=RESERVED_CANDIDATE_SLOTS,
                     )
                     embedder_ok = True
                 except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
