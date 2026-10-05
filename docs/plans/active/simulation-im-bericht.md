@@ -601,7 +601,8 @@ Lesart: Den meisten Claims liegen Belege mehrerer Stimmen vor, aber nur einer wi
 
 - **Anlass:** Der Lauf `sim_44fee3d638cf` (30 Agenten, `deepseek/deepseek-v4.1-flash`) erzeugte in 17 Runden 1.455 Aktionen, darunter 510 Textbeiträge, und stand bei 18,4 von 20 Mio. Tokens. Die Konfiguration sieht in Summe rund 11 Textbeiträge je simulierter Stunde vor, gemessen wurden 32 bis 74. Im Median macht ein aktivierter Agent fünf Aktionen je Runde und Plattform.
 - **Entscheidung des Maintainers (05.10.2026):** Die Aktivität wird begrenzt und an echter Nutzung ausgerichtet. Vor der Umsetzung müssen Belege vorliegen; jeder Zielwert muss auf eine Quelle zurückführbar sein.
-- **Stand:** Belegsammlung und Bestandsaufnahme der Mechanik liegen vor bzw. laufen; der Vorschlag der Zielwerte geht vor der Umsetzung an den Maintainer. Bis dahin wird am Aktivitätsmodell nichts geändert.
+- **Umsetzung:** zwei Modi (`realistic` als Standard, `active` am oberen Ende der belegten Spannen), Tagesraten je Akteursklasse mit deutschem Stundenprofil, eine Ziehung je Runde für alle Plattformen, je Aktivierung höchstens ein Textbeitrag und zwei Reaktionen (im Runner durchgesetzt). Belege und Herkunft jedes Werts: `docs/research/simulation-aktivitaet-belege.md`. Simulationen ohne `time_config.activity_model` laufen nach dem bisherigen Muster.
+- **Offen:** Die Wirkung ist bisher nur durch Tests belegt. Ein Lauf mit dem neuen Modell braucht die Freigabe des Maintainers; erst er zeigt, wie viele Textbeiträge tatsächlich entstehen und ob die Obergrenze je Aktivierung mit dem eingesetzten Modell greift.
 
 ### Schritt 2.5 ff.
 

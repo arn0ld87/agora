@@ -148,6 +148,8 @@ Nach Completion (`completed`, `failed`, `stopped`) ist ein neuer Start wieder er
 
 `COMPLETED` und `INCOMPLETE` sind fachlich verschieden. Ein nutzbarer Teilreport kann `INCOMPLETE` sein und trotzdem ausgeliefert werden. Cancel-, Section-Failure-, Requirement- und Fallback-Outline-Degradierungen dürfen nicht durch einen generischen „completed“-Status verschluckt werden (#1479).
 
+`POST /api/simulation/prepare` nimmt seit #1779 das optionale Feld `activity_mode` entgegen: `realistic` oder `active`. Es wählt den Satz der Tagesraten für Textbeiträge je Akteursklasse, mit dem die Simulation vorbereitet wird (`time_config.activity_model`). Fehlt es oder ist es leer, gilt die Einstellung `AGORA_SIM_ACTIVITY_MODE` (Standard `realistic`). Jeder andere Wert antwortet mit `400`. Der Modus steht als `metadata.activity_mode` am Prepare-Run; `POST /api/runs/<id>/resume` reicht ihn beim Neustart der Vorbereitung erneut durch. Weicht ein ausdrücklich übergebener Modus vom persistierten ab, wird eine bereits vorbereitete Simulation erneut vorbereitet statt mit `already_prepared` zu antworten; das gilt auch für eine Simulation, die noch kein Aktivitätsmodell hat. Ohne das Feld bleibt der Kurzschluss bestehen.
+
 `POST /api/simulation/prepare`/`/prepare/status` und `POST /api/report/generate/status` liefern seit #1174 neben dem Klartext `message` einen stabilen `message_key` (z. B. `prepare.already_completed`, `report.generated`, `report.failed`); das Frontend löst bekannte Schlüssel zentral auf, ein unbekannter Schlüssel fällt auf `message` zurück. Details: [`api-contracts.md`](api-contracts.md#status-meldungen-message_key).
 
 #### Evidence-Endpunkt
