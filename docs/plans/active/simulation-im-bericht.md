@@ -543,22 +543,65 @@ Die Schwellen 25 % und 50 % sind gesetzt, nicht gemessen. Verfehlt der Lauf sie,
 
 ---
 
-## 3. Etappe 2: Farblosigkeit der Simulation (Issue #1779, eigener PR)
+## 3. Etappe 2: Belegdichte je Aussage (Issue #1779, eigener PR)
 
-Die Schritte werden erst nach der Abnahme von Etappe 1 ausgearbeitet, weil die Positionierungsquote aus Etappe 1 das Messinstrument ist.
+**Neuer Zuschnitt vom 05.10.2026.** Der alte Zuschnitt („Farblosigkeit der Simulation", Abnahmeziel Positionierungsquote über 50 %) ist überholt: Die Quote lag in beiden Abnahmeläufen von Etappe 1 über 93 % (49 von 52 und 58 von 62 Stimmen), ohne dass Etappe 2 begonnen war. Der Maintainer hat den Start von Etappe 2 am 05.10.2026 freigegeben, obwohl die Abnahme Etappe 1 an Kriterium 5 verfehlt ist. Die Schritte unten sind der Vorschlag des Leads; der Maintainer kann sie ändern.
 
-**Befund:** In `sim_c8c6b30aa652` bezieht fast kein Beitrag Stellung (10 ablehnend, 0 zustimmend, 313 abwägend von 426), obwohl 38 von 50 Personas im Interview eine klare Haltung angeben.
+**Befund** (Lauf `sim_1a88f50d89cd`, Bericht `report_7caeb1e0827b`, `evidence_map.json`):
 
-**Bekannte Ursachen (belegt):**
-- 38 von 54 Agenten starten als `neutral` oder `observer`. Die regelbasierten Defaults in `simulation_config_agents.py:224-238` setzen fast alle Entitätstypen auf `neutral`, Medien auf `observer`.
-- Der Haltungssatz für `neutral` lautet „noch unentschieden und wägst ab", für `observer` „ohne aktiv Position zu beziehen" (`backend/scripts/agent_tools.py:668-696`). Das Modell befolgt das.
-- Bis Etappe 1 hatte die Haltung keinen Bezugsgegenstand.
-- Die vier synthetischen Skeptiker (`Skeptiker 50` bis `Skeptiker 53`, alle `opposing`) stehen in `agent_configs`, haben aber kein Profil. In `actions.jsonl` kommen nur die Agenten 0 bis 49 vor. Die Skeptiker-Quote wirkt also nur auf dem Papier: Vier der elf `opposing`-Agenten haben nie geschrieben.
-- Bei drei namentlichen Personen des Seeds trägt das Profil einen anderen Namen als die Konfiguration, bei gleicher Entität: Agent 23 heißt in der Konfiguration „Detlef Brunn", im Profil „Maren Hoffmann"; Agent 27 „Svenja Meyer" gegenüber „Ralf Becker"; Agent 28 „Heiko Dirks" gegenüber „Ingrid Hartwig". Die Persona kennt sich also unter einem anderen Namen, als das Aktionsprotokoll sie führt.
+| Messwert | Zähler / Nenner |
+|---|---|
+| Claims mit genau einem stützenden Beleg | 45 von 71 |
+| Claims mit zwei oder mehr stützenden Belegen | 26 von 71 |
+| Claims exakt bei 0,59 (Ein-Quellen-Deckel) | 38 von 71 |
+| davon gestützt durch ein einzelnes Interview / einen Simulationsbeitrag / ein Seed-Dokument | 26 / 10 / 2 |
+| Vorlagen je Ein-Beleg-Claim (Median) | 5, von 4 verschiedenen Stimmen |
+| Urteile der übrigen Vorlagen bei Ein-Beleg-Claims | 122 `RELATED_ONLY`, 24 `INSUFFICIENT`, 13 `CONTRADICTED` |
+| Textbeiträge, die eine andere Stimme bestätigt (Like, Repost, Zitat) | 101 von 540 |
+| Ein-Beleg-Claims, deren Beleg ein von anderer Stimme bestätigter Beitrag ist | 3 von 45 |
 
-**Zu klären im Issue:** ob der Agenten-Prompt eine Aufforderung zum Stellungbeziehen braucht; ob das Tagebuch je Agent (offener Punkt in #1772) die eigene Haltung über die Runden trägt; ob die acht Rollenkonflikte und die vier Agenten ohne Profil hineinspielen.
+Lesart: Den meisten Claims liegen Belege mehrerer Stimmen vor, aber nur einer wird als stützend gewertet. Der Engpass liegt damit zwischen Vorlage und Urteil, nicht beim Finden. Öffentliche Zustimmung (Likes, Reposts) ist im Bericht bisher unsichtbar, trägt für sich aber wenig (3 Claims).
 
-**Abnahme:** Positionierungsquote über 50 % im Hollerau-Lauf, ohne dass die Lagerverteilung künstlich ausgeglichen wird.
+**Nicht geklärt:** warum bei inhaltlich ähnlichen Interviewantworten eine als `SUPPORTED` und andere als `RELATED_ONLY` oder `CONTRADICTED` gewertet werden. Dafür ist eine Messung mit Modellaufrufen nötig (Schritt 2.3).
+
+**Die alten Befunde aus #1779** (regelbasierte Default-Haltung `neutral`, bremsender Haltungssatz, Skeptiker ohne Profil, Namensabweichungen zwischen Profil und Konfiguration) sind nicht Teil dieses Zuschnitts. Die Zuordnung Konfiguration → OASIS-Agent ist seit PR #1785 korrigiert. Offen bleibt, warum einzelne Profile fehlen (Agenten 9 und 35 im Lauf `sim_1a88f50d89cd`).
+
+### Schritt 2.1 · Belegdichte als Messwert im Bericht
+
+- **Ziel:** Die Abnahme wird aus einem Artefakt gelesen statt mit einem Handskript gezählt.
+- **Vertrag:** `backend/app/contracts/evidence_density_contract.py`, Modell `EvidenceDensity` (Pydantic v2, `extra="forbid"`): `schema_version`, `claims_total`, `claims_without_support`, `claims_single_support`, `claims_multi_support`, `claims_multi_independent` (zwei oder mehr unabhängige Quellen nach `_count_independent_sources`), `claims_at_single_source_cap` (Score exakt 0,59), `claims_with_action_support`, `supporting_links_by_type` (Belegart → Zahl), `single_support_ratio`, `action_support_ratio`. Im Schema-Register von `dump_schemas` eintragen.
+- **Berechnung:** reine Funktion `compute_evidence_density(evidence_map)` in `backend/app/services/report_agent/evidence_density.py`, ohne Modellaufruf.
+- **Persistenz:** `evidence_density.json` im Berichtsordner, atomar geschrieben, beim Abschluss des Berichts (auch bei `INCOMPLETE`).
+- **Tests:** Zählung an einer kleinen, handgebauten `evidence_map`; Vertragstest; Test, dass die Datei auch bei `INCOMPLETE` entsteht.
+- **Nicht tun:** keine neue Degradation, keine Änderung an Schwellen oder am Confidence-Rechner.
+
+### Schritt 2.2 · Öffentliche Zustimmung als Stimme am Beleg
+
+- **Ziel:** Bestätigt eine andere Stimme einen Beitrag öffentlich (`LIKE_POST`, `LIKE_COMMENT`, `REPOST`, `QUOTE_POST`), steht das am Beleg.
+- **Vertrag zuerst:** optionales Feld `endorsing_voice_keys` am Beleg `agent_action`, analog zu `voice_key` (Schritt 1.2). Die Stimme des Autors zählt nicht mit. Aktionen mit hartem Rollenkonflikt zählen nicht.
+- **Offene Entscheidung des Maintainers, vor der Umsetzung des zweiten Teils:** ob eine bestätigende Stimme beim Ein-Quellen-Deckel als unabhängige Quelle zählt. Dagegen spricht, dass ein Like billig ist; dafür, dass der bestätigte Beitrag selbst die Entailment-Prüfung bestanden hat. Bis zur Entscheidung wird das Feld nur geschrieben und angezeigt, der Confidence-Rechner bleibt unverändert.
+
+### Schritt 2.3 · Diagnose: Vorlage und Urteil bei Interviews
+
+- **Ziel:** klären, warum von mehreren Vorlagen meist nur eine stützt. Kandidaten: zusammengesetzte Claims (Median drei Teilaussagen), die keine einzelne Antwort ganz deckt; schwankende Urteile bei langen Interviewantworten (rund 3.000 Zeichen, mehrere Fragen).
+- **Vorgehen:** Nur-Lese-Messung am Bericht `report_7caeb1e0827b` mit demselben Judge. Sie braucht Modellaufrufe und läuft erst nach Freigabe des Maintainers.
+- **Ergebnis:** Befund mit Zählern; daraus folgen die Schritte 2.4 ff. Ohne diesen Befund wird an der Entailment-Stufe nichts geändert.
+
+### Schritt 2.4 ff.
+
+Werden nach Schritt 2.3 ausgearbeitet.
+
+### Abnahme Etappe 2 (führt der Lead aus, nach Freigabe des Laufs durch den Maintainer)
+
+Ein Lauf mit `seed-3-geburtshilfe-hollerau.md`, Standardwerte, `gpt-6-luna`. Bestanden, wenn in `evidence_density.json`:
+
+| Kriterium | Feld |
+|---|---|
+| Weniger als 50 % der Claims liegen exakt bei 0,59 | `claims_at_single_source_cap` / `claims_total` |
+| Mindestens 50 % der Claims haben zwei oder mehr unabhängige stützende Quellen | `claims_multi_independent` / `claims_total` |
+| Mindestens 25 % der Claims haben einen stützenden Beleg `agent_action` | `action_support_ratio` |
+
+Die Schwellen sind gesetzt, nicht gemessen. Die Lagerverteilung wird nicht künstlich ausgeglichen, und die Entailment-Prüfung wird nicht gelockert: Ein Beleg zählt nur, wenn er den Claim inhaltlich stützt.
 
 ---
 
@@ -643,4 +686,4 @@ Erst starten, wenn Etappe 2 abgenommen ist. Vor dem Start alle Anker neu prüfen
 
 - Je Lauf rund 0,70 $ (`gpt-6-luna`), dazu etwa 1 Cent für die Klassifikation der Beiträge.
 - Das Tageslimit des Anbieters (20 Mio. Tokens, gecachte zählen mit) erlaubt einen Lauf pro Tag.
-- Deployment auf gns3 und jeder Lauf nur auf ausdrückliche Ansage des Maintainers.
+- Deployment auf gns3 und jeder Lauf nur auf ausdrückliche Ansage des Maintainers. Das gilt auch für Nur-Lese-Messungen mit vielen Modellaufrufen.
