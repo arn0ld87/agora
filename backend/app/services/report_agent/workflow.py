@@ -27,7 +27,7 @@ from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .contract_validator import matches_known_preset, validate_required_sections
 from .evidence import validate_quote_anchors
-from .evidence_density import compute_evidence_density, save_evidence_density
+from .evidence_density import compute_evidence_density
 from .manager import ReportManager
 from .output_contract import (
     FinalContentRejected,
@@ -268,7 +268,7 @@ def _persist_evidence_density(agent: Any, report_id: str) -> None:
             exc,
         )
         return
-    save_evidence_density(ReportManager._ensure_report_folder(report_id), density)
+    ReportManager.save_evidence_density(report_id, density)
     logger.info(
         "report %s: Belegdichte claims=%d single_support=%s action_support=%s "
         "single_source_cap=%s multi_independent=%s",

@@ -220,11 +220,12 @@ def test_schreibfehler_wird_nicht_geschluckt(reports_dir, monkeypatch):
     """Speicher- und Berechtigungsfehler beim Schreiben eines Berichtsartefakts
     brechen den Schreibpfad ab (Review #1779)."""
     from app.services.report_agent import workflow
+    from app.services.report_agent.manager import ReportManager
 
     def _boom(*_a: Any, **_k: Any) -> str:
         raise PermissionError("evidence_density.json")
 
-    monkeypatch.setattr(workflow, "save_evidence_density", _boom)
+    monkeypatch.setattr(ReportManager, "save_evidence_density", _boom)
 
     with pytest.raises(PermissionError):
         workflow._persist_evidence_density(_Agent(_evidence_map()), "report-3")
@@ -258,7 +259,7 @@ def test_budgetabbruch_wird_nicht_geschluckt(reports_dir, monkeypatch):
     def _budget(*_a: Any, **_k: Any) -> str:
         raise BudgetExceededError("tokens", 10, 5)
 
-    monkeypatch.setattr(workflow, "save_evidence_density", _budget)
+    monkeypatch.setattr(workflow, "compute_evidence_density", _budget)
 
     with pytest.raises(BudgetExceededError):
         workflow._persist_evidence_density(_Agent(_evidence_map()), "report-4")
