@@ -1,8 +1,8 @@
 # Agora Roadmap
 
-**Stand:** 02.10.2026
+**Stand:** 05.10.2026
 
-**Geprüfte Main-Baseline:** `4cbf0eb849502472e4107fdd947559d417842b90` (GitHub-Issue-/CI-Abgleich vom 02.10.2026; keine neue lokale Vollsuite)
+**Geprüfte Main-Baseline:** `444b2680` (GitHub-Issue-/CI-Abgleich vom 05.10.2026; keine neue lokale Vollsuite)
 
 **Aktuelle Produktversion:** `0.9.6` (getaggt, Stability Beta) — nächster Schnitt `0.10.0-rc.1`
 **Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
@@ -116,14 +116,14 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 ## Vor `0.10.0-rc.1` — Feature-Freeze
 
 - [x] **Früherer P0:** Neo4j-Backup repariert ([#1633](https://github.com/arn0ld87/agora/issues/1633)). Ein neuer P0 stoppt den RC-Schnitt; die reale Restore-Abnahme bleibt [#766](https://github.com/arn0ld87/agora/issues/766).
-- [ ] **Verträge und Persistenz:** `schema_version` für Dateiartefakte ([#1663](https://github.com/arn0ld87/agora/issues/1663), erledigt), Kompatibilitäts-/Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664), erledigt mit [ADR-0021](docs/decisions/0021-kompatibilitaet-ab-1-0.md)), Cutover-Nachweise ([#1592](https://github.com/arn0ld87/agora/issues/1592)) und Release-Checksummen ([#1661](https://github.com/arn0ld87/agora/issues/1661)).
+- [ ] **Verträge und Persistenz:** `schema_version` für Dateiartefakte ([#1663](https://github.com/arn0ld87/agora/issues/1663), erledigt), Kompatibilitäts-/Deprecation-Policy ([#1664](https://github.com/arn0ld87/agora/issues/1664), erledigt mit [ADR-0021](docs/decisions/0021-kompatibilitaet-ab-1-0.md)), Cutover-Nachweise ([#1592](https://github.com/arn0ld87/agora/issues/1592)) und Release-Checksummen ([#1661](https://github.com/arn0ld87/agora/issues/1661), erledigt; Nachweis am ersten echten Tag steht aus). Offen ist damit nur noch #1592.
 - [x] **Trust und Testbarkeit:** Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)): tmp-Isolation der Upload-Pfade, abgemeldete Shutdown-Hooks und Schreibsperre für echte Datenverzeichnisse in der Suite.
-- [ ] **Release-Gates:** Supabase-Image-Scan und Ausnahmeregister ([#1670](https://github.com/arn0ld87/agora/issues/1670)), Backend-Ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671)), Frontend-Coverage ([#1672](https://github.com/arn0ld87/agora/issues/1672)).
+- [ ] **Release-Gates:** Supabase-Image-Scan und Ausnahmeregister ([#1670](https://github.com/arn0ld87/agora/issues/1670)), Backend-Ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671), erledigt), Frontend-Coverage ([#1672](https://github.com/arn0ld87/agora/issues/1672)).
 
 ## Bis `0.10.0` stabil — P1-Fixes
 
 - [ ] Eval-Seed-Leakage und bereinigter Gegenlauf ([#1240](https://github.com/arn0ld87/agora/issues/1240)).
-- [ ] Alle erforderlichen Gates auf dem finalen Release-Commit grün belegen. Auf `main@4cbf0eb8` ist die Integration-CI grün, der Python-Dependency-Audit jedoch rot; [PR #1748](https://github.com/arn0ld87/agora/pull/1748) ist der offene pypdf-Fix. Das ist kein Wiederaufleben von [#1660](https://github.com/arn0ld87/agora/issues/1660).
+- [ ] Alle erforderlichen Gates auf dem finalen Release-Commit grün belegen. Auf `main@444b2680` ist `ci.yml` einschließlich „Security scans“ grün ([CI-Run 37324880033](https://github.com/arn0ld87/agora/actions/runs/37324880033)); der frühere rote Python-Dependency-Audit ist mit [PR #1748](https://github.com/arn0ld87/agora/pull/1748) (pypdf) und [PR #1751](https://github.com/arn0ld87/agora/pull/1751) (bun audit, Trivy) behoben. Der Nachweis am finalen Release-Commit steht weiter aus. Der damalige Audit-Befund war kein Wiederaufleben von [#1660](https://github.com/arn0ld87/agora/issues/1660).
 
 Offene P0/P1 im 0.10-Milestone verhindern den stabilen Tag. Geschlossene Manifest-Tickets begründen keine Determinismuszusage: `random_seed` bleibt bewusst `null`, Modellantworten bleiben nicht-deterministisch.
 
