@@ -308,6 +308,25 @@ def build_stance_analysis(
     return analysis
 
 
+def voices_match_config(
+    analysis: StanceAnalysis, simulation_config: Optional[Mapping[str, Any]]
+) -> bool:
+    """Ob die gespeicherten Stimmen zur (angeglichenen) Konfiguration gehören.
+
+    Issue #1778: Eine Analyse aus der Zeit vor der Angleichung der
+    Agenten-Nummern trägt je ``voice_key`` Namen und Starthaltung eines
+    anderen Agenten. Ein Resume darf sie dann nicht übernehmen.
+    """
+    expected = {
+        voice.voice_key: (voice.agent_name, voice.start_class)
+        for voice in _voices(simulation_config, [])
+    }
+    stored = {
+        voice.voice_key: (voice.agent_name, voice.start_class) for voice in analysis.voices
+    }
+    return stored == expected
+
+
 def load_stance_analysis(report_folder: str) -> Optional[StanceAnalysis]:
     """Liest eine bereits gespeicherte Analyse; ``None``, wenn keine gültige vorliegt."""
     path = os.path.join(report_folder, STANCE_ANALYSIS_FILENAME)

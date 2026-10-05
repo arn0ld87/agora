@@ -109,8 +109,7 @@ def test_post_search_runs_before_the_first_model_turn() -> None:
 
     name, parameters = agent._execute_tool.call_args_list[0].args[:2]
     assert name == "search_simulation_actions"
-    assert "Stakeholder-Positionen" in parameters["query"]
-    assert "Schließung Kreißsaal" in parameters["query"]
+    assert parameters["query"] == "Stakeholder-Positionen Wer steht wo"
     prompt = _first_user_prompt(agent)
     assert "[Evidence ID: `ev_a`]" in prompt
     assert "plain statements" in prompt
@@ -158,3 +157,23 @@ def test_agent_without_the_tool_is_not_prefetched() -> None:
     _run(agent, [_final_turn()])
 
     assert agent._execute_tool.call_count == 0
+
+
+def test_requirement_is_only_the_fallback_query() -> None:
+    """Review PR #1785: Die Fragestellung steht in fast jedem Beitrag.
+
+    Als Teil der Anfrage füllte sie die Trefferliste mit beliebigen Beiträgen.
+    Sie wird erst gesucht, wenn die Wörter des Abschnitts nichts finden.
+    """
+    agent = _make_agent(tools={"search_simulation_actions": {}})
+
+    def _execute_tool(name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
+        return POSTS if parameters["query"] == "Schließung Kreißsaal" else NO_POSTS
+
+    agent._execute_tool.side_effect = _execute_tool
+
+    _run(agent, [_final_turn()])
+
+    queries = [call.args[1]["query"] for call in agent._execute_tool.call_args_list]
+    assert queries == ["Stakeholder-Positionen Wer steht wo", "Schließung Kreißsaal"]
+    assert "tool call 1/5" in _first_user_prompt(agent)

@@ -78,6 +78,7 @@ from .stance_analysis import (
     has_contested_statement,
     load_stance_analysis,
     save_stance_analysis,
+    voices_match_config,
 )
 from ..run_budget import reraise_if_budget_exceeded
 from ..sim.action_log_reader import action_log_health
@@ -192,7 +193,14 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
         # Analyse, statt alle Beiträge erneut zu klassifizieren (Budget des
         # Resumes) — aber nur, wenn sie zur aktuellen Streitfrage gehört.
         stored = load_stance_analysis(report_folder)
-        if stored is not None and stored.contested_statement == contested_statement_of(config):
+        # Und nur, wenn ihre Stimmen zur angeglichenen Konfiguration passen:
+        # eine Analyse mit verschobenen Agenten-Nummern wird neu gerechnet
+        # (#1778).
+        if (
+            stored is not None
+            and stored.contested_statement == contested_statement_of(config)
+            and voices_match_config(stored, config)
+        ):
             return stored.model_dump(mode="json")
         # Ohne Streitfrage ist die Analyse nicht anwendbar: das Protokoll
         # wird dann gar nicht erst gelesen.
@@ -1038,18 +1046,39 @@ def _prefetch_simulation_posts(
     tools = getattr(agent, "tools", None)
     if not isinstance(tools, dict) or _POST_SEARCH_TOOL not in tools:
         return None
-    parameters = {
-        "query": " ".join(
-            part
-            for part in (
-                section.title,
-                getattr(section, "description", "") or "",
-                agent.simulation_requirement or "",
-            )
-            if isinstance(part, str) and part
-        ),
-        "limit": 12,
-    }
+    # Erst mit den Wörtern des Abschnitts suchen. Die Fragestellung des Laufs
+    # steht in fast jedem Beitrag; als Teil der Anfrage füllte sie die
+    # begrenzte Trefferliste mit beliebigen Beiträgen statt mit denen des
+    # Abschnitts (Review PR #1785). Sie ist nur der Rückfall, wenn der
+    # Abschnitt selbst nichts findet.
+    section_query = " ".join(
+        part
+        for part in (section.title, getattr(section, "description", "") or "")
+        if isinstance(part, str) and part
+    )
+    requirement = agent.simulation_requirement
+    queries = [section_query]
+    if isinstance(requirement, str) and requirement:
+        queries.append(requirement)
+    for query in queries:
+        if not query:
+            continue
+        result = _run_post_search(
+            agent, section, section_index, report_context, {"query": query, "limit": 12}
+        )
+        if result is not None:
+            return result
+    return None
+
+
+def _run_post_search(
+    agent: Any,
+    section: Any,
+    section_index: int,
+    report_context: str,
+    parameters: Dict[str, Any],
+) -> Optional[str]:
+    """Ein Aufruf der Beitragssuche; ``None`` ohne Treffer oder bei Werkzeugfehler."""
     if agent.report_logger:
         agent.report_logger.log_tool_call(
             section_title=section.title,
