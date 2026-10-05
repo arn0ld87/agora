@@ -195,13 +195,25 @@ def reasoning_effort_kwargs(
     Gesendet wird ausschliesslich, wenn die bestehende Detection
     (``providers/registry.py::detect_provider``, hier als *provider*
     hereingereicht — keine zweite Heuristik) ``"openai"`` liefert UND das
-    Modell zur Reasoning-Familie gehoert. Ollama, OpenRouter, openai-
+    Modell zur Reasoning-Familie gehoert. Ollama, sonstige openai-
     kompatible Proxies und Nicht-Reasoning-Modelle (gpt-4.1, gpt-4o) bekommen
     den Parameter nicht. ``force_no_thinking`` erzwingt ``"none"``.
+
+    Ausnahme OpenRouter (Detection ``"openrouter"``): der Proxy nimmt
+    ``reasoning_effort`` fuer jedes Modell an und bildet ihn auf das
+    Reasoning des Zielmodells ab. Ohne den Parameter denken Modelle wie
+    ``deepseek/deepseek-v4.1-flash`` bei jedem Aufruf mit Anbieter-Default;
+    gemessen ~250-fache Ausgabe-Tokens fuer dieselbe Antwort. Lehnt ein
+    Modell den Wert ab, greift der bestehende 400-Retry ohne Parameter
+    (:func:`is_reasoning_effort_400`).
 
     Returns:
         ``{"reasoning_effort": <wert>}`` oder ein leeres Dict.
     """
+    if provider == "openrouter":
+        if force_no_thinking:
+            return {"reasoning_effort": "none"}
+        return {"reasoning_effort": effort or "none"}
     if provider != "openai" or not _is_reasoning_family(model):
         return {}
     if force_no_thinking:

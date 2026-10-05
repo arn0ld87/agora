@@ -1274,6 +1274,7 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     model_cfg: Dict[str, Any] = build_camel_completion_params(
         model=llm_model,
         completion_max_tokens=runtime_settings["completion_max_tokens"],
+        base_url=llm_base_url or None,
     )
 
     if platform == ModelPlatformType.GEMINI:

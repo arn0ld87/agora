@@ -673,7 +673,9 @@ class LLMClient:
 
     def _detect_provider(
         self, *, model: Optional[str] = None
-    ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "anthropic", "unknown"]:
+    ) -> Literal[
+        "ollama", "cloud", "minimax", "openai", "google", "anthropic", "openrouter", "unknown"
+    ]:
         """
         Identify the LLM provider associated with the configured endpoint and model.
 
@@ -686,7 +688,7 @@ class LLMClient:
 
         Returns:
             str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
-                ``"openai"``, ``"google"``, ``"anthropic"``, or ``"unknown"``.
+                ``"openai"``, ``"google"``, ``"anthropic"``, ``"openrouter"``, or ``"unknown"``.
         """
         # codex_cli wird nie aus einer base_url erraten (verboten laut
         # AGENTS.md: keine Detection-Heuristik neben registry.py::
@@ -720,10 +722,14 @@ class LLMClient:
             if temperature is not None:
                 extra["temperature"] = temperature
 
+            # ``openrouter`` ist ein Detection-Wert, keine Verbindungsart im
+            # Vertrag ``ProviderType``; das Ereignis fuehrt die Route wie
+            # bisher als ``unknown``.
+            detected = self._detect_provider()
             event = ModelActiveEvent(
                 model=self.model or "unknown",
                 context=context,
-                provider=self._detect_provider(),
+                provider="unknown" if detected == "openrouter" else detected,
                 ts=_time_mod.time(),
                 extra=extra if extra else None,
             )

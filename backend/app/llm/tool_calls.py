@@ -216,7 +216,9 @@ def _chat_with_tools(
     is_cli_shim_provider = getattr(self, "_codex_cli_active", False) or getattr(
         self, "_claude_cli_active", False
     )
-    if provider == "unknown" and not is_cli_shim_provider:
+    # ``openrouter`` bleibt wie ``unknown`` im XML-Fallback: der eigene
+    # Detection-Wert aendert nur ``reasoning_effort``, nicht den Tools-Pfad.
+    if provider in ("unknown", "openrouter") and not is_cli_shim_provider:
         logger.info(
             "LLMClient.chat_with_tools: provider=unknown (model=%s, base=%s) — "
             "skipping tools= and falling back to chat() for XML-tool-call parsing",

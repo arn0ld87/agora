@@ -148,6 +148,22 @@ class TestChatPublishesModelActiveEvent:
         assert ev.extra["max_tokens"] == 8192
         assert ev.extra["temperature"] == 0.5
 
+    def test_openrouter_route_publishes_provider_unknown(self, client, monkeypatch):
+        """``openrouter`` ist kein Wert des Vertrags ``ProviderType``; das
+        Ereignis darf daran nicht scheitern."""
+        published: list[ModelActiveEvent] = []
+        monkeypatch.setattr(
+            "app.services.model_event_bus.model_event_bus.publish",
+            lambda ev: published.append(ev),
+        )
+        client.base_url = "https://openrouter.ai/api/v1"
+        client.model = "deepseek/deepseek-v4.1-flash"
+
+        client._publish_model_active("report")
+
+        assert client._detect_provider() == "openrouter"
+        assert published[0].provider == "unknown"
+
 
 # ---------------------------------------------------------------------------
 # Fail-safe: publish error must not abort the LLM call

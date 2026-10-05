@@ -236,7 +236,7 @@ def test_chat_json_path_sends_reasoning_effort(make_client) -> None:
     ("base_url", "model"),
     [
         ("http://localhost:11434", "gpt-6.1-sol"),  # Ollama
-        ("https://openrouter.ai/api/v1", "openai/gpt-6.1-sol"),  # Proxy
+        ("https://openrouter.ai.attacker.test/v1", "gpt-6.1-sol"),  # kein OpenRouter
         ("https://llm-proxy.example.test/v1", "gpt-6.1-sol"),  # openai-kompatibel
         ("https://api.openai.com/v1", "gpt-4.1"),  # Nicht-Reasoning
         ("https://api.openai.com/v1", "gpt-4o"),
@@ -330,3 +330,40 @@ def test_detector_is_narrow() -> None:
     assert not is_reasoning_effort_400(
         _FakeBadRequest("Unsupported value: 'temperature' does not support 0.7")
     )
+
+
+# ---------------------------------------------------------------------------
+# (g) OpenRouter: reasoning_effort fuer jedes Modell
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("effort", "expected"),
+    [("none", "none"), ("high", "high")],
+)
+def test_openrouter_sends_reasoning_effort_for_any_model(
+    make_client, effort: str, expected: str
+) -> None:
+    """OpenRouter bildet ``reasoning_effort`` auf das Zielmodell ab. Ohne den
+    Parameter denkt z. B. DeepSeek V4.1 Flash bei jedem Aufruf."""
+    client, comps = make_client(
+        base_url="https://openrouter.ai/api/v1",
+        model="deepseek/deepseek-v4.1-flash",
+        effort=effort,
+    )
+
+    client.chat(messages=[{"role": "user", "content": "hi"}])
+
+    assert comps.calls[0]["reasoning_effort"] == expected
+
+
+def test_openrouter_force_no_thinking_overrides_route_effort(make_client) -> None:
+    client, comps = make_client(
+        base_url="https://openrouter.ai/api/v1",
+        model="deepseek/deepseek-v4.1-flash",
+        effort="high",
+    )
+
+    client.chat(messages=[{"role": "user", "content": "hi"}], force_no_thinking=True)
+
+    assert comps.calls[0]["reasoning_effort"] == "none"

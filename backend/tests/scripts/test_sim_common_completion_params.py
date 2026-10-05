@@ -131,6 +131,22 @@ class TestBuildCamelCompletionParams:
         )
         assert params == {"max_completion_tokens": 2048}
 
+    def test_openrouter_route_disables_reasoning_for_any_model(self) -> None:
+        params = build_camel_completion_params(
+            model="deepseek/deepseek-v4.1-flash",
+            completion_max_tokens=8192,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        assert params == {"max_tokens": 8192, "reasoning_effort": "none"}
+
+    def test_other_proxy_keeps_reasoning_param_unset(self) -> None:
+        params = build_camel_completion_params(
+            model="deepseek/deepseek-v4.1-flash",
+            completion_max_tokens=8192,
+            base_url="https://openrouter.ai.attacker.test/v1",
+        )
+        assert params == {"max_tokens": 8192}
+
     def test_legacy_openai_returns_max_tokens(self) -> None:
         params = build_camel_completion_params(
             model="gpt-4o",

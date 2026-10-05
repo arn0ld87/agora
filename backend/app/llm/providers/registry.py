@@ -54,7 +54,15 @@ if TYPE_CHECKING:
 
 # Teilmengen von app.contracts.provider_types.ProviderType
 HttpDetectedProvider = Literal[
-    "ollama", "cloud", "minimax", "openai", "google", "bedrock", "anthropic", "unknown"
+    "ollama",
+    "cloud",
+    "minimax",
+    "openai",
+    "google",
+    "bedrock",
+    "anthropic",
+    "openrouter",
+    "unknown",
 ]
 OasisDetectedProvider = Literal["google", "ollama", "openai"]
 DetectionMode = Literal["http", "oasis"]
@@ -148,6 +156,13 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     # ``api.openai.com.attacker.test`` oder ein Pfad/Query mit dem Text darf
     # NICHT matchen. ``_parse_host_port`` wird fuer ALLE Zweige (auch
     # MiniMax/Bedrock/Anthropic) wiederverwendet statt dreifachem urlparse.
+    # OpenRouter zuerst: der Host ist eindeutig, waehrend ein Modell-Suffix
+    # wie ``:cloud`` hinter dem Proxy kein Ollama-Signal ist. ``get_adapter``
+    # behandelt ``"openrouter"`` wie ``"unknown"`` (OpenAIAdapter); der eigene
+    # Wert existiert, damit ``reasoning_effort`` gesendet werden kann
+    # (``providers/openai.py::reasoning_effort_kwargs``).
+    if _host_is(host, "openrouter.ai"):
+        return "openrouter"
     if _host_is(host, "ollama.com") or _is_ollama_cloud_tag(model_name):
         return "cloud"
     if _host_is(host, "api.minimax.io"):
@@ -241,7 +256,8 @@ def detect_provider(
 ) -> Union[HttpDetectedProvider, OasisDetectedProvider]:
     """Erkennt den LLM-Provider aus Base-URL + Modellname.
 
-    ``mode="http"``  — Vokabular ``ollama|cloud|minimax|openai|google|unknown``;
+    ``mode="http"``  — Vokabular
+    ``ollama|cloud|minimax|openai|google|bedrock|anthropic|openrouter|unknown``;
     nutzt der OpenAI-kompatible Backend-HTTP-Client (``LLMClient``).
 
     ``mode="oasis"`` — Vokabular ``google|ollama|openai``; nutzt das
@@ -311,7 +327,7 @@ def get_adapter(
       :class:`~app.llm.providers.ollama.OllamaAdapter` (Ollama Cloud nutzt
       denselben Adapter wie lokales Ollama).
     - ``google`` -> :class:`~app.llm.providers.gemini.GeminiAdapter`.
-    - ``openai`` und ``unknown`` (Default) ->
+    - ``openai``, ``openrouter`` und ``unknown`` (Default) ->
       :class:`~app.llm.providers.openai.OpenAIAdapter`.
 
     Adapter-Importe sind bewusst lazy (innerhalb der Funktion), um einen
