@@ -189,9 +189,10 @@ class TestExpectedRate:
                 total = sum(sam.activation_probability(model, actor_class, hour) for hour in range(24))
                 assert total == pytest.approx(model.text_posts_per_day[actor_class])
 
-    @pytest.mark.parametrize("minutes_per_round", [30, 60, 120])
+    @pytest.mark.parametrize("minutes_per_round", [30, 45, 60, 90, 120])
     def test_daily_rate_does_not_depend_on_the_round_length(self, minutes_per_round: int) -> None:
-        """Regression: ohne Skalierung verdoppelte eine 30-Minuten-Runde die Tagesrate."""
+        """Regression: ohne Skalierung verdoppelte eine 30-Minuten-Runde die Tagesrate,
+        und ohne Startminute zählten 90-Minuten-Runden Stundenanteile doppelt."""
         rounds_per_day = 24 * 60 // minutes_per_round
         for mode in ActivityMode:
             model = _model(mode)
@@ -202,10 +203,20 @@ class TestExpectedRate:
                         actor_class,
                         (round_num * minutes_per_round) // 60,
                         minutes_per_round,
+                        sam.round_start_minute(round_num, minutes_per_round),
                     )
                     for round_num in range(rounds_per_day)
                 )
                 assert total == pytest.approx(model.text_posts_per_day[actor_class])
+
+    def test_ninety_minute_round_starting_at_half_past_covers_the_right_hours(self) -> None:
+        weights = list(_model().hourly_weights)
+        # Runde 1 bei 90 Minuten: 01:30 bis 03:00.
+        assert sam.round_start_minute(1, 90) == 30
+        assert sam._round_weight(weights, 1, 90, 30) == pytest.approx(weights[1] / 2 + weights[2])
+        # Runde 2: 03:00 bis 04:30.
+        assert sam.round_start_minute(2, 90) == 0
+        assert sam._round_weight(weights, 3, 90, 0) == pytest.approx(weights[3] + weights[4] / 2)
 
     @pytest.mark.parametrize("bad", [None, 0, -30, "60", True])
     def test_unusable_round_length_counts_as_one_hour(self, bad: object) -> None:

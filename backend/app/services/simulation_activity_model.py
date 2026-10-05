@@ -279,23 +279,48 @@ def _round_minutes(minutes_per_round: Any) -> float:
     return float(minutes_per_round)
 
 
-def _round_weight(hourly_weights: Sequence[float], hour: int, minutes_per_round: Any) -> float:
-    """Anteil der Tagesrate, der auf eine Runde ab ``hour`` fällt.
+def _start_minute(minute_of_hour: Any) -> float:
+    """Startminute der Runde innerhalb ihrer Stunde; 0 bei unbrauchbarem Wert."""
+    if isinstance(minute_of_hour, bool) or not isinstance(minute_of_hour, (int, float)):
+        return 0.0
+    if not 0 <= minute_of_hour < MINUTES_PER_HOUR:
+        return 0.0
+    return float(minute_of_hour)
 
-    Die Runde deckt ``minutes_per_round`` Minuten ab dem Beginn von ``hour``:
-    eine halbe Stunde trägt das halbe Stundengewicht, zwei Stunden tragen die
-    Gewichte beider Stunden. Für Rundenlängen, die 60 teilen oder ein Vielfaches
-    von 60 sind, summieren sich die Runden eines Tages exakt zu 1; dazwischen
-    (z. B. 90 Minuten) ist es eine Näherung, weil der Runner nur die Stunde
-    der Runde kennt, nicht ihre Startminute.
+
+def round_start_minute(round_num: int, minutes_per_round: Any) -> int:
+    """Startminute der Runde ``round_num`` (ab 0) innerhalb ihrer Stunde.
+
+    Der Runner rechnet ``simulated_minutes = round_num * minutes_per_round`` und
+    startet zur vollen Stunde; bei 90-Minuten-Runden beginnt jede zweite Runde
+    um ``:30``.
+    """
+    return int(round_num * _round_minutes(minutes_per_round)) % MINUTES_PER_HOUR
+
+
+def _round_weight(
+    hourly_weights: Sequence[float],
+    hour: int,
+    minutes_per_round: Any,
+    minute_of_hour: Any = 0,
+) -> float:
+    """Anteil der Tagesrate, der auf eine Runde fällt.
+
+    Die Runde deckt ``minutes_per_round`` Minuten ab ``hour:minute_of_hour``.
+    Jede berührte Stunde trägt ihr Gewicht anteilig zu den abgedeckten Minuten
+    bei: eine halbe Stunde das halbe Stundengewicht, eine Runde von 13:30 bis
+    15:00 die Hälfte von 13 Uhr und das Ganze von 14 Uhr. Damit summieren sich
+    die Runden eines simulierten Tages bei jeder Rundenlänge zu 1.
     """
     remaining = _round_minutes(minutes_per_round)
+    position = _start_minute(minute_of_hour)
     total = 0.0
     offset = 0
     while remaining > 0:
-        covered = min(float(MINUTES_PER_HOUR), remaining)
+        covered = min(float(MINUTES_PER_HOUR) - position, remaining)
         total += hourly_weights[(hour + offset) % HOURS_PER_DAY] * covered / MINUTES_PER_HOUR
         remaining -= covered
+        position = 0.0
         offset += 1
     return total
 
@@ -305,6 +330,7 @@ def activation_probability(
     actor_class: ActorClass,
     hour: int,
     minutes_per_round: Any = MINUTES_PER_HOUR,
+    minute_of_hour: Any = 0,
 ) -> float:
     """Wahrscheinlichkeit, in dieser Runde aktiv zu sein.
 
@@ -316,7 +342,10 @@ def activation_probability(
     oder halbierte die Rundenlänge die Tagesrate.
     """
     rate = model.text_posts_per_day[actor_class]
-    return min(1.0, rate * _round_weight(model.hourly_weights, hour, minutes_per_round))
+    return min(
+        1.0,
+        rate * _round_weight(model.hourly_weights, hour, minutes_per_round, minute_of_hour),
+    )
 
 
 def select_active_agent_ids_by_rate(
@@ -325,6 +354,7 @@ def select_active_agent_ids_by_rate(
     current_hour: int,
     rng: _RandomLike,
     minutes_per_round: Any = MINUTES_PER_HOUR,
+    minute_of_hour: Any = 0,
 ) -> List[int]:
     """Agent-IDs, die in dieser Runde aktiv werden: je Agent eine Ziehung gegen ``p``.
 
@@ -334,7 +364,7 @@ def select_active_agent_ids_by_rate(
     active: List[int] = []
     for cfg in agent_configs:
         probability = activation_probability(
-            model, resolve_agent_actor_class(cfg), current_hour, minutes_per_round
+            model, resolve_agent_actor_class(cfg), current_hour, minutes_per_round, minute_of_hour
         )
         if rng.random() < probability:
             active.append(cfg.get("agent_id", 0))
@@ -382,6 +412,7 @@ def select_active_agent_ids_for_platform(
         current_hour,
         activity_round_rng(seed, round_num, "draw"),
         minutes_per_round,
+        round_start_minute(round_num, minutes_per_round),
     )
     if len(ordered) == 1:
         return active

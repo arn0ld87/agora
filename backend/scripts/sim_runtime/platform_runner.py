@@ -304,6 +304,9 @@ class SinglePlatformRunner:
         model_cfg: dict = build_camel_completion_params(
             model=llm_model,
             completion_max_tokens=completion_max_tokens,
+            # Wie im Parallel-Runner: ohne die URL erkennt der Helper OpenRouter
+            # nicht und sendet kein ``reasoning_effort`` (Review #1779).
+            base_url=llm_base_url or None,
         )
 
         if platform == ModelPlatformType.GEMINI:
