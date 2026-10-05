@@ -30,7 +30,7 @@ of the same standing as interview answers.
 - Do not confine posts to quote blocks: a quote block illustrates a statement, it does
   not replace it.
 - Call search_simulation_actions with your own keywords to find further posts.
-This call counts as tool call {tool_calls_count}/{max_tool_calls}.
+Tool calls used so far: {tool_calls_count}/{max_tool_calls}.
 ═══════════════════════════════════════════════════════════════"""
 
 REACT_INSUFFICIENT_TOOLS_MSG = (

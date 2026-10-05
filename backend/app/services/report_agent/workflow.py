@@ -1029,8 +1029,8 @@ def _prefetch_simulation_posts(
     section: Any,
     section_index: int,
     report_context: str,
-) -> Optional[str]:
-    """Führt die Beitragssuche einmal für den Abschnitt aus (Issue #1778).
+) -> tuple[Optional[str], int]:
+    """Führt die Beitragssuche für den Abschnitt aus (Issue #1778).
 
     Der Report-Agent rief ``search_simulation_actions`` im Abnahmelauf
     ``report_89d20c11edc1`` in zwei von sieben Abschnitten auf. Ein Abschnitt
@@ -1040,12 +1040,14 @@ def _prefetch_simulation_posts(
     Modells: Die Treffer werden als Belege ``agent_action`` registriert und
     tragen ihre Evidence-ID.
 
-    Gibt den Trefferlistentext zurück oder ``None``, wenn das Werkzeug fehlt
-    oder die Simulation zu diesem Abschnitt keine Beiträge hat.
+    Rückgabe: ``(Trefferlistentext oder None, Zahl der ausgeführten Suchen)``.
+    Jede ausgeführte Suche zählt beim Aufrufer gegen das Werkzeuglimit des
+    Abschnitts, auch eine ohne Treffer — höchstens zwei (Review PR #1785).
+    Ohne das Werkzeug wird nichts ausgeführt.
     """
     tools = getattr(agent, "tools", None)
     if not isinstance(tools, dict) or _POST_SEARCH_TOOL not in tools:
-        return None
+        return None, 0
     # Erst mit den Wörtern des Abschnitts suchen. Die Fragestellung des Laufs
     # steht in fast jedem Beitrag; als Teil der Anfrage füllte sie die
     # begrenzte Trefferliste mit beliebigen Beiträgen statt mit denen des
@@ -1060,15 +1062,17 @@ def _prefetch_simulation_posts(
     queries = [section_query]
     if isinstance(requirement, str) and requirement:
         queries.append(requirement)
+    executed = 0
     for query in queries:
         if not query:
             continue
+        executed += 1
         result = _run_post_search(
             agent, section, section_index, report_context, {"query": query, "limit": 12}
         )
         if result is not None:
-            return result
-    return None
+            return result, executed
+    return None, executed
 
 
 def _run_post_search(
@@ -1174,12 +1178,16 @@ def generate_section_react(
     }
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
 
-    # Issue #1778: die Beitragssuche läuft einmal vorab und zählt gegen das
-    # Werkzeuglimit des Abschnitts — das Limit selbst bleibt unverändert.
-    prefetched_posts = _prefetch_simulation_posts(agent, section, section_index, report_context)
-    if prefetched_posts is not None:
-        tool_calls_count += 1
+    # Issue #1778: die Beitragssuche läuft vorab; jede ausgeführte Suche zählt
+    # gegen das Werkzeuglimit des Abschnitts — das Limit selbst bleibt
+    # unverändert.
+    prefetched_posts, prefetch_calls = _prefetch_simulation_posts(
+        agent, section, section_index, report_context
+    )
+    if prefetch_calls:
+        tool_calls_count += prefetch_calls
         used_tools.add(_POST_SEARCH_TOOL)
+    if prefetched_posts is not None:
         messages[-1]["content"] += agent.REACT_PREFETCHED_POSTS_TEMPLATE.format(
             result=prefetched_posts,
             tool_calls_count=tool_calls_count,

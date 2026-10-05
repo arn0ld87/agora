@@ -122,22 +122,25 @@ def test_prefetch_counts_against_the_tool_limit() -> None:
 
     _run(agent, turns)
 
-    assert "tool call 1/5" in _first_user_prompt(agent)
+    assert "used so far: 1/5" in _first_user_prompt(agent)
     last_messages = agent.llm.chat_with_tools.call_args_list[-1].kwargs["messages"]
     observations = [m["content"] for m in last_messages if m["content"].startswith("Obs ")]
     assert " 5/5 " in observations[-1]
     assert "search_simulation_actions" in observations[-1].split("5/5")[1]
 
 
-def test_no_posts_means_no_prefetch_block_and_no_spent_call() -> None:
+def test_searches_without_posts_show_no_block_but_count_against_the_limit() -> None:
+    """Review PR #1785: jede ausgeführte Suche zählt, auch eine ohne Treffer."""
     agent = _make_agent(tools={"search_simulation_actions": {}}, post_result=NO_POSTS)
 
     _run(agent, [_tool_turn("panorama_search", "q0"), _final_turn()])
 
     assert "search_simulation_actions Returned" not in _first_user_prompt(agent)
+    # Abschnittssuche und Rückfall auf die Fragestellung: zwei Aufrufe.
+    assert agent._execute_tool.call_count == 3
     last_messages = agent.llm.chat_with_tools.call_args_list[-1].kwargs["messages"]
     observation = next(m["content"] for m in last_messages if m["content"].startswith("Obs "))
-    assert " 1/5 " in observation
+    assert " 3/5 " in observation
 
 
 def test_tool_failure_is_not_presented_as_posts() -> None:
@@ -176,4 +179,22 @@ def test_requirement_is_only_the_fallback_query() -> None:
 
     queries = [call.args[1]["query"] for call in agent._execute_tool.call_args_list]
     assert queries == ["Stakeholder-Positionen Wer steht wo", "Schließung Kreißsaal"]
-    assert "tool call 1/5" in _first_user_prompt(agent)
+    # Beide ausgeführten Suchen zählen gegen das Limit von fünf.
+    assert "used so far: 2/5" in _first_user_prompt(agent)
+
+
+def test_fallback_search_leaves_three_calls_for_the_model() -> None:
+    """Mit zwei Vorab-Suchen führt der Abschnitt höchstens fünf Werkzeuge aus."""
+    agent = _make_agent(tools={"search_simulation_actions": {}})
+
+    def _execute_tool(name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
+        if name != "search_simulation_actions":
+            return "Treffer"
+        return POSTS if parameters["query"] == "Schließung Kreißsaal" else NO_POSTS
+
+    agent._execute_tool.side_effect = _execute_tool
+    turns = [_tool_turn("panorama_search", f"q{i}") for i in range(6)] + [_final_turn()]
+
+    _run(agent, turns)
+
+    assert agent._execute_tool.call_count == 5
