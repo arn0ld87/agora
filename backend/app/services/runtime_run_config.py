@@ -88,6 +88,9 @@ _HTTP_DETECTION_TO_PROVIDER_ID = {
     # behavior (it never had a distinct local-Ollama branch).
     "ollama": PROVIDER_OPENAI_COMPATIBLE,
     "unknown": PROVIDER_OPENAI_COMPATIBLE,
+    # OpenRouter hat keine eigene Verbindungsart: der Detection-Wert steuert
+    # nur ``reasoning_effort``, die Route laeuft ueber ``openai_compatible``.
+    "openrouter": PROVIDER_OPENAI_COMPATIBLE,
     # Issue #1567 — detect_provider(mode="http") learned "bedrock" as a
     # return value (#1282) but this mapping never followed, so the dict
     # lookup below raised a raw KeyError for legacy Bedrock server config

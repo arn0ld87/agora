@@ -37,6 +37,13 @@ def test_detect_default_provider_id_maps_bedrock_base_url():
     assert provider_id == PROVIDER_BEDROCK
 
 
+def test_detect_default_provider_id_maps_openrouter_to_openai_compatible():
+    provider_id = _detect_default_provider_id(
+        "https://openrouter.ai/api/v1", "deepseek/deepseek-v4.1-flash"
+    )
+    assert provider_id == "openai_compatible"
+
+
 def test_detect_default_provider_id_covers_every_http_detection_value():
     """Jeder Rueckgabewert von ``detect_provider(mode="http")`` muss in
     ``_detect_default_provider_id`` entweder gemappt oder explizit
