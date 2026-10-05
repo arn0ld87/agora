@@ -587,9 +587,25 @@ Lesart: Den meisten Claims liegen Belege mehrerer Stimmen vor, aber nur einer wi
 - **Vorgehen:** Nur-Lese-Messung am Bericht `report_7caeb1e0827b` mit demselben Judge. Sie braucht Modellaufrufe und läuft erst nach Freigabe des Maintainers.
 - **Ergebnis:** Befund mit Zählern; daraus folgen die Schritte 2.4 ff. Ohne diesen Befund wird an der Entailment-Stufe nichts geändert.
 
-### Schritt 2.4 ff.
+**Befund vom 05.10.2026 (Messung nach Freigabe, 358 Judge-Aufrufe, nichts geschrieben):**
 
-Werden nach Schritt 2.3 ausgearbeitet.
+- **Abweichung vom Vorgehen:** Der Judge der Messung war `deepseek/deepseek-v4.1-flash` (Standardroute der Instanz zum Messzeitpunkt). Die gespeicherten Urteile des Berichts stammen von `gpt-6-luna`. Der Vergleich mit den gespeicherten Urteilen ist deshalb ein Vergleich zweier Modelle.
+- **Umfang:** 45 Ein-Beleg-Claims, 204 Paare aus Claim und vorgelegtem Beleg, jedes Paar zweimal neu geprüft.
+- **Stabilität innerhalb eines Modells:** 190 von 204 Urteilen sind in beiden Durchgängen gleich (93,1 %). Interviews wechseln häufiger als Simulationsbeiträge (37 von 96 gegenüber 15 von 100 Paaren weichen in mindestens einem der drei Urteile ab).
+- **Abweichung zwischen den Modellen:** 161 von 204 Urteilen stimmen mit dem gespeicherten überein (78,9 %). 22 Paare fallen von `SUPPORTED` auf `RELATED_ONLY`, 18 steigen von `RELATED_ONLY` auf `SUPPORTED`. Netto entsteht keine höhere Belegdichte: 15 der 45 Claims hätten in beiden Durchgängen keinen stützenden Beleg, 16 in beiden genau einen, 6 in beiden mindestens zwei.
+- **Länge der Vorlage:** Wird für die 51 nicht stützenden Interview-Vorlagen statt der ganzen Antwort nur das ähnlichste Satzfenster vorgelegt, werden 2 davon stützend; 2 von 45 Claims bekämen einen zweiten Beleg. Die Länge der Interviewantwort ist nicht die Ursache.
+- **Schluss:** An der Entailment-Stufe ist kein Hebel belegt. Die übrigen Vorlagen sind überwiegend thematisch verwandt, sagen aber nicht dasselbe wie der Claim. Offen bleibt der Kandidat „zusammengesetzte Claims"; er ist mit dieser Messung nicht geprüft.
+- **Nicht belegt:** wie die Urteile mit `gpt-6-luna` als Judge der Wiederholung ausfallen.
+
+### Schritt 2.4 · Aktivitätsmodell an belegten Werten ausrichten
+
+- **Anlass:** Der Lauf `sim_44fee3d638cf` (30 Agenten, `deepseek/deepseek-v4.1-flash`) erzeugte in 17 Runden 1.455 Aktionen, darunter 510 Textbeiträge, und stand bei 18,4 von 20 Mio. Tokens. Die Konfiguration sieht in Summe rund 11 Textbeiträge je simulierter Stunde vor, gemessen wurden 32 bis 74. Im Median macht ein aktivierter Agent fünf Aktionen je Runde und Plattform.
+- **Entscheidung des Maintainers (05.10.2026):** Die Aktivität wird begrenzt und an echter Nutzung ausgerichtet. Vor der Umsetzung müssen Belege vorliegen; jeder Zielwert muss auf eine Quelle zurückführbar sein.
+- **Stand:** Belegsammlung und Bestandsaufnahme der Mechanik liegen vor bzw. laufen; der Vorschlag der Zielwerte geht vor der Umsetzung an den Maintainer. Bis dahin wird am Aktivitätsmodell nichts geändert.
+
+### Schritt 2.5 ff.
+
+Werden nach den Schritten 2.2 und 2.4 ausgearbeitet.
 
 ### Abnahme Etappe 2 (führt der Lead aus, nach Freigabe des Laufs durch den Maintainer)
 
