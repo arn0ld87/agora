@@ -492,6 +492,20 @@ def _host_is(host: Optional[str], domain: str) -> bool:
         return False
     return host == domain or host.endswith("." + domain)
 
+def is_openrouter_base_url(base_url: Optional[str]) -> bool:
+    """True wenn *base_url* auf OpenRouter zeigt (``openrouter.ai`` oder Subdomain).
+
+    Teil der zentralen Detection in diesem Modul, keine zweite Heuristik:
+    ``mode="http"`` liefert fuer OpenRouter weiter ``"unknown"`` (generischer
+    OpenAI-kompatibler Adapter, unveraendertes Tool-/Preis-Verhalten). Dieses
+    Praedikat beantwortet nur die Zusatzfrage, ob der Proxy den Top-Level-
+    Parameter ``reasoning_effort`` versteht. Hostname-basiert wie die uebrigen
+    Zweige (CodeQL #1669): ``openrouter.ai.attacker.test`` matcht nicht.
+    """
+    host, _port = _parse_host_port((base_url or "").lower())
+    return _host_is(host, "openrouter.ai")
+
+
 def _is_bedrock_host(host: str) -> bool:
     """Praezise Bedrock-Host-Erkennung, Spiegel des MiniMax-Zweigs.
 

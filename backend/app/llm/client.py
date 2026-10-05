@@ -557,6 +557,7 @@ class LLMClient:
             model=self.model or "",
             effort=getattr(self, "reasoning_effort", None),
             force_no_thinking=force_no_thinking,
+            base_url=getattr(self, "base_url", None),
         )
 
     def _is_minimax(self) -> bool:

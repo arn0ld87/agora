@@ -339,6 +339,7 @@ def build_camel_completion_params(
     *,
     model: str,
     completion_max_tokens: int,
+    base_url: str | None = None,
 ) -> dict[str, Any]:
     """Baut den Token-Limit-Block für ``ModelFactory.create()``.
 
@@ -347,12 +348,24 @@ def build_camel_completion_params(
     (nicht das ursprüngliche GPT-5.0) wird zusätzlich
     ``reasoning_effort: "none"`` gesetzt, sonst schlagen Function-Tool-
     Calls mit 400 fehl (siehe ``supports_reasoning_effort_none``).
+
+    Zeigt *base_url* auf OpenRouter, wird ``reasoning_effort: "none"`` fuer
+    jedes Modell gesetzt: der Proxy bildet den Parameter auf das Reasoning
+    des Zielmodells ab, ohne ihn denken Reasoning-Modelle bei jeder
+    Agentenaktion mit Anbieter-Default.
     """
     key = "max_completion_tokens" if uses_max_completion_tokens(model) else "max_tokens"
     params: dict[str, Any] = {key: completion_max_tokens}
-    if supports_reasoning_effort_none(model):
+    if supports_reasoning_effort_none(model) or _is_openrouter_route(base_url):
         params["reasoning_effort"] = "none"
     return params
+
+
+def _is_openrouter_route(base_url: str | None) -> bool:
+    """True wenn *base_url* auf OpenRouter zeigt (zentrale Detection, lazy Import)."""
+    from app.llm.providers.registry import is_openrouter_base_url
+
+    return is_openrouter_base_url(base_url)
 
 
 def build_camel_extra_body(
