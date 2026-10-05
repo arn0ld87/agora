@@ -144,10 +144,30 @@ const appliedContestedQuestion = computed(() => {
 })
 
 // ----- Aktivitätsmodus (#1779) -----
+// Gesendet wird der Modus nur nach einer ausdrücklichen Wahl. Ohne sie
+// entscheidet der Server (Einstellung AGORA_SIM_ACTIVITY_MODE, Standard
+// realistic), und eine bereits vorbereitete Simulation wird nicht allein
+// wegen der Vorauswahl erneut vorbereitet: ein ausdrücklich übergebener,
+// abweichender Modus hebt den Kurzschluss `already_prepared` auf.
 const activityMode = ref('realistic')
+const activityModeChosen = ref(false)
+
+function chooseActivityMode(mode) {
+  activityMode.value = mode
+  activityModeChosen.value = true
+}
 
 // Wirksamer Modus aus der erzeugten Konfiguration. Ältere Simulationen tragen
 // kein `time_config.activity_model` und zeigen den Hinweis auf das bisherige Modell.
+watch(
+  () => simulationConfig.value?.time_config?.activity_model?.mode,
+  (mode) => {
+    const parsed = ActivityModeSchema.safeParse(mode)
+    if (parsed.success && !activityModeChosen.value) activityMode.value = parsed.data
+  },
+  { immediate: true },
+)
+
 const appliedActivityMode = computed(() => {
   const timeConfig = simulationConfig.value?.time_config
   if (!timeConfig) return null
@@ -235,7 +255,7 @@ async function triggerPrepare() {
     simulation_id: props.simulationId,
     use_llm_for_profiles: true,
     language: language.value,
-    activity_mode: activityMode.value,
+    ...(activityModeChosen.value ? { activity_mode: activityMode.value } : {}),
   }
   if (selectedModelOverride.value !== null) {
     payload.ai_model_ref = { ...selectedModelOverride.value, source: 'explicit' }
@@ -331,7 +351,11 @@ onMounted(async () => {
         </p>
 
         <!-- Aktivitätsmodus (#1779) -->
-        <ActivityModeField v-model="activityMode" :is-preparing="isPreparing" />
+        <ActivityModeField
+          :model-value="activityMode"
+          :is-preparing="isPreparing"
+          @update:model-value="chooseActivityMode"
+        />
 
         <!-- Agent cap (optional) -->
         <AgentCapControl

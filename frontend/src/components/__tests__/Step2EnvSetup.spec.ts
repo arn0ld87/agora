@@ -397,7 +397,7 @@ describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () =>
     wrapper.unmount()
   })
 
-  it('Aktivitaetsmodus (#1779): Vorauswahl realistic, Wechsel auf active wird gesendet', async () => {
+  it('Aktivitaetsmodus (#1779): ohne ausdrueckliche Wahl wird kein Modus gesendet, danach der gewaehlte', async () => {
     const wrapper = mount(Step2EnvSetup, {
       props: { simulationId: 'sim-1779-01', projectData: undefined, graphData: undefined, systemLogs: [] },
       global: globalConfigModelRef,
@@ -406,12 +406,19 @@ describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () =>
     const realistic = wrapper.find('input[type="radio"][value="realistic"]')
     expect((realistic.element as HTMLInputElement).checked).toBe(true)
 
+    // Die Vorauswahl allein ist keine Vorgabe: der Server entscheidet, und eine
+    // bereits vorbereitete Simulation wird nicht ihretwegen erneut vorbereitet.
     await triggerPrepare(wrapper)
-    expect(lastPayload().activity_mode).toBe('realistic')
+    expect(lastPayload()).not.toHaveProperty('activity_mode')
 
     await wrapper.find('input[type="radio"][value="active"]').setValue(true)
     await triggerPrepare(wrapper)
     expect(lastPayload().activity_mode).toBe('active')
+
+    // Eine ausdrueckliche Rueckkehr zu realistic ist ebenfalls eine Vorgabe.
+    await wrapper.find('input[type="radio"][value="realistic"]').setValue(true)
+    await triggerPrepare(wrapper)
+    expect(lastPayload().activity_mode).toBe('realistic')
     wrapper.unmount()
   })
 
