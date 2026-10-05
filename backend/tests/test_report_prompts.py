@@ -60,6 +60,10 @@ PROMPT_SPECS = [
     ]),
     ("REACT_UNUSED_TOOLS_HINT", ["{unused_list}"]),
     ("REACT_FORCE_FINAL_MSG", []),
+    ("REACT_PREFETCH_EMPTY_NOTE", [
+        "{tool_calls_count}",
+        "{max_tool_calls}",
+    ]),
     ("REACT_PREFETCHED_POSTS_TEMPLATE", [
         "{result}",
         "{tool_calls_count}",
@@ -349,3 +353,26 @@ def test_section_prompt_nennt_die_beitragssuche_fuer_oeffentliche_aussagen():
     start = template.index('<evidence_gating priority="hard">')
     end = template.index("</evidence_gating>", start)
     assert "search_simulation_actions" not in template[start:end]
+
+
+def test_section_prompt_asks_for_public_statements_in_running_text():
+    """Issue #1778: Zitierte Beiträge standen nur als Zitatblock im Bericht,
+    und ein Zitatblock ist kein Claim. Die Anweisung steht an der Zeile des
+    Werkzeugs ``search_simulation_actions`` — außerhalb des harten Blocks
+    ``evidence_gating``, der unverändert bleibt."""
+    template = report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE
+    instruction = (
+        "Report what was said publicly as plain statements in your running text and "
+        "anchor them with the Evidence ID of the post; a quote block illustrates such "
+        "a statement, it does not replace it."
+    )
+
+    tool_line = next(
+        line for line in template.splitlines() if line.startswith("- search_simulation_actions:")
+    )
+    assert tool_line.endswith(instruction)
+    gating_block = template[
+        template.index("<evidence_gating") : template.index("</evidence_gating>")
+    ]
+    assert "plain statements" not in gating_block
+    assert template.index(instruction) > template.index("</evidence_gating>")

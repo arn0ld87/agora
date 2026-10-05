@@ -33,6 +33,14 @@ of the same standing as interview answers.
 Tool calls used so far: {tool_calls_count}/{max_tool_calls}.
 ═══════════════════════════════════════════════════════════════"""
 
+#: Die Vorab-Suche fand keine Beiträge, hat aber Werkzeugaufrufe verbraucht.
+#: Der erste Prompt weist das verbleibende Budget aus (Review PR #1785).
+REACT_PREFETCH_EMPTY_NOTE = """\
+
+
+[Notice] The system searched the simulation posts for this section and found none.
+Tool calls used so far: {tool_calls_count}/{max_tool_calls}."""
+
 REACT_INSUFFICIENT_TOOLS_MSG = (
     "[Notice] Coverage gap: the evidence available so far ({tool_calls_count} tool calls) "
     "does not cover the statements of your draft. "

@@ -1129,6 +1129,13 @@ def _prefetch_into_prompt(
             tool_calls_count=prefetch_calls,
             max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
         )
+    elif prefetch_calls:
+        # Auch ohne Treffer sind die Aufrufe verbraucht; der Agent plant sonst
+        # mit fünf statt mit dem verbleibenden Budget.
+        messages[-1]["content"] += agent.REACT_PREFETCH_EMPTY_NOTE.format(
+            tool_calls_count=prefetch_calls,
+            max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
+        )
     return prefetch_calls
 
 

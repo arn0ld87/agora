@@ -12,7 +12,10 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 from app.services.report_agent.workflow import generate_section_react
-from app.services.report_prompts import REACT_PREFETCHED_POSTS_TEMPLATE
+from app.services.report_prompts import (
+    REACT_PREFETCH_EMPTY_NOTE,
+    REACT_PREFETCHED_POSTS_TEMPLATE,
+)
 
 POSTS = (
     'Simulation posts for "Stakeholder-Positionen": showing 1 of 1 matching posts '
@@ -56,6 +59,7 @@ def _make_agent(*, tools: Any, post_result: str = POSTS) -> MagicMock:
     )
     agent.REACT_FORCE_FINAL_MSG = "Force final"
     agent.REACT_PREFETCHED_POSTS_TEMPLATE = REACT_PREFETCHED_POSTS_TEMPLATE
+    agent.REACT_PREFETCH_EMPTY_NOTE = REACT_PREFETCH_EMPTY_NOTE
     agent.MAX_TOOL_CALLS_PER_SECTION = 5
     agent.report_logger = None
     agent.simulation_requirement = "Schließung Kreißsaal"
@@ -136,6 +140,8 @@ def test_searches_without_posts_show_no_block_but_count_against_the_limit() -> N
     _run(agent, [_tool_turn("panorama_search", "q0"), _final_turn()])
 
     assert "search_simulation_actions Returned" not in _first_user_prompt(agent)
+    # Der Agent erfährt das verbrauchte Budget auch ohne Treffer.
+    assert "Tool calls used so far: 2/5" in _first_user_prompt(agent)
     # Abschnittssuche und Rückfall auf die Fragestellung: zwei Aufrufe.
     assert agent._execute_tool.call_count == 3
     last_messages = agent.llm.chat_with_tools.call_args_list[-1].kwargs["messages"]
