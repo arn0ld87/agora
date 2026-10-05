@@ -33,6 +33,10 @@ _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
+from app.services.simulation_agent_identity import (  # noqa: E402
+    align_config_to_profiles,
+    load_simulation_profiles,
+)
 from app.contracts.simulation_liveness_contract import (  # noqa: E402
     PlatformLiveness,
     SimulationLivenessReport,
@@ -514,6 +518,11 @@ def _combine_overall(
 
 def compute_report(run_dir: Path, seed_path: Path | None = None) -> SimulationLivenessReport:
     config = _read_json(run_dir / "simulation_config.json")
+    # Issue #1778: das Aktionsprotokoll zählt Agenten nach OASIS-Position; die
+    # Zuordnung Name → Nummer muss dieselbe Zählung verwenden.
+    config, _agents_without_profile = align_config_to_profiles(
+        config, load_simulation_profiles(str(run_dir))
+    )
     run_state = _read_json(run_dir / "run_state.json")
     name_to_id = _agent_name_to_id(config)
     agent_count = len(config.get("agent_configs", []))

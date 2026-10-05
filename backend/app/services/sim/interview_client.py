@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from ...utils.logger import get_logger
 from ...utils.path_safety import safe_join_within_root, validate_path_id
 from ..artifact_store import resolve_default_store
+from ..simulation_agent_identity import align_config_to_profiles, load_simulation_profiles
 from ..simulation_ipc import SimulationIPCClient
 from .interview_direct import (
     direct_interviews_available,
@@ -410,14 +411,23 @@ def interview_all_agents(
     if not config:
         raise ValueError(f"Simulation config is unreadable: {simulation_id}")
 
+    # Issue #1778: OASIS adressiert Agenten über die Position ihres Profils.
+    # Die Konfiguration wird darauf umgeschrieben; ein Agent ohne Profil
+    # existiert in der Simulation nicht und wird nicht befragt.
+    profiles = load_simulation_profiles(sim_dir)
+    config, agents_without_profile = align_config_to_profiles(config, profiles)
     agent_configs = config.get("agent_configs", [])
     if not agent_configs:
         raise ValueError(f"No agents in simulation config: {simulation_id}")
 
+    # Agenten ohne Profil tragen nach der Angleichung eine Nummer hinter dem
+    # letzten Profil.
+    first_missing_id = len(profiles) if agents_without_profile else None
     interviews = [
         {"agent_id": ac.get("agent_id"), "prompt": prompt}
         for ac in agent_configs
         if ac.get("agent_id") is not None
+        and (first_missing_id is None or ac.get("agent_id") < first_missing_id)
     ]
 
     logger.info(

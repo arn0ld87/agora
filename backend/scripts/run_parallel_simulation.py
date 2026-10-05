@@ -200,6 +200,11 @@ if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
 from app.config import Config
 from app.contracts.persona_contract import VOICE_REGISTER_VALUES
 # Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
+# Zuordnung Konfigurations-Agent → OASIS-Position (#1778).
+from app.services.simulation_agent_identity import (
+    align_config_to_profiles,
+    load_simulation_profiles,
+)
 from app.services.simulation_activity_policy import (
     TWITTER_FOLLOWING_POST_COUNT,
     TWITTER_MAX_REC_POST_LEN,
@@ -1109,6 +1114,24 @@ def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration file"""
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
+
+
+def load_aligned_config(config_path: str) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Lädt die Konfiguration und schreibt sie auf OASIS-Positionen um (#1778).
+
+    OASIS nummeriert die Agenten nach der Position ihres Profils in der
+    Profildatei. Fehlt ein Profil, rücken alle folgenden Agenten vor, und ein
+    Zugriff mit der OASIS-Nummer in ``agent_configs`` trifft den falschen
+    Agenten: falscher Name im Aktionsprotokoll, fremde Aktivitäts- und
+    Haltungswerte, Startbeitrag unter fremdem Namen. Alle Zugriffe dieses
+    Runners auf ``agent_configs`` und ``initial_posts`` laufen deshalb über die
+    hier umgeschriebene Konfiguration.
+
+    Rückgabe: ``(Konfiguration, Agenten ohne Profil)``.
+    """
+    config = load_config(config_path)
+    profiles = load_simulation_profiles(os.path.dirname(config_path) or ".")
+    return align_config_to_profiles(config, profiles)
 
 
 # Trace-Lese-/Anreicherungslogik (#1713): gemeinsamer Helfer fuer den
@@ -2231,7 +2254,7 @@ async def main():
         print(f"Error: Configuration file does not exist: {args.config}")
         sys.exit(1)
     
-    config = load_config(args.config)
+    config, agents_without_profile = load_aligned_config(args.config)
     simulation_dir = os.path.dirname(args.config) or "."
     # Issue #1160 F: Der Seed steht vor jeder Zufallsentscheidung des Laufs —
     # ``get_active_agents_for_round`` wuerfelt sonst aus dem globalen,
@@ -2254,6 +2277,12 @@ async def main():
     log_manager.info("OASIS dual-platform parallel simulation")
     log_manager.info(f"Configuration file: {args.config}")
     log_manager.info(f"Simulation ID: {config.get('simulation_id', 'unknown')}")
+    if agents_without_profile:
+        # Diese Agenten existieren in OASIS nicht und handeln im Lauf nie.
+        log_manager.info(
+            f"Agents without profile (never act): {len(agents_without_profile)} - "
+            + ", ".join(str(entry.get("entity_name")) for entry in agents_without_profile)
+        )
     # Protokolliert, damit ein Lauf gezielt wiederholbar ist: der Wert gehoert
     # als ``random_seed`` in die simulation_config.json des Re-Runs (#1160 F).
     log_manager.info(f"Random seed: {simulation_seed}")

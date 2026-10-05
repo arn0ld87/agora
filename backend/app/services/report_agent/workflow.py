@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -20,6 +21,7 @@ from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ...utils.provider_message import redacted_provider_message as _redacted_provider_message
 from ..artifact_store import resolve_default_store
+from ..simulation_agent_identity import align_config_to_profiles, load_simulation_profiles
 from ..report_intent import ReportIntent, detect_report_intent
 from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
@@ -175,6 +177,17 @@ def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, A
         )
         if not isinstance(config, dict):
             return None
+        # Issue #1778: Das Aktionsprotokoll zählt die Agenten nach ihrer
+        # Position in der Profildatei (so nummeriert OASIS). Die
+        # Konfiguration wird darauf umgeschrieben, sonst bekäme eine Stimme
+        # Namen und Starthaltung eines anderen Agenten, sobald ein Profil
+        # fehlt.
+        config, _agents_without_profile = align_config_to_profiles(
+            config,
+            load_simulation_profiles(
+                os.path.join(SimulationRunner.RUN_STATE_DIR, agent.simulation_id)
+            ),
+        )
         # Ein Resume derselben ``report_id`` übernimmt die gespeicherte
         # Analyse, statt alle Beiträge erneut zu klassifizieren (Budget des
         # Resumes) — aber nur, wenn sie zur aktuellen Streitfrage gehört.
