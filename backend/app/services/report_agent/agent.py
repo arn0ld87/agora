@@ -30,7 +30,7 @@ from .evidence import (
 from .action_search import ActionSearchResult, build_action_evidence_item
 from .data_gap import ClaimGapKind, classify_claim_gap
 from .evidence_ledger import ledger_for
-from .evidence_candidates import EvidenceCandidatePool
+from .evidence_candidates import RESERVED_CANDIDATE_SLOTS, EvidenceCandidatePool
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
 from .search_dedup import (
@@ -889,7 +889,11 @@ class ReportAgent:
         # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
         pool = (
-            EvidenceCandidatePool(direct_items + global_items, embedder)
+            EvidenceCandidatePool(
+                direct_items + global_items,
+                embedder,
+                reserved_slots=RESERVED_CANDIDATE_SLOTS,
+            )
             if embedder is not None
             else None
         )
@@ -933,6 +937,7 @@ class ReportAgent:
                         threshold=0.55,
                         top_k=5,
                         judge=self._try_get_entailment_judge(),
+                        reserved_slots=RESERVED_CANDIDATE_SLOTS,
                     )
                     embedder_ok = True
                 except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
