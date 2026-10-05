@@ -1,11 +1,21 @@
 {
-  "pricing_version": "2026-07",
+  "pricing_version": "2026-10",
   "pricing_source": "backend/app/data/model_pricing.json (statische, manuell gepflegte Richtpreise; keine Preisgarantie)",
   "currency": "USD",
   "unit": "micros_per_million_tokens",
   "note": "Richtpreise fuer Schaetzungen (Issue #764). Werte sind unverbindliche Naeherungen oeffentlicher Listenpreise und werden als Schaetzung gekennzeichnet. Lokale Modelle werden nicht hier, sondern ueber transport=local als 'free' klassifiziert.",
   "providers": {
     "openai": [
+      { "match": "gpt-6-astra", "input": 10000000, "output": 50000000 },
+      { "match": "gpt-6.1-sol", "input": 2000000, "output": 10000000 },
+      { "match": "gpt-6-sol", "input": 2000000, "output": 10000000 },
+      { "match": "gpt-6-luna", "input": 100000, "output": 500000 },
+      { "match": "gpt-5.6-sol", "input": 4000000, "output": 20000000 },
+      { "match": "gpt-5.6-terra", "input": 2000000, "output": 12000000 },
+      { "match": "gpt-5.6-luna", "input": 200000, "output": 1200000 },
+      { "match": "gpt-5.5", "input": 5000000, "output": 30000000 },
+      { "match": "gpt-5.3-codex", "input": 1750000, "output": 14000000 },
+      { "match": "gpt-5.2", "input": 1750000, "output": 14000000 },
       { "match": "gpt-5-mini", "input": 250000, "output": 2000000 },
       { "match": "gpt-5", "input": 1250000, "output": 10000000 },
       { "match": "gpt-4.1-mini", "input": 400000, "output": 1600000 },
