@@ -267,16 +267,56 @@ def resolve_agent_actor_class(agent_config: Mapping[str, Any]) -> ActorClass:
 # --- Auswahl der aktiven Agenten ---------------------------------------------------------
 
 
-def activation_probability(model: ActivityModelConfig, actor_class: ActorClass, hour: int) -> float:
-    """Wahrscheinlichkeit, in dieser Stunde aktiv zu sein.
+MINUTES_PER_HOUR = 60
 
-    ``p = min(1, Tagesrate(Klasse) * Stundengewicht(Stunde))``. Eine Runde ist
-    eine Stunde; das Stundengewicht ist der Anteil der Tagesrate, der auf die
-    Stunde fällt. Über 24 Stunden ergibt die Summe der Wahrscheinlichkeiten
-    die Tagesrate (solange kein ``min`` greift).
+
+def _round_minutes(minutes_per_round: Any) -> float:
+    """Rundenlänge in Minuten; 60 bei unbrauchbarem Wert."""
+    if isinstance(minutes_per_round, bool) or not isinstance(minutes_per_round, (int, float)):
+        return float(MINUTES_PER_HOUR)
+    if minutes_per_round <= 0:
+        return float(MINUTES_PER_HOUR)
+    return float(minutes_per_round)
+
+
+def _round_weight(hourly_weights: Sequence[float], hour: int, minutes_per_round: Any) -> float:
+    """Anteil der Tagesrate, der auf eine Runde ab ``hour`` fällt.
+
+    Die Runde deckt ``minutes_per_round`` Minuten ab dem Beginn von ``hour``:
+    eine halbe Stunde trägt das halbe Stundengewicht, zwei Stunden tragen die
+    Gewichte beider Stunden. Für Rundenlängen, die 60 teilen oder ein Vielfaches
+    von 60 sind, summieren sich die Runden eines Tages exakt zu 1; dazwischen
+    (z. B. 90 Minuten) ist es eine Näherung, weil der Runner nur die Stunde
+    der Runde kennt, nicht ihre Startminute.
+    """
+    remaining = _round_minutes(minutes_per_round)
+    total = 0.0
+    offset = 0
+    while remaining > 0:
+        covered = min(float(MINUTES_PER_HOUR), remaining)
+        total += hourly_weights[(hour + offset) % HOURS_PER_DAY] * covered / MINUTES_PER_HOUR
+        remaining -= covered
+        offset += 1
+    return total
+
+
+def activation_probability(
+    model: ActivityModelConfig,
+    actor_class: ActorClass,
+    hour: int,
+    minutes_per_round: Any = MINUTES_PER_HOUR,
+) -> float:
+    """Wahrscheinlichkeit, in dieser Runde aktiv zu sein.
+
+    ``p = min(1, Tagesrate(Klasse) * Rundengewicht)``. Das Rundengewicht ist der
+    Anteil der Tagesrate, der auf die Runde fällt (siehe ``_round_weight``).
+    Über einen simulierten Tag ergibt die Summe der Wahrscheinlichkeiten die
+    Tagesrate, solange kein ``min`` greift. ``minutes_per_round`` liegt laut
+    Konfigurationsschema zwischen 30 und 120; ohne die Gewichtung verdoppelte
+    oder halbierte die Rundenlänge die Tagesrate.
     """
     rate = model.text_posts_per_day[actor_class]
-    return min(1.0, rate * model.hourly_weights[hour % HOURS_PER_DAY])
+    return min(1.0, rate * _round_weight(model.hourly_weights, hour, minutes_per_round))
 
 
 def select_active_agent_ids_by_rate(
@@ -284,6 +324,7 @@ def select_active_agent_ids_by_rate(
     model: ActivityModelConfig,
     current_hour: int,
     rng: _RandomLike,
+    minutes_per_round: Any = MINUTES_PER_HOUR,
 ) -> List[int]:
     """Agent-IDs, die in dieser Runde aktiv werden: je Agent eine Ziehung gegen ``p``.
 
@@ -292,7 +333,9 @@ def select_active_agent_ids_by_rate(
     """
     active: List[int] = []
     for cfg in agent_configs:
-        probability = activation_probability(model, resolve_agent_actor_class(cfg), current_hour)
+        probability = activation_probability(
+            model, resolve_agent_actor_class(cfg), current_hour, minutes_per_round
+        )
         if rng.random() < probability:
             active.append(cfg.get("agent_id", 0))
     return active
@@ -318,6 +361,7 @@ def select_active_agent_ids_for_platform(
     *,
     platform: str,
     platforms: Sequence[str],
+    minutes_per_round: Any = MINUTES_PER_HOUR,
 ) -> List[int]:
     """Aktive Agenten einer Plattform bei einer Ziehung je Runde für alle Plattformen.
 
@@ -333,7 +377,11 @@ def select_active_agent_ids_for_platform(
     if platform not in ordered:
         raise ValueError(f"Plattform {platform!r} nicht in den aktivierten Plattformen {ordered}")
     active = select_active_agent_ids_by_rate(
-        agent_configs, model, current_hour, activity_round_rng(seed, round_num, "draw")
+        agent_configs,
+        model,
+        current_hour,
+        activity_round_rng(seed, round_num, "draw"),
+        minutes_per_round,
     )
     if len(ordered) == 1:
         return active
@@ -375,6 +423,7 @@ def select_round_agent_ids(
         seed,
         platform=platform,
         platforms=platforms,
+        minutes_per_round=time_config.get("minutes_per_round", MINUTES_PER_HOUR),
     )
 
 

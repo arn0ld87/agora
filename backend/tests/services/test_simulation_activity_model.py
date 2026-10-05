@@ -189,6 +189,48 @@ class TestExpectedRate:
                 total = sum(sam.activation_probability(model, actor_class, hour) for hour in range(24))
                 assert total == pytest.approx(model.text_posts_per_day[actor_class])
 
+    @pytest.mark.parametrize("minutes_per_round", [30, 60, 120])
+    def test_daily_rate_does_not_depend_on_the_round_length(self, minutes_per_round: int) -> None:
+        """Regression: ohne Skalierung verdoppelte eine 30-Minuten-Runde die Tagesrate."""
+        rounds_per_day = 24 * 60 // minutes_per_round
+        for mode in ActivityMode:
+            model = _model(mode)
+            for actor_class in ActorClass:
+                total = sum(
+                    sam.activation_probability(
+                        model,
+                        actor_class,
+                        (round_num * minutes_per_round) // 60,
+                        minutes_per_round,
+                    )
+                    for round_num in range(rounds_per_day)
+                )
+                assert total == pytest.approx(model.text_posts_per_day[actor_class])
+
+    @pytest.mark.parametrize("bad", [None, 0, -30, "60", True])
+    def test_unusable_round_length_counts_as_one_hour(self, bad: object) -> None:
+        model = _model()
+        assert sam.activation_probability(
+            model, ActorClass.POLITICIAN, 20, bad
+        ) == sam.activation_probability(model, ActorClass.POLITICIAN, 20)
+
+    def test_round_selection_reads_the_round_length_from_the_time_config(self) -> None:
+        agents = [{"agent_id": i, "actor_class": "media"} for i in range(400)]
+        model = _model(ActivityMode.ACTIVE).model_dump(mode="json")
+
+        def count(minutes: int) -> int:
+            config = {
+                "time_config": {"minutes_per_round": minutes, "activity_model": model},
+                "agent_configs": agents,
+            }
+            return len(
+                sam.select_round_agent_ids(
+                    config, 12, 3, seed=7, platform="twitter", platforms=["twitter"]
+                )
+            )
+
+        assert count(30) < count(60) < count(120)
+
     def test_probability_is_capped_at_one(self) -> None:
         model = _model().model_copy(update={"text_posts_per_day": {item: 100.0 for item in ActorClass}})
         assert sam.activation_probability(model, ActorClass.MEDIA, 21) == 1.0
