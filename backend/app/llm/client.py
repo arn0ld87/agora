@@ -557,7 +557,6 @@ class LLMClient:
             model=self.model or "",
             effort=getattr(self, "reasoning_effort", None),
             force_no_thinking=force_no_thinking,
-            base_url=getattr(self, "base_url", None),
         )
 
     def _is_minimax(self) -> bool:
@@ -674,7 +673,9 @@ class LLMClient:
 
     def _detect_provider(
         self, *, model: Optional[str] = None
-    ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "anthropic", "unknown"]:
+    ) -> Literal[
+        "ollama", "cloud", "minimax", "openai", "google", "anthropic", "openrouter", "unknown"
+    ]:
         """
         Identify the LLM provider associated with the configured endpoint and model.
 
@@ -687,7 +688,7 @@ class LLMClient:
 
         Returns:
             str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
-                ``"openai"``, ``"google"``, ``"anthropic"``, or ``"unknown"``.
+                ``"openai"``, ``"google"``, ``"anthropic"``, ``"openrouter"``, or ``"unknown"``.
         """
         # codex_cli wird nie aus einer base_url erraten (verboten laut
         # AGENTS.md: keine Detection-Heuristik neben registry.py::

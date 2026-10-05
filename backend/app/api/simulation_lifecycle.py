@@ -35,7 +35,7 @@ def _detect_default_provider() -> str:
     Delegiert an die Provider-Detection-SSoT
     ``app.llm.providers.registry.detect_provider`` im ``mode="http"``
     (Issue #669) statt eine lokale Heuristik zu pflegen. Vokabular:
-    ``ollama|cloud|minimax|openai|google|unknown``.
+    ``ollama|cloud|minimax|openai|google|bedrock|anthropic|openrouter|unknown``.
     """
     model_name = (Config.LLM_MODEL_NAME or '').strip()
     base_url = (Config.LLM_BASE_URL or '').strip()

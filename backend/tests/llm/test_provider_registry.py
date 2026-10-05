@@ -38,6 +38,9 @@ HTTP_CASES = [
     ),
     ("http://localhost:11434", "gemini-2.5-pro", "ollama"),  # Hybrid: Port gewinnt
     ("http://some-other-host:8080/v1", "some-model", "unknown"),
+    ("https://openrouter.ai/api/v1", "deepseek/deepseek-v4.1-flash", "openrouter"),
+    ("https://openrouter.ai/api/v1", "vendor/model:cloud", "openrouter"),
+    ("https://openrouter.ai.attacker.test/v1", "some-model", "unknown"),
     ("", "", "unknown"),
     (None, None, "unknown"),
     # Issue #1669 (CodeQL #390) — vorher Substring-Match ("11434" in base),

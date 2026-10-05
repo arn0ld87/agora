@@ -356,16 +356,16 @@ def build_camel_completion_params(
     """
     key = "max_completion_tokens" if uses_max_completion_tokens(model) else "max_tokens"
     params: dict[str, Any] = {key: completion_max_tokens}
-    if supports_reasoning_effort_none(model) or _is_openrouter_route(base_url):
+    if supports_reasoning_effort_none(model) or _is_openrouter_route(model, base_url):
         params["reasoning_effort"] = "none"
     return params
 
 
-def _is_openrouter_route(base_url: str | None) -> bool:
-    """True wenn *base_url* auf OpenRouter zeigt (zentrale Detection, lazy Import)."""
-    from app.llm.providers.registry import is_openrouter_base_url
+def _is_openrouter_route(model: str, base_url: str | None) -> bool:
+    """True wenn die Route laut zentraler Detection auf OpenRouter zeigt."""
+    from app.llm.providers.registry import detect_provider
 
-    return is_openrouter_base_url(base_url)
+    return detect_provider(base_url, model, mode="http") == "openrouter"
 
 
 def build_camel_extra_body(

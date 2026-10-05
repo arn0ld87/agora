@@ -23,7 +23,6 @@ Zwei Rollen koexistieren in diesem Modul, klar getrennt:
 from typing import Any, Dict, Optional
 
 from app.llm import model_capabilities as _model_capabilities
-from app.llm.providers.registry import is_openrouter_base_url as _is_openrouter_base_url
 from app.llm.providers.base import (
     CompletionTokenParam,
     ProviderAdapter,
@@ -184,7 +183,6 @@ def reasoning_effort_kwargs(
     model: str,
     effort: Optional[str],
     force_no_thinking: bool = False,
-    base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Top-level ``reasoning_effort`` fuer OpenAI-Reasoning-Modelle (#1738).
 
@@ -201,8 +199,7 @@ def reasoning_effort_kwargs(
     kompatible Proxies und Nicht-Reasoning-Modelle (gpt-4.1, gpt-4o) bekommen
     den Parameter nicht. ``force_no_thinking`` erzwingt ``"none"``.
 
-    Ausnahme OpenRouter (*base_url*, erkannt ueber
-    ``registry.py::is_openrouter_base_url``): der Proxy nimmt
+    Ausnahme OpenRouter (Detection ``"openrouter"``): der Proxy nimmt
     ``reasoning_effort`` fuer jedes Modell an und bildet ihn auf das
     Reasoning des Zielmodells ab. Ohne den Parameter denken Modelle wie
     ``deepseek/deepseek-v4.1-flash`` bei jedem Aufruf mit Anbieter-Default;
@@ -213,7 +210,7 @@ def reasoning_effort_kwargs(
     Returns:
         ``{"reasoning_effort": <wert>}`` oder ein leeres Dict.
     """
-    if provider == "unknown" and _is_openrouter_base_url(base_url):
+    if provider == "openrouter":
         if force_no_thinking:
             return {"reasoning_effort": "none"}
         return {"reasoning_effort": effort or "none"}
