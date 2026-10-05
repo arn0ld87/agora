@@ -95,3 +95,16 @@ class TestBundledPricingData:
         assert reg.resolve("openai", "gpt-4o").status == "priced"
         assert reg.resolve("google", "gemini-2.5-flash").status == "priced"
         assert reg.resolve("ollama", "qwen3:8b", "http://localhost:11434").status == "free"
+
+    def test_bundled_file_prices_gpt6_family(self):
+        """Regression: ``gpt-6-luna`` war ohne Richtpreis, Preflight meldete ``unknown``."""
+        reg = PricingRegistry()
+        luna = reg.resolve("openai", "gpt-6-luna")
+        assert luna.status == "priced"
+        assert (luna.input_per_mtok_micros, luna.output_per_mtok_micros) == (100_000, 500_000)
+        # ``gpt-6.1-sol`` und ``gpt-6-sol`` sind getrennte Einträge, kein gemeinsamer Präfix.
+        assert reg.resolve("openai", "gpt-6.1-sol").input_per_mtok_micros == 2_000_000
+        assert reg.resolve("openai", "gpt-6-sol").output_per_mtok_micros == 10_000_000
+        # Der kürzere Präfix ``gpt-5`` darf die neueren 5.x-Modelle nicht mehr bepreisen.
+        assert reg.resolve("openai", "gpt-5.6-luna").input_per_mtok_micros == 200_000
+        assert reg.resolve("openai", "gpt-5.5").output_per_mtok_micros == 30_000_000
