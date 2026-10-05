@@ -722,10 +722,14 @@ class LLMClient:
             if temperature is not None:
                 extra["temperature"] = temperature
 
+            # ``openrouter`` ist ein Detection-Wert, keine Verbindungsart im
+            # Vertrag ``ProviderType``; das Ereignis fuehrt die Route wie
+            # bisher als ``unknown``.
+            detected = self._detect_provider()
             event = ModelActiveEvent(
                 model=self.model or "unknown",
                 context=context,
-                provider=self._detect_provider(),
+                provider="unknown" if detected == "openrouter" else detected,
                 ts=_time_mod.time(),
                 extra=extra if extra else None,
             )
