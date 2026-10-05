@@ -60,6 +60,11 @@ PROMPT_SPECS = [
     ]),
     ("REACT_UNUSED_TOOLS_HINT", ["{unused_list}"]),
     ("REACT_FORCE_FINAL_MSG", []),
+    ("REACT_PREFETCHED_POSTS_TEMPLATE", [
+        "{result}",
+        "{tool_calls_count}",
+        "{max_tool_calls}",
+    ]),
     # Chat
     ("CHAT_SYSTEM_PROMPT_TEMPLATE", [
         "{simulation_requirement}",

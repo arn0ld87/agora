@@ -999,6 +999,70 @@ def _safe_generate_section_react(
     return result
 
 
+#: Werkzeugname der Beitragssuche (Issue #1778).
+_POST_SEARCH_TOOL = "search_simulation_actions"
+
+
+def _prefetch_simulation_posts(
+    agent: Any,
+    section: Any,
+    section_index: int,
+    report_context: str,
+) -> Optional[str]:
+    """Führt die Beitragssuche einmal für den Abschnitt aus (Issue #1778).
+
+    Der Report-Agent rief ``search_simulation_actions`` im Abnahmelauf
+    ``report_89d20c11edc1`` in zwei von sieben Abschnitten auf. Ein Abschnitt
+    ohne Suche schreibt allein aus Interviews, und kein Claim kann sich dann
+    auf einen Simulationsbeitrag stützen. Die Suche läuft deshalb zu Beginn
+    jedes Abschnitts durch das System, über denselben Weg wie ein Aufruf des
+    Modells: Die Treffer werden als Belege ``agent_action`` registriert und
+    tragen ihre Evidence-ID.
+
+    Gibt den Trefferlistentext zurück oder ``None``, wenn das Werkzeug fehlt
+    oder die Simulation zu diesem Abschnitt keine Beiträge hat.
+    """
+    tools = getattr(agent, "tools", None)
+    if not isinstance(tools, dict) or _POST_SEARCH_TOOL not in tools:
+        return None
+    parameters = {
+        "query": " ".join(
+            part
+            for part in (
+                section.title,
+                getattr(section, "description", "") or "",
+                agent.simulation_requirement or "",
+            )
+            if isinstance(part, str) and part
+        ),
+        "limit": 12,
+    }
+    if agent.report_logger:
+        agent.report_logger.log_tool_call(
+            section_title=section.title,
+            section_index=section_index,
+            tool_name=_POST_SEARCH_TOOL,
+            parameters=parameters,
+            iteration=0,
+        )
+    result = agent._execute_tool(_POST_SEARCH_TOOL, parameters, report_context=report_context)
+    if agent.report_logger:
+        agent.report_logger.log_tool_result(
+            section_title=section.title,
+            section_index=section_index,
+            tool_name=_POST_SEARCH_TOOL,
+            result=result,
+            iteration=0,
+        )
+    # ``ActionSearchResult.to_text`` beginnt mit „Simulation posts"; ein
+    # Leertreffer und ein Werkzeugfehler sind kein Material für den Abschnitt.
+    if not isinstance(result, str) or not result.startswith("Simulation posts"):
+        return None
+    if "no matching posts" in result.splitlines()[0]:
+        return None
+    return result
+
+
 def generate_section_react(
     agent: Any,
     section,
@@ -1067,6 +1131,18 @@ def generate_section_react(
         "search_simulation_actions",
     }
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
+
+    # Issue #1778: die Beitragssuche läuft einmal vorab und zählt gegen das
+    # Werkzeuglimit des Abschnitts — das Limit selbst bleibt unverändert.
+    prefetched_posts = _prefetch_simulation_posts(agent, section, section_index, report_context)
+    if prefetched_posts is not None:
+        tool_calls_count += 1
+        used_tools.add(_POST_SEARCH_TOOL)
+        messages[-1]["content"] += agent.REACT_PREFETCHED_POSTS_TEMPLATE.format(
+            result=prefetched_posts,
+            tool_calls_count=tool_calls_count,
+            max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
+        )
 
     # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten
     # andere Casings/Werte einschleusen. Unbekannte Werte fallen auf den Default

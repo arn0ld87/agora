@@ -296,7 +296,7 @@ This section analyzes...
 - panorama_search: Wide-angle panoramic search, understand complete event view, timeline, and evolution process
 - quick_search: Quick verification of specific information points
 - interview_agents: Interview simulated agents, get first-person perspectives and real reactions from different roles
-- search_simulation_actions: Search the posts and comments the agents actually wrote during the simulation. Use it for what was said publicly and how the debate developed.
+- search_simulation_actions: Search the posts and comments the agents actually wrote during the simulation. Use it for what was said publicly and how the debate developed. Report what was said publicly as plain statements in your running text and anchor them with the Evidence ID of the post; a quote block illustrates such a statement, it does not replace it.
 - web_search (if listed above): Live web search for CURRENT, time-sensitive facts the graph cannot have (news, recent statistics, official statements). Use whenever the topic references real-world developments beyond the simulated document.
 - fetch_url (if listed above): Read a specific URL found via web_search when a snippet is not enough.
 

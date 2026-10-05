@@ -12,6 +12,27 @@ Called tools {tool_calls_count}/{max_tool_calls} times (Used: {used_tools_str}){
 - If more information is needed: Call a tool to continue retrieving
 ═══════════════════════════════════════════════════════════════"""
 
+#: Issue #1778: Die Beitragssuche läuft zu Beginn jedes Abschnitts einmal durch
+#: das System. Im Abnahmelauf ``report_89d20c11edc1`` rief der Report-Agent sie
+#: nur in zwei von sieben Abschnitten auf; 3,5 % des gelesenen Werkzeugtexts
+#: stammten aus Beiträgen, 59 % aus Interviews.
+REACT_PREFETCHED_POSTS_TEMPLATE = """\
+
+
+═══ Tool search_simulation_actions Returned (run by the system for this section) ═══
+{result}
+
+═══════════════════════════════════════════════════════════════
+These posts are what the agents wrote publicly during the simulation. They are evidence
+of the same standing as interview answers.
+- Report what was said publicly as plain statements in your running text (who argued
+  what, where positions met or diverged) and anchor each with its Evidence ID.
+- Do not confine posts to quote blocks: a quote block illustrates a statement, it does
+  not replace it.
+- Call search_simulation_actions with your own keywords to find further posts.
+This call counts as tool call {tool_calls_count}/{max_tool_calls}.
+═══════════════════════════════════════════════════════════════"""
+
 REACT_INSUFFICIENT_TOOLS_MSG = (
     "[Notice] Coverage gap: the evidence available so far ({tool_calls_count} tool calls) "
     "does not cover the statements of your draft. "
