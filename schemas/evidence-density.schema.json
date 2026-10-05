@@ -1,0 +1,120 @@
+{
+  "$id": "https://alexle135.de/schemas/evidence-density.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Z\u00e4hler und Quoten der Belegdichte eines Berichts.",
+  "properties": {
+    "action_support_ratio": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Support Ratio"
+    },
+    "claims_at_single_source_cap": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims At Single Source Cap",
+      "type": "integer"
+    },
+    "claims_multi_independent": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims Multi Independent",
+      "type": "integer"
+    },
+    "claims_multi_support": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims Multi Support",
+      "type": "integer"
+    },
+    "claims_single_support": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims Single Support",
+      "type": "integer"
+    },
+    "claims_total": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims Total",
+      "type": "integer"
+    },
+    "claims_with_action_support": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims With Action Support",
+      "type": "integer"
+    },
+    "claims_without_support": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Claims Without Support",
+      "type": "integer"
+    },
+    "multi_independent_ratio": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Multi Independent Ratio"
+    },
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "single_source_cap_ratio": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Single Source Cap Ratio"
+    },
+    "single_support_ratio": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Single Support Ratio"
+    },
+    "supporting_links_by_type": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Supporting Links By Type",
+      "type": "object"
+    }
+  },
+  "title": "EvidenceDensity",
+  "type": "object"
+}
