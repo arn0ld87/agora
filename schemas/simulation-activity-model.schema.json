@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "ActivityMode": {
+      "description": "Satz der Tagesraten, den eine Simulation verwendet.\n\nBeide Modi rechnen mit einer Stunde je Runde und demselben Stundenprofil;\nsie unterscheiden sich nur im Satz der Tagesraten.",
+      "enum": [
+        "realistic",
+        "active"
+      ],
+      "title": "ActivityMode",
+      "type": "string"
+    },
+    "ActorClass": {
+      "description": "Akteursklasse eines Agenten; sie bestimmt seine Tagesrate.",
+      "enum": [
+        "individual",
+        "politician",
+        "authority",
+        "organisation",
+        "media"
+      ],
+      "title": "ActorClass",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/simulation-activity-model.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Aktivit\u00e4tsmodell: Tagesraten je Akteursklasse, Stundenprofil, Obergrenzen.",
+  "properties": {
+    "hourly_weights": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Hourly Weights",
+      "type": "array"
+    },
+    "max_reactions_per_activation": {
+      "minimum": 0,
+      "title": "Max Reactions Per Activation",
+      "type": "integer"
+    },
+    "max_text_actions_per_activation": {
+      "minimum": 1,
+      "title": "Max Text Actions Per Activation",
+      "type": "integer"
+    },
+    "mode": {
+      "$ref": "#/$defs/ActivityMode"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "text_posts_per_day": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "propertyNames": {
+        "$ref": "#/$defs/ActorClass"
+      },
+      "title": "Text Posts Per Day",
+      "type": "object"
+    }
+  },
+  "required": [
+    "mode",
+    "max_text_actions_per_activation",
+    "max_reactions_per_activation",
+    "text_posts_per_day",
+    "hourly_weights"
+  ],
+  "title": "ActivityModelConfig",
+  "type": "object"
+}

@@ -29,10 +29,16 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from typing import Any, Callable, Dict, NamedTuple, Optional
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, Mapping, NamedTuple, Optional
 
 from app.contracts.simulation_activity_contract import ActivityModelConfig
-from app.services.simulation_activity_model import REACTION_ACTION_NAMES, TEXT_ACTION_NAMES
+from app.services.simulation_activity_model import (
+    REACTION_ACTION_NAMES,
+    TEXT_ACTION_NAMES,
+    activity_limits_sentence,
+    activity_model_from_time_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +223,64 @@ def install_activation_limits(
     return ActivationLimits(limiters, emit)
 
 
+def install_activation_limits_from_config(
+    agent_graph: Any,
+    config: Mapping[str, Any],
+    *,
+    log: Optional[Callable[[str], None]] = None,
+) -> Optional[ActivationLimits]:
+    """Wie :func:`install_activation_limits`, mit dem Modell aus der Konfiguration."""
+    model = activity_model_from_time_config(config.get("time_config") or {})
+    return install_activation_limits(agent_graph, model, log=log)
+
+
+def append_activity_limits_to_prompts(
+    agent_graph: Any,
+    config: Mapping[str, Any],
+    *,
+    log: Optional[Callable[[str], None]] = None,
+) -> int:
+    """Hängt den Grenzen-Satz an die System-Nachricht jedes Agenten; Zahl der Agenten.
+
+    Für den Single-Platform-Runner, der die Profildatei nicht umschreibt (der
+    Parallel-Runner trägt den Satz über ``augment_profile_with_stance`` ein).
+    CAMEL legt die System-Nachricht beim Aufbau als Snapshot in den Speicher;
+    deshalb wird wie in ``attach_tools_to_agents`` die lebende Nachricht, die
+    Originalnachricht und danach ``init_messages`` angepasst.
+    """
+    emit = log or logger.info
+    sentence = activity_limits_sentence(config)
+    if not sentence or agent_graph is None:
+        return 0
+    note = f"\n## Deine Aktivität\n{sentence}\n"
+    patched = 0
+    for agent_id, agent in list(agent_graph.get_agents()):
+        try:
+            for message in (getattr(agent, "system_message", None), getattr(agent, "_original_system_message", None)):
+                if message is not None and hasattr(message, "content") and note not in message.content:
+                    message.content = message.content + note
+            if hasattr(agent, "init_messages"):
+                agent.init_messages()
+            patched += 1
+        except Exception as exc:  # noqa: BLE001 — Prompt-Satz ist Zusatz, die Durchsetzung bleibt
+            emit(f"[activation-limit] prompt note failed for agent {agent_id}: {exc}")
+    emit(f"[activation-limit] prompt note added for {patched} agent(s)")
+    return patched
+
+
+@contextmanager
+def round_activation_limits(limits: Optional[ActivationLimits], round_num: int) -> Iterator[None]:
+    """Begrenzung um ``env.step`` einer Runde; ohne ``limits`` ohne Wirkung."""
+    if limits is None:
+        yield
+        return
+    limits.begin_round()
+    try:
+        yield
+    finally:
+        limits.end_round(round_num)
+
+
 def _wrap_agent_tools(agent: Any, limiter: ActivationLimiter) -> int:
     """Tauscht ``func`` der begrenzten Aktions-Tools eines Agenten; Zahl der Umschläge."""
     tools = getattr(agent, "tool_dict", None)
@@ -226,8 +290,11 @@ def _wrap_agent_tools(agent: Any, limiter: ActivationLimiter) -> int:
     for name, tool in list(tools.items()):
         kind = _kind_of(name)
         func = getattr(tool, "func", None)
-        if kind is None or func is None or getattr(func, _MARKER, False):
+        if kind is None or func is None:
             continue
+        if getattr(func, _MARKER, False):
+            # Erneute Installation: vom Original aus neu umhüllen, nie doppelt.
+            func = func.__wrapped__
         tool.func = _limited(func, kind, limiter)
         wrapped += 1
     return wrapped

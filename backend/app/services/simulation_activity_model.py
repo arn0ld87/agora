@@ -378,7 +378,71 @@ def select_round_agent_ids(
     )
 
 
+# --- Laufzeitkontext der Runner ----------------------------------------------------------
+# Der Parallel-Runner ruft die Auswahl je Plattformschleife unabhängig auf, ohne
+# die Aufrufschnittstelle ``get_active_agents_for_round(env, config, hour, round)``
+# zu ändern. Der Kontext reist deshalb in der geladenen (nicht persistierten)
+# Konfiguration; jede Plattformschleife arbeitet auf einer Kopie mit ihrer Plattform.
+RUNTIME_PLATFORM_KEY = "_activity_platform"
+RUNTIME_PLATFORMS_KEY = "_activity_platforms"
+RUNTIME_SEED_KEY = "_activity_seed"
+
+
+def activity_platforms(twitter_only: bool, reddit_only: bool) -> List[str]:
+    """Die in diesem Lauf aktivierten Plattformen."""
+    if twitter_only:
+        return ["twitter"]
+    if reddit_only:
+        return ["reddit"]
+    return ["twitter", "reddit"]
+
+
+def activity_runtime_context(seed: int, platforms: Sequence[str]) -> Dict[str, Any]:
+    """Schlüssel, die der Runner vor dem Start in die geladene Konfiguration schreibt."""
+    return {RUNTIME_SEED_KEY: seed, RUNTIME_PLATFORMS_KEY: list(platforms)}
+
+
+def for_platform(config: Mapping[str, Any], platform: str) -> Dict[str, Any]:
+    """Flache Kopie der Konfiguration für die Auswahlschleife einer Plattform."""
+    return {**config, RUNTIME_PLATFORM_KEY: platform}
+
+
+def select_round_agent_ids_from_config(
+    config: Mapping[str, Any],
+    current_hour: int,
+    round_num: int,
+    *,
+    fallback_seed: int,
+    rng: Any = random,
+) -> List[int]:
+    """Auswahl für eine Runde aus der Konfiguration samt Laufzeitkontext.
+
+    Fehlt der Kontext (alte Aufrufer), gilt eine einzelne Plattform ``twitter``
+    und ``fallback_seed``; mit Altkonfiguration ist beides ohne Wirkung.
+    """
+    platform = str(config.get(RUNTIME_PLATFORM_KEY) or "twitter")
+    platforms = config.get(RUNTIME_PLATFORMS_KEY) or [platform]
+    seed = config.get(RUNTIME_SEED_KEY)
+    return select_round_agent_ids(
+        config,
+        current_hour,
+        round_num,
+        seed=fallback_seed if seed is None else int(seed),
+        platform=platform,
+        platforms=platforms,
+        rng=rng,
+    )
+
+
 # --- Satz für den Agenten-Prompt ---------------------------------------------------------
+
+
+def activity_limits_sentence(config: Mapping[str, Any]) -> str:
+    """Grenzen-Satz für den Profiltext aus ``time_config.activity_model`` der Konfiguration."""
+    model = activity_model_from_time_config(config.get("time_config") or {})
+    return describe_activity_limits(model)
+
+
 
 
 def describe_activity_limits(model: Optional[ActivityModelConfig]) -> str:

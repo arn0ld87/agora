@@ -123,6 +123,8 @@ def make_prepare_job(
                 # #1778: Nutzervorgabe für die Streitfrage; None heißt, der
                 # Konfigurations-Assistent schlägt eine vor.
                 contested_question_override=inputs.contested_question,
+                # #1779: Aktivitätsmodus; None heißt Einstellung/Standard.
+                activity_mode=inputs.activity_mode.value if inputs.activity_mode else None,
                 # Budget-Enforcement (#984): dieselbe persistierte run_id wie
                 # der Prepare-Run — Persona- und Config-Generierung bauen ihre
                 # LLM-Clients damit run-gebunden statt budgetfrei.

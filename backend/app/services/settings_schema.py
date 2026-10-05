@@ -185,6 +185,11 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
               default=0.25, min_value=0.01, max_value=1.0),
     FieldSpec('AGORA_SIM_AGENTS_PER_HOUR_MAX_RATIO', 'oasis', 'float',
               default=0.5, min_value=0.01, max_value=1.0),
+    # #1779: Aktivitaetsmodus (Ratensatz der Textbeitraege je Tag). Default =
+    # ``DEFAULT_ACTIVITY_MODE`` in ``simulation_activity_model.py``; je
+    # Simulation uebersteuerbar ueber ``activity_mode`` in ``/api/simulation/prepare``.
+    FieldSpec('AGORA_SIM_ACTIVITY_MODE', 'oasis', 'enum',
+              default='realistic', enum_values=('realistic', 'active')),
     # #1772: Obergrenze fuer ``total_simulation_hours`` beim Erzeugen der
     # Simulationskonfiguration (Standard 1 Tag / 24 Runden). Default =
     # ``DEFAULT_TOTAL_SIMULATION_HOURS`` in ``simulation_config_models.py``.

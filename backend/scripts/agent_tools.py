@@ -784,8 +784,12 @@ def _profile_prompt_sections(
     stance_section: str,
     voice_register: Optional[str],
     entity_type: str,
+    activity_limits: str = "",
 ) -> str:
-    """Haltung plus Beitragslänge für den Profiltext (Issue #1759, A7).
+    """Haltung, Beitragslänge und Aktivitätsgrenzen für den Profiltext (Issue #1759, A7).
+
+    ``activity_limits`` (#1779): Satz mit den Grenzen je Aktivierung aus dem
+    Aktivitätsmodell; leer in Altkonfigurationen, dann bleibt der Text unverändert.
 
     Die Längengrenze hängt an Plattform und Voice-Register
     (``persona_post_length``). Trägt das Profil kein Register (Altbestand,
@@ -796,8 +800,11 @@ def _profile_prompt_sections(
     from app.services.persona_voice_register import rule_based_voice_register
 
     register = voice_register or rule_based_voice_register(entity_type)
+    limits_section = f"## Deine Aktivität\n{activity_limits}\n" if activity_limits else ""
     return "\n".join(
-        part for part in (stance_section, build_length_section(platform, register)) if part
+        part
+        for part in (stance_section, build_length_section(platform, register), limits_section)
+        if part
     )
 
 
@@ -805,6 +812,7 @@ def _augment_twitter_csv_with_stance(
     profile_path: str,
     cfg_by_id: Dict[Any, Dict[str, Any]],
     contested_statement: Optional[str] = None,
+    activity_limits: str = "",
 ) -> str:
     """Hängt ``build_stance_section`` an die ``user_char``-Spalte einer Kopie
     von ``twitter_profiles.csv`` an — genau das Feld, das
@@ -839,6 +847,7 @@ def _augment_twitter_csv_with_stance(
             section,
             row.get("voice_register") or cfg.get("voice_register"),
             str(cfg.get("entity_type") or ""),
+            activity_limits,
         )
         if section:
             row["user_char"] = f"{row.get('user_char', '')}\n{section}".strip()
@@ -863,6 +872,7 @@ def _augment_reddit_json_with_stance(
     profile_path: str,
     cfg_by_id: Dict[Any, Dict[str, Any]],
     contested_statement: Optional[str] = None,
+    activity_limits: str = "",
 ) -> str:
     """Hängt ``build_stance_section`` an das ``persona``-Feld einer Kopie von
     ``reddit_profiles.json`` an — genau das Feld, das
@@ -892,6 +902,7 @@ def _augment_reddit_json_with_stance(
             section,
             item.get("voice_register") or cfg.get("voice_register"),
             str(item.get("source_entity_type") or cfg.get("entity_type") or ""),
+            activity_limits,
         )
         if section:
             item["persona"] = f"{item.get('persona', '')}\n{section}".strip()
@@ -915,6 +926,7 @@ def augment_profile_with_stance(
     agent_configs: List[Dict[str, Any]],
     platform: str,
     contested_statement: Optional[str] = None,
+    activity_limits: str = "",
 ) -> str:
     """Trägt die Haltung aus ``agent_configs`` in eine EIGENE Kopie der
     Profildatei ein, die OASIS beim Aufbau des Agent-Graphs
@@ -958,10 +970,10 @@ def augment_profile_with_stance(
 
     if platform == "twitter":
         return _augment_twitter_csv_with_stance(
-            profile_path, cfg_by_id, contested_statement
+            profile_path, cfg_by_id, contested_statement, activity_limits
         )
     return _augment_reddit_json_with_stance(
-        profile_path, cfg_by_id, contested_statement
+        profile_path, cfg_by_id, contested_statement, activity_limits
     )
 
 
