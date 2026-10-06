@@ -231,12 +231,18 @@ const activeSubRoute = computed<string>(() => {
 <style scoped>
 .app-shell {
   width: 100%;
-  height: 100%;
+  /* Feste Viewport-Hoehe: Seitenleiste und Hauptbereich scrollen je fuer sich,
+     nie das Dokument. `height: 100%` lief ins Leere (#app hat nur min-height),
+     die Huelle wuchs mit der Seitenleiste und das Dokument scrollte; ein
+     Fokussprung scrollte dann die ganze Seite mit. */
+  height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: auto 1fr;
   /* An --topbar-h gekoppelt: der Token schrumpft unter `pointer: coarse`
-     auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen. */
-  grid-template-rows: var(--topbar-h, 64px) 1fr;
+     auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen.
+     minmax(0, 1fr): der Inhalt darf die Zeile nicht ueber den Viewport dehnen. */
+  grid-template-rows: var(--topbar-h, 64px) minmax(0, 1fr);
   background: var(--surface-canvas);
   overflow: hidden;
 }
@@ -303,7 +309,7 @@ const activeSubRoute = computed<string>(() => {
 @media (max-width: 767px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: 56px 1fr;
+    grid-template-rows: 56px minmax(0, 1fr);
   }
 
   /* Inspector als Full-Screen-Overlay auf Mobile */

@@ -335,25 +335,31 @@ const navSettings = computed<NavSettingsItem[]>(() =>
 }
 
 .sidebar__body {
-  padding: 0 10px 12px;
+  padding: 0 10px 8px;
   display: flex;
   flex-direction: column;
   flex: 1;
+  /* Hoehe der Seitenleiste mit geoeffneter Einstellungen-Gruppe (8 Unterpunkte)
+     passt bewusst in 720 px Viewport-Hoehe: scrollt die Leiste, springt der
+     Fokus beim Tabben in die Mitte und die Tab-Reihenfolge-Pruefung
+     (e2e tabOrder) meldet einen Sprung nach oben. Die Abstaende hier und in
+     SidebarItem/SidebarGroup sind darauf abgestimmt. */
+  min-height: 0;
   overflow-y: auto;
 }
 
 .sidebar__group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 10px;
 }
 
 .sidebar__group-title {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--fg3);
-  padding: 0 10px 4px;
+  padding: 0 10px 2px;
 }
 
 .sidebar__notice {
@@ -368,13 +374,13 @@ const navSettings = computed<NavSettingsItem[]>(() =>
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-top: 16px;
+  gap: 0;
+  padding-top: 8px;
 }
 
 .sidebar__footer {
   width: 100%;
-  padding: 10px 18px;
+  padding: 8px 18px;
   border: 0;
   border-radius: 0;
   background: transparent;

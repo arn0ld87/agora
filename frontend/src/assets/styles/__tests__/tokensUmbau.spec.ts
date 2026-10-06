@@ -157,3 +157,99 @@ describe('alte Token-Namen → neue Tokens (#1795, Ticket 2)', () => {
     }
   })
 })
+
+// Kontrast (WCAG AA, 4.5:1): Zustandstext auf der eigenen -soft-Fläche und
+// Fließtext auf den Flächen. Gerechnet aus den oklch-Werten der Datei, damit
+// ein Token-Wert den Kontrast nicht still unterschreitet (axe color-contrast).
+describe('Kontrast der Token-Paare (WCAG AA)', () => {
+  type Rgb = [number, number, number]
+  type Paint = { rgb: Rgb; alpha: number }
+
+  const parseOklch = (value: string): Paint => {
+    const m = value.match(/^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/)
+    if (!m) throw new Error(`kein oklch-Wert: ${value}`)
+    const [L, C, h] = [Number(m[1]), Number(m[2]), (Number(m[3]) * Math.PI) / 180]
+    const a = C * Math.cos(h)
+    const b = C * Math.sin(h)
+    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    const mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3
+    const lin = [
+      4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * mm + 1.707614701 * s,
+    ].map((v) => Math.min(1, Math.max(0, v)))
+    return { rgb: lin as Rgb, alpha: m[4] === undefined ? 1 : Number(m[4]) }
+  }
+  const gamma = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055)
+  const linear = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  // Wie der Browser: im Gamma-Raum über den Hintergrund legen.
+  const over = (fg: Paint, bg: Paint): Paint => ({
+    rgb: fg.rgb.map((c, i) => linear(gamma(c) * fg.alpha + gamma(bg.rgb[i]) * (1 - fg.alpha))) as Rgb,
+    alpha: 1,
+  })
+  const luminance = ({ rgb }: Paint) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+  const ratio = (a: Paint, b: Paint) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+  const tokenIn = (src: string, name: string) =>
+    parseOklch(src.match(new RegExp('--' + name + '\\s*:\\s*([^;]+);'))![1].trim())
+
+  // Dunkel: --err auf --err-soft über --s3 (Hover-Fläche) liegt im Entwurf bei
+  // 4.28:1 und bleibt unverändert; Badges sitzen nicht auf --s3.
+  const themes = [
+    ['Dunkel', dark, ['s0', 's1', 's2']],
+    ['Hell', light, ['s0', 's1', 's2', 's3']],
+  ] as const
+
+  describe.each(themes)('%s', (_theme, src, stateSurfaces) => {
+    it('--ok und --err auf ihrer -soft-Fläche ≥ 4.5:1', () => {
+      for (const surface of stateSurfaces) {
+        const bg = tokenIn(src, surface)
+        for (const state of ['ok', 'err']) {
+          const soft = over(tokenIn(src, state + '-soft'), bg)
+          expect(ratio(tokenIn(src, state), soft), `--${state} auf --${state}-soft über --${surface}`).toBeGreaterThanOrEqual(4.5)
+        }
+      }
+    })
+
+    it.each(['s0', 's1', 's2', 's3'])('--fg, --fg2, --fg3 und --acc-text auf --%s ≥ 4.5:1', (surface) => {
+      const bg = tokenIn(src, surface)
+      for (const text of ['fg', 'fg2', 'fg3', 'acc-text']) {
+        expect(ratio(tokenIn(src, text), bg), `--${text} auf --${surface}`).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+
+    it('--on-acc (weiß) auf --acc ≥ 4.5:1', () => {
+      const white: Paint = { rgb: [1, 1, 1], alpha: 1 }
+      expect(ratio(white, tokenIn(src, 'acc'))).toBeGreaterThanOrEqual(4.5)
+    })
+  })
+})
+
+// Anmeldeseiten: Karte und Text müssen aus denselben Tokens kommen. Die alten
+// Catppuccin-Rückfallwerte (--color-*) ergaben im hellen Thema dunkle Schrift
+// auf dunkler Karte (#login-heading: 1.08:1).
+describe('Anmeldeseiten nutzen Themen-Tokens statt fester Dunkelwerte', () => {
+  const views = ['EmailConfirmView', 'LoginView', 'PasswordResetView', 'RegisterView']
+  it.each(views)('%s hat keine --color-*-Rückfallwerte oder Roh-Farben', (view) => {
+    const src = readFileSync(resolve(here, `../../../views/auth/${view}.vue`), 'utf8')
+    const style = src.slice(src.indexOf('<style'))
+    expect(style).not.toMatch(/--color-/)
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/)
+  })
+})
+
+// Die Hülle füllt genau den Viewport: scrollt das Dokument (Hülle wächst mit
+// der Seitenleiste), springt der Fokus beim Tabben und die Tab-Reihenfolge-
+// Prüfung der e2e-Smokes meldet einen Sprung nach oben.
+describe('Hülle: feste Viewport-Höhe', () => {
+  const shell = readFileSync(resolve(here, '../../../components/v4/shell/AppShell.vue'), 'utf8')
+  const rule = shell.slice(shell.indexOf('.app-shell {'), shell.indexOf('}', shell.indexOf('.app-shell {')))
+
+  it('.app-shell ist so hoch wie der Viewport und lässt den Inhalt die Zeile nicht dehnen', () => {
+    expect(rule).toMatch(/height:\s*100dvh/)
+    expect(rule).toMatch(/grid-template-rows:[^;]*minmax\(0,\s*1fr\)/)
+  })
+})

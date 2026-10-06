@@ -76,7 +76,7 @@ watch(hasActiveChild, (active) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 34px;
+  height: 32px;
   padding: 0 8px;
   border-radius: var(--ag-r-8);
   font-size: 13.5px;
@@ -112,7 +112,7 @@ watch(hasActiveChild, (active) => {
 .sidebar-group__body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   margin-top: 2px;
 }
 
@@ -120,7 +120,7 @@ watch(hasActiveChild, (active) => {
 .sidebar-group__body :deep(.sidebar-sub-item) {
   display: flex;
   align-items: center;
-  height: 32px;
+  height: 28px;
   padding: 0 10px 0 42px;
   border-radius: var(--ag-r-8);
   font-size: 13px;
