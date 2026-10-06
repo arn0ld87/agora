@@ -6,6 +6,7 @@ import i18n from './i18n'
 import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
+import { useTheme } from './composables/useTheme'
 import { useAuthStore } from './store/auth'
 
 // Self-hosted Webfonts (Block B1): Archivo traegt die Oberflaeche,
@@ -25,7 +26,10 @@ import './assets/styles/states.css'
 // Observability: initialise before Vue so the first fetch spans are captured.
 initFrontendTracing()
 
-document.documentElement.setAttribute('data-theme', 'dark')
+// Theme: data-theme + color-scheme folgen dem System bzw. der gespeicherten
+// Wahl (#1795). Vor app.mount() aufrufen; index.html setzt es vor dem ersten
+// Paint mit derselben Logik.
+useTheme()
 
 // Density: data-density auf <html> setzen bevor Vue mountet → kein FOUC.
 // Slice FE-Redesign-6 · 2026-05-15

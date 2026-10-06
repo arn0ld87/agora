@@ -12,10 +12,26 @@
          Google-Fonts-CDN aus Slice D0 ist entfallen: Agora laeuft ueber
          Tailscale, ein externer Font-Request gehoert dort nicht hin. -->
     <script>
-      // Dark ist das Hauptgesicht (Q2/Q28). Vor dem ersten Paint setzen,
-      // sonst blitzt der ungestylte Grund auf.
+      // Hell/Dunkel nach System oder gespeicherter Wahl (#1795). Vor dem
+      // ersten Paint setzen, sonst blitzt das falsche Theme auf. Gleiche Logik
+      // und gleicher Schlüssel wie src/composables/useTheme.ts.
       (function () {
-        document.documentElement.setAttribute('data-theme', 'dark');
+        var choice = 'system';
+        try {
+          var raw = localStorage.getItem('agora.theme');
+          if (raw === 'light' || raw === 'dark' || raw === 'system') choice = raw;
+        } catch (e) {}
+        var dark = true;
+        if (choice === 'system') {
+          if (typeof window.matchMedia === 'function') {
+            dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+        } else {
+          dark = choice === 'dark';
+        }
+        var theme = dark ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.style.colorScheme = theme;
       })();
     </script>
   </head>
