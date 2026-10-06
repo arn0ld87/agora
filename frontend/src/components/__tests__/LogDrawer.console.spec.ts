@@ -58,7 +58,7 @@ const i18n = createI18n({
   fallbackWarn: false,
   messages: {
     de: {
-      logs: { drawer: { title: 'Backend-Logs', resize: 'Höhe ändern', levelFilter: 'Stufe filtern', search: 'Suchen…', pause: 'Pause', empty: 'leer' } },
+      logs: { drawer: { title: 'Backend-Logs', resize: 'Höhe ändern', levelFilter: 'Stufe filtern', search: 'Suchen…', pause: 'Pause', empty: 'leer', copy: 'Kopieren', copyTitle: 'Sichtbare Zeilen kopieren', copied: 'Kopiert', copyFailed: 'Kopieren fehlgeschlagen' } },
       common: { close: 'Schließen' },
     },
   },
@@ -106,6 +106,44 @@ describe('LogDrawer als Konsole', () => {
     await flushPromises()
     expect(w.get('[role="separator"]').attributes('aria-valuenow')).toBe('370')
     window.dispatchEvent(new MouseEvent('pointerup'))
+    w.unmount()
+  })
+
+  it('Kopieren: schreibt genau die sichtbaren Zeilen, Rückmeldung per Statusregion', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const w = mount(LogDrawer, { props: { open: true }, global })
+    await flushPromises()
+    await w.get('.search-input').setValue('twhin')
+    await w.get('.copy-btn').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('twhin-bert: 100%|████| 4/4')
+    expect(w.get('[role="status"]').text()).toBe('Kopiert')
+    await w.get('.search-input').setValue('')
+    await w.get('.copy-btn').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenLastCalledWith('INFO start\ntwhin-bert: 100%|████| 4/4\nERROR kaputt')
+    w.unmount()
+  })
+
+  it('Kopieren: Fehler wird sichtbar gemeldet', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const w = mount(LogDrawer, { props: { open: true }, global })
+    await flushPromises()
+    await w.get('.copy-btn').trigger('click')
+    await flushPromises()
+    expect(w.get('[role="status"]').text()).toBe('Kopieren fehlgeschlagen')
+    expect(w.get('[role="status"]').classes()).toContain('is-error')
+    w.unmount()
+  })
+
+  it('Kopieren: deaktiviert, wenn keine Zeile sichtbar ist', async () => {
+    const w = mount(LogDrawer, { props: { open: true }, global })
+    await flushPromises()
+    expect(w.get('.copy-btn').attributes('disabled')).toBeUndefined()
+    await w.get('.search-input').setValue('gibt-es-nicht')
+    expect(w.get('.copy-btn').attributes('disabled')).toBeDefined()
     w.unmount()
   })
 

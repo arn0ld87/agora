@@ -1051,7 +1051,11 @@
       "reconnect": "Reconnect",
       "resize": "Resize console (arrow up/down)",
       "levelFilter": "Filter by level",
-      "reconnecting": "Reconnecting…"
+      "reconnecting": "Reconnecting…",
+      "copy": "Copy",
+      "copyTitle": "Copy visible lines to the clipboard",
+      "copied": "Copied",
+      "copyFailed": "Copying failed. The clipboard is not available."
     }
   },
   "settings": {

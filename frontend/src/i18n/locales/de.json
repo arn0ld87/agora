@@ -1051,7 +1051,11 @@
       "reconnect": "Erneut verbinden",
       "resize": "Höhe der Konsole ändern (Pfeil hoch/runter)",
       "levelFilter": "Stufe filtern",
-      "reconnecting": "Verbindung wird wiederhergestellt…"
+      "reconnecting": "Verbindung wird wiederhergestellt…",
+      "copy": "Kopieren",
+      "copyTitle": "Sichtbare Zeilen in die Zwischenablage kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Kopieren fehlgeschlagen. Die Zwischenablage ist nicht verfügbar."
     }
   },
   "settings": {

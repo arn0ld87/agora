@@ -56,6 +56,19 @@
           :title="t('logs.drawer.reconnect')"
         >&#x21bb; {{ t('logs.drawer.reconnect') }}</button>
         <button
+          type="button"
+          class="copy-btn"
+          :disabled="!canCopy"
+          :title="t('logs.drawer.copyTitle')"
+          @click="copyVisible"
+        >{{ t('logs.drawer.copy') }}</button>
+        <span
+          class="copy-status"
+          :class="{ 'is-error': copyState === 'failed' }"
+          role="status"
+          aria-live="polite"
+        >{{ copyState === 'copied' ? t('logs.drawer.copied') : copyState === 'failed' ? t('logs.drawer.copyFailed') : '' }}</span>
+        <button
           class="close-btn"
           @click="$emit('close')"
           :title="t('common.close')"
@@ -171,6 +184,26 @@ const filteredLines = computed(() => {
   return displayLines.value.filter((ln) => typeof ln === 'string' && ln.toLowerCase().includes(needle))
 })
 
+// Kopieren: genau die sichtbaren Zeilen (nach Stufe, Suche, zusammengefasste
+// Fortschrittsbalken), eine je Eintrag, im Format der Anzeige.
+const copyState = ref('idle')
+let _copyTimer = null
+const canCopy = computed(() => !errorMessage.value && !fileNotice.value && filteredLines.value.length > 0)
+
+async function copyVisible() {
+  if (!canCopy.value) return
+  if (_copyTimer !== null) window.clearTimeout(_copyTimer)
+  try {
+    await navigator.clipboard.writeText(filteredLines.value.join('\n'))
+    copyState.value = 'copied'
+    _copyTimer = window.setTimeout(() => { copyState.value = 'idle'; _copyTimer = null }, 2000)
+  } catch {
+    // Fehler bleibt sichtbar, bis erneut kopiert wird.
+    copyState.value = 'failed'
+    _copyTimer = null
+  }
+}
+
 let _eventSource = null
 let _streamGeneration = 0
 
@@ -282,7 +315,11 @@ watch(level, () => {
 })
 
 onMounted(() => { if (props.open) { reload(); startStream() } })
-onUnmounted(() => { stopStream(); onHandleUp() })
+onUnmounted(() => {
+  stopStream()
+  onHandleUp()
+  if (_copyTimer !== null) window.clearTimeout(_copyTimer)
+})
 </script>
 
 <style scoped>
@@ -365,6 +402,22 @@ onUnmounted(() => { stopStream(); onHandleUp() })
   font: inherit;
 }
 .close-btn:hover { background: var(--s3); color: var(--fg); }
+.copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg2);
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--ag-r-8);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.copy-btn:hover:not(:disabled) { background: var(--s3); color: var(--fg); }
+.copy-btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+.copy-btn:disabled { opacity: 0.5; cursor: default; }
+.copy-status { font-size: 12px; color: var(--fg3); }
+.copy-status.is-error { color: var(--err); }
 .reconnect-btn { width: auto; padding: 0 10px; color: var(--err); background: var(--err-soft); }
 .reconnect-btn:hover { background: var(--err-soft); color: var(--fg); }
 
