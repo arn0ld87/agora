@@ -29,7 +29,7 @@ import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import { readRunParamsFromQuery, toRunParamsQuery } from '@/contracts/runParamsQuery'
-import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   projectId: string
@@ -40,7 +40,7 @@ const router = useRouter()
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Runs', path: '/runs' },
-  { label: props.projectId },
+  crumbForId(props.projectId),
   { label: 'Personas' },
 ])
 

@@ -8,14 +8,14 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import RunDetailView from '../RunDetailView.vue'
-import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const route = useRoute()
 const runId = computed(() => String(route.params['id'] ?? ''))
 
 const breadcrumbs = computed(() => [
   { label: 'Runs', to: { name: 'Runs' } },
-  { label: runId.value || 'Detail' },
+  runId.value ? crumbForId(runId.value) : { label: 'Detail' },
 ])
 
 useShellBreadcrumbs(breadcrumbs)

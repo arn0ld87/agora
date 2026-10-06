@@ -1002,7 +1002,23 @@
   "topbar": {
     "search": "Suche",
     "openNavigation": "Navigation öffnen",
+    "searchShort": "Suchen (Cmd+K)",
+    "newRun": "Neuer Lauf",
+    "console": "Konsole",
+    "consoleToggle": "Konsole ein- oder ausblenden",
+    "consoleUnread": "{count} ungelesene Fehler",
+    "copyIdent": "Kennung {ident} kopieren",
+    "identCopied": "Kennung kopiert",
+    "identCopyFailed": "Kennung konnte nicht kopiert werden",
     "userMenu": {
+      "workspaceLocal": "Lokaler Arbeitsbereich",
+      "appearance": "Darstellung",
+      "theme": {
+        "system": "System",
+        "light": "Hell",
+        "dark": "Dunkel"
+      },
+      "densityCompact": "Kompakte Dichte",
       "trigger": "Nutzermenü, angemeldet als {name}",
       "triggerUnknown": "Nutzermenü öffnen",
       "profile": "Profil",

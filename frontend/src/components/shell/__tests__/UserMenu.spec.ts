@@ -37,12 +37,14 @@ vi.mock('../../v4/forms/DropdownMenuItem.vue', () => ({
   default: defineComponent({
     emits: ['select'],
     setup(_, { slots, emit, attrs }) {
-      return () => h('button', { ...attrs, role: 'menuitem', onClick: (e: Event) => emit('select', e) }, slots.default?.())
+      return () => h('button', { role: 'menuitem', ...attrs, onClick: (e: Event) => emit('select', e) }, slots.default?.())
     },
   }),
 }))
 
 import UserMenu from '../UserMenu.vue'
+import { THEME_STORAGE_KEY, useTheme } from '../../../composables/useTheme'
+import { useDensity } from '../../../composables/useDensity'
 
 function items(wrapper: ReturnType<typeof mount>) {
   return wrapper.findAll('[role="menuitem"]').map((b) => b.text())
@@ -103,6 +105,52 @@ describe('UserMenu', () => {
 
     await wrapper.find('[data-testid="user-menu-workspace-beta"]').trigger('click')
     expect(auth.switchWorkspace).toHaveBeenCalledWith(WS_B.workspace_id)
+  })
+
+  it('Darstellung: Theme-Wahl System/Hell/Dunkel als Radio-Eintraege ueber useTheme()', async () => {
+    useTheme._resetForTesting()
+    localStorage.removeItem(THEME_STORAGE_KEY)
+    const wrapper = mount(UserMenu)
+
+    const radios = wrapper.findAll('[role="menuitemradio"]')
+    expect(radios.map((r) => r.attributes('data-testid'))).toEqual([
+      'user-menu-theme-system',
+      'user-menu-theme-light',
+      'user-menu-theme-dark',
+    ])
+    expect(wrapper.find('[data-testid="user-menu-theme-system"]').attributes('aria-checked')).toBe('true')
+
+    await wrapper.find('[data-testid="user-menu-theme-dark"]').trigger('click')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
+    expect(wrapper.find('[data-testid="user-menu-theme-dark"]').attributes('aria-checked')).toBe('true')
+
+    await wrapper.find('[data-testid="user-menu-theme-light"]').trigger('click')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('light')
+  })
+
+  it('Darstellung: Dichte bleibt als Schalter im Menue erreichbar', async () => {
+    const { density, setDensity } = useDensity()
+    setDensity('comfortable')
+    const wrapper = mount(UserMenu)
+    const item = wrapper.find('[data-testid="user-menu-density"]')
+    expect(item.attributes('role')).toBe('menuitemcheckbox')
+    expect(item.attributes('aria-checked')).toBe('false')
+
+    await item.trigger('click')
+    expect(density.value).toBe('compact')
+    expect(wrapper.find('[data-testid="user-menu-density"]').attributes('aria-checked')).toBe('true')
+    setDensity('comfortable')
+  })
+
+  it('zeigt im Legacy-Modus einen reinen Workspace-Anzeigeeintrag, mit Session nicht', () => {
+    const legacy = mount(UserMenu)
+    expect(legacy.find('[data-testid="user-menu-workspace-local"]').exists()).toBe(true)
+    expect(items(legacy).join('|')).not.toContain('workspaceLocal')
+
+    Object.assign(auth, { jwtEnabled: true, session: { access_token: 'x' } })
+    expect(mount(UserMenu).find('[data-testid="user-menu-workspace-local"]').exists()).toBe(false)
   })
 
   it('meldet ab und geht zum Login', async () => {

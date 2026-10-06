@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 import Breadcrumbs from '../Breadcrumbs.vue'
@@ -71,6 +71,35 @@ describe('Breadcrumbs', () => {
     const lastLink = crumbs[crumbs.length - 1].find('a')
     expect(lastLink.exists()).toBe(false)
     expect(crumbs[crumbs.length - 1].text()).toBe('LLM-Routing')
+  })
+
+  it('zeigt die Kennung als kopierbare Marke neben dem Titel; Klick kopiert und meldet es', async () => {
+    const { router, i18n } = build('/')
+    await router.isReady()
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const items = [{ label: 'Runs', to: '/' }, { label: 'Quartalsbericht', ident: 'sim_abc123' }]
+    const w = mount(Breadcrumbs, { props: { items }, global: { plugins: [router, i18n] } })
+
+    const ident = w.find('[data-testid="breadcrumb-ident"]')
+    expect(ident.text()).toBe('sim_abc123')
+    expect(ident.element.tagName).toBe('BUTTON')
+    expect(w.findAll('[data-crumb]')[1].text()).toContain('Quartalsbericht')
+    expect(w.find('[data-testid="breadcrumb-status"]').text()).toBe('')
+
+    await ident.trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('sim_abc123')
+    const status = w.find('[data-testid="breadcrumb-status"]')
+    expect(status.attributes('aria-live')).toBe('polite')
+    expect(status.text()).not.toBe('')
+  })
+
+  it('ohne ident gibt es keine Marke', async () => {
+    const { router, i18n } = build('/')
+    await router.isReady()
+    const w = mount(Breadcrumbs, { props: { items: [{ label: 'Nur Titel' }] }, global: { plugins: [router, i18n] } })
+    expect(w.find('[data-testid="breadcrumb-ident"]').exists()).toBe(false)
   })
 
   it('Props-Fallback: explizite items überschreiben Auto-Derive', async () => {

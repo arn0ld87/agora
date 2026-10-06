@@ -61,7 +61,7 @@ import DegradationNotice from '@/components/v4/DegradationNotice.vue'
 import { useGraphBuildPipeline } from '@/composables/useGraphBuildPipeline'
 import { hasBlockingDegradation } from '@/contracts/pipelineDegradationContract'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
-import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   projectId: string
@@ -119,7 +119,7 @@ const qualityBlocked = computed(() => hasBlockingDegradation(degradations.value)
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: t('step1.breadcrumbRuns'), path: '/runs' },
-  { label: props.projectId },
+  crumbForId(props.projectId),
   { label: t('step1.breadcrumbTitle') },
 ])
 

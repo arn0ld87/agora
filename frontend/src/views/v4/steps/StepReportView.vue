@@ -30,7 +30,7 @@ import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.v
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import { PENDING_REPORT_ID, REPORT_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
 import { asRunRegistryId, asSimulationId } from '@/contracts/runIdentifiers'
-import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   reportId: string
@@ -64,7 +64,7 @@ const simulationIdFromQuery = computed<string | null>(() =>
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Runs', path: '/runs' },
-  { label: pendingReportId.value ? (simulationIdFromQuery.value ?? props.reportId) : props.reportId },
+  crumbForId(pendingReportId.value ? (simulationIdFromQuery.value ?? props.reportId) : props.reportId),
   { label: 'Report' },
 ])
 

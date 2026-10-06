@@ -53,7 +53,7 @@ import { getSimulation } from '@/api/simulation'
 import { unwrap } from '@/api/envelope'
 import { clearSimFeed } from '@/composables/useSimFeed'
 import { clearSimClock } from '@/composables/useSimClock'
-import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   simulationId: string
@@ -133,7 +133,7 @@ const crumbs = computed<BreadcrumbItem[]>(() => {
   }).path
   return [
     { label: 'Runs', path: '/runs' },
-    { label: props.simulationId, path: withCurrentQuery(pipelinePath) },
+    crumbForId(props.simulationId, withCurrentQuery(pipelinePath)),
     { label: t(TAB_LABEL_KEYS[activeTab.value]) },
   ]
 })

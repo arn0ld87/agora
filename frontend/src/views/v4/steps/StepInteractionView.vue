@@ -26,7 +26,7 @@ import Step5Interaction from '@/components/Step5Interaction.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import { INTERACTION_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
 import { asSimulationId } from '@/contracts/runIdentifiers'
-import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   reportId: string
@@ -48,7 +48,7 @@ const simulationIdFromQuery = computed<string | null>(() => {
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Runs', path: '/runs' },
-  { label: props.reportId },
+  crumbForId(props.reportId),
   { label: 'Interaktion' },
 ])
 
