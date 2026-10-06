@@ -592,7 +592,7 @@ Durchgezogene Linien sind Navigation, gestrichelte sind Sprünge zwischen Reiter
 
 ## 11. Stand Etappe 0
 
-**Durchgang 1 geliefert am 05.10.2026** als Handoff-Bündel aus Claude Design (`Frontend redesign prompt-handoff.zip`, liegt außerhalb des Repos). Inhalt: `AgoraApp.dc.html` (Hülle, Bibliothek, Lauf-Übersicht, Dialog, Konsole; über Eigenschaften in 14 Varianten gezeigt), `AgoraBausteine.dc.html` (Bausteinblatt) und die Übersichtsseite. **Vom Maintainer abgenommen am 06.10.2026**, einschließlich der unten genannten Abweichungen. Durchgang 2 ist noch nicht beauftragt.
+**Durchgang 1 geliefert am 05.10.2026** als Handoff-Bündel aus Claude Design (`Frontend redesign prompt-handoff.zip`; die Prototypen liegen unter [`docs/design/frontend-umbau/`](../../design/frontend-umbau/README.md)). Inhalt: `AgoraApp.dc.html` (Hülle, Bibliothek, Lauf-Übersicht, Dialog, Konsole; über Eigenschaften in 14 Varianten gezeigt), `AgoraBausteine.dc.html` (Bausteinblatt) und die Übersichtsseite. **Vom Maintainer abgenommen am 06.10.2026**, einschließlich der unten genannten Abweichungen. Durchgang 2 ist noch nicht beauftragt.
 
 Abweichungen des Entwurfs von der Beschreibung, vom Gestalter selbst benannt:
 
@@ -605,7 +605,7 @@ Abweichungen des Entwurfs von der Beschreibung, vom Gestalter selbst benannt:
 | Abstand statt Trennlinie über „System" | — |
 | Bei 1024 px wird die Suche zum Symbolknopf | ein Umbruchpunkt in der Werkzeugleiste |
 
-**Durchgang 2 geliefert am 06.10.2026** (`Agora Durchgang 2.zip`, liegt außerhalb des Repos). **Vom Maintainer abgenommen am 06.10.2026**, einschließlich der unten genannten Abweichungen. Etappe 0 ist damit abgeschlossen. Inhalt: der klickbare Prototyp der Kernstrecke und 36 Einzelbilder, alle über `AgoraApp.dc.html` mit der Eigenschaft `screen` angesteuert; je Bereich eine eigene Datei (`AgoraGraph`, `AgoraSim`, `AgoraBericht`, `AgoraInterviews`, `AgoraPersonas`, `AgoraEinstellungen`, `AgoraAktivitaet`, `AgoraLog`), dazu das ergänzte Bausteinblatt und die fünf Dreispalter bei 1024 px. Der Stand von Durchgang 1 liegt unverändert als `AgoraAppD1.dc.html` bei.
+**Durchgang 2 geliefert am 06.10.2026** (`Agora Durchgang 2.zip`; die Prototypen liegen unter [`docs/design/frontend-umbau/`](../../design/frontend-umbau/README.md)). **Vom Maintainer abgenommen am 06.10.2026**, einschließlich der unten genannten Abweichungen. Etappe 0 ist damit abgeschlossen. Inhalt: der klickbare Prototyp der Kernstrecke und 36 Einzelbilder, alle über `AgoraApp.dc.html` mit der Eigenschaft `screen` angesteuert; je Bereich eine eigene Datei (`AgoraGraph`, `AgoraSim`, `AgoraBericht`, `AgoraInterviews`, `AgoraPersonas`, `AgoraEinstellungen`, `AgoraAktivitaet`, `AgoraLog`), dazu das ergänzte Bausteinblatt und die fünf Dreispalter bei 1024 px. Der Stand von Durchgang 1 liegt unverändert als `AgoraAppD1.dc.html` bei.
 
 Abweichungen in Durchgang 2, vom Gestalter selbst benannt:
 

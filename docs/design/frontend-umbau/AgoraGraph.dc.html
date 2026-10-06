@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;padding-bottom:20px;box-sizing:border-box;">
+
+<sc-if value="{{ isBib }}">
+  <div style="flex:1;min-height:0;overflow:auto;">
+    <div style="display:flex;align-items:center;gap:10px;margin:6px 0 16px;">
+      <h1 style="margin:0;font-size:22px;font-weight:650;letter-spacing:-0.01em;">Graphen</h1>
+      <span style="color:var(--fg3);font-size:14px;">3</span>
+      <span style="flex:1;"></span>
+      <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">+ Graph aus Quelle</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+      <sc-for list="{{ bib }}" as="b" hint-placeholder-count="3">
+        <article tabindex="0" onClick="{{ b.onOpen }}" style="display:flex;flex-direction:column;gap:12px;background:var(--s2);border-radius:12px;padding:16px 18px;cursor:pointer;min-width:0;" style-hover="background:var(--s3)">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:{{ b.stateFg }};">{{ b.stateGlyph }} {{ b.state }}</span>
+            <span style="flex:1;"></span>
+            <span style="font-size:12.5px;color:var(--fg3);">{{ b.date }}</span>
+          </div>
+          <h3 style="margin:0;font-size:15.5px;line-height:1.42;font-weight:600;">{{ b.name }}</h3>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg3);">{{ b.src }}</div>
+          <div style="font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ b.counts }}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <sc-if value="{{ b.hasManual }}"><span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">✎ {{ b.manual }}</span></sc-if>
+            <sc-if value="{{ b.hasDup }}"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--s3);color:var(--fg2);font-size:11.5px;font-weight:600;">1 mögliche Dublette</span></sc-if>
+          </div>
+          <div style="font-size:12.5px;color:var(--fg3);margin-top:auto;">{{ b.used }}</div>
+        </article>
+      </sc-for>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isFehler }}">
+  <div style="flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding-top:48px;">
+    <div style="max-width:600px;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="width:40px;height:40px;border-radius:50%;background:var(--err-soft);color:var(--err);display:grid;place-items:center;font-weight:700;flex:none;">✕</span>
+        <h2 style="margin:0;font-size:19px;font-weight:650;">Der Graph konnte nicht aufgebaut werden</h2>
+      </div>
+      <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--fg2);text-wrap:pretty;">Agora hat die Graph-Datenbank Neo4j nicht erreicht. Nach 30 Sekunden ohne Antwort wurde der Aufbau abgebrochen. Meist läuft der Dienst nicht oder startet gerade neu. Quelle und Einstellungen des Laufs sind unverändert.</p>
+      <div style="background:var(--s2);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5;">
+        <span style="font-weight:600;">So geht es weiter</span>
+        <span style="display:flex;gap:10px;"><span style="color:var(--fg3);font-variant-numeric:tabular-nums;">1</span><span>Unter System prüfen, ob Neo4j verbunden ist.</span></span>
+        <span style="display:flex;gap:10px;"><span style="color:var(--fg3);">2</span><span>Den Aufbau erneut starten. Bisher entstanden 0,03 € Kosten.</span></span>
+        <span style="display:flex;gap:10px;"><span style="color:var(--fg3);">3</span><span>Oder ohne Graph fortsetzen. Personas und Bericht stützen sich dann nur auf das Dokument.</span></span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button style="height:34px;padding:0 16px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--acc-hover)">Erneut versuchen</button>
+        <button onClick="{{ openSystem }}" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Systemzustand prüfen</button>
+        <button style="height:34px;padding:0 12px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">Ohne Graph fortsetzen</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span style="font-size:12.5px;color:var(--fg3);">Technische Details</span>
+        <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:1.55;color:var(--fg2);background:var(--s1);border-radius:8px;padding:10px 12px;overflow-wrap:anywhere;">11:05:31 graph.neo4j ServiceUnavailable: bolt://neo4j:7687, timeout 30 s · lauf_19bd04</div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isOhne }}">
+  <div style="flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding-top:48px;">
+    <div style="max-width:560px;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="width:40px;height:40px;border-radius:50%;background:var(--s3);color:var(--fg2);display:grid;place-items:center;flex:none;">◇</span>
+        <h2 style="margin:0;font-size:19px;font-weight:650;">Dieser Lauf wurde ohne Graph angelegt</h2>
+      </div>
+      <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--fg2);text-wrap:pretty;">Beim Anlegen wurde „Ohne Graph“ gewählt. Das ist eine gültige Einstellung und kein Fehler.</p>
+      <div style="background:var(--s2);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5;">
+        <span style="font-weight:600;">Was das für diesen Lauf bedeutet</span>
+        <span>Die Personas stammen aus dem Satz „Südkreis Geburtshilfe“ und nicht aus einem Graphen.</span>
+        <span>Belege im Bericht verweisen auf Dokument, Simulation und Interviews. Die Art „Graph“ bleibt leer.</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button onClick="{{ openLibrary }}" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Graphen der Bibliothek ansehen</button>
+        <button style="height:34px;padding:0 12px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">Neuen Lauf mit Graph anlegen</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isLaden }}">
+  <div aria-busy="true" aria-label="Graph wird geladen" style="flex:1;min-height:0;display:flex;gap:16px;animation:agpulse 1.6s ease-in-out infinite;">
+    <div style="width:248px;flex:none;display:flex;flex-direction:column;gap:12px;">
+      <span style="height:32px;border-radius:8px;background:var(--s2);"></span>
+      <sc-for list="{{ sk8 }}" as="k" hint-placeholder-count="8"><span style="height:14px;width:{{ k.w }};border-radius:4px;background:var(--s2);"></span></sc-for>
+    </div>
+    <div style="flex:1;border-radius:12px;background:var(--s2);display:grid;place-items:center;color:var(--fg3);font-size:13px;">Graph wird geladen …</div>
+    <div style="width:340px;flex:none;border-radius:12px;background:var(--s2);padding:18px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;">
+      <span style="height:18px;width:60%;border-radius:4px;background:var(--s3);"></span>
+      <span style="height:12px;width:30%;border-radius:4px;background:var(--s3);"></span>
+      <span style="height:12px;width:90%;border-radius:4px;background:var(--s3);margin-top:12px;"></span>
+      <span style="height:12px;width:80%;border-radius:4px;background:var(--s3);"></span>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isGraph }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <span style="width:30px;height:30px;border-radius:50%;background:var(--s3);color:var(--fg2);display:grid;place-items:center;font-size:12px;flex:none;">◇</span>
+    <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+      <span style="font-weight:600;font-size:15px;">{{ gName }}</span>
+      <span style="font-size:12.5px;color:var(--fg3);display:flex;gap:10px;flex-wrap:wrap;font-variant-numeric:tabular-nums;"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;">seed-3-geburtshilfe-hollerau.md</span><span>{{ gCounts }}</span></span>
+    </div>
+    <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg2);white-space:nowrap;">{{ gState }}</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">✎ {{ manualCount }} manuell</span>
+    <span style="flex:1;"></span>
+    <sc-for list="{{ headButtons }}" as="hb" hint-placeholder-count="2">
+      <button onClick="{{ hb.onClick }}" style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;" style-hover="background:var(--s4)">{{ hb.label }}</button>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{ fromReport }}">
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 10px 8px 14px;border-radius:10px;background:var(--acc-soft);font-size:13px;">
+      <span style="font-weight:600;">Aus dem Bericht</span>
+      <span style="color:var(--fg2);flex:1;min-width:0;">Kante „Moorhagen → Hollerau-Nord“ ist hervorgehoben. Sie belegt eine Aussage in Abschnitt 4.</span>
+      <button onClick="{{ backToReport }}" style="height:28px;padding:0 10px;border:none;border-radius:6px;background:transparent;color:var(--acc-text);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s3)">← Zurück zum Bericht</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ locked }}">
+    <div style="display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:12px;background:var(--s2);">
+      <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg2);flex:none;">⊘ Gesperrt</span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:4px;font-size:13.5px;line-height:1.5;">
+        <span style="font-weight:600;">Auf diesem Graphen wurden 2 Läufe gestartet. Deshalb lässt er sich nicht mehr ändern.</span>
+        <span style="color:var(--fg2);">So bleiben die Belege dieser Läufe gültig: <a href="#">Kooperation Hebammen</a> und <a href="#">Risiken Brenkhausen</a>. Zum Bearbeiten legst du eine Kopie an.</span>
+      </div>
+      <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;flex:none;" style-hover="background:var(--acc-hover)" onClick="{{ duplicate }}">Duplizieren</button>
+    </div>
+  </sc-if>
+
+  <div style="flex:1;min-height:0;display:flex;gap:16px;position:relative;">
+    <sc-if value="{{ showLeft }}" hint-placeholder-val="{{ true }}">
+      <div style="width:248px;flex:none;display:flex;flex-direction:column;gap:14px;min-height:0;position:{{ lp.pos }};left:0;top:0;bottom:0;z-index:4;background:{{ lp.bg }};box-shadow:{{ lp.sh }};padding:{{ lp.pad }};border-radius:12px;box-sizing:border-box;">
+        <label style="display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-radius:8px;background:var(--field);color:var(--fg3);flex:none;">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"></circle><line x1="11" y1="11" x2="14.5" y2="14.5"></line></svg>
+          <input value="{{ q }}" onChange="{{ onQ }}" placeholder="Entität suchen" aria-label="Entität suchen" style="flex:1;min-width:0;border:none;background:transparent;color:var(--fg);font:inherit;font-size:13px;outline:none;">
+        </label>
+        <div style="display:flex;flex-direction:column;gap:2px;flex:none;">
+          <span style="font-size:12px;font-weight:600;color:var(--fg3);padding:0 8px 4px;">Typ</span>
+          <sc-for list="{{ typeRows }}" as="t" hint-placeholder-count="7">
+            <button onClick="{{ t.onClick }}" aria-pressed="{{ t.on }}" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border:none;border-radius:7px;background:transparent;color:{{ t.fg }};font:inherit;font-size:13px;cursor:pointer;text-align:left;" style-hover="background:var(--s3)">
+              <span style="width:16px;height:16px;box-sizing:border-box;border-radius:4px;display:grid;place-items:center;font-size:10px;background:{{ t.boxBg }};border:{{ t.boxBd }};color:var(--on-acc);flex:none;">{{ t.check }}</span>
+              <span style="width:14px;color:var(--fg3);font-size:11px;text-align:center;">{{ t.glyph }}</span>
+              <span style="flex:1;">{{ t.label }}</span>
+              <span style="color:var(--fg3);font-size:12px;font-variant-numeric:tabular-nums;">{{ t.count }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;">
+          <span style="font-size:12px;font-weight:600;color:var(--fg3);padding:0 8px 4px;">Entitäten <span style="font-weight:400;">{{ listCount }}</span></span>
+          <div style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:1px;">
+            <sc-for list="{{ entityList }}" as="en" hint-placeholder-count="10">
+              <button onClick="{{ en.onClick }}" aria-current="{{ en.cur }}" style="display:flex;align-items:center;gap:10px;min-height:32px;padding:5px 8px;border:none;border-radius:7px;background:{{ en.bg }};color:var(--fg);font:inherit;font-size:13px;cursor:pointer;text-align:left;" style-hover="background:{{ en.hover }}">
+                <span style="width:14px;color:var(--fg3);font-size:11px;text-align:center;flex:none;">{{ en.glyph }}</span>
+                <span style="flex:1;min-width:0;line-height:1.35;">{{ en.name }}</span>
+                <sc-if value="{{ en.manual }}"><span title="manuell geändert" style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:10.5px;font-weight:600;box-sizing:border-box;flex:none;">✎</span></sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--s2);border-radius:12px;min-height:0;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 8px 14px;flex:none;flex-wrap:wrap;">
+        <sc-if value="{{ narrow }}">
+          <button onClick="{{ toggleLeft }}" aria-expanded="{{ leftOpen }}" style="height:30px;padding:0 10px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;">☰ Filter und Liste</button>
+        </sc-if>
+        <sc-if value="{{ editor }}">
+          <div role="tablist" style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;">
+            <sc-for list="{{ etabs }}" as="et" hint-placeholder-count="2">
+              <button role="tab" aria-selected="{{ et.on }}" onClick="{{ et.onClick }}" style="height:28px;padding:0 10px;border:none;border-radius:6px;font:inherit;font-size:12.5px;cursor:pointer;background:{{ et.bg }};color:{{ et.fg }};font-weight:{{ et.fw }};">{{ et.label }} <span style="color:var(--fg3);font-weight:400;">{{ et.count }}</span></button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showSelBar }}">
+          <div style="display:flex;align-items:center;gap:8px;padding-left:6px;">
+            <span style="font-size:13px;font-weight:600;">{{ selCount }} ausgewählt</span>
+            <button onClick="{{ noop }}" style="height:28px;padding:0 10px;border:none;border-radius:6px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Zusammenführen</button>
+            <button style="height:28px;padding:0 10px;border:none;border-radius:6px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Löschen</button>
+            <button onClick="{{ clearSel }}" style="height:28px;padding:0 8px;border:none;border-radius:6px;background:transparent;color:var(--fg2);font:inherit;font-size:12.5px;cursor:pointer;" style-hover="background:var(--s3)">Auswahl aufheben</button>
+          </div>
+        </sc-if>
+        <span style="flex:1;"></span>
+        <div role="group" aria-label="Darstellung" style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;">
+          <sc-for list="{{ viewSeg }}" as="vs" hint-placeholder-count="2">
+            <button onClick="{{ vs.onClick }}" aria-pressed="{{ vs.on }}" style="height:28px;padding:0 10px;border:none;border-radius:6px;font:inherit;font-size:12.5px;cursor:pointer;background:{{ vs.bg }};color:{{ vs.fg }};font-weight:{{ vs.fw }};">{{ vs.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ isNetz }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;min-height:0;padding:0 8px;">{{ netSvg }}</div>
+        <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:8px 16px 12px;font-size:12px;color:var(--fg3);flex:none;">
+          <span style="display:flex;align-items:center;gap:8px;"><span style="width:22px;height:0;border-top:1.5px solid var(--fg2);"></span>aus der Quelle belegt</span>
+          <span style="display:flex;align-items:center;gap:8px;"><span style="width:22px;height:0;border-top:1.5px dashed var(--fg2);"></span>manuell</span>
+          <span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--acc);"></span>gewählt</span>
+          <span>Klick auf einen Knoten zeigt seine Beziehungen.</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isTabEnt }}">
+        <div role="table" style="flex:1;min-height:0;overflow:auto;font-size:13.5px;">
+          <div role="row" style="display:grid;grid-template-columns:{{ cols }};gap:14px;padding:8px 16px;font-size:12px;font-weight:600;color:var(--fg3);position:sticky;top:0;background:var(--s2);">
+            <sc-for list="{{ entHead }}" as="hd" hint-placeholder-count="5">
+              <button onClick="{{ hd.onClick }}" style="display:flex;align-items:center;gap:4px;border:none;background:transparent;padding:0;font:inherit;font-weight:600;color:{{ hd.fg }};cursor:{{ hd.cursor }};text-align:left;">{{ hd.label }}<span style="font-size:9px;">{{ hd.arrow }}</span></button>
+            </sc-for>
+          </div>
+          <sc-for list="{{ entRows }}" as="er" hint-placeholder-count="10">
+            <div role="row" onClick="{{ er.onClick }}" style="display:grid;grid-template-columns:{{ cols }};gap:14px;align-items:center;padding:9px 16px;border-top:1px solid var(--line);cursor:pointer;background:{{ er.bg }};" style-hover="background:{{ er.hover }}">
+              <sc-if value="{{ editor }}"><span onClick="{{ er.onCheck }}" role="checkbox" aria-checked="{{ er.checked }}" style="width:16px;height:16px;box-sizing:border-box;border-radius:4px;display:grid;place-items:center;font-size:10px;background:{{ er.boxBg }};border:{{ er.boxBd }};color:var(--on-acc);">{{ er.check }}</span></sc-if>
+              <span style="display:flex;align-items:center;gap:8px;min-width:0;"><span style="font-weight:600;">{{ er.name }}</span><sc-if value="{{ er.manual }}"><span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;flex:none;">✎ manuell</span></sc-if></span>
+              <span style="color:var(--fg2);display:flex;gap:6px;align-items:center;"><span style="color:var(--fg3);font-size:11px;">{{ er.glyph }}</span>{{ er.type }}</span>
+              <span style="color:var(--fg2);font-variant-numeric:tabular-nums;">{{ er.deg }}</span>
+              <span style="color:var(--fg2);">{{ er.origin }}</span>
+              <sc-if value="{{ editor }}"><span style="color:var(--fg3);font-size:12.5px;font-variant-numeric:tabular-nums;">{{ er.changed }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isTabRel }}">
+        <div role="table" style="flex:1;min-height:0;overflow:auto;font-size:13.5px;">
+          <div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr) 150px;gap:14px;padding:8px 16px;font-size:12px;font-weight:600;color:var(--fg3);position:sticky;top:0;background:var(--s2);">
+            <span>Von</span><span>Beziehung</span><span>Zu</span><span>Herkunft</span>
+          </div>
+          <sc-for list="{{ relRows }}" as="rr" hint-placeholder-count="10">
+            <div role="row" onClick="{{ rr.onClick }}" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr) 150px;gap:14px;align-items:center;padding:9px 16px;border-top:1px solid var(--line);cursor:pointer;background:{{ rr.bg }};" style-hover="background:var(--s3)">
+              <span style="font-weight:600;">{{ rr.from }}</span>
+              <span style="color:var(--fg2);">{{ rr.label }}</span>
+              <span style="font-weight:600;">{{ rr.to }}</span>
+              <span style="display:flex;align-items:center;gap:6px;color:var(--fg2);"><sc-if value="{{ rr.manual }}"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;">✎ manuell</span></sc-if>{{ rr.origin }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <aside aria-label="Details" style="width:340px;flex:none;background:var(--s2);border-radius:12px;overflow:auto;min-height:0;">
+      <sc-if value="{{ showMerge }}">
+        <div style="padding:18px 20px;display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:17px;font-weight:650;">Zusammenführen</span>
+            <span style="font-size:13px;color:var(--fg2);">Aus zwei Entitäten wird eine. Beziehungen und Herkunft beider bleiben erhalten.</span>
+          </div>
+          <div role="radiogroup" aria-label="Name behalten" style="display:flex;flex-direction:column;gap:8px;">
+            <span style="font-size:12.5px;color:var(--fg3);">Name behalten</span>
+            <sc-for list="{{ mergeOpts }}" as="mo" hint-placeholder-count="2">
+              <button role="radio" aria-checked="{{ mo.on }}" onClick="{{ mo.onClick }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:{{ mo.border }};background:{{ mo.bg }};color:var(--fg);font:inherit;cursor:pointer;text-align:left;">
+                <span style="width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:{{ mo.ring }};flex:none;"></span>
+                <span style="flex:1;display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;font-size:14px;">{{ mo.name }}</span><span style="font-size:12px;color:var(--fg3);">{{ mo.meta }}</span></span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0;font-size:13px;">
+            <span style="font-size:12.5px;color:var(--fg3);padding-bottom:6px;">Ergebnis</span>
+            <div style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);"><span style="color:var(--fg3);">Aliase</span><span>{{ mergeAlias }}</span></div>
+            <div style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);"><span style="color:var(--fg3);">Beziehungen</span><span style="font-variant-numeric:tabular-nums;">5, davon 1 aus „Der Kreistag“</span></div>
+            <div style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);"><span style="color:var(--fg3);">Herkunft</span><span>§3 Beschlussvorlage, §3.2 Zeitplan</span></div>
+            <div style="display:grid;grid-template-columns:96px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);"><span style="color:var(--fg3);">Marke</span><span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;">✎ manuell</span><span style="color:var(--fg2);">manuell, 06.10.2026</span></span></div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--acc-hover)">Zusammenführen</button>
+            <button onClick="{{ clearSel }}" style="height:32px;padding:0 12px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">Abbrechen</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showDetail }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <span style="font-size:18px;font-weight:650;line-height:1.3;text-wrap:pretty;">{{ ent.name }}</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;background:var(--s3);color:var(--fg2);font-size:12px;font-weight:600;"><span style="font-size:10px;">{{ ent.glyph }}</span>{{ ent.type }}</span>
+              <sc-if value="{{ ent.manual }}"><span style="display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">✎ manuell</span></sc-if>
+            </div>
+          </div>
+
+          <sc-if value="{{ editMode }}">
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Name<div style="height:36px;display:flex;align-items:center;padding:0 12px;border-radius:8px;background:var(--field);border:1px solid var(--acc);box-shadow:0 0 0 3px var(--acc-soft);font-size:14px;color:var(--fg);">{{ ent.name }}</div></label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Typ<div style="height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-radius:8px;background:var(--field);font-size:14px;color:var(--fg);">{{ ent.type }}<span style="color:var(--fg2);font-size:10px;">▾</span></div></label>
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Aliase
+                <div style="display:flex;flex-wrap:wrap;gap:6px;padding:6px;border-radius:8px;background:var(--field);">
+                  <sc-for list="{{ ent.aliases }}" as="al" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 8px;border-radius:6px;background:var(--s3);color:var(--fg);font-size:12.5px;">{{ al }}<span style="color:var(--fg3);font-size:11px;padding:0 4px;">✕</span></span></sc-for>
+                  <span style="display:inline-flex;align-items:center;height:24px;padding:0 6px;color:var(--fg3);font-size:12.5px;">+ Alias</span>
+                </div>
+              </div>
+              <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Beschreibung<div style="min-height:60px;padding:8px 12px;border-radius:8px;background:var(--field);font-size:13.5px;line-height:1.5;color:var(--fg);">{{ ent.desc }}</div></label>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ readMode }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:14px;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <span style="font-size:12.5px;color:var(--fg3);">Aliase</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;"><sc-for list="{{ ent.aliases }}" as="al" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:6px;background:var(--s3);font-size:12.5px;">{{ al }}</span></sc-for><sc-if value="{{ ent.noAlias }}"><span style="font-size:13px;color:var(--fg3);">keine</span></sc-if></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <span style="font-size:12.5px;color:var(--fg3);">Beschreibung</span>
+                <p style="margin:0;font-size:13.5px;line-height:1.55;text-wrap:pretty;">{{ ent.desc }}</p>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12.5px;color:var(--fg3);flex:1;">Beziehungen {{ ent.relCount }}</span><sc-if value="{{ editMode }}"><span style="font-size:12.5px;color:var(--acc-text);font-weight:600;">+ Beziehung</span></sc-if></div>
+            <sc-for list="{{ ent.rels }}" as="rl" hint-placeholder-count="4">
+              <button onClick="{{ rl.onClick }}" style="display:flex;align-items:flex-start;gap:8px;padding:8px 8px;margin:0 -8px;border:none;border-radius:8px;background:{{ rl.bg }};color:var(--fg);font:inherit;font-size:13px;line-height:1.4;cursor:pointer;text-align:left;" style-hover="background:var(--s3)">
+                <span style="color:var(--fg3);flex:none;width:12px;">{{ rl.arrow }}</span>
+                <span style="flex:1;min-width:0;"><span style="color:var(--fg2);">{{ rl.label }}</span> <span style="font-weight:600;">{{ rl.other }}</span></span>
+                <sc-if value="{{ rl.manual }}"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;flex:none;">✎ manuell</span></sc-if>
+              </button>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:12.5px;color:var(--fg3);">Herkunft</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg2);overflow-wrap:anywhere;">seed-3-geburtshilfe-hollerau.md · {{ ent.sec }}</span>
+            <p style="margin:0;font-size:13px;line-height:1.5;color:var(--fg2);padding:8px 12px;border-radius:8px;background:var(--s1);text-wrap:pretty;">„{{ ent.ex }}“</p>
+            <sc-if value="{{ ent.manual }}"><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg2);"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;">✎</span>manuell, {{ ent.manualDate }} · {{ ent.manualWhat }}</span></sc-if>
+          </div>
+
+          <sc-if value="{{ ent.hasClaims }}">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <span style="font-size:12.5px;color:var(--fg3);">Im Bericht als Beleg</span>
+              <sc-for list="{{ ent.claims }}" as="cl" hint-placeholder-count="2">
+                <button onClick="{{ cl.onClick }}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin:0 -8px;border:none;border-radius:8px;background:transparent;color:var(--acc-text);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left;" style-hover="background:var(--s3)"><span style="flex:1;">{{ cl.label }}</span><span>→</span></button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ editMode }}">
+            <div style="display:flex;gap:10px;">
+              <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--acc-hover)">Änderungen speichern</button>
+              <button style="height:32px;padding:0 12px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">Verwerfen</button>
+            </div>
+            <span style="font-size:12px;color:var(--fg3);">Gespeicherte Änderungen erhalten die Marke „manuell“.</span>
+          </sc-if>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:760},&quot;mode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;lauf&quot;,&quot;bibliothek&quot;,&quot;editor&quot;,&quot;gesperrt&quot;,&quot;fehler&quot;,&quot;laden&quot;,&quot;ohne&quot;],&quot;default&quot;:&quot;lauf&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;narrow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;init&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;nav&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(o: object) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  g(k, d) { const i = this.props.init || {}; if (this.state[k] !== undefined) return this.state[k]; if (i[k] !== undefined) return i[k]; return d; }
+  renderVals() {
+    const mode = this.props.mode || 'lauf';
+    const nav = this.props.nav || (() => {});
+    const narrow = !!this.props.narrow;
+    const editor = mode === 'editor', locked = mode === 'gesperrt';
+    const isGraph = ['lauf', 'editor', 'gesperrt'].includes(mode);
+    const GL = { Organisation: '■', Ort: '▲', Person: '●', Gremium: '◆', Initiative: '⬢', Behörde: '▣', Partei: '▼' };
+    const E0 = [
+      { id: 'e1', name: 'Kliniken Hollerau gGmbH', short: 'Kliniken Hollerau', type: 'Organisation', al: ['Kliniken Hollerau', 'Klinikträger'], desc: 'Kommunaler Klinikträger des Landkreises mit den Standorten Hollerau-Nord und Brenkhausen.', sec: '§1 Ausgangslage', ex: 'Träger beider Standorte ist die Kliniken Hollerau gGmbH; alleiniger Gesellschafter ist der Landkreis.', x: 400, y: 250 },
+      { id: 'e2', name: 'Kreißsaal Brenkhausen', short: 'Kreißsaal Brenkhausen', type: 'Ort', al: ['Geburtshilfe Brenkhausen'], desc: 'Geburtshilfliche Abteilung am Standort Brenkhausen. Im Jahr 2025 an 23 Tagen geschlossen.', sec: '§2.1 Standorte', ex: 'Der Kreißsaal in Brenkhausen musste 2025 an 23 Tagen schließen, weil Dienste nicht besetzt werden konnten.', x: 580, y: 330, claims: ['c3'] },
+      { id: 'e3', name: 'Hollerau-Nord', short: 'Hollerau-Nord', type: 'Ort', al: ['Klinikum Hollerau-Nord'], desc: 'Hauptstandort mit Kinderklinik und Ziel der vorgeschlagenen Bündelung.', sec: '§2.1 Standorte', ex: 'Am Standort Hollerau-Nord befindet sich die einzige Kinderklinik des Landkreises.', x: 250, y: 340, claims: ['c8'] },
+      { id: 'e4', name: 'Kreistag', short: 'Kreistag', type: 'Gremium', al: ['Kreistag Hollerau'], desc: 'Entscheidet als Vertretung des Gesellschafters über die Beschlussvorlage.', sec: '§3 Beschlussvorlage', ex: 'Über die Vorlage entscheidet der Kreistag in seiner Sitzung im Dezember.', x: 470, y: 110 },
+      { id: 'e5', name: 'Geschäftsführung', short: 'Geschäftsführung', type: 'Organisation', al: ['Geschäftsführung der Kliniken Hollerau'], desc: 'Legt die Beschlussvorlage zur Schließung zum 30. Juni 2027 vor.', sec: '§3 Beschlussvorlage', ex: 'Die Geschäftsführung schlägt vor, die Geburtshilfe in Brenkhausen zum 30. Juni 2027 zu schließen.', x: 255, y: 160, claims: ['c3', 'c6'] },
+      { id: 'e6', name: 'Hebammenverband', short: 'Hebammenverband', type: 'Organisation', al: ['Landeshebammenverband'], desc: 'Lehnt die Schließung ab, solange das Land nicht über einen Sicherstellungszuschlag entschieden hat.', sec: '§4.2 Stellungnahmen', ex: 'Der Hebammenverband lehnt die Schließung ab, solange über den Sicherstellungszuschlag nicht entschieden ist.', x: 700, y: 200, claims: ['c5'] },
+      { id: 'e7', name: 'Anke Wübbena', short: 'Anke Wübbena', type: 'Person', al: ['A. Wübbena'], desc: 'Sprecherin der freiberuflichen Hebammen im Südkreis.', sec: '§4.1 Stellungnahmen', ex: 'Anke Wübbena spricht für die Gruppe der freiberuflichen Hebammen im Südkreis.', x: 720, y: 400, claims: ['c1', 'c4'] },
+      { id: 'e8', name: 'Dr. Birgit Sander', short: 'Dr. Birgit Sander', type: 'Person', al: ['Chefärztin Sander'], desc: 'Chefärztin der Geburtshilfe in Hollerau-Nord.', sec: '§4.3 Stellungnahmen', ex: 'Dr. Birgit Sander leitet die Geburtshilfe am Standort Hollerau-Nord.', x: 110, y: 220 },
+      { id: 'e9', name: 'Betriebsrat Kliniken Hollerau', short: 'Betriebsrat', type: 'Organisation', al: ['Betriebsrat'], desc: 'Vertritt die Beschäftigten beider Standorte.', sec: '§4.4 Stellungnahmen', ex: 'Der Betriebsrat fordert eine Beschäftigungszusage für alle Mitarbeitenden in Brenkhausen.', x: 390, y: 420 },
+      { id: 'e10', name: 'Rettungsdienst des Landkreises', short: 'Rettungsdienst', type: 'Organisation', al: ['Rettungsdienst'], desc: 'Gibt die Fahrzeit von Moorhagen nach Hollerau-Nord mit 52 Minuten an, bei Glätte bis zu 72 Minuten.', sec: '§5 Erreichbarkeit', ex: 'Die Fahrzeit von Moorhagen nach Hollerau-Nord liegt bei 52 Minuten, bei Glätte bis zu 72 Minuten.', x: 100, y: 430, claims: ['c8'] },
+      { id: 'e11', name: 'Initiative „Kreißsaal bleibt in Brenkhausen“', short: 'Initiative', type: 'Initiative', al: ['Bürgerinitiative Brenkhausen'], desc: 'Bürgerinitiative gegen die Schließung; 6.400 Unterschriften, 900 Teilnehmende bei der Demonstration.', sec: '§4.5 Stellungnahmen', ex: 'Die Initiative übergab 6.400 Unterschriften; an der Demonstration nahmen 900 Menschen teil.', x: 560, y: 470, claims: ['c9'] },
+      { id: 'e12', name: 'Landesministerium', short: 'Landesministerium', type: 'Behörde', al: ['Ministerium für Gesundheit'], desc: 'Entscheidet über einen Sicherstellungszuschlag für den Standort Brenkhausen.', sec: '§6 Finanzierung', ex: 'Ob das Land einen Sicherstellungszuschlag gewährt, ist noch offen.', x: 640, y: 70 },
+      { id: 'e13', name: 'CDU', short: 'CDU', type: 'Partei', al: ['CDU-Kreistagsfraktion'], desc: 'Trägt die Bündelung mit, wenn das Land einen Sicherstellungszuschlag zahlt.', sec: '§4.6 Stellungnahmen', ex: 'Die CDU-Fraktion knüpft ihre Zustimmung an einen Sicherstellungszuschlag des Landes.', x: 330, y: 50, claims: ['c7'] },
+      { id: 'e14', name: 'Moorhagen', short: 'Moorhagen', type: 'Ort', al: ['Gemeinde Moorhagen', 'Moorhagen-Süd'], desc: 'Gemeinde im Südkreis mit dem weitesten Weg nach Hollerau-Nord.', sec: '§5 Erreichbarkeit', ex: 'Aus Moorhagen ist der Weg nach Hollerau-Nord am längsten.', x: 270, y: 490, manual: '01.10.2026', manualWhat: 'Alias „Moorhagen-Süd“ ergänzt', claims: ['c8'] },
+    ];
+    const DUP = { id: 'e15', name: 'Der Kreistag', short: 'Der Kreistag', type: 'Gremium', al: [], desc: 'Berät über die Zukunft des Standorts Brenkhausen.', sec: '§3.2 Zeitplan', ex: 'Der Kreistag berät im Dezember über die Vorlage.', x: 545, y: 205 };
+    const K0 = [
+      ['k1', 'e5', 'e1', 'leitet', '§3'], ['k2', 'e1', 'e2', 'betreibt', '§2.1'], ['k3', 'e1', 'e3', 'betreibt', '§2.1'],
+      ['k4', 'e5', 'e2', 'schlägt Schließung vor', '§3'], ['k5', 'e4', 'e2', 'entscheidet über', '§3'],
+      ['k6', 'e7', 'e2', 'arbeitet als Beleghebamme in', '§4.1'], ['k7', 'e7', 'e5', 'kritisiert', '§4.1'],
+      ['k8', 'e6', 'e2', 'lehnt Schließung ab', '§4.2'], ['k9', 'e6', 'e12', 'fordert Zuschlag von', '§4.2'],
+      ['k10', 'e8', 'e3', 'leitet Geburtshilfe in', '§4.3'], ['k11', 'e8', 'e5', 'unterstützt Vorlage von', '§4.3'],
+      ['k12', 'e9', 'e1', 'vertritt Beschäftigte von', '§4.4'], ['k13', 'e10', 'e14', 'versorgt', '§5'],
+      ['k14', 'e14', 'e3', 'Fahrzeit 52 min, bei Glätte 72 min', '§5'], ['k15', 'e11', 'e5', 'protestiert gegen', '§4.5'],
+      ['k16', 'e13', 'e4', 'Fraktion im', '§4.6'], ['k17', 'e13', 'e12', 'knüpft Zustimmung an Zuschlag von', '§4.6'],
+      ['k18', 'e12', 'e1', 'entscheidet über Zuschlag für', '§6'], ['k19', 'e14', 'e2', 'im Einzugsgebiet von', '§5'],
+      ['k20', 'e9', 'e11', 'unterstützt', null, '01.10.2026'], ['k21', 'e1', 'e7', 'bietet Kooperation an', null, '02.10.2026'],
+      ['k22', 'e4', 'e5', 'beauftragt', '§3'],
+    ];
+    const E = editor ? E0.concat([DUP]) : E0;
+    const Kr = editor ? K0.concat([['k23', 'e15', 'e2', 'berät über', '§3.2']]) : K0;
+    const K = Kr.map(([id, f, t, label, sec, manual]) => ({ id, f, t, label, sec, manual: manual || null }));
+    const byId = Object.fromEntries(E.map(e => [e.id, e]));
+    const deg = (id) => K.filter(k => k.f === id || k.t === id).length;
+
+    const graphView = this.g('graphView', 'netz');
+    const sel = this.g('sel', editor ? ['e14'] : []);
+    const entity = this.g('entity', editor ? 'e14' : (this.g('edge', null) ? 'e14' : 'e10'));
+    const edge = this.g('edge', null);
+    const hidden = this.state.hidden || [];
+    const q = this.state.q || '';
+    const etab = this.state.etab || 'ent';
+    const leftOpen = !!this.state.leftOpen;
+    const sort = this.state.sort || { k: 'name', d: 1 };
+    const keep = this.state.keep || 'e4';
+    const fromReport = !!(this.props.init && this.props.init.claim) && mode === 'lauf';
+
+    const pick = (id) => () => this.setState({ entity: id, edge: null, sel: editor ? [id] : [] , leftOpen: false });
+    const types = Object.keys(GL);
+    const typeRows = types.map(t => {
+      const on = !hidden.includes(t);
+      return { label: t, glyph: GL[t], count: E.filter(e => e.type === t).length, on, check: on ? '✓' : '', boxBg: on ? 'var(--acc)' : 'transparent', boxBd: on ? 'none' : '1.5px solid var(--fg3)', fg: on ? 'var(--fg)' : 'var(--fg3)', onClick: () => this.setState({ hidden: on ? hidden.concat([t]) : hidden.filter(x => x !== t) }) };
+    });
+    const visible = E.filter(e => !hidden.includes(e.type) && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
+    const entityList = visible.map(e => ({ name: e.name, glyph: GL[e.type], manual: !!e.manual, cur: e.id === entity ? 'true' : 'false', bg: e.id === entity ? 'var(--acc-soft)' : 'transparent', hover: e.id === entity ? 'var(--acc-soft)' : 'var(--s3)', onClick: pick(e.id) }));
+
+    const visIds = new Set(visible.map(e => e.id));
+    const h = React.createElement;
+    const sel1 = byId[entity];
+    const related = new Set(K.filter(k => k.f === entity || k.t === entity).flatMap(k => [k.f, k.t]));
+    const edges = K.filter(k => visIds.has(k.f) && visIds.has(k.t)).map(k => {
+      const a = byId[k.f], b = byId[k.t];
+      const isSel = k.id === edge, conn = k.f === entity || k.t === entity;
+      return { k, a, b, isSel, conn };
+    });
+    const netSvg = h('svg', { viewBox: '0 0 800 540', role: 'img', 'aria-label': 'Netz der Entitäten und Beziehungen', style: { width: '100%', height: '100%', display: 'block' } },
+      edges.map(({ k, a, b, isSel, conn }) => h('line', { key: k.id, x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: { stroke: isSel ? 'var(--acc-text)' : (conn ? 'var(--fg2)' : 'var(--fg3)'), strokeWidth: isSel ? 2.8 : (conn ? 1.6 : 1), strokeDasharray: k.manual ? '6 5' : 'none', opacity: isSel || conn ? 1 : 0.45 } })),
+      edges.filter(e => e.isSel || e.conn).map(({ k, a, b, isSel }) => h('text', { key: 't' + k.id, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 5, textAnchor: 'middle', style: { fill: isSel ? 'var(--acc-text)' : 'var(--fg2)', fontSize: 11, fontWeight: isSel ? 700 : 500, paintOrder: 'stroke', stroke: 'var(--s2)', strokeWidth: 4, strokeLinejoin: 'round' } }, (k.manual ? '✎ ' : '') + k.label)),
+      visible.map(e => {
+        const isS = e.id === entity, rel = related.has(e.id);
+        const r = Math.min(16, 7 + deg(e.id) * 1.1);
+        const dim = !isS && !rel;
+        return h('g', { key: e.id, onClick: pick(e.id), style: { cursor: 'pointer', opacity: dim ? 0.5 : 1 } },
+          h('circle', { cx: e.x, cy: e.y, r, style: { fill: isS ? 'var(--acc)' : 'var(--s4)', stroke: isS ? 'var(--acc-text)' : (rel ? 'var(--fg2)' : 'var(--fg3)'), strokeWidth: isS ? 2 : 1.3, strokeDasharray: e.manual ? '3 2.5' : 'none' } }),
+          h('text', { x: e.x, y: e.y + r + 15, textAnchor: 'middle', style: { fill: isS ? 'var(--fg)' : 'var(--fg2)', fontSize: 12, fontWeight: isS ? 700 : 500, paintOrder: 'stroke', stroke: 'var(--s2)', strokeWidth: 4, strokeLinejoin: 'round' } }, e.short + (e.manual ? ' ✎' : '')));
+      })
+    );
+
+    const sortVal = (e) => sort.k === 'type' ? e.type : sort.k === 'deg' ? deg(e.id) : e.name.replace(/^Dr\. /, '');
+    const rows = visible.slice().sort((a, b) => { const x = sortVal(a), y = sortVal(b); return (x > y ? 1 : x < y ? -1 : 0) * sort.d; });
+    const toggleSel = (id) => (ev) => { ev && ev.stopPropagation && ev.stopPropagation(); const s = sel.includes(id) ? sel.filter(x => x !== id) : sel.concat([id]); this.setState({ sel: s, entity: s.length === 1 ? s[0] : entity }); };
+    const entRows = rows.map(e => {
+      const checked = sel.includes(e.id), cur = editor ? checked : e.id === entity;
+      return { name: e.name, type: e.type, glyph: GL[e.type], deg: deg(e.id), origin: e.manual ? e.sec + ' · manuell' : e.sec, changed: e.manual ? e.manual : (e.id === 'e15' ? '28.09.2026' : '28.09.2026'), manual: !!e.manual, checked: checked ? 'true' : 'false', check: checked ? '✓' : '', boxBg: checked ? 'var(--acc)' : 'transparent', boxBd: checked ? 'none' : '1.5px solid var(--fg3)', bg: cur ? 'var(--acc-soft)' : 'transparent', hover: cur ? 'var(--acc-soft)' : 'var(--s3)', onClick: pick(e.id), onCheck: toggleSel(e.id) };
+    });
+    const HD = editor ? [['', null], ['Name', 'name'], ['Typ', 'type'], ['Beziehungen', 'deg'], ['Herkunft', null], ['Geändert', null]] : [['Name', 'name'], ['Typ', 'type'], ['Beziehungen', 'deg'], ['Herkunft', null]];
+    const entHead = HD.map(([label, k]) => ({ label, arrow: k && sort.k === k ? (sort.d > 0 ? '▲' : '▼') : '', fg: k && sort.k === k ? 'var(--fg)' : 'var(--fg3)', cursor: k ? 'pointer' : 'default', onClick: k ? () => this.setState({ sort: { k, d: sort.k === k ? -sort.d : 1 } }) : () => {} }));
+    const relRows = K.map(k => ({ from: byId[k.f].name, to: byId[k.t].name, label: k.label, manual: !!k.manual, origin: k.manual ? 'manuell, ' + k.manual : k.sec, bg: k.id === edge ? 'var(--acc-soft)' : 'transparent', onClick: () => this.setState({ edge: k.id, entity: k.f }) }));
+
+    const CL = { c1: '§1 · Ablehnung des Kooperationsmodells', c3: '§2 · Gründe der Beschlussvorlage', c4: '§3 · Ursache der Schließtage', c5: '§3 · Haltung des Hebammenverbands', c6: '§4 · Gesprächsangebote', c7: '§4 · Bedingung der CDU', c8: '§4 · Fahrzeit aus Moorhagen', c9: '§7 · Unterschriften und Demonstration' };
+    const ent = sel1 ? {
+      name: sel1.name, type: sel1.type, glyph: GL[sel1.type], aliases: sel1.al, noAlias: sel1.al.length === 0, desc: sel1.desc, sec: sel1.sec, ex: sel1.ex,
+      manual: !!sel1.manual, manualDate: sel1.manual || '', manualWhat: sel1.manualWhat || '',
+      relCount: deg(sel1.id),
+      rels: K.filter(k => k.f === sel1.id || k.t === sel1.id).map(k => {
+        const out = k.f === sel1.id;
+        return { arrow: out ? '→' : '←', label: out ? k.label : k.label + ' ←', other: byId[out ? k.t : k.f].name, manual: !!k.manual, bg: k.id === edge ? 'var(--acc-soft)' : 'transparent', onClick: () => this.setState({ edge: k.id }) };
+      }).map(r => ({ ...r, label: r.label.replace(' ←', '') })),
+      hasClaims: mode === 'lauf' && !!(sel1.claims && sel1.claims.length),
+      claims: (sel1.claims || []).map(c => ({ label: CL[c] || c, onClick: () => nav({ tab: 'bericht', init: { claim: c } }) })),
+    } : { aliases: [], rels: [], claims: [] };
+
+    const showMerge = editor && sel.length >= 2;
+    const mergeOpts = ['e4', 'e15'].map(id => { const on = keep === id; const e = byId[id] || {}; return { name: e.name || '', meta: (e.sec || '') + ' · ' + (byId[id] ? deg(id) : 0) + ' Beziehungen', on, border: on ? '2px solid var(--acc)' : '2px solid transparent', bg: on ? 'var(--acc-soft)' : 'var(--field)', ring: on ? '5px solid var(--acc)' : '1.5px solid var(--fg3)', onClick: () => this.setState({ keep: id }) }; });
+
+    const bib = [
+      { name: 'Geburtshilfe Hollerau', src: 'seed-3-geburtshilfe-hollerau.md', counts: '14 Entitäten · 22 Beziehungen', used: 'verwendet in 2 Läufen', state: 'Gesperrt', stateGlyph: '⊘', stateFg: 'var(--fg2)', manual: '3 manuell', hasManual: true, hasDup: false, date: '28.09.2026', onOpen: () => nav({ graphenMode: 'gesperrt', init: { graphView: 'tabelle', entity: 'e1' } }) },
+      { name: 'Geburtshilfe Hollerau · Kopie', src: 'seed-3-geburtshilfe-hollerau.md', counts: '15 Entitäten · 23 Beziehungen', used: 'in keinem Lauf verwendet', state: 'Bearbeitbar', stateGlyph: '✎', stateFg: 'var(--fg)', manual: '3 manuell', hasManual: true, hasDup: true, date: '05.10.2026', onOpen: () => nav({ graphenMode: 'editor', init: { graphView: 'tabelle', sel: ['e4', 'e15'], entity: 'e4' } }) },
+      { name: 'Hebammen im Südkreis', src: 'von Hand angelegt', counts: '9 Entitäten · 11 Beziehungen', used: 'in keinem Lauf verwendet', state: 'Bearbeitbar', stateGlyph: '✎', stateFg: 'var(--fg)', manual: '20 manuell', hasManual: true, hasDup: false, date: '02.10.2026', onOpen: () => nav({ graphenMode: 'editor', init: { graphView: 'netz' } }) },
+    ];
+
+    const headButtons = mode === 'lauf'
+      ? [{ label: 'In Bibliothek öffnen', onClick: () => nav({ view: 'graphen', graphenMode: 'gesperrt', init: { graphView: 'tabelle', entity: 'e1' } }) }, { label: 'Duplizieren und bearbeiten', onClick: () => nav({ view: 'graphen', graphenMode: 'editor', init: { graphView: 'tabelle', sel: ['e4', 'e15'], entity: 'e4' } }) }]
+      : editor ? [{ label: '+ Entität', onClick: () => {} }, { label: '+ Beziehung', onClick: () => {} }] : [];
+    const showLeft = !narrow || leftOpen;
+
+    return {
+      isBib: mode === 'bibliothek', isFehler: mode === 'fehler', isOhne: mode === 'ohne', isLaden: mode === 'laden', isGraph,
+      bib, sk8: [80, 64, 72, 90, 58, 76, 66, 84].map(w => ({ w: w + '%' })),
+      openSystem: () => nav({ settings: 'system' }), openLibrary: () => nav({ view: 'graphen', graphenMode: 'bibliothek', init: {} }),
+      gName: editor ? 'Geburtshilfe Hollerau · Kopie' : 'Geburtshilfe Hollerau',
+      gCounts: E.length + ' Entitäten · ' + K.length + ' Beziehungen',
+      gState: editor ? '✎ Bearbeitbar, in keinem Lauf verwendet' : '⊘ Gesperrt, verwendet von 2 Läufen',
+      manualCount: K.filter(k => k.manual).length + E.filter(e => e.manual).length,
+      headButtons, locked, editor, fromReport,
+      backToReport: () => nav({ tab: 'bericht', init: { claim: (this.props.init || {}).claim } }),
+      duplicate: () => nav({ graphenMode: 'editor', init: { graphView: 'tabelle', sel: ['e4', 'e15'], entity: 'e4' } }),
+      narrow, leftOpen, showLeft, toggleLeft: () => this.setState({ leftOpen: !leftOpen }),
+      lp: narrow ? { pos: 'absolute', bg: 'var(--s1)', sh: 'var(--shadow-dlg)', pad: '14px' } : { pos: 'relative', bg: 'transparent', sh: 'none', pad: '0' },
+      q, onQ: (e) => this.setState({ q: e.target.value }), typeRows, entityList, listCount: visible.length,
+      etabs: [['ent', 'Entitäten', E.length], ['rel', 'Beziehungen', K.length]].map(([k, label, count]) => ({ label, count, on: etab === k, bg: etab === k ? 'var(--s4)' : 'transparent', fg: etab === k ? 'var(--fg)' : 'var(--fg2)', fw: etab === k ? 600 : 500, onClick: () => this.setState({ etab: k, graphView: 'tabelle' }) })),
+      showSelBar: editor && sel.length >= 2, selCount: sel.length, clearSel: () => this.setState({ sel: [entity] }), noop: () => {},
+      viewSeg: [['Netz', 'netz'], ['Tabelle', 'tabelle']].map(([label, k]) => ({ label, on: graphView === k, bg: graphView === k ? 'var(--s4)' : 'transparent', fg: graphView === k ? 'var(--fg)' : 'var(--fg2)', fw: graphView === k ? 600 : 500, onClick: () => this.setState({ graphView: k }) })),
+      isNetz: graphView === 'netz', isTabEnt: graphView === 'tabelle' && (!editor || etab === 'ent'), isTabRel: graphView === 'tabelle' && editor && etab === 'rel',
+      netSvg, cols: editor ? '16px minmax(0,1.6fr) 130px 96px minmax(0,1fr) 96px' : 'minmax(0,1.6fr) 130px 96px minmax(0,1fr)',
+      entHead, entRows, relRows,
+      showMerge, showDetail: !showMerge && !!sel1, mergeOpts, mergeAlias: keep === 'e4' ? 'Kreistag Hollerau, Der Kreistag' : 'Kreistag, Kreistag Hollerau',
+      ent, editMode: editor, readMode: !editor,
+    };
+  }
+}
+</script>
+</body>
+</html>

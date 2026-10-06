@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:absolute;inset:0;display:flex;gap:16px;padding-bottom:20px;box-sizing:border-box;">
+  <sc-if value="{{ showLeft }}" hint-placeholder-val="{{ true }}">
+    <nav aria-label="Gespräche" style="width:248px;flex:none;display:flex;flex-direction:column;gap:10px;overflow:auto;min-height:0;position:{{ lp.pos }};left:0;top:0;bottom:20px;z-index:4;background:{{ lp.bg }};box-shadow:{{ lp.sh }};padding:{{ lp.pad }};border-radius:12px;box-sizing:border-box;">
+      <button onClick="{{ newConv }}" style="display:flex;align-items:center;gap:6px;height:34px;padding:0 12px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)"><span style="font-size:16px;line-height:1;">+</span> Neues Gespräch</button>
+      <span style="font-size:12px;font-weight:600;color:var(--fg3);padding:6px 8px 0;">Gespräche</span>
+      <div style="display:flex;flex-direction:column;gap:2px;">
+        <sc-for list="{{ convs }}" as="c" hint-placeholder-count="4">
+          <button onClick="{{ c.onClick }}" aria-current="{{ c.cur }}" style="display:flex;gap:10px;align-items:flex-start;padding:8px;border:none;border-radius:8px;background:{{ c.bg }};color:var(--fg);font:inherit;cursor:pointer;text-align:left;" style-hover="background:{{ c.hover }}">
+            <span style="width:28px;height:28px;border-radius:{{ c.rad }};background:{{ c.av }};color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none;">{{ c.ini }}</span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+              <span style="font-size:13px;font-weight:600;line-height:1.3;">{{ c.title }}</span>
+              <span style="font-size:12px;color:var(--fg3);line-height:1.35;">{{ c.meta }}</span>
+            </span>
+          </button>
+        </sc-for>
+      </div>
+    </nav>
+  </sc-if>
+
+  <section aria-label="Gespräch" style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--s2);border-radius:12px;min-height:0;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 18px 10px;flex:none;flex-wrap:wrap;">
+      <sc-if value="{{ narrow }}"><button onClick="{{ toggleLeft }}" style="height:30px;padding:0 10px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;">☰ Gespräche</button></sc-if>
+      <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;">
+        <span style="font-size:16px;font-weight:650;">{{ head.title }}</span>
+        <span style="font-size:12.5px;color:var(--fg3);">{{ head.meta }}</span>
+      </div>
+      <span style="display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 8px;border-radius:5px;border:1px solid var(--fg3);color:var(--fg);font-size:12px;font-weight:600;box-sizing:border-box;">❝ Interview</span>
+    </div>
+    <div style="margin:0 18px;padding:9px 12px;border-radius:8px;background:var(--s1);font-size:12.5px;line-height:1.45;color:var(--fg2);flex:none;">Nachträgliche Befragung. Die Antworten sind synthetische Modellausgabe und waren nie Teil der Diskussion im Feed.</div>
+
+    <div style="flex:1;min-height:0;overflow:auto;padding:16px 18px;">
+      <sc-if value="{{ isEinzel }}" hint-placeholder-val="{{ true }}">
+        <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px;">
+          <sc-for list="{{ turns }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="align-self:flex-end;max-width:78%;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                <span style="font-size:12px;color:var(--fg3);">Du · {{ t.time }}</span>
+                <p style="margin:0;padding:10px 14px;border-radius:14px 14px 4px 14px;background:var(--s3);font-size:14px;line-height:1.5;text-wrap:pretty;">{{ t.q }}</p>
+              </div>
+              <div style="align-self:flex-start;max-width:86%;display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px;border-radius:4px 14px 14px 14px;border:1px solid var(--fg3);background:{{ t.bg }};box-sizing:border-box;">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;">
+                  <span style="width:24px;height:24px;border-radius:{{ t.rad }};background:{{ t.av }};color:#fff;display:grid;place-items:center;font-size:9px;font-weight:700;">{{ t.ini }}</span>
+                  <span style="font-weight:650;font-size:13px;">{{ t.name }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:5px;border:1px solid var(--fg3);color:var(--fg);font-size:11px;font-weight:600;box-sizing:border-box;">❝ Interview</span>
+                  <span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span>
+                  <sc-if value="{{ t.hl }}"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--acc);color:var(--on-acc);font-size:11px;font-weight:600;">Beleg im Bericht</span></sc-if>
+                </div>
+                <p style="margin:0;font-size:14.5px;line-height:1.55;text-wrap:pretty;">{{ t.a }}</p>
+                <span style="font-size:11.5px;color:var(--fg3);font-variant-numeric:tabular-nums;">{{ t.meta }}</span>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ isEmpty }}">
+            <div style="padding:48px 0;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center;">
+              <span style="font-size:15px;font-weight:600;">Noch keine Frage an {{ head.persona }}</span>
+              <span style="font-size:13.5px;color:var(--fg2);max-width:420px;line-height:1.5;">Die Persona antwortet aus ihrer Rolle und ihrem Wissensstand am Ende der Simulation.</span>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isGruppe }}">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+            <span style="font-size:12px;color:var(--fg3);">Du an 3 Personas · 15:20</span>
+            <p style="margin:0;padding:10px 14px;border-radius:14px 14px 4px 14px;background:var(--s3);font-size:14.5px;line-height:1.5;max-width:78%;">Was müsste passieren, damit Sie einer Bündelung in Hollerau-Nord zustimmen?</p>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+            <sc-for list="{{ group }}" as="g" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px;border-radius:4px 14px 14px 14px;border:1px solid var(--fg3);box-sizing:border-box;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="width:28px;height:28px;border-radius:{{ g.rad }};background:{{ g.av }};color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none;">{{ g.ini }}</span>
+                  <span style="display:flex;flex-direction:column;min-width:0;"><span style="font-weight:650;font-size:13px;line-height:1.3;">{{ g.name }}</span><span style="font-size:11.5px;color:var(--fg3);line-height:1.3;">{{ g.stance }}</span></span>
+                </div>
+                <div style="display:flex;gap:6px;">
+                  <span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:5px;border:1px solid var(--fg3);color:var(--fg);font-size:11px;font-weight:600;box-sizing:border-box;">❝ Interview</span>
+                  <span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span>
+                </div>
+                <p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty;">{{ g.a }}</p>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="padding:12px 18px 16px;flex:none;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px;">
+      <div style="min-height:44px;padding:10px 12px;border-radius:8px;background:var(--field);font-size:14px;color:var(--fg3);box-sizing:border-box;">{{ inputHint }}</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span style="font-size:12.5px;color:var(--fg3);">Modell</span>
+        <span style="display:flex;align-items:center;gap:10px;height:30px;padding:0 10px 0 12px;border-radius:8px;border:1px solid var(--acc-line);background:var(--field);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;cursor:pointer;">claude-haiku-4.5<span style="color:var(--acc-text);font-size:10px;">▾</span></span>
+        <span style="font-size:12.5px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ costHint }}</span>
+        <span style="flex:1;"></span>
+        <button style="height:32px;padding:0 16px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--acc-hover)">{{ sendLabel }}</button>
+      </div>
+    </div>
+  </section>
+
+  <aside aria-label="Persona" style="width:320px;flex:none;background:var(--s2);border-radius:12px;overflow:auto;min-height:0;">
+    <sc-if value="{{ isEinzel }}" hint-placeholder-val="{{ true }}">
+      <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:16px;">
+        <div style="display:flex;gap:14px;align-items:center;">
+          <span style="width:56px;height:56px;border-radius:{{ pc.radL }};background:{{ pc.av }};color:#fff;display:grid;place-items:center;font-size:17px;font-weight:700;flex:none;">{{ pc.ini }}</span>
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-size:16px;font-weight:650;line-height:1.3;">{{ pc.name }}</span><span style="font-size:13px;color:var(--fg2);line-height:1.4;">{{ pc.role }}</span></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--s3);color:var(--fg2);font-size:12px;font-weight:600;">{{ pc.art }}</span>
+          <sc-if value="{{ pc.fallback }}"><span style="display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:12px;font-weight:600;">↺ Fallback</span></sc-if>
+          <sc-if value="{{ pc.notFallback }}"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--s3);color:var(--fg2);font-size:12px;font-weight:600;">{{ pc.origin }}</span></sc-if>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.5;text-wrap:pretty;">{{ pc.haltung }}</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <span style="font-size:12.5px;color:var(--fg3);">Beiträge im Feed</span>
+          <sc-for list="{{ pc.posts }}" as="po" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;background:var(--s1);">
+              <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg3);"><span>{{ po.meta }}</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div>
+              <p style="margin:0;font-size:13px;line-height:1.5;color:var(--fg2);text-wrap:pretty;">{{ po.text }}</p>
+              <button onClick="{{ po.onJump }}" style="align-self:flex-start;height:24px;padding:0 6px;margin-left:-6px;border:none;border-radius:6px;background:transparent;color:var(--acc-text);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s3)">Im Feed zeigen →</button>
+            </div>
+          </sc-for>
+          <sc-if value="{{ pc.noPosts }}"><span style="font-size:13px;color:var(--fg3);">Keine Beiträge in diesem Lauf.</span></sc-if>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <span style="font-size:12.5px;color:var(--fg3);">Im Bericht zitiert</span>
+          <sc-for list="{{ pc.cites }}" as="ci" hint-placeholder-count="2">
+            <button onClick="{{ ci.onClick }}" style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;margin:0 -8px;border:none;border-radius:8px;background:transparent;color:var(--acc-text);font:inherit;font-size:13px;font-weight:600;line-height:1.4;cursor:pointer;text-align:left;" style-hover="background:var(--s3)"><span style="flex:1;">{{ ci.label }}</span><span>→</span></button>
+          </sc-for>
+          <sc-if value="{{ pc.noCites }}"><span style="font-size:13px;color:var(--fg3);">Nicht zitiert.</span></sc-if>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isGruppe }}">
+      <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:12px;">
+        <span style="font-size:15px;font-weight:600;">Teilnehmende</span>
+        <p style="margin:0;font-size:13px;line-height:1.5;color:var(--fg2);">Dieselbe Frage an mehrere Personas. Jede antwortet unabhängig und sieht die anderen Antworten nicht.</p>
+        <sc-for list="{{ group }}" as="g" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);">
+            <span style="width:28px;height:28px;border-radius:{{ g.rad }};background:{{ g.av }};color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none;">{{ g.ini }}</span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font-size:13px;font-weight:600;">{{ g.name }}</span><span style="font-size:12px;color:var(--fg3);">{{ g.role }}</span></span>
+          </div>
+        </sc-for>
+        <span style="font-size:12.5px;color:var(--acc-text);font-weight:600;cursor:pointer;">+ Persona hinzufügen</span>
+      </div>
+    </sc-if>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1300,&quot;height&quot;:800},&quot;narrow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;init&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;nav&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(o: object) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  renderVals() {
+    const nav = this.props.nav || (() => {});
+    const init = this.props.init || {};
+    const narrow = !!this.props.narrow;
+    const P = {
+      wue: ['Anke Wübbena', 'Sprecherin der freiberuflichen Hebammen im Südkreis', 'E', 'graph', 20, 'AW', 'Will den Kreißsaal Brenkhausen erhalten und fordert eine echte Kooperation mit den freiberuflichen Hebammen.', 'Für Erhalt'],
+      san: ['Dr. Birgit Sander', 'Chefärztin der Geburtshilfe in Hollerau-Nord', 'E', 'graph', 170, 'BS', 'Hält die Bündelung wegen der Kinderklinik im Haus für medizinisch sicherer.', 'Für Bündelung'],
+      gf: ['Geschäftsführung', 'Geschäftsführung der Kliniken Hollerau gGmbH', 'K', 'graph', 250, 'GF', 'Hält die Bündelung in Hollerau-Nord für den einzigen Weg, die Geburtshilfe personell zu sichern.', 'Für Bündelung'],
+      rd: ['Rettungsdienst des Landkreises', 'Träger des Rettungsdienstes', 'K', 'graph', 200, 'RD', 'Bewertet die Pläne nach Fahrzeiten und Erreichbarkeit, ohne sich festzulegen.', 'Unentschieden'],
+      hv: ['Hebammenverband', 'Berufsverband der Hebammen', 'K', 'fallback', 45, 'HV', 'Lehnt die Schließung ab, solange das Land nicht über einen Sicherstellungszuschlag entschieden hat.', 'Für Erhalt'],
+      tja: ['Maren Tjaden', 'Werdende Mutter aus Moorhagen', 'E', 'ki', 355, 'MT', 'Fürchtet den langen Weg nach Hollerau-Nord, besonders im Winter.', 'Für Erhalt'],
+      cdu: ['CDU-Kreistagsfraktion', 'Fraktion im Kreistag', 'K', 'fallback', 230, 'CDU', 'Trägt die Bündelung mit, wenn das Land einen Sicherstellungszuschlag zahlt.', 'Unentschieden'],
+      ini: ['Initiative „Kreißsaal bleibt in Brenkhausen“', 'Bürgerinitiative', 'K', 'fallback', 140, 'IN', 'Mobilisiert gegen die Schließung mit Unterschriften und Demonstrationen.', 'Für Erhalt'],
+      br: ['Betriebsrat Kliniken Hollerau', 'Vertretung der Beschäftigten', 'K', 'fallback', 70, 'BR', 'Verlangt Zusagen für die Beschäftigten in Brenkhausen, bevor er einer Bündelung zustimmt.', 'Für Erhalt'],
+      jan: ['Okko Janssen', 'Bürgermeister von Moorhagen', 'E', 'graph', 110, 'OJ', 'Sieht Moorhagen bei einer Bündelung abgehängt und verlangt verlässliche Rettungswege.', 'Für Erhalt'],
+      ben: ['Hinrich Bents', 'Kreistagsabgeordneter, parteilos', 'E', 'graph', 90, 'HB', 'Will vor der Abstimmung wissen, ob das Land einen Zuschlag zahlt.', 'Unentschieden'],
+      eil: ['Sabine Eilers', 'Pflegekraft im Kreißsaal Brenkhausen', 'E', 'hand', 5, 'SE', 'Kennt die Dienstplanlücken aus erster Hand und will am Standort bleiben.', 'Für Erhalt'],
+      wie: ['Jörg Wiemann', 'Hausarzt in Moorhagen', 'E', 'ki', 330, 'JW', 'Wägt kurze Wege gegen die bessere Ausstattung in Hollerau-Nord ab.', 'Unentschieden'],
+      fra: ['Claudia Franke', 'Referentin im Landesministerium', 'E', 'graph', 215, 'CF', 'Prüft, ob ein Sicherstellungszuschlag rechtlich und finanziell möglich ist.', 'Unentschieden'],
+    };
+    const ORI = { graph: '◇ aus Graph', hand: '✎ von Hand', ki: 'KI-Entwurf', fallback: '↺ Fallback' };
+    const per = (id) => { const p = P[id]; return { id, name: p[0], role: p[1], art: p[2], origin: p[3], av: 'oklch(0.5 0.08 ' + p[4] + ')', ini: p[5], haltung: p[6], stance: p[7], rad: p[2] === 'K' ? '7px' : '50%', fallback: p[3] === 'fallback' }; };
+    const CONVS = [
+      { id: 'i1', persona: 'wue', title: 'Anke Wübbena', meta: 'Einzelgespräch · 3 Fragen · 05.10.' },
+      { id: 'i2', persona: null, title: 'Gruppenfrage: Bedingungen für eine Bündelung', meta: '3 Personas · 05.10.' },
+      { id: 'i3', persona: 'san', title: 'Dr. Birgit Sander', meta: 'Einzelgespräch · 2 Fragen · 05.10.' },
+      { id: 'i4', persona: 'gf', title: 'Geschäftsführung', meta: 'Einzelgespräch · 1 Frage · 04.10.' },
+    ];
+    const TURNS = {
+      i1: [
+        ['15:02', 'Warum lehnen Sie das Kooperationsangebot ab?', 'Wir lehnen nicht die Kooperation ab, sondern diese Bedingungen. Ohne verlässliche Dienstpläne und ohne Zuschuss zur Haftpflicht tragen wir das ganze Risiko. Zu diesen Bedingungen nicht.', 'c1'],
+        ['15:04', 'Was wäre für Sie ein annehmbares Angebot?', 'Feste Belegschichten im Kreißsaal Brenkhausen, ein Zuschuss zur Haftpflicht und ein gemeinsamer Dienstplan, den wir mitgestalten. Dann kann ich mir das gut vorstellen.', 'c2'],
+        ['15:07', 'Wie bewerten Sie die Fahrzeit nach Hollerau-Nord?', 'Für Frauen aus Moorhagen ist das zu weit. Ich begleite Geburten, die nicht warten, bis der Weg frei ist.', null],
+      ],
+      i3: [
+        ['15:12', 'Warum halten Sie Hollerau-Nord für sicherer?', 'Weil dort die Kinderklinik im Haus ist. Bei einer Risikogeburt zählen Minuten im Haus mehr als Minuten auf der Straße.', null],
+        ['15:14', 'Was entgegnen Sie den Hebammen aus Brenkhausen?', 'Dass ich ihre Sorge teile. Ohne sie kann Hollerau-Nord die zusätzlichen Geburten nicht tragen.', null],
+      ],
+      i4: [['17:30', 'Ist das Kooperationsmodell ernst gemeint?', 'Ja. Es ergänzt die Bündelung, es ersetzt aber keine festen Stellen. Ohne feste Stellen bleibt Brenkhausen unsicher.', null]],
+    };
+    const POSTS = { wue: [['p2', 'Runde 2 · Twitter', 'Als Sprecherin der freiberuflichen Hebammengruppe im Südkreis kann ich diesen Beschlussvorschlag nicht unwidersprochen stehen lassen …'], ['p10', 'Runde 7 · Twitter', 'Ein Angebot ohne verlässliche Dienstpläne und ohne Zuschuss zur Haftpflicht ist kein Kooperationsmodell …']], san: [['p5', 'Runde 3 · Twitter', 'Mit Kinderklinik im Haus ist die Versorgung von Risikogeburten in Hollerau-Nord sicherer.']], gf: [['p1', 'Runde 1 · Twitter', 'Beschlussvorlage: Die Geschäftsführung der Kliniken Hollerau gGmbH schlägt vor …'], ['p7', 'Runde 5 · Twitter', 'Wir haben den freiberuflichen Hebammen im Frühjahr Gespräche angeboten …']], rd: [['p4', 'Runde 3 · Twitter', 'Die Fahrzeit von Moorhagen nach Hollerau-Nord liegt bei 52 Minuten …']] };
+    const CITES = { wue: [['c1', '§1 · Ablehnung des Kooperationsmodells'], ['c4', '§3 · Ursache der Schließtage, mit Zitat']], san: [['c8', '§4 · Zitat zur Sicherheit bei Risikogeburten']], gf: [['c3', '§2 · Gründe der Beschlussvorlage'], ['c6', '§4 · Gesprächsangebote']], rd: [['c8', '§4 · Fahrzeit aus Moorhagen']] };
+
+    const conv = this.state.conv || init.conv || (init.persona && init.persona !== 'wue' ? 'neu' : 'i1');
+    const leftOpen = !!this.state.leftOpen;
+    const c0 = CONVS.find(c => c.id === conv);
+    const pid = conv === 'neu' ? (this.state.persona || init.persona || 'tja') : (c0 && c0.persona) || 'wue';
+    const isGruppe = conv === 'i2';
+    const p = per(pid);
+    const hlClaim = init.claim;
+    const turns = (TURNS[conv] || []).map(([time, q, a, c]) => ({ time, q, a, ...p, hl: !!c && c === hlClaim, bg: c && c === hlClaim ? 'var(--acc-soft)' : 'transparent', meta: 'claude-haiku-4.5 · 0,04 €' }));
+    const group = [['wue', 'Ein verbindlicher Rettungsweg aus Moorhagen und feste Belegschichten für uns in Hollerau-Nord. Ohne beides nicht.'], ['san', 'Ein Hebammenteam, das die zusätzlichen Geburten tragen kann, und eine zweite Kreißsaalschicht. Die Kinderklinik ist schon da.'], ['rd', 'Ein zusätzlicher Rettungswagen im Südkreis. Dann ließe sich die Fahrzeit im Notfall zumindest teilweise ausgleichen.']].map(([id, a]) => ({ ...per(id), a }));
+    const convs = [...(conv === 'neu' ? [{ id: 'neu', persona: pid, title: per(pid).name, meta: 'Neues Gespräch' }] : []), ...CONVS].map(c => {
+      const pp = c.persona ? per(c.persona) : null, on = c.id === conv;
+      return { title: c.title, meta: c.meta, ini: pp ? pp.ini : '3', av: pp ? pp.av : 'var(--s4)', rad: pp ? pp.rad : '7px', cur: on ? 'true' : 'false', bg: on ? 'var(--acc-soft)' : 'transparent', hover: on ? 'var(--acc-soft)' : 'var(--s3)', onClick: () => this.setState({ conv: c.id, leftOpen: false }) };
+    });
+    const pc = { ...p, radL: p.art === 'K' ? '12px' : '50%', art: p.art === 'K' ? 'Kollektiv' : 'Einzelperson', origin: ORI[p.origin], notFallback: !p.fallback,
+      posts: (POSTS[pid] || []).map(([post, meta, text]) => ({ meta, text, onJump: () => nav({ tab: 'simulation', init: { post, persona: pid } }) })),
+      cites: (CITES[pid] || []).map(([c, label]) => ({ label, onClick: () => nav({ tab: 'bericht', init: { claim: c } }) })) };
+    pc.noPosts = pc.posts.length === 0; pc.noCites = pc.cites.length === 0;
+    return {
+      narrow, showLeft: !narrow || leftOpen, toggleLeft: () => this.setState({ leftOpen: !leftOpen }),
+      lp: narrow ? { pos: 'absolute', bg: 'var(--s1)', sh: 'var(--shadow-dlg)', pad: '14px' } : { pos: 'relative', bg: 'transparent', sh: 'none', pad: '0' },
+      convs, newConv: () => this.setState({ conv: 'neu', persona: 'tja' }),
+      isGruppe, isEinzel: !isGruppe, turns, isEmpty: !isGruppe && turns.length === 0, group, pc,
+      head: isGruppe ? { title: 'Gruppenfrage an 3 Personas', meta: 'Antworten nebeneinander · 05.10.2026, 15:20', persona: '' } : { title: 'Gespräch mit ' + p.name, meta: conv === 'neu' ? 'Einzelgespräch · noch keine Frage' : (c0 ? c0.meta : ''), persona: p.name },
+      inputHint: isGruppe ? 'Neue Frage an Anke Wübbena, Dr. Birgit Sander und den Rettungsdienst …' : 'Frage an ' + p.name + ' …',
+      costHint: isGruppe ? '≈ 0,15 € für 3 Antworten' : '≈ 0,05 € je Frage',
+      sendLabel: isGruppe ? 'An alle fragen' : 'Fragen',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;gap:14px;padding-bottom:20px;box-sizing:border-box;">
+
+<sc-if value="{{ isBib }}">
+  <div style="flex:1;min-height:0;overflow:auto;">
+    <div style="display:flex;align-items:center;gap:10px;margin:6px 0 16px;">
+      <h1 style="margin:0;font-size:22px;font-weight:650;letter-spacing:-0.01em;">Personasätze</h1>
+      <span style="color:var(--fg3);font-size:14px;">2</span>
+      <span style="flex:1;"></span>
+      <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">+ Personasatz</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;">
+      <sc-for list="{{ sets }}" as="s" hint-placeholder-count="2">
+        <article tabindex="0" onClick="{{ s.onOpen }}" style="display:flex;flex-direction:column;gap:12px;background:var(--s2);border-radius:12px;padding:16px 18px;cursor:pointer;" style-hover="background:var(--s3)">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg2);">{{ s.state }}</span>
+            <span style="flex:1;"></span><span style="font-size:12.5px;color:var(--fg3);">{{ s.date }}</span>
+          </div>
+          <h3 style="margin:0;font-size:15.5px;font-weight:600;">{{ s.name }}</h3>
+          <div style="display:flex;">
+            <sc-for list="{{ s.faces }}" as="f" hint-placeholder-count="6"><span style="width:28px;height:28px;border-radius:{{ f.rad }};background:{{ f.av }};color:#fff;display:grid;place-items:center;font-size:9.5px;font-weight:700;margin-right:-6px;box-shadow:0 0 0 2px var(--s2);">{{ f.ini }}</span></sc-for>
+          </div>
+          <div style="font-size:13px;color:var(--fg2);">{{ s.counts }}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <sc-for list="{{ s.marks }}" as="m" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;background:{{ m.bg }};border:{{ m.bd }};color:{{ m.fg }};font-size:11.5px;font-weight:600;box-sizing:border-box;">{{ m.label }}</span></sc-for>
+          </div>
+          <div style="font-size:12.5px;color:var(--fg3);">{{ s.src }}</div>
+        </article>
+      </sc-for>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isSatz }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:none;">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <h1 style="margin:0;font-size:20px;font-weight:650;">Südkreis Geburtshilfe</h1>
+      <span style="font-size:12.5px;color:var(--fg3);">14 Personas · 8 Einzelpersonen, 6 Kollektive · aus Graph „Geburtshilfe Hollerau“ · verwendet in 6 Läufen</span>
+    </div>
+    <span style="flex:1;"></span>
+    <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Aus Graph ergänzen</button>
+    <button onClick="{{ openEditor }}" style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">+ Persona</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;flex:none;">
+    <sc-for list="{{ filterGroups }}" as="fg" hint-placeholder-count="4">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span style="font-size:12px;font-weight:600;color:var(--fg3);margin-right:2px;">{{ fg.label }}</span>
+        <sc-for list="{{ fg.opts }}" as="o" hint-placeholder-count="3">
+          <button onClick="{{ o.onClick }}" aria-pressed="{{ o.on }}" style="height:28px;padding:0 10px;border-radius:999px;border:{{ o.bd }};background:{{ o.bg }};color:var(--fg);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;">{{ o.label }} <span style="color:var(--fg3);">{{ o.count }}</span></button>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+  <div style="flex:1;min-height:0;overflow:auto;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;">
+      <sc-for list="{{ cards }}" as="c" hint-placeholder-count="8">
+        <article tabindex="0" onClick="{{ c.onOpen }}" aria-label="{{ c.name }}" style="display:flex;flex-direction:column;gap:10px;background:var(--s2);border-radius:12px;padding:14px 16px;cursor:pointer;" style-hover="background:var(--s3)">
+          <div style="display:flex;gap:12px;align-items:center;">
+            <span style="width:44px;height:44px;border-radius:{{ c.rad }};background:{{ c.av }};color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none;">{{ c.ini }}</span>
+            <div style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font-size:14px;font-weight:650;line-height:1.3;">{{ c.name }}</span><span style="font-size:12.5px;color:var(--fg2);line-height:1.35;">{{ c.role }}</span></div>
+          </div>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:var(--fg2);text-wrap:pretty;min-height:39px;">{{ c.haltung }}</p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">
+            <span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:999px;background:var(--s3);color:var(--fg2);font-size:11.5px;font-weight:600;">{{ c.art }}</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;background:{{ c.o.bg }};border:{{ c.o.bd }};color:{{ c.o.fg }};font-size:11.5px;font-weight:600;box-sizing:border-box;">{{ c.o.label }}</span>
+            <span style="flex:1;"></span>
+            <span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:{{ c.f.fg }};">{{ c.f.label }}</span>
+          </div>
+        </article>
+      </sc-for>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isEditor }}">
+  <div role="dialog" aria-modal="true" aria-label="Persona bearbeiten" style="width:980px;max-width:100%;height:100%;max-height:100%;display:flex;flex-direction:column;background:var(--s2);border-radius:16px;box-shadow:var(--shadow-dlg);overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 18px 14px 22px;border-bottom:1px solid var(--line);flex:none;">
+      <span style="width:40px;height:40px;border-radius:50%;background:oklch(0.5 0.08 355);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;">MT</span>
+      <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;">
+        <span style="font-size:16px;font-weight:650;">Maren Tjaden</span>
+        <span style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--fg3);">Südkreis Geburtshilfe · <span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dotted var(--fg2);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;">KI-Entwurf</span><span style="color:var(--fg2);">○ Entwurf, nicht freigegeben</span></span>
+      </div>
+      <button onClick="{{ closeEditor }}" title="Schließen" style="width:32px;height:32px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:15px;cursor:pointer;" style-hover="background:var(--s3)">✕</button>
+    </div>
+    <div style="flex:1;min-height:0;display:flex;">
+      <nav aria-label="Abschnitte" style="width:220px;flex:none;background:var(--s1);padding:14px 10px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box;">
+        <sc-for list="{{ edSections }}" as="es" hint-placeholder-count="5">
+          <button onClick="{{ es.onClick }}" aria-current="{{ es.cur }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border:none;border-radius:8px;background:{{ es.bg }};color:var(--fg);font:inherit;font-size:13.5px;cursor:pointer;text-align:left;" style-hover="background:{{ es.hover }}">
+            <span style="width:22px;height:22px;border-radius:50%;background:{{ es.plBg }};color:{{ es.plFg }};display:grid;place-items:center;font-size:10.5px;flex:none;">{{ es.glyph }}</span>{{ es.label }}
+          </button>
+        </sc-for>
+      </nav>
+      <div ref="{{ edRef }}" style="flex:1;min-width:0;overflow:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:22px;position:relative;">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:12px;border:1.5px dashed var(--acc-line);">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;font-weight:600;flex:1;">Entwurf aus Stichworten</span><span style="font-size:12px;color:var(--fg3);">füllt alle Felder mit einem Vorschlag</span></div>
+          <div style="min-height:46px;padding:9px 12px;border-radius:8px;background:var(--field);font-size:13.5px;line-height:1.5;">Werdende Mutter aus Moorhagen, 34, zweites Kind. Musste 2025 wegen der Schließung in Brenkhausen nach Hollerau-Nord ausweichen.</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Entwurf erstellen</button>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg2);">claude-haiku-4.5</span>
+            <span style="font-size:12.5px;color:var(--fg3);">≈ 0,01 €</span>
+          </div>
+        </div>
+
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+          <section data-sec="{{ g.id }}" style="display:flex;flex-direction:column;gap:8px;">
+            <h3 style="margin:0;font-size:14px;font-weight:600;">{{ g.title }}</h3>
+            <div style="background:var(--s1);border-radius:12px;padding:2px 16px;">
+              <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+                <div style="display:grid;grid-template-columns:170px minmax(0,1fr);gap:16px;align-items:start;padding:12px 0;border-top:{{ r.bt }};">
+                  <div style="display:flex;flex-direction:column;gap:4px;padding-top:7px;">
+                    <span style="font-size:13.5px;">{{ r.label }}</span>
+                    <sc-if value="{{ r.canSuggest }}"><button style="align-self:flex-start;border:none;background:transparent;padding:0;color:var(--acc-text);font:inherit;font-size:12px;font-weight:600;cursor:pointer;">Feld vorschlagen · ≈ 0,01 €</button></sc-if>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
+                    <sc-if value="{{ r.isField }}"><div style="min-height:34px;display:flex;align-items:center;padding:6px 12px;border-radius:8px;background:var(--s2);font-size:13.5px;line-height:1.45;box-sizing:border-box;color:{{ r.fg }};">{{ r.value }}</div></sc-if>
+                    <sc-if value="{{ r.isSelect }}"><div style="height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-radius:8px;background:var(--s2);font-size:13.5px;">{{ r.value }}<span style="color:var(--fg2);font-size:10px;">▾</span></div></sc-if>
+                    <sc-if value="{{ r.isSeg }}">
+                      <div style="display:flex;padding:2px;border-radius:8px;background:var(--s2);gap:2px;align-self:flex-start;">
+                        <sc-for list="{{ r.opts }}" as="o" hint-placeholder-count="3"><span style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:12.5px;background:{{ o.bg }};color:{{ o.fg }};font-weight:{{ o.fw }};">{{ o.label }}</span></sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ r.isChips }}"><div style="display:flex;gap:6px;flex-wrap:wrap;"><sc-for list="{{ r.chips }}" as="ch" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 4px 0 9px;border-radius:6px;background:var(--s3);font-size:12.5px;">{{ ch }}<span style="color:var(--fg3);font-size:11px;padding:0 4px;">✕</span></span></sc-for><span style="display:inline-flex;align-items:center;height:26px;padding:0 6px;color:var(--fg3);font-size:12.5px;">+ hinzufügen</span></div></sc-if>
+                    <sc-if value="{{ r.hasDraft }}">
+                      <div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;border:1.5px dashed var(--acc-line);background:{{ r.draftBg }};">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px solid var(--acc-line);color:var(--acc-text);font-size:11px;font-weight:700;box-sizing:border-box;">{{ r.draftTag }}</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px;color:var(--fg3);">claude-haiku-4.5</span></div>
+                        <p style="margin:0;font-size:13.5px;line-height:1.5;text-wrap:pretty;">{{ r.draft }}</p>
+                        <sc-if value="{{ r.draftOpen }}">
+                          <div style="display:flex;gap:8px;">
+                            <button onClick="{{ r.onAccept }}" style="height:28px;padding:0 12px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Annehmen</button>
+                            <button onClick="{{ r.onReject }}" style="height:28px;padding:0 10px;border:none;border-radius:7px;background:transparent;color:var(--fg2);font:inherit;font-size:12.5px;cursor:pointer;" style-hover="background:var(--s3)">Verwerfen</button>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ r.hasDerive }}">
+                      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <button style="height:30px;padding:0 12px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Aus Entität ableiten</button>
+                        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px;color:var(--fg2);">claude-haiku-4.5</span><span style="font-size:12px;color:var(--fg3);">≈ 0,01 € · überschreibt nichts ohne Bestätigung</span>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+
+        <section style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;"><h3 style="margin:0;font-size:14px;font-weight:600;flex:1;">Beispielbeitrag in ihrer Stimme</h3><button style="height:28px;padding:0 10px;border:none;border-radius:7px;background:transparent;color:var(--acc-text);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s3)">Neu erzeugen · ≈ 0,01 €</button></div>
+          <div style="display:flex;gap:12px;background:var(--s1);border-radius:12px;padding:14px 16px;">
+            <span style="width:40px;height:40px;border-radius:50%;background:oklch(0.5 0.08 355);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;">MT</span>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+              <div style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="font-weight:650;">Maren Tjaden</span><span style="color:var(--fg3);">· Vorschau</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div>
+              <p style="margin:2px 0 0;font-size:14.5px;line-height:1.5;text-wrap:pretty;">Letztes Jahr stand ich mit Wehen vor einem geschlossenen Kreißsaal in Brenkhausen. Bis Hollerau-Nord war es fast eine Stunde. Das möchte ich keiner anderen Frau aus Moorhagen wünschen.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 18px 14px 22px;background:var(--s1);flex:none;">
+      <span style="font-size:12.5px;color:var(--fg3);flex:1;">{{ draftNote }}</span>
+      <button onClick="{{ closeEditor }}" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">Abbrechen</button>
+      <button style="height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Als Entwurf speichern</button>
+      <button style="height:34px;padding:0 18px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--acc-hover)">Freigeben</button>
+    </div>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:800},&quot;mode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;bibliothek&quot;,&quot;satz&quot;,&quot;editor&quot;],&quot;default&quot;:&quot;satz&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;nav&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(o: object) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  edRef = React.createRef();
+  renderVals() {
+    const mode = this.props.mode || 'satz';
+    const nav = this.props.nav || (() => {});
+    const P = [
+      ['gf', 'Geschäftsführung', 'Geschäftsführung der Kliniken Hollerau gGmbH', 'K', 'graph', 'buendelung', 250, 'GF', 'Hält die Bündelung in Hollerau-Nord für den einzigen Weg, die Geburtshilfe personell zu sichern.', 'frei'],
+      ['wue', 'Anke Wübbena', 'Sprecherin der freiberuflichen Hebammen im Südkreis', 'E', 'graph', 'erhalt', 20, 'AW', 'Will den Kreißsaal Brenkhausen erhalten und fordert eine echte Kooperation mit den freiberuflichen Hebammen.', 'frei'],
+      ['hv', 'Hebammenverband', 'Berufsverband der Hebammen', 'K', 'fallback', 'erhalt', 45, 'HV', 'Lehnt die Schließung ab, solange das Land nicht über einen Sicherstellungszuschlag entschieden hat.', 'pruefen'],
+      ['rd', 'Rettungsdienst des Landkreises', 'Träger des Rettungsdienstes', 'K', 'graph', 'offen', 200, 'RD', 'Bewertet die Pläne nach Fahrzeiten und Erreichbarkeit, ohne sich festzulegen.', 'frei'],
+      ['san', 'Dr. Birgit Sander', 'Chefärztin der Geburtshilfe in Hollerau-Nord', 'E', 'graph', 'buendelung', 170, 'BS', 'Hält die Bündelung wegen der Kinderklinik im Haus für medizinisch sicherer.', 'frei'],
+      ['tja', 'Maren Tjaden', 'Werdende Mutter aus Moorhagen', 'E', 'ki', 'erhalt', 355, 'MT', 'Fürchtet den langen Weg nach Hollerau-Nord, besonders im Winter.', 'entwurf'],
+      ['cdu', 'CDU-Kreistagsfraktion', 'Fraktion im Kreistag', 'K', 'fallback', 'offen', 230, 'CDU', 'Trägt die Bündelung mit, wenn das Land einen Sicherstellungszuschlag zahlt.', 'pruefen'],
+      ['ini', 'Initiative „Kreißsaal bleibt in Brenkhausen“', 'Bürgerinitiative', 'K', 'fallback', 'erhalt', 140, 'IN', 'Mobilisiert gegen die Schließung mit Unterschriften und Demonstrationen.', 'pruefen'],
+      ['br', 'Betriebsrat Kliniken Hollerau', 'Vertretung der Beschäftigten', 'K', 'fallback', 'erhalt', 70, 'BR', 'Verlangt Zusagen für die Beschäftigten in Brenkhausen, bevor er einer Bündelung zustimmt.', 'pruefen'],
+      ['jan', 'Okko Janssen', 'Bürgermeister von Moorhagen', 'E', 'graph', 'erhalt', 110, 'OJ', 'Sieht Moorhagen bei einer Bündelung abgehängt und verlangt verlässliche Rettungswege.', 'frei'],
+      ['ben', 'Hinrich Bents', 'Kreistagsabgeordneter, parteilos', 'E', 'graph', 'offen', 90, 'HB', 'Will vor der Abstimmung wissen, ob das Land einen Zuschlag zahlt.', 'frei'],
+      ['eil', 'Sabine Eilers', 'Pflegekraft im Kreißsaal Brenkhausen', 'E', 'hand', 'erhalt', 5, 'SE', 'Kennt die Dienstplanlücken aus erster Hand und will am Standort bleiben.', 'frei'],
+      ['wie', 'Jörg Wiemann', 'Hausarzt in Moorhagen', 'E', 'ki', 'offen', 330, 'JW', 'Wägt kurze Wege gegen die bessere Ausstattung in Hollerau-Nord ab.', 'entwurf'],
+      ['fra', 'Claudia Franke', 'Referentin im Landesministerium', 'E', 'graph', 'offen', 215, 'CF', 'Prüft, ob ein Sicherstellungszuschlag rechtlich und finanziell möglich ist.', 'frei'],
+    ].map(([id, name, role, art, origin, stance, hue, ini, haltung, frei]) => ({ id, name, role, art, origin, stance, ini, haltung, frei, av: 'oklch(0.5 0.08 ' + hue + ')', rad: art === 'K' ? '10px' : '50%' }));
+    const ORI = {
+      graph: { label: '◇ aus Graph', bg: 'var(--s3)', bd: 'none', fg: 'var(--fg2)' },
+      hand: { label: '✎ von Hand', bg: 'transparent', bd: '1px dashed var(--fg3)', fg: 'var(--fg2)' },
+      ki: { label: 'KI-Entwurf', bg: 'transparent', bd: '1px dotted var(--fg2)', fg: 'var(--fg2)' },
+      fallback: { label: '↺ Fallback', bg: 'var(--warn-soft)', bd: 'none', fg: 'var(--warn)' },
+    };
+    const FR = { frei: { label: '✓ freigegeben', fg: 'var(--ok)' }, entwurf: { label: '○ Entwurf', fg: 'var(--fg2)' }, pruefen: { label: '▲ prüfen', fg: 'var(--warn)' } };
+    const f = this.state.f || { art: [], ori: [], frei: [], st: [] };
+    const tog = (k, v) => () => { const a = f[k]; this.setState({ f: { ...f, [k]: a.includes(v) ? a.filter(x => x !== v) : a.concat([v]) } }); };
+    const match = (p) => (!f.art.length || f.art.includes(p.art)) && (!f.ori.length || f.ori.includes(p.origin)) && (!f.frei.length || f.frei.includes(p.frei)) && (!f.st.length || f.st.includes(p.stance));
+    const opt = (k, v, label) => { const on = f[k].includes(v); return { label, count: P.filter(p => p[{ art: 'art', ori: 'origin', frei: 'frei', st: 'stance' }[k]] === v).length, on, bd: on ? '1px solid var(--acc)' : '1px solid var(--line)', bg: on ? 'var(--acc-soft)' : 'transparent', onClick: tog(k, v) }; };
+    const filterGroups = [
+      { label: 'Typ', opts: [opt('art', 'E', 'Einzelperson'), opt('art', 'K', 'Kollektiv')] },
+      { label: 'Haltung', opts: [opt('st', 'erhalt', 'Für Erhalt'), opt('st', 'buendelung', 'Für Bündelung'), opt('st', 'offen', 'Unentschieden')] },
+      { label: 'Freigabe', opts: [opt('frei', 'frei', 'freigegeben'), opt('frei', 'entwurf', 'Entwurf'), opt('frei', 'pruefen', 'prüfen')] },
+      { label: 'Herkunft', opts: [opt('ori', 'graph', 'aus Graph'), opt('ori', 'hand', 'von Hand'), opt('ori', 'ki', 'KI-Entwurf'), opt('ori', 'fallback', 'Fallback')] },
+    ];
+    const cards = P.filter(match).map(p => ({ ...p, art: p.art === 'K' ? 'Kollektiv' : 'Einzelperson', o: ORI[p.origin], f: FR[p.frei], onOpen: () => nav({ personaEditor: true }) }));
+    const sets = [
+      { name: 'Südkreis Geburtshilfe', state: '⊘ Gesperrt', date: '04.10.2026', counts: '14 Personas · 8 Einzelpersonen, 6 Kollektive', src: 'aus Graph „Geburtshilfe Hollerau“ · verwendet in 6 Läufen', faces: P.slice(0, 7), marks: [{ label: '↺ 4 Fallback', bg: 'var(--warn-soft)', bd: 'none', fg: 'var(--warn)' }, { label: '2 KI-Entwürfe', bg: 'transparent', bd: '1px dotted var(--fg2)', fg: 'var(--fg2)' }], onOpen: () => nav({ personasMode: 'satz' }) },
+      { name: 'Kreistag Hollerau', state: '✎ Bearbeitbar', date: '02.10.2026', counts: '6 Personas · 6 Einzelpersonen', src: 'von Hand angelegt · in keinem Lauf verwendet', faces: [P[10], P[13], P[9], P[4], P[11], P[12]], marks: [{ label: '✎ 4 von Hand', bg: 'transparent', bd: '1px dashed var(--fg3)', fg: 'var(--fg2)' }, { label: '○ 2 Entwürfe', bg: 'var(--s3)', bd: 'none', fg: 'var(--fg2)' }], onOpen: () => nav({ personasMode: 'satz' }) },
+    ];
+    const acc = this.state.acc || {};
+    const sec = this.state.sec || 'identitaet';
+    const SECS = [['identitaet', 'Identität', '●'], ['haltung', 'Haltung und Ziele', '◐'], ['sprache', 'Sprache und Ton', '❝'], ['aktivitaet', 'Aktivität', '≡'], ['graph', 'Bezug zum Graphen', '◇']];
+    const edSections = SECS.map(([id, label, glyph]) => { const on = sec === id; return { label, glyph, cur: on ? 'true' : 'false', bg: on ? 'var(--acc-soft)' : 'transparent', hover: on ? 'var(--acc-soft)' : 'var(--s3)', plBg: on ? 'var(--acc)' : 'var(--s3)', plFg: on ? 'var(--on-acc)' : 'var(--fg2)', onClick: () => { this.setState({ sec: id }); const box = this.edRef.current; const el = box && box.querySelector('[data-sec="' + id + '"]'); if (el) box.scrollTop = el.offsetTop - 12; } }; });
+    const seg = (opts, cur) => opts.map(l => ({ label: l, bg: l === cur ? 'var(--s4)' : 'transparent', fg: l === cur ? 'var(--fg)' : 'var(--fg2)', fw: l === cur ? 600 : 500 }));
+    const R = (o) => ({ isField: false, isSelect: false, isSeg: false, isChips: false, hasDraft: false, hasDerive: false, canSuggest: false, fg: 'var(--fg)', opts: [], chips: [], ...o });
+    const draft = (key, text) => { const st = acc[key]; return { hasDraft: st !== 'rejected', draft: text, draftOpen: !st, draftTag: st === 'accepted' ? 'Entwurf angenommen' : 'Entwurf', draftBg: st === 'accepted' ? 'transparent' : 'var(--acc-soft)', onAccept: () => this.setState({ acc: { ...acc, [key]: 'accepted' } }), onReject: () => this.setState({ acc: { ...acc, [key]: 'rejected' } }) }; };
+    const rows = (arr) => arr.map((r, i) => R({ ...r, bt: i ? '1px solid var(--line)' : 'none' }));
+    const groups = [
+      { id: 'identitaet', title: 'Identität', rows: rows([{ label: 'Name', isField: true, value: 'Maren Tjaden' }, { label: 'Art', isSeg: true, opts: seg(['Einzelperson', 'Kollektiv'], 'Einzelperson') }, { label: 'Rolle', isField: true, value: 'Werdende Mutter aus Moorhagen' }, { label: 'Alter', isField: true, value: '34' }]) },
+      { id: 'haltung', title: 'Haltung und Ziele', rows: rows([{ label: 'Zur Streitfrage', isSeg: true, opts: seg(['Für Erhalt', 'Für Bündelung', 'Unentschieden'], 'Für Erhalt') }, { label: 'Haltung in einem Satz', canSuggest: true, ...draft('haltung', 'Will in Brenkhausen entbinden, weil der Weg nach Hollerau-Nord im Winter zu lang ist.'), isField: acc.haltung === 'rejected', value: '', fg: 'var(--fg3)' }, { label: 'Ziele', canSuggest: true, isField: true, value: 'Kurzer Weg zur Geburt, Hebamme, die sie kennt', fg: 'var(--fg)' }]) },
+      { id: 'sprache', title: 'Sprache und Ton', rows: rows([{ label: 'Ton', isSelect: true, value: 'persönlich, ruhig' }, { label: 'Länge der Beiträge', isSeg: true, opts: seg(['kurz', 'mittel', 'lang'], 'kurz') }, { label: 'Typische Wendungen', canSuggest: true, ...draft('wendungen', '„Ich frage mich, …“ · „Für uns in Moorhagen heißt das …“') }]) },
+      { id: 'aktivitaet', title: 'Aktivität', rows: rows([{ label: 'Beiträge je Runde', isSeg: true, opts: seg(['selten', 'mittel', 'häufig'], 'selten') }, { label: 'Aktiv ab Runde', isField: true, value: '3' }, { label: 'Antwortet bevorzugt auf', isChips: true, chips: ['Geschäftsführung', 'Rettungsdienst des Landkreises'] }]) },
+      { id: 'graph', title: 'Bezug zum Graphen', rows: rows([{ label: 'Entität', isSelect: true, value: 'Moorhagen · Ort', hasDerive: true }, { label: 'Kennt', isChips: true, chips: ['Kreißsaal Brenkhausen', 'Hollerau-Nord'] }]) },
+    ];
+    const open = ['haltung', 'wendungen'].filter(k => !acc[k]).length;
+    return {
+      isBib: mode === 'bibliothek', isSatz: mode === 'satz', isEditor: mode === 'editor',
+      sets, filterGroups, cards, openEditor: () => nav({ personaEditor: true }),
+      closeEditor: () => nav({ personaEditor: false }), edSections, groups, edRef: this.edRef,
+      draftNote: open ? open + (open === 1 ? ' Vorschlag wartet' : ' Vorschläge warten') + ' auf deine Entscheidung. Freigeben geht erst danach.' : 'Alle Vorschläge entschieden.',
+    };
+  }
+}
+</script>
+</body>
+</html>
