@@ -104,10 +104,13 @@ const headline = computed(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin: 0 0 14px;
 }
 .run-workspace__title {
+  flex: 1 1 280px;
+  min-width: 0;
   margin: 0;
   max-width: 980px;
   font-size: 21px;

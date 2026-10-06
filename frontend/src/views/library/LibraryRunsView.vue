@@ -188,7 +188,7 @@ function compare(): void {
 }
 .runs-btn--primary {
   background: var(--acc);
-  color: var(--fg);
+  color: var(--on-acc);
 }
 .runs-btn--primary:hover:not(:disabled) {
   background: var(--acc-hover);

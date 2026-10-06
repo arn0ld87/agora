@@ -204,10 +204,11 @@ describe('Kontrast der Token-Paare (WCAG AA)', () => {
   ] as const
 
   describe.each(themes)('%s', (_theme, src, stateSurfaces) => {
-    it('--ok und --err auf ihrer -soft-Fläche ≥ 4.5:1', () => {
+    it('--ok, --warn und --err auf ihrer -soft-Fläche ≥ 4.5:1', () => {
       for (const surface of stateSurfaces) {
         const bg = tokenIn(src, surface)
-        for (const state of ['ok', 'err']) {
+        // --warn: Zustandsmarke „degraded“ lag auf --s2 bei 4.49:1 (#1797).
+        for (const state of ['ok', 'warn', 'err']) {
           const soft = over(tokenIn(src, state + '-soft'), bg)
           expect(ratio(tokenIn(src, state), soft), `--${state} auf --${state}-soft über --${surface}`).toBeGreaterThanOrEqual(4.5)
         }

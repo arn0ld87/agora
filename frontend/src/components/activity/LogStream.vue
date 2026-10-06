@@ -58,7 +58,10 @@
     </header>
     <p v-if="scopeActive" class="scope-note">{{ t('logs.drawer.scopeNote', { id: scopeId }) }}</p>
     <div class="drawer-body-wrap">
-      <div ref="scrollEl" class="drawer-body" role="log" :aria-label="t('logs.drawer.title')">
+      <!-- tabindex="0": der Bereich scrollt und enthält selbst nichts Fokussierbares;
+           ohne Fokus käme die Tastatur nicht an die älteren Zeilen (axe
+           scrollable-region-focusable). -->
+      <div ref="scrollEl" class="drawer-body" role="log" tabindex="0" :aria-label="t('logs.drawer.title')">
         <div v-if="loading && !lines.length" class="meta">{{ t('logs.drawer.loading') }}</div>
         <div v-else-if="errorMessage" class="meta is-error">{{ errorMessage }}</div>
         <div v-else-if="fileNotice" class="meta">{{ t(fileNotice) }}</div>
@@ -373,6 +376,7 @@ onUnmounted(() => {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.drawer-body:focus-visible { outline: 2px solid var(--acc-text); outline-offset: -2px; }
 .log-line { padding: 3px 0; border-top: 1px solid var(--line); }
 .log-line:first-child { border-top: none; }
 .log-line.is-error { color: var(--err); }

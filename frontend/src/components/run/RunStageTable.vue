@@ -45,6 +45,10 @@ function cost(row: StageRow): string | null {
 </script>
 
 <template>
+  <!-- Schmale Fenster scrollen die Tabelle im Rahmen, nicht die Seite. Die
+       Links der Spalte „Nächster Schritt“ machen den Bereich per Tastatur
+       scrollbar. -->
+  <div class="stage-table-wrap">
   <table class="stage-table" data-testid="run-stage-table">
     <caption class="stage-table__caption">{{ t('views.run.overview.stagesLabel') }}</caption>
     <thead>
@@ -113,9 +117,19 @@ function cost(row: StageRow): string | null {
       </tr>
     </tbody>
   </table>
+  </div>
 </template>
 
 <style scoped>
+.stage-table-wrap {
+  /* Containing Block für die absolut gesetzten `.sr-only`-Texte in den Zellen:
+     sonst läge ihr Bezug außerhalb des Rahmens und sie dehnten die Seite. */
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--ag-r-12);
+  background: var(--s2);
+}
 .stage-table {
   width: 100%;
   border-collapse: collapse;

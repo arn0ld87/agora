@@ -73,10 +73,29 @@ const count = computed(() => props.entry.reports.length)
         <RouterLink v-if="target" :to="target" class="run-tile__link">{{ entry.title }}</RouterLink>
         <template v-else>{{ entry.title }}</template>
       </h3>
-      <p v-if="entry.source" class="run-tile__source">
-        <span class="run-tile__source-label">{{ t('views.library.runs.tile.source') }}</span> {{ entry.source }}
-      </p>
     </div>
+
+    <!-- Direkt unter dem Titel: Titel-Link und diese Knöpfe sind aufeinanderfolgende
+         Tab-Stops. Läge dazwischen eine hohe Kachel, scrollte der Browser beim Tab
+         zum Knopf (zentriert) und die Reihenfolge sähe wie ein Sprung nach oben aus. -->
+    <div v-if="count > 0" class="run-tile__reports">
+      <button
+        type="button"
+        class="run-tile__btn"
+        :aria-expanded="versionsOpen"
+        :aria-controls="versionsId"
+        @click="emit('toggle-versions')"
+      >
+        {{ t('views.library.runs.versions.count', { n: count }, count) }}
+      </button>
+      <RouterLink v-if="latestReportId" class="run-tile__btn" :to="{ name: 'StepReport', params: { reportId: latestReportId } }">
+        {{ t('views.library.runs.versions.openLatest') }}
+      </RouterLink>
+    </div>
+
+    <p v-if="entry.source" class="run-tile__source">
+      <span class="run-tile__source-label">{{ t('views.library.runs.tile.source') }}</span> {{ entry.source }}
+    </p>
 
     <div class="run-tile__status">
       <RunStateMark :state="entry.state" />
@@ -93,21 +112,6 @@ const count = computed(() => props.entry.reports.length)
     <RunStageDots class="run-tile__stages" :stages="entry.stages" />
 
     <p class="run-tile__date">{{ date }}</p>
-
-    <div v-if="count > 0" class="run-tile__reports">
-      <button
-        type="button"
-        class="run-tile__btn"
-        :aria-expanded="versionsOpen"
-        :aria-controls="versionsId"
-        @click="emit('toggle-versions')"
-      >
-        {{ t('views.library.runs.versions.count', { n: count }, count) }}
-      </button>
-      <RouterLink v-if="latestReportId" class="run-tile__btn" :to="{ name: 'StepReport', params: { reportId: latestReportId } }">
-        {{ t('views.library.runs.versions.openLatest') }}
-      </RouterLink>
-    </div>
 
     <RunVersionsList v-if="versionsOpen && versionsState" :id="versionsId" :state="versionsState" class="run-tile__versions" />
   </li>
@@ -183,7 +187,7 @@ const count = computed(() => props.entry.reports.length)
   outline-offset: 2px;
 }
 .run-tile__source {
-  margin: 2px 0 0;
+  margin: 0;
   font-size: 12.5px;
   color: var(--fg2);
   overflow-wrap: anywhere;
@@ -264,30 +268,52 @@ const count = computed(() => props.entry.reports.length)
   column-gap: 16px;
   padding: 10px 16px;
 }
+/* Feste Zeilen: die Knöpfe stehen in der zweiten Zeile unter Grund und Stufen,
+   nicht unter dem Titel. So liegen aufeinanderfolgende Tab-Stops (Titel-Link,
+   Knöpfe) in verschiedenen Spalten. */
 .run-tile--list .run-tile__select {
   position: static;
   grid-column: 1;
+  grid-row: 1;
 }
 .run-tile--list .run-tile__main {
+  grid-column: 2;
+  grid-row: 1;
   padding-right: 0;
 }
 .run-tile--list .run-tile__title {
   min-height: 0;
   font-size: 14px;
 }
-.run-tile--list .run-tile__reports,
-.run-tile--list .run-tile__versions {
-  grid-column: 2 / -1;
+.run-tile--list .run-tile__source {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+}
+.run-tile--list .run-tile__status {
+  grid-column: 3;
+  grid-row: 1;
 }
 .run-tile--list .run-tile__reason {
   grid-column: 4;
+  grid-row: 1;
 }
 .run-tile--list .run-tile__stages {
   grid-column: 5;
+  grid-row: 1;
 }
 .run-tile--list .run-tile__date {
   grid-column: 6;
+  grid-row: 1;
   text-align: right;
+}
+.run-tile--list .run-tile__reports {
+  grid-column: 4 / -1;
+  grid-row: 2;
+}
+.run-tile--list .run-tile__versions {
+  grid-column: 2 / -1;
+  grid-row: 3;
 }
 .sr-only {
   position: absolute;
