@@ -9,10 +9,9 @@ import { useDensity } from './composables/useDensity'
 import { useTheme } from './composables/useTheme'
 import { useAuthStore } from './store/auth'
 
-// Self-hosted Webfonts (Block B1): Archivo traegt die Oberflaeche,
-// Newsreader den Berichts-Fliesstext inkl. kursiver Zitate.
-// Geist Mono bleibt lokal in fonts.css registriert.
-import '@fontsource-variable/archivo/wght.css'
+// Self-hosted Webfonts: Newsreader traegt den Berichts-Fliesstext inkl.
+// kursiver Zitate. Die Oberflaeche nutzt seit #1795 die Systemschrift,
+// Archivo ist entfallen. Geist Mono bleibt lokal in fonts.css registriert.
 import '@fontsource-variable/newsreader/wght.css'
 import '@fontsource-variable/newsreader/wght-italic.css'
 

@@ -36,9 +36,9 @@ function linkedString(run: RunDetail, key: string): string | null {
 
 /** `termination_reason` steht je nach Endpunkt am Job selbst oder in dessen `metadata`. */
 function terminationReasonOf(run: RunDetail): string | null {
-  const top = (run as Record<string, unknown>).termination_reason
+  const top = run.termination_reason
   if (typeof top === 'string' && top) return top
-  const meta = (run.metadata as Record<string, unknown> | undefined)?.termination_reason
+  const meta = run.metadata?.termination_reason
   return typeof meta === 'string' && meta ? meta : null
 }
 
