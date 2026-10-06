@@ -1014,6 +1014,8 @@
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
       "reconnect": "Reconnect",
+      "resize": "Resize console (arrow up/down)",
+      "levelFilter": "Filter by level",
       "reconnecting": "Reconnecting…"
     }
   },

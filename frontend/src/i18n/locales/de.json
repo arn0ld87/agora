@@ -1014,6 +1014,8 @@
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
       "reconnect": "Erneut verbinden",
+      "resize": "Höhe der Konsole ändern (Pfeil hoch/runter)",
+      "levelFilter": "Stufe filtern",
       "reconnecting": "Verbindung wird wiederhergestellt…"
     }
   },
