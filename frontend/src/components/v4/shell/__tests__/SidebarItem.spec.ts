@@ -87,6 +87,55 @@ describe('SidebarItem', () => {
     expect(wrapper.element.tagName.toLowerCase()).toBe('a')
   })
 
+  it('zeigt den Zaehler neutral; ohne Zahl (null = unbekannt) gar keinen, auch kein "0"', async () => {
+    await router.push('/')
+    const withCount = mount(SidebarItem, { props: { label: 'Läufe', count: 0 }, global: { plugins: [router] } })
+    expect(withCount.find('.sidebar-item__count').text()).toBe('0')
+    const unknown = mount(SidebarItem, { props: { label: 'Läufe', count: null }, global: { plugins: [router] } })
+    expect(unknown.find('.sidebar-item__count').exists()).toBe(false)
+    const none = mount(SidebarItem, { props: { label: 'Vergleich' }, global: { plugins: [router] } })
+    expect(none.find('.sidebar-item__count').exists()).toBe(false)
+  })
+
+  it('current erzwingt den aktiven Zustand gegen den Router (Query-Filter kennt er nicht)', async () => {
+    await router.push('/runs')
+    const off = mount(SidebarItem, { props: { label: 'Runs', to: { name: 'Runs' }, current: false }, global: { plugins: [router] } })
+    expect(off.classes()).not.toContain('sidebar-item--active')
+    expect(off.attributes('aria-current')).toBeUndefined()
+    const on = mount(SidebarItem, { props: { label: 'Runs', to: { name: 'Home' }, current: true }, global: { plugins: [router] } })
+    expect(on.classes()).toContain('sidebar-item--active')
+    expect(on.attributes('aria-current')).toBe('page')
+  })
+
+  it('eingeklappt: kein sichtbares Label, aber aria-label und title mit Zaehler', async () => {
+    await router.push('/')
+    const wrapper = mount(SidebarItem, {
+      props: { label: 'Braucht dich', glyph: '!', count: 2, collapsed: true, to: { name: 'Runs' } },
+      global: { plugins: [router] },
+    })
+    expect(wrapper.find('.sidebar-item__label').exists()).toBe(false)
+    expect(wrapper.find('.sidebar-item__count').exists()).toBe(false)
+    expect(wrapper.attributes('aria-label')).toBe('Braucht dich, 2')
+    expect(wrapper.attributes('title')).toBe('Braucht dich, 2')
+  })
+
+  it('Zustandspunkt: Zustand als Text fuer die Hilfstechnik, Punkt selbst aria-hidden', async () => {
+    await router.push('/')
+    const wrapper = mount(SidebarItem, {
+      props: { label: 'System', tone: 'err', tooltip: 'Ein Dienst ist nicht erreichbar', to: { name: 'Runs' } },
+      global: { plugins: [router] },
+    })
+    expect(wrapper.find('.sidebar-item__dot--err').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.find('.sidebar-item__sr').text()).toBe('Ein Dienst ist nicht erreichbar')
+  })
+
+  it('meldet click auch mit `to`, damit der mobile Drawer schliessen kann', async () => {
+    await router.push('/')
+    const wrapper = mount(SidebarItem, { props: { label: 'Runs', to: { name: 'Runs' } }, global: { plugins: [router] } })
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('click')).toBeTruthy()
+  })
+
   it('nutzt div wenn to nicht gesetzt', async () => {
     await router.push('/')
     const wrapper = mount(SidebarItem, {

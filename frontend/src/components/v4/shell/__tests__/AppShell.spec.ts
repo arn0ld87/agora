@@ -38,6 +38,9 @@ const lsMock = (() => {
 Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
 
 vi.mock('@/api/runs', () => ({ cancelRun: vi.fn().mockResolvedValue({ success: true }) }))
+// Die Seitenleiste ist hier nur Teil der Huelle: weder Ablage noch /api/status laden (#1795).
+vi.mock('@/composables/useLibraryCounts', async () => (await import('./sidebarMocks')).libraryCountsMock)
+vi.mock('@/composables/useSidebarSystem', async () => (await import('./sidebarMocks')).sidebarSystemMock)
 
 import AppShell from '../AppShell.vue'
 

@@ -901,10 +901,29 @@
   },
   "sidebar": {
     "title": "Hauptnavigation",
-    "nav": {
-      "dashboard": "Dashboard",
-      "runs": "Runs"
+    "groups": {
+      "library": "Bibliothek",
+      "focus": "Im Blick",
+      "tools": "Werkzeuge"
     },
+    "nav": {
+      "runs": "Läufe",
+      "graphs": "Graphen",
+      "personas": "Personasätze",
+      "running": "Läuft gerade",
+      "attention": "Braucht dich",
+      "compare": "Vergleich",
+      "activity": "Aktivität"
+    },
+    "system": {
+      "label": "System",
+      "state": {
+        "ok": "Alle Dienste erreichbar",
+        "err": "Ein Dienst ist nicht erreichbar",
+        "unknown": "Systemzustand unbekannt"
+      }
+    },
+    "countsError": "Zähler konnten nicht vollständig geladen werden.",
     "settings": {
       "label": "Einstellungen",
       "general": "Allgemein",

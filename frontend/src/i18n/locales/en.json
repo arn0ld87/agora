@@ -901,10 +901,29 @@
   },
   "sidebar": {
     "title": "Main navigation",
-    "nav": {
-      "dashboard": "Dashboard",
-      "runs": "Runs"
+    "groups": {
+      "library": "Library",
+      "focus": "In focus",
+      "tools": "Tools"
     },
+    "nav": {
+      "runs": "Runs",
+      "graphs": "Graphs",
+      "personas": "Persona sets",
+      "running": "Running now",
+      "attention": "Needs you",
+      "compare": "Compare",
+      "activity": "Activity"
+    },
+    "system": {
+      "label": "System",
+      "state": {
+        "ok": "All services reachable",
+        "err": "A service is unreachable",
+        "unknown": "System state unknown"
+      }
+    },
+    "countsError": "Counts could not be loaded completely.",
     "settings": {
       "label": "Settings",
       "general": "General",

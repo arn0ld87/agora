@@ -81,11 +81,19 @@ describe('locale-coverage', () => {
 
   // 4. Sidebar-Keys (smoke #8) — nur wire-Ziele laut IA-Matrix Slice 7.3
   it('sidebar.nav.* Keys existieren in beiden Locales (nur wire-Ziele)', () => {
-    const navIds = ['dashboard', 'runs']
+    // #1795: Dashboard und Runs sind keine Seitenleisten-Eintraege mehr; es gilt
+    // die Gliederung Bibliothek / Im Blick / Werkzeuge.
+    const navIds = ['runs', 'graphs', 'personas', 'running', 'attention', 'compare', 'activity']
     for (const id of navIds) {
       expect(deKeys).toContain(`sidebar.nav.${id}`)
       expect(enKeys).toContain(`sidebar.nav.${id}`)
     }
+    for (const key of ['groups.library', 'groups.focus', 'groups.tools', 'system.label', 'system.state.ok', 'system.state.err', 'system.state.unknown', 'countsError']) {
+      expect(deKeys).toContain(`sidebar.${key}`)
+      expect(enKeys).toContain(`sidebar.${key}`)
+    }
+    expect(deKeys).not.toContain('sidebar.nav.dashboard')
+    expect(enKeys).not.toContain('sidebar.nav.dashboard')
     // Stub-IDs (hide) sind aus den Locales entfernt
     const hiddenNavIds = ['projects', 'datasets', 'templates', 'monitoring']
     for (const id of hiddenNavIds) {

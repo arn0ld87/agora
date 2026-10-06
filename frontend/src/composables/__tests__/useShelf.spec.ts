@@ -681,4 +681,46 @@ describe('useShelf.reload mit Supabase-Session (#1617)', () => {
     expect(simulationApi.listPersonaTemplates).not.toHaveBeenCalled()
     expect(error.value).not.toContain('shelf.partialLoad')
   })
+
+  // #1795: die Seitenleiste zaehlt aus dem Ablage-Stand und braucht je Quelle,
+  // was NICHT geladen wurde — sonst wuerde ein Ausfall als „0“ erscheinen.
+  it('meldet je Quelle, was nicht geladen wurde (unavailableSources), auch ohne Betreiber-Zugang', async () => {
+    const { createPinia, setActivePinia } = await import('pinia')
+    const { useAuthStore } = await import('../../store/auth')
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.config = { auth_backend: 'hybrid', jwt_enabled: true, supabase_url: 'https://s.test', supabase_anon_key: 'k', realtime_enabled: false, demo_mode: false }
+    auth.session = { access_token: 'x' } as never
+    runsApi.listRuns.mockResolvedValue({ success: true, data: { runs: [], total: 0, aggregation: null } })
+    reportApi.listReports.mockRejectedValue(new Error('down'))
+    graphApi.listProjects.mockResolvedValue({ success: true, data: [] })
+
+    const { reload, unavailableSources } = useShelf(t)
+    await reload()
+
+    expect([...unavailableSources.value].sort()).toEqual(['reports', 'templates'])
+  })
+
+  it('traegt Berichtsstatus und Beendigungsgrund in die Ablage-Objekte', async () => {
+    const { createPinia, setActivePinia } = await import('pinia')
+    setActivePinia(createPinia())
+    const run = makeRun({
+      run_id: 'run_b',
+      status: 'failed',
+      run_type: 'simulation_run',
+      linked_ids: { simulation_id: 'sim_b' },
+      metadata: { termination_reason: 'budget_tokens' },
+    })
+    runsApi.listRuns.mockResolvedValue({ success: true, data: { runs: [run], total: 1, aggregation: null } })
+    reportApi.listReports.mockResolvedValue({ success: true, data: [makeReport({ report_id: 'rep_i', status: 'incomplete' })] })
+    graphApi.listProjects.mockResolvedValue({ success: true, data: [] })
+    simulationApi.listPersonaTemplates.mockResolvedValue({ success: true, data: { count: 0, templates: [] } })
+
+    const { reload, objects, unavailableSources } = useShelf(t)
+    await reload()
+
+    expect(unavailableSources.value).toEqual([])
+    expect(objects.value.find((o) => o.kind === 'lauf')?.jobs?.[0]?.terminationReason).toBe('budget_tokens')
+    expect(objects.value.find((o) => o.kind === 'bericht')?.reportStatus).toBe('incomplete')
+  })
 })

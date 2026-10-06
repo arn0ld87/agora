@@ -8,7 +8,7 @@
  *    zweite, parallele Navigation (Doppelnavigation, jetzt aufgeloest).
  * 3. Sidebar rendert weiterhin nur wire-Ziele laut Matrix.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -17,6 +17,9 @@ import en from '@/i18n/locales/en.json'
 import { makeTestRouter } from './testRouter'
 import { useSidebarState } from '@/composables/useSidebarState'
 import Sidebar from '../Sidebar.vue'
+
+vi.mock('@/composables/useLibraryCounts', async () => (await import('./sidebarMocks')).libraryCountsMock)
+vi.mock('@/composables/useSidebarSystem', async () => (await import('./sidebarMocks')).sidebarSystemMock)
 
 const lsMock = (() => {
   const s: Record<string, string> = {}
@@ -74,10 +77,12 @@ describe('Sidebar IA matrix (slice 7.3)', () => {
     expect(text).toContain('LLM-Routing')
   })
 
-  it('behaelt wire-Ziele: Dashboard + Runs sichtbar', async () => {
+  it('behaelt wire-Ziele: Läufe, Graphen, Personasätze, Aktivität sichtbar (#1795)', async () => {
     const wrapper = await mountSidebar()
     const text = wrapper.text()
-    expect(text).toContain('Dashboard')
-    expect(text).toContain('Runs')
+    expect(text).toContain('Läufe')
+    expect(text).toContain('Graphen')
+    expect(text).toContain('Personasätze')
+    expect(text).toContain('Aktivität')
   })
 })

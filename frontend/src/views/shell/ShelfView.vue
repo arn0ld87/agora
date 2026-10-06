@@ -98,6 +98,16 @@ const shellStore = useShellStore()
 watch(shelf.activeObjects, (list) => (shellStore.activeObjects = list), { immediate: true })
 onBeforeUnmount(() => (shellStore.activeObjects = []))
 
+// Geladenen Stand fuer die Zaehler der Seitenleiste veroeffentlichen (#1795):
+// die Seitenleiste laedt die Ablage nicht ein zweites Mal, solange sie offen ist.
+// `objects` und `unavailableSources` werden bei jedem Laden neu gesetzt.
+watch(
+  [shelf.objects, shelf.unavailableSources],
+  ([objects, unavailable]) => {
+    shellStore.shelfSnapshot = { objects, unavailable }
+  },
+)
+
 const polling = usePolling(() => shelf.reload(), 10000, { immediate: false })
 
 watch(

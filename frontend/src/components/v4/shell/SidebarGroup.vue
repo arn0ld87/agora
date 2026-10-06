@@ -76,26 +76,25 @@ watch(hasActiveChild, (active) => {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 36px;
-  padding: var(--sidebar-group-trigger-py, 6px) var(--sidebar-item-px, 10px);
-  border-radius: var(--r-3);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
+  height: 34px;
+  padding: 0 8px;
+  border-radius: var(--ag-r-8);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--fg);
   background: transparent;
   cursor: pointer;
-  margin-top: 12px;
   user-select: none;
   transition: background 100ms ease;
 }
 
 .sidebar-group__trigger:hover:not(.sidebar-group__trigger--active) {
-  background: var(--surface-hover);
+  background: var(--s3);
 }
 
 .sidebar-group__trigger--active {
-  background: var(--accent-tint-bg);
-  color: var(--accent);
+  background: var(--acc-soft);
+  color: var(--fg);
   font-weight: 600;
 }
 
@@ -122,11 +121,11 @@ watch(hasActiveChild, (active) => {
   display: flex;
   align-items: center;
   height: 32px;
-  padding: 0 10px 0 38px;
-  border-radius: var(--r-3);
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--text-primary);
+  padding: 0 10px 0 42px;
+  border-radius: var(--ag-r-8);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--fg);
   background: transparent;
   text-decoration: none;
   cursor: pointer;
@@ -136,19 +135,19 @@ watch(hasActiveChild, (active) => {
 }
 
 .sidebar-group__body :deep(.sidebar-sub-item:hover:not(.sidebar-sub-item--active)) {
-  background: var(--surface-hover);
+  background: var(--s3);
 }
 
 .sidebar-group__body :deep(.sidebar-sub-item--active) {
-  background: var(--accent-tint-bg);
-  color: var(--accent);
+  background: var(--acc-soft);
+  color: var(--fg);
   font-weight: 600;
-  border-left-color: var(--accent);
+  border-left-color: var(--acc);
 }
 
 /* Der Gruppen-Auslöser ist ein <button> ohne jede Fokusregel gewesen. */
 .sidebar-group__trigger:focus-visible {
-  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
-  outline-offset: var(--v4-state-focus-ring-offset);
+  outline: 2px solid var(--acc-text);
+  outline-offset: 2px;
 }
 </style>
