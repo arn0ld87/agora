@@ -661,7 +661,7 @@ function errorMessage(err: unknown): string {
           <p class="text-warn">
             {{ $t('embedding.adopt.noConnections', 'Keine Provider-Connections vorhanden. Zuerst eine Verbindung anlegen.') }}
           </p>
-          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn--secondary">
+          <router-link :to="{ name: 'SettingsWindow', params: { section: 'providers' } }" class="btn btn--secondary">
             {{ $t('embedding.adopt.toProviders', 'Zu den LLM-Anbietern') }}
           </router-link>
         </template>
@@ -726,7 +726,7 @@ function errorMessage(err: unknown): string {
           <p class="text-warn">
             {{ $t('embedding.create.noConnections', 'Keine Provider-Connections vorhanden. Zuerst eine Verbindung anlegen.') }}
           </p>
-          <router-link :to="{ name: 'SettingsLlmProviders' }" class="btn btn--secondary">
+          <router-link :to="{ name: 'SettingsWindow', params: { section: 'providers' } }" class="btn btn--secondary">
             {{ $t('embedding.create.toProviders', 'Zu den LLM-Anbietern') }}
           </router-link>
         </template>

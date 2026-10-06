@@ -269,7 +269,7 @@
     "model": {
       "label": "LLM-Modell",
       "placeholder": "Modell wählen …",
-      "workspaceDefaultHint": "Keine Auswahl: Workspace-Default aus /settings/llm-providers wird verwendet.",
+      "workspaceDefaultHint": "Keine Auswahl: Workspace-Default aus Einstellungen → Anbieter wird verwendet.",
       "presetGroup": "Empfohlen",
       "ollamaGroup": "Lokal verfügbar",
       "customGroup": "Eigene Eingabe",
@@ -277,7 +277,7 @@
       "customPlaceholder": "z. B. qwen3-coder-next:cloud",
       "refresh": "Liste aktualisieren",
       "loadingModels": "Lade verfügbare Modelle…",
-      "noOllama": "Keine Verbindung zu Ollama. Provider unter /settings/llm-providers konfigurieren oder Ollama starten.",
+      "noOllama": "Keine Verbindung zu Ollama. Provider unter Einstellungen → Anbieter konfigurieren oder Ollama starten.",
       "openAiDefault": "OpenAI-Standardmodell aktiv.",
       "default": "Standard aus .env",
       "ollamaOption": "{model} (Ollama)"
@@ -925,18 +925,7 @@
     },
     "countsError": "Zähler konnten nicht vollständig geladen werden.",
     "settings": {
-      "label": "Einstellungen",
-      "general": "Allgemein",
-      "integrations": "Integrationen",
-      "usersTeams": "Nutzer & Teams",
-      "apiKeys": "API-Schlüssel",
-      "llmProviders": "LLM-Anbieter",
-      "embedding": "Embedding-Konfiguration",
-      "llmRouting": "LLM-Routing",
-      "auditLogs": "Audit-Logs",
-      "profile": "Profil",
-      "providerKeys": "Provider-Keys",
-      "previewBadge": "Vorschau"
+      "label": "Einstellungen"
     },
     "footer": {
       "collapse": "Einklappen",
@@ -2107,8 +2096,6 @@
       "navLabel": "Abschnitte",
       "sectionSelect": "Abschnitt wählen",
       "operatorOnly": "Dieser Abschnitt gehört dem Betreiber. Hier ist er nur als Vorschau sichtbar, Änderungen sind nicht möglich.",
-      "placeholderTitle": "In Vorbereitung",
-      "placeholder": "Dieser Abschnitt kommt in dieser Etappe.",
       "access": {
         "apiKeys": "API-Schlüssel",
         "audit": "Audit-Protokoll",
@@ -2309,7 +2296,6 @@
           "next": "Nächster Schritt"
         },
         "notRecorded": "nicht erfasst",
-        "modelPlannedHint": "Das geplante Modell vor dem Start ist in dieser Ansicht noch nicht erfasst.",
         "modelDefault": "Standard: {model}",
         "modelDefaultHint": "gilt, wenn beim Start nichts anderes gewählt wird",
         "modelNone": "kein Standard erfasst",

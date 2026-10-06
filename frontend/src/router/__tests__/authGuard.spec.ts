@@ -76,7 +76,7 @@ describe('Legacy-Modus (JWT aus)', () => {
   })
 
   it('leitet requiresAuth-Routen ohne Token wie bisher auf die Startseite (Bibliothek)', async () => {
-    await go('/settings/api-keys')
+    await go('/settings/providers')
     expect(router.currentRoute.value.name).toBe('LibraryRuns')
     expect(router.currentRoute.value.query.authRequired).toBe('1')
   })
@@ -128,7 +128,7 @@ describe('Betreiber-Routen im JWT-Modus', () => {
     fakeAuth.isAuthenticated = true
   })
 
-  it.each(['/settings/general', '/settings/api-keys', '/onboarding'])(
+  it.each(['/settings/general', '/settings/access', '/onboarding'])(
     'laesst Besucher mit Session auf %s (Demo-Vorschau statt Redirect)',
     async (path) => {
       // Im echten Store impliziert operatorAccess=false immer eine Session

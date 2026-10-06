@@ -140,23 +140,10 @@ const emit = defineEmits<{
 }>()
 
 /** Route-Namen, bei denen die Zeile „Einstellungen“ als aktiv gilt. Die Fenster-
- *  Adressen (meta.settingsWindow) kommen ueber `onSettingsRoute`; die alten
- *  Einstellungsansichten, die bis Ticket 7 (Weiterleitungen) bestehen bleiben,
- *  stehen hier. */
-const settingsRouteNames = [
-  'Settings',
-  'SettingsGeneral',
-  'SettingsWindow',
-  'SettingsIntegrations',
-  'SettingsProfile',
-  'SettingsApiKeys',
-  'SettingsAuditLogs',
-  'SettingsLlmRouting',
-  'SettingsLlmProviders',
-  'SettingsEmbedding',
-  // Deep-Link aus dem Demo-Vorschau-Banner.
-  'WorkspaceProviderKeys',
-]
+ *  Adressen (meta.settingsWindow) kommen zusaetzlich ueber `onSettingsRoute`;
+ *  die alten Einstellungsadressen sind seit Etappe 3 Weiterleitungen und
+ *  tauchen in `route.matched` nicht mehr auf. */
+const settingsRouteNames = ['Settings', 'SettingsGeneral', 'SettingsWindow', 'SettingsEmbedding']
 
 const onSettingsRoute = computed(
   () =>

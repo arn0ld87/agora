@@ -269,7 +269,7 @@
     "model": {
       "label": "LLM model",
       "placeholder": "Select model …",
-      "workspaceDefaultHint": "No selection: workspace default from /settings/llm-providers will be used.",
+      "workspaceDefaultHint": "No selection: workspace default from Settings → Providers will be used.",
       "presetGroup": "Recommended",
       "ollamaGroup": "Locally available",
       "customGroup": "Custom",
@@ -277,7 +277,7 @@
       "customPlaceholder": "e.g. qwen3-coder-next:cloud",
       "refresh": "Refresh list",
       "loadingModels": "Loading available models…",
-      "noOllama": "No connection to Ollama. Configure a provider in /settings/llm-providers or start Ollama.",
+      "noOllama": "No connection to Ollama. Configure a provider in Settings → Providers or start Ollama.",
       "openAiDefault": "OpenAI default model active.",
       "default": "Default from .env",
       "ollamaOption": "{model} (Ollama)"
@@ -925,18 +925,7 @@
     },
     "countsError": "Counts could not be loaded completely.",
     "settings": {
-      "label": "Settings",
-      "general": "General",
-      "integrations": "Integrations",
-      "usersTeams": "Users & Teams",
-      "apiKeys": "API Keys",
-      "llmProviders": "LLM Providers",
-      "embedding": "Embedding configuration",
-      "llmRouting": "LLM Routing",
-      "auditLogs": "Audit logs",
-      "profile": "Profile",
-      "providerKeys": "Provider keys",
-      "previewBadge": "Preview"
+      "label": "Settings"
     },
     "footer": {
       "collapse": "Collapse",
@@ -2107,8 +2096,6 @@
       "navLabel": "Sections",
       "sectionSelect": "Choose a section",
       "operatorOnly": "This section belongs to the operator. It is shown here as a preview only, changes are not possible.",
-      "placeholderTitle": "In preparation",
-      "placeholder": "This section arrives in this stage.",
       "access": {
         "apiKeys": "API keys",
         "audit": "Audit log",
@@ -2309,7 +2296,6 @@
           "next": "Next step"
         },
         "notRecorded": "not recorded",
-        "modelPlannedHint": "The model planned before the start is not recorded in this view yet.",
         "modelDefault": "Default: {model}",
         "modelDefaultHint": "applies if nothing else is chosen at the start",
         "modelNone": "no default recorded",

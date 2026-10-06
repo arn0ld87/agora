@@ -43,17 +43,17 @@
               <span class="user-menu__role">{{ t(`topbar.userMenu.role.${ws.role}`) }}</span>
             </DropdownMenuItem>
           </div>
-          <DropdownMenuItem @select="() => { close(); goTo('WorkspaceProviderKeys') }">
+          <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'providers' } }) }">
             {{ t('topbar.userMenu.providerKeys') }}
           </DropdownMenuItem>
         </template>
         <!-- Profil und Einstellungen sind prozessweiter Betreiber-Zustand
              (operator_only): für Supabase-Nutzer ausgeblendet (#1617). -->
         <template v-else>
-          <DropdownMenuItem @select="() => { close(); goTo('SettingsProfile') }">
+          <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'access' } }) }">
             {{ t('topbar.userMenu.profile') }}
           </DropdownMenuItem>
-          <DropdownMenuItem @select="() => { close(); goTo('SettingsGeneral') }">
+          <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsGeneral' }) }">
             {{ t('topbar.userMenu.settings') }}
           </DropdownMenuItem>
         </template>
@@ -85,7 +85,7 @@
             <span class="user-menu__check" aria-hidden="true">{{ themeChoice === opt ? '✓' : '' }}</span>
             {{ t(`topbar.userMenu.theme.${opt}`) }}
           </DropdownMenuItem>
-          <!-- Dichte bleibt bis Etappe 3 erreichbar (ex DensityToggle in der Leiste). -->
+          <!-- Dichte (ex DensityToggle in der Leiste); steht auch im Fenster unter „Aussehen“. -->
           <DropdownMenuItem
             role="menuitemcheckbox"
             :aria-checked="density === 'compact'"
@@ -111,7 +111,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import DropdownMenu from '../v4/forms/DropdownMenu.vue'
 import DropdownMenuItem from '../v4/forms/DropdownMenuItem.vue'
 import { ShellTestId } from '../../contracts/testIds'
@@ -185,8 +185,8 @@ const triggerLabel = computed(() =>
     : t('topbar.userMenu.triggerUnknown'),
 )
 
-function goTo(routeName: 'SettingsProfile' | 'SettingsGeneral' | 'WorkspaceProviderKeys'): void {
-  router.push({ name: routeName })
+function goTo(target: RouteLocationRaw): void {
+  router.push(target)
 }
 
 /** Kein Help/Docs-Ziel im Router (geprueft) — Fallback auf den README-Anker.

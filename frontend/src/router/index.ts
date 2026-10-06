@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
+import type { RouteLocationAsRelativeGeneric, RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
 import { useAuthStore } from '../store/auth'
@@ -11,10 +11,16 @@ import {
   isSettingsSectionId,
   normalizeSettingsSection,
   settingsSectionPath,
+  type SettingsSectionId,
 } from '../components/settings-window/sections'
 import { isWindowRoute, useSettingsWindowStore } from '../stores/settingsWindow'
 
 const AUTH_ONLY_ROUTES = { Login: 1, Register: 1, PasswordReset: 1, EmailConfirm: 1 } as const
+
+/** Weiterleitung auf einen Abschnitt des Einstellungsfensters (Etappe 3, #1799). */
+function settingsWindowRedirect(section: SettingsSectionId): RouteLocationAsRelativeGeneric {
+  return { name: 'SettingsWindow', params: { section } }
+}
 
 const routes: RouteRecordRaw[] = [
   // Etappe 2 des Frontend-Umbaus (#1797, Ticket „Weiterleitungen"): die
@@ -33,9 +39,10 @@ const routes: RouteRecordRaw[] = [
     redirect: { name: 'LibraryRuns' },
   },
 
-  // Dashboard entfaellt: HeroNewRun lebt weiter unter /library/runs/new
-  // (NewRun), die uebrigen Karten sind in Abschnitt „Dashboard“ des
-  // Umsetzungsberichts aufgelistet. DashboardView.vue bleibt als Datei stehen.
+  // Dashboard entfaellt: der Start eines Laufs ist seit Etappe 3 der Startdialog
+  // unter /library/runs/new (NewRun), die uebrigen Karten sind in Abschnitt
+  // „Dashboard“ des Umsetzungsberichts aufgelistet. DashboardView.vue und
+  // HeroNewRun.vue bleiben als Dateien stehen.
   {
     path: '/dashboard',
     name: 'Dashboard',
@@ -87,9 +94,7 @@ const routes: RouteRecordRaw[] = [
     // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
     meta: { operatorOnly: true, settingsWindow: true, settingsSection: 'general' },
   },
-  // Alle uebrigen Abschnitte des Fensters (`/settings/appearance` …). Statische
-  // Adressen darunter (integrations, profile, api-keys …) gewinnen gegen den
-  // Parameter und bleiben bis Ticket 7 auf ihrer alten Ansicht. Unbekannter
+  // Alle uebrigen Abschnitte des Fensters (`/settings/appearance` …). Unbekannter
   // Abschnitt → general.
   {
     path: '/settings/:section',
@@ -97,60 +102,21 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../components/settings-window/SettingsWindow.vue'),
     meta: { settingsWindow: true },
   },
-  {
-    path: '/settings/integrations',
-    name: 'SettingsIntegrations',
-    component: () => import('../views/Settings/SettingsIntegrationsView.vue'),
-    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
-    meta: { operatorOnly: true },
-  },
-  {
-    path: '/settings/profile',
-    name: 'SettingsProfile',
-    component: () => import('../views/Settings/SettingsProfileView.vue'),
-    // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617).
-    // demoPreview: 'static' — Besucher sehen nur einen Erklaertext.
-    meta: { operatorOnly: true, demoPreview: 'static' },
-  },
+  // Etappe 3 (#1799, Bauplan §6.2): die alten Einstellungsadressen leiten auf
+  // das Fenster um. Die Namen bleiben als Weiterleitungs-Routen bestehen, damit
+  // kein `router.push({ name })` im Bestand bricht; Query und Hash bleiben
+  // erhalten. Die Zugangsregeln gelten am Ziel (sections.ts), nicht an der
+  // alten Adresse. Statische Adressen gewinnen gegen `/settings/:section`.
+  { path: '/settings/integrations', name: 'SettingsIntegrations', redirect: settingsWindowRedirect('pipeline') },
+  { path: '/settings/profile', name: 'SettingsProfile', redirect: settingsWindowRedirect('access') },
   // Sidebar-IA-Fix (Onboarding-Epic): "Users & Teams" wurde durch das
-  // Profil-Setting ersetzt — bestehende Deep-Links leiten weiter um.
-  {
-    path: '/settings/users-teams',
-    name: 'SettingsUsersTeams',
-    redirect: { name: 'SettingsProfile' },
-  },
-  {
-    path: '/settings/api-keys',
-    name: 'SettingsApiKeys',
-    component: () => import('../views/Settings/SettingsApiKeysView.vue'),
-    // demoPreview: 'static' — Besucher sehen nur einen Erklaertext statt der
-    // Workspace-API-Keys (DemoPreviewFrame).
-    meta: { operatorOnly: true, requiresAuth: true, demoPreview: 'static' },
-  },
-  {
-    path: '/settings/audit-logs',
-    name: 'SettingsAuditLogs',
-    component: () => import('../views/Settings/SettingsAuditLogsView.vue'),
-    meta: { operatorOnly: true, requiresAuth: true, demoPreview: 'static' },
-  },
-  {
-    path: '/settings/llm-routing',
-    name: 'SettingsLlmRouting',
-    component: () => import('../views/Settings/LlmRoutingView.vue'),
-    meta: { operatorOnly: true, requiresAuth: true },
-  },
-  {
-    path: '/settings/llm-providers',
-    name: 'SettingsLlmProviders',
-    component: () => import('../views/Settings/LlmProvidersView.vue'),
-    meta: { operatorOnly: true, requiresAuth: true },
-  },
-  {
-    path: '/workspace/provider-keys',
-    name: 'WorkspaceProviderKeys',
-    component: () => import('../views/Settings/WorkspaceProviderKeysView.vue'),
-    meta: { requiresAuth: true },
-  },
+  // Profil-Setting ersetzt, das heute im Abschnitt „Zugang“ liegt.
+  { path: '/settings/users-teams', name: 'SettingsUsersTeams', redirect: settingsWindowRedirect('access') },
+  { path: '/settings/api-keys', name: 'SettingsApiKeys', redirect: settingsWindowRedirect('access') },
+  { path: '/settings/audit-logs', name: 'SettingsAuditLogs', redirect: settingsWindowRedirect('access') },
+  { path: '/settings/llm-routing', name: 'SettingsLlmRouting', redirect: settingsWindowRedirect('profiles') },
+  { path: '/settings/llm-providers', name: 'SettingsLlmProviders', redirect: settingsWindowRedirect('providers') },
+  { path: '/workspace/provider-keys', name: 'WorkspaceProviderKeys', redirect: settingsWindowRedirect('providers') },
   // Onboarding Slice 4.3.3: eigene Route für die kanonische
   // Embedding-Konfiguration (Store, View, Migrations, Ollama-Download).
   {

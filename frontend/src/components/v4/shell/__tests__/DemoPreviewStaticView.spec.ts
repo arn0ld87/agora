@@ -52,7 +52,7 @@ describe('DemoPreviewStaticView', () => {
     expect(banner.exists()).toBe(true)
     expect(banner.text()).toContain('Demo-Vorschau')
     const link = wrapper.find('.demo-preview-static__banner-link')
-    expect(link.attributes('href')).toBe('/workspace/provider-keys')
+    expect(link.attributes('href')).toBe('/settings/providers')
   })
 
   it('zeigt die statischen Erlaeuterungen fuer SettingsApiKeys', async () => {

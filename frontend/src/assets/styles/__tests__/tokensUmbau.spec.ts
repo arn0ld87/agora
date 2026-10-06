@@ -134,7 +134,6 @@ describe('alte Token-Namen → neue Tokens (#1795, Ticket 2)', () => {
       '../../../components/v4/shell/Breadcrumbs.vue',
       '../../../components/v4/shell/CommandPalette.vue',
       '../../../components/v4/shell/Sidebar.vue',
-      '../../../components/v4/shell/SidebarGroup.vue',
       '../../../components/v4/shell/SidebarItem.vue',
       '../../../components/v4/shell/Topbar.vue',
     ]

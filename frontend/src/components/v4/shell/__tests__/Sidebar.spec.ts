@@ -475,15 +475,15 @@ describe('Sidebar', () => {
     })
   })
 
-  describe('Deep-Link auf /workspace/provider-keys (#1688)', () => {
-    it('markiert die Zeile "Einstellungen" als aktiv (alte Ansicht bleibt bis Ticket 7)', async () => {
+  describe('Deep-Link aus dem Demo-Vorschau-Banner auf /settings/providers (#1688)', () => {
+    it('markiert die Zeile "Einstellungen" als aktiv (Fenster-Abschnitt Anbieter)', async () => {
       const pinia = createPinia()
       setActivePinia(pinia)
       const auth = useAuthStore()
       auth.config = DEMO_CONFIG
       auth.session = { access_token: 'tok', user: { id: 'u1' } } as never
 
-      await router.push({ name: 'WorkspaceProviderKeys' })
+      await router.push({ name: 'SettingsWindow', params: { section: 'providers' } })
       const wrapper = mount(Sidebar, {
         global: { plugins: [router, pinia, i18n] },
       })
