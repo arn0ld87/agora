@@ -1120,6 +1120,7 @@
       "ui": "UI",
       "webtools": "Webtools",
       "oasis": "OASIS",
+      "budget": "Budgets",
       "security": "Secrets"
     },
     "llmActive": {

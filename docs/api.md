@@ -175,7 +175,7 @@ Die Run-API umfasst unter anderem:
 - Export
 - Manifest
 - Replay
-- Usage/Budget (ohne `budget` im Start-Aufruf gilt seit #1772 ein harter Standard-Tokendeckel, `AGORA_SIM_DEFAULT_MAX_TOKENS`, Standard 20 Mio., `0` = aus; sichtbar in `metadata.budget`)
+- Usage/Budget (ohne `budget` im Start-Aufruf gilt seit #1772 ein Standardbudget aus den Einstellungen im Abschnitt `budget`: harter Tokendeckel `AGORA_SIM_DEFAULT_MAX_TOKENS`, Standard 20 Mio., plus seit #1799 optional `AGORA_SIM_DEFAULT_MAX_COST_MICROS`, `AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS`, `AGORA_SIM_DEFAULT_MAX_LLM_CALLS` und die Durchsetzung `AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT` (`soft`/`hard`); `0` = kein Limit; sichtbar in `metadata.budget`)
 - LLM-Routing je Run bzw. Stage
 
 Ungültige Filterparameter von `GET /api/runs` (z. B. `limit` außerhalb 1–200, unbekannter `status`) liefern `400` mit `code: "validation_error"`, einem Text in `error` und den Pydantic-Details unter `details` (#1679).

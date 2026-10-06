@@ -17,4 +17,5 @@ export const INTEGRATION_SETTINGS_SECTIONS = [
   'agent_tools',
   'webtools',
   'oasis',
+  'budget',
 ] as const satisfies readonly SettingsSection[]
