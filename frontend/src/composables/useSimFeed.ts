@@ -42,7 +42,7 @@ export function parentIdOf(post: PostCreatedEvent): string | null {
  * kein `kind`). `comment`/`quote`/`repost` sind nie Wurzeln, auch wenn
  * ihre Elternkante fehlt — das ist ein Data Gap, keine neue Wurzel.
  */
-function isThreadRoot(post: PostCreatedEvent): boolean {
+export function isThreadRoot(post: PostCreatedEvent): boolean {
   return parentIdOf(post) === null && (post.kind == null || post.kind === 'post')
 }
 
