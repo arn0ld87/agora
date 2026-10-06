@@ -63,7 +63,7 @@ const simulationIdFromQuery = computed<string | null>(() =>
 )
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
-  { label: 'Runs', path: '/runs' },
+  { label: 'Runs', path: '/library/runs' },
   crumbForId(pendingReportId.value ? (simulationIdFromQuery.value ?? props.reportId) : props.reportId),
   { label: 'Report' },
 ])

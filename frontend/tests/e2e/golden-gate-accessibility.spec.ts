@@ -12,7 +12,7 @@
  * Stack: Playwright + axe-core (siehe global-setup.ts + scripts/e2e-up.sh).
  * Auth: Single-User-Token-Mode via localStorage (siehe helpers/auth.ts).
  */
-import { test, request } from '@playwright/test';
+import { test, expect, request } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
 import { ensureOnboardingDismissed } from './helpers/onboarding';
 import {
@@ -54,20 +54,60 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   });
 
   test.describe('Shell', () => {
-    test('Dashboard passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/dashboard');
+    // Etappe 2 des Frontend-Umbaus (#1797): /dashboard, /runs und /ablage sind
+    // Weiterleitungen auf die Bibliothek der Läufe (siehe „Alte Adressen
+    // leiten um“ unten). Die Gates laufen an den Zielen, jeder Fall an einer
+    // anderen Ansicht der Bibliothek bzw. der Aktivität.
+    test('Bibliothek Läufe (ehemals Dashboard) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/library/runs');
     });
 
-    test('Runs (Redirect auf die Ablage) passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/runs');
+    test('Bibliothek Läufe „Läuft“ (ehemals Runs) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/library/runs?view=running');
     });
 
-    // Block B3 — die neue Huelle. Die Route existiert unabhaengig vom
-    // Shell-Flag; nur der '/'-Redirect haengt daran. Geprueft wird der
-    // Leerzustand (ohne Backend-Daten) — fuer die Gates reicht das:
-    // sie messen Struktur, Fokus und Kontrast, nicht Inhalt.
-    test('Ablage passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/ablage');
+    // Block B3 — die neue Huelle. Geprueft wird der Leerzustand (ohne
+    // Backend-Daten) — fuer die Gates reicht das: sie messen Struktur, Fokus
+    // und Kontrast, nicht Inhalt.
+    test('Bibliothek Läufe „Mit Bericht“ (ehemals Ablage) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/library/runs?view=with-report');
+    });
+  });
+
+  // Etappe 2 (#1797): die neuen Ansichten ohne Parameter-Bedarf.
+  test.describe('Bibliothek und Aktivität (Etappe 2, #1797)', () => {
+    test('Bibliothek Läufe „Braucht Aufmerksamkeit“ passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/library/runs?view=attention');
+    });
+
+    test('Bibliothek Graphen passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/library/graphs');
+    });
+
+    test('Neuer Lauf passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/library/runs/new');
+    });
+
+    test('Aktivität Jobs passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/activity/jobs');
+    });
+
+    test('Aktivität Protokoll passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/activity/log');
+    });
+  });
+
+  // Etappe 2 (#1797): gespeicherte Links auf alte Adressen funktionieren
+  // weiter. Geprüft wird die Weiterleitung selbst (URL), nicht der Inhalt.
+  test.describe('Alte Adressen leiten um (Etappe 2, #1797)', () => {
+    test('/dashboard leitet auf /library/runs um', async ({ page }) => {
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await expect(page).toHaveURL(/\/library\/runs$/);
+    });
+
+    test('/runs/<id> leitet auf /activity/jobs/<id> um', async ({ page }) => {
+      await page.goto('/runs/run_e2e_redirect', { waitUntil: 'domcontentloaded' });
+      await expect(page).toHaveURL(/\/activity\/jobs\/run_e2e_redirect$/);
     });
   });
 
@@ -149,8 +189,10 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, '/settings/audit-logs');
     });
 
-    test('History (v4, Redirect auf die Ablage) passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/v4/history');
+    // /v4/history leitet seit Etappe 2 auf die Aktivität um; das Gate prüft
+    // die Jobliste der Aktivität (vorher: die Ablage).
+    test('Verlauf (ehemals /v4/history, jetzt Aktivität Jobs) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/activity/jobs');
     });
 
     // RunDetailView (frontend/src/views/RunDetailView.vue:66 — role="alert" im
@@ -160,10 +202,10 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
     // erreichbar (siehe Ausnahme-Begründung unten) — für das reine A11y-Gate
     // (Struktur/Fokus/Kontrast, kein Inhaltstest) reicht der deterministische
     // Fehlerzustand aus und hält die Smoke-Laufzeit niedrig.
-    test('Run Detail (unbekannte Run-ID, deterministischer Fehlerzustand) passes accessibility gates', async ({
+    test('Job-Detail (unbekannte Run-ID, deterministischer Fehlerzustand) passes accessibility gates', async ({
       page,
     }) => {
-      await checkAccessibilityGate(page, '/runs/run_e2e_a11y_missing');
+      await checkAccessibilityGate(page, '/activity/jobs/run_e2e_a11y_missing');
     });
   });
 
@@ -257,7 +299,20 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       // Fehlerzustand, ansonsten BranchComparePanel — beide Zweige sind
       // barrierefrei; eine frische Simulation ohne Branches deckt den
       // Fehlerzweig ab.
-      await checkAccessibilityGate(page, `/v4/compare/${simulationId}`);
+      await checkAccessibilityGate(page, `/compare/${simulationId}`);
+    });
+
+    // Etappe 2 (#1797): Lauf-Arbeitsbereich und Graph-Ansichten mit echter ID.
+    test('Lauf Übersicht passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}`);
+    });
+
+    test('Lauf Graph passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/graph`);
+    });
+
+    test('Graph der Bibliothek passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/graphs/${projectId}`);
     });
   });
 

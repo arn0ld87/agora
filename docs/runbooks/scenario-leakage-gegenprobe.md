@@ -24,7 +24,7 @@ Die Fallbeschreibung ist **keine** Konstruktionsnotiz. Wer sie als
 1. Seed in getrennte Dateien schneiden: Fallbeschreibung, Konstruktionsnotizen,
    Auftrag, erwartete Ergebnisse. Vorbild: `docs/test-seeds/ki-azubi-match-dortmund/`
    (`seed_document.md`, `prompt.md`, `erwartungshorizont.md`).
-2. Im Dashboard alle Dateien hochladen und je Datei die Textsorte wählen
+2. In der Bibliothek über „Neuer Lauf“ (`/library/runs/new`) alle Dateien hochladen und je Datei die Textsorte wählen
    (API: Formularfeld `document_roles` als JSON-Liste in Upload-Reihenfolge).
 3. Simulation und Report wie gewohnt fahren.
 4. Auswerten:

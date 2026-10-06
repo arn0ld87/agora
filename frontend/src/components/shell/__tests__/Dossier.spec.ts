@@ -54,7 +54,7 @@ const router = createRouter({
     { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: { template: '<div/>' } },
     { path: '/v4/report/:reportId', name: 'StepReport', component: { template: '<div/>' } },
     { path: '/ablage/:kind/:objectId', name: 'ShelfObject', component: { template: '<div/>' } },
-    { path: '/dashboard', name: 'Dashboard', component: { template: '<div/>' } },
+    { path: '/library/runs/new', name: 'NewRun', component: { template: '<div/>' } },
     { path: '/settings', name: 'SettingsGeneral', component: { template: '<div/>' } },
   ],
 })
@@ -309,13 +309,13 @@ describe('Dossier — Uebersichtszustand (Redesign PR 3)', () => {
     expect(router.currentRoute.value.params).toEqual({ kind: 'bericht', objectId: 'rep_1' })
   })
 
-  it('"Quelle ablegen" navigiert zum Dashboard', async () => {
+  it('"Quelle ablegen" navigiert zum Einstieg Neuer Lauf', async () => {
     const wrapper = mountDossier(null, [])
 
     await wrapper.find(`[data-testid="${DossierTestId.overviewNewSource}"]`).trigger('click')
     await flushPromises()
 
-    expect(router.currentRoute.value.name).toBe('Dashboard')
+    expect(router.currentRoute.value.name).toBe('NewRun')
   })
 })
 

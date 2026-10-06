@@ -422,7 +422,7 @@ function goToNextAction(obj: ShelfObject): void {
 }
 
 function goToNewObject(): void {
-  void router.push({ name: 'Dashboard' })
+  void router.push({ name: 'NewRun' })
 }
 
 function nextActionClass(kind: 'accent' | 'warn' | 'neutral'): string {

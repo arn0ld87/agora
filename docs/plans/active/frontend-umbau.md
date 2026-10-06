@@ -639,6 +639,18 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 
 ---
 
+## 11a. Stand Etappe 2
+
+**Umgesetzt (Epic #1797, Branch `feat/1797-bibliothek-und-lauf`)** nach 8: Bibliothek der Läufe als Kacheln und Liste mit „Im Blick“ und Filter „Mit Bericht“ samt Liste aller Fassungen; Lauf-Arbeitsbereich unter `/simulations/:simulationId` mit sechs Reitern und Übersicht je Stufe; Graph lesend im Lauf und in der Bibliothek (`/library/graphs`, `/graphs/:projectId`); Aktivität mit Jobs, Job-Detail und Protokoll; Übergangsadresse `/v4/simulation/:simulationId/interviews`; alle Weiterleitungen der Zeilen „ab Etappe 2“ aus 6.2 (`router/legacyRedirects.ts`). Der Knopf „Neuer Lauf“ öffnet `/library/runs/new` mit dem bestehenden Start. Die e2e-Smokes laufen auf den neuen Adressen und prüfen je eine Weiterleitung.
+
+**Geklärt (6.2, „Auflösungen“):** Die Ablage führt Graphen unter der `project_id` (`ShelfObject.id`; `graph_id` steht nur daneben); `/ablage/graph/:objectId` leitet deshalb unverändert auf `/graphs/:objectId`. Läufe führt sie unter `simulation_id`, sonst `project_id`, sonst `run_id` (`endeavorKey` in `useShelf`); `/ablage/lauf/:objectId` leitet bei `sim_` auf den Lauf-Arbeitsbereich, bei `proj_` auf die Graph-Ansicht, sonst auf den Job. Personasätze führt die Ablage nicht; `/ablage/personasatz/:objectId` bleibt bis Etappe 7 auf der alten Ansicht.
+
+**Bewusst nicht gebaut, weil der Bestand es nicht trägt:** Löschen von Läufen (kein Endpunkt); Vergleich zweier Läufe (die Vergleichsansicht nimmt einen Lauf); Kosten, „Runde x von y“ und Modell je Fassung in den Kacheln; geplantes Modell je Stufe (Etappe 3); Herkunft „Dokument, Abschnitt“ im Graphen (nur die Zahl der Quellenfragmente); der Vorfilter der Konsole ist eine Textsuche nach der Kennung; die Dashboard-Karten `StatsRow`, `ActiveRunsCard`, `SystemHealthCard`, `RecentReportsCard` und `QuickActionsRow` sind bis Etappe 3 nicht mehr geroutet.
+
+**Offen:** Die Tab-Reihenfolge-Prüfung (`helpers/tabOrder.ts`) meldet in langen, gestapelten Listen (Entitätenliste und Tabellenzeilen im Graph-Leser) einen Sprung nach oben, wenn der Browser beim Tab scrollt. Ein einzelner Tab-Stop je Liste (Listbox mit Pfeiltasten) würde das beheben und ist für Etappe 8 (Graph bearbeiten) vorzumerken.
+
+---
+
 ## 12. Offene Punkte
 
 | Punkt | Wer klärt | Wann |
@@ -647,7 +659,7 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 | Zuordnung Lauf = Simulation, Graph = Projekt (Abschnitt 2) | Maintainer, dann Lead | vor Etappe 2 |
 | Filter „Mit Bericht" in der Bibliothek als Ersatz für den Ablage-Filter „Berichte" (Vorschlag in 4.1) | Maintainer | vor Etappe 2 |
 | Platz für die Nachfragen an den Berichtsagenten (Vorschlag in 4.6) | Maintainer | vor Etappe 5 |
-| Welche Kennung führt die Ablage für Graph- und Personasatz-Objekte? (6.2) | Lead | Etappe 2 |
+| Welche Kennung führt die Ablage für Graph- und Personasatz-Objekte? (6.2) | Lead | Etappe 2; geklärt, siehe 11a (Graph: `project_id`; Personasätze führt die Ablage nicht) |
 | Liefert `by-simulation` alle Berichtsfassungen? | Lead | Etappe 5 |
 | Trägt der Evidence-Vertrag schon Sprungziele je Beleg? | Lead | Etappe 5 |
 | Gibt es persistierte Standard-Budgets? | Lead | Etappe 3 |

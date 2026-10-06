@@ -36,7 +36,7 @@
       <div class="sidebar__bottom">
         <SidebarItem
           :label="t('sidebar.system.label')"
-          :to="{ name: 'Dashboard' }"
+          :to="{ name: 'SettingsGeneral' }"
           :tone="systemTone"
           :tooltip="t(`sidebar.system.state.${systemTone}`)"
           :current="false"
@@ -116,7 +116,6 @@ import Icon from './Icon.vue'
 import AgoraBrand from '../../brand/AgoraBrand.vue'
 import { useShellStore } from '@/stores/shell'
 import { MOBILE_MEDIA_QUERY } from '@/constants/breakpoints'
-import type { ShelfFilter } from '@/types/shelf'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -196,56 +195,60 @@ const onSettingsRoute = computed(() =>
   route.matched.some((r) => r.name !== undefined && settingsRouteNames.includes(String(r.name))),
 )
 
-const SHELF_FILTERS: readonly ShelfFilter[] = ['alle', 'lauf', 'bericht', 'personasatz', 'graph', 'jobs']
+const RUN_WORKSPACE_ROUTES = ['RunWorkspace', 'RunOverview', 'RunGraph']
 
-/**
- * Welcher Ablage-Filter gerade gilt. Auf der Ablage selbst steht er in der Query,
- * auf einem Objekt (`/ablage/:kind/:objectId`) ergibt er sich aus der Objektart.
- * `null` ausserhalb der Ablage.
- */
-const shelfFilter = computed<ShelfFilter | null>(() => {
-  if (route.name === 'ShelfObject') {
-    const kind = route.params.kind
-    return kind === 'lauf' || kind === 'graph' || kind === 'personasatz' ? kind : null
-  }
-  if (route.name !== 'Shelf') return null
-  const raw = route.query.filter
-  return typeof raw === 'string' && (SHELF_FILTERS as readonly string[]).includes(raw)
-    ? (raw as ShelfFilter)
-    : 'alle'
+/** Gewaehlte Ansicht der Laeufe-Bibliothek (`?view=`); `null` = alle. */
+const runsView = computed<string | null>(() => {
+  const raw = route.query.view
+  return route.name === 'LibraryRuns' && typeof raw === 'string' ? raw : null
 })
 
-function shelfLink(filter: ShelfFilter): RouteLocationRaw {
-  return { name: 'Shelf', query: { filter } }
-}
+/** Art des Objekts auf der alten Ablage-Objektansicht (`/ablage/:kind/:objectId`, Bericht und Personasatz bis Etappe 5/7). */
+const shelfObjectKind = computed<string | null>(() =>
+  route.name === 'ShelfObject' && typeof route.params.kind === 'string' ? route.params.kind : null,
+)
+
+const onRunsSection = computed(
+  () =>
+    (route.name === 'LibraryRuns' && runsView.value !== 'running' && runsView.value !== 'attention') ||
+    route.name === 'NewRun' ||
+    route.matched.some((r) => r.name !== undefined && RUN_WORKSPACE_ROUTES.includes(String(r.name))) ||
+    shelfObjectKind.value === 'lauf' ||
+    shelfObjectKind.value === 'bericht',
+)
+
+const onActivitySection = computed(() => route.path === '/activity' || route.path.startsWith('/activity/'))
 
 /**
- * Seitenleiste laut Bauplan 3.1. Jeder Eintrag fuehrt auf eine heute bestehende
- * Adresse:
- *  - Laeufe / Graphen / Personasaetze / Aktivitaet → Ablage mit Filter
- *    lauf / graph / personasatz / jobs.
- *  - Laeuft gerade / Braucht dich → Ablage mit Filter lauf. Die Ablage kennt
- *    keinen Zustandsfilter; beide Eintraege teilen sich daher das Ziel mit
- *    „Laeufe“ und sind nie selbst als aktiv markiert.
- *  - Vergleich → Vergleichsansicht des juengsten Laufs mit Simulation; solange
- *    keiner bekannt ist (oder das Laden fehlschlug), die Laeufe-Liste.
+ * Seitenleiste laut Bauplan 3.1. Jeder Eintrag fuehrt auf eine Adresse der
+ * Etappe 2:
+ *  - Laeufe → Bibliothek → Laeufe; ein geoeffneter Lauf (`/simulations/…`)
+ *    markiert „Laeufe“. Graphen → Graphen-Bibliothek, `/graphs/:projectId`
+ *    markiert „Graphen“.
+ *  - Personasaetze → bis Etappe 7 die Laeufe-Bibliothek; nie selbst als aktiv
+ *    markiert (ausser auf der alten Personasatz-Objektansicht).
+ *  - Laeuft gerade / Braucht dich → Laeufe mit `?view=running` bzw.
+ *    `?view=attention`.
+ *  - Vergleich → Vergleichsansicht, mit dem juengsten Lauf mit Simulation
+ *    vorgewaehlt, sobald einer bekannt ist.
+ *  - Aktivitaet → Jobs; `/activity/*` markiert „Aktivitaet“.
  */
 const navGroups = computed<NavGroup[]>(() => [
   {
     id: 'library',
     title: t('sidebar.groups.library'),
     items: [
-      { id: 'runs', glyph: '▶', label: t('sidebar.nav.runs'), to: shelfLink('lauf'), count: counts.value.laeufe, current: shelfFilter.value === 'lauf' || route.name === 'RunDetail' },
-      { id: 'graphs', glyph: '◇', label: t('sidebar.nav.graphs'), to: shelfLink('graph'), count: counts.value.graphen, current: shelfFilter.value === 'graph' },
-      { id: 'personas', glyph: '◎', label: t('sidebar.nav.personas'), to: shelfLink('personasatz'), count: counts.value.personasaetze, current: shelfFilter.value === 'personasatz' },
+      { id: 'runs', glyph: '▶', label: t('sidebar.nav.runs'), to: { name: 'LibraryRuns' }, count: counts.value.laeufe, current: onRunsSection.value },
+      { id: 'graphs', glyph: '◇', label: t('sidebar.nav.graphs'), to: { name: 'LibraryGraphs' }, count: counts.value.graphen, current: route.name === 'LibraryGraphs' || route.name === 'GraphLibraryDetail' || shelfObjectKind.value === 'graph' },
+      { id: 'personas', glyph: '◎', label: t('sidebar.nav.personas'), to: { name: 'LibraryRuns' }, count: counts.value.personasaetze, current: shelfObjectKind.value === 'personasatz' },
     ],
   },
   {
     id: 'focus',
     title: t('sidebar.groups.focus'),
     items: [
-      { id: 'running', glyph: '◌', label: t('sidebar.nav.running'), to: shelfLink('lauf'), count: counts.value.laeuft, current: false },
-      { id: 'attention', glyph: '!', label: t('sidebar.nav.attention'), to: shelfLink('lauf'), count: counts.value.brauchtDich, current: false },
+      { id: 'running', glyph: '◌', label: t('sidebar.nav.running'), to: { name: 'LibraryRuns', query: { view: 'running' } }, count: counts.value.laeuft, current: runsView.value === 'running' },
+      { id: 'attention', glyph: '!', label: t('sidebar.nav.attention'), to: { name: 'LibraryRuns', query: { view: 'attention' } }, count: counts.value.brauchtDich, current: runsView.value === 'attention' },
     ],
   },
   {
@@ -257,11 +260,11 @@ const navGroups = computed<NavGroup[]>(() => [
         glyph: '⇄',
         label: t('sidebar.nav.compare'),
         to: compareSimulationId.value
-          ? { name: 'CompareV4', params: { simulationId: compareSimulationId.value } }
-          : shelfLink('lauf'),
-        current: route.name === 'CompareV4',
+          ? { name: 'Compare', params: { simulationId: compareSimulationId.value } }
+          : { name: 'Compare' },
+        current: route.name === 'Compare',
       },
-      { id: 'activity', glyph: '≡', label: t('sidebar.nav.activity'), to: shelfLink('jobs'), count: counts.value.aktivitaet, current: shelfFilter.value === 'jobs' },
+      { id: 'activity', glyph: '≡', label: t('sidebar.nav.activity'), to: { name: 'ActivityJobs' }, count: counts.value.aktivitaet, current: onActivitySection.value },
     ],
   },
 ])

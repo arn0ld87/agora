@@ -135,13 +135,13 @@ describe('Sidebar', () => {
     expect(wrapper.text()).toContain('Einstellungen')
   })
 
-  it('Active-State: auf der Ablage mit Filter lauf ist genau "Läufe" aktiv und traegt aria-current', async () => {
-    await router.push({ name: 'Shelf', query: { filter: 'lauf' } })
+  it('Active-State: die Laeufe-Bibliothek markiert genau "Läufe" und traegt aria-current', async () => {
+    await router.push({ name: 'LibraryRuns' })
     await router.isReady()
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },
     })
-    // „Läuft gerade“ und „Braucht dich“ teilen sich die Adresse, sind aber nie selbst aktiv.
+    // „Läuft gerade“ und „Braucht dich“ teilen sich den Pfad, sind aber nur mit ihrem `?view=` aktiv.
     const active = wrapper.findAll('.sidebar-item--active')
     expect(active).toHaveLength(1)
     expect(active[0]?.text()).toContain('Läufe')
@@ -149,11 +149,10 @@ describe('Sidebar', () => {
   })
 
   it.each([
-    { query: 'graph', label: 'Graphen' },
-    { query: 'personasatz', label: 'Personasätze' },
-    { query: 'jobs', label: 'Aktivität' },
-  ])('Active-State: Ablage-Filter $query markiert "$label"', async ({ query, label }) => {
-    await router.push({ name: 'Shelf', query: { filter: query } })
+    { view: 'running', label: 'Läuft gerade' },
+    { view: 'attention', label: 'Braucht dich' },
+  ])('Active-State: ?view=$view markiert "$label" und nicht "Läufe"', async ({ view, label }) => {
+    await router.push({ name: 'LibraryRuns', query: { view } })
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },
     })
@@ -162,8 +161,8 @@ describe('Sidebar', () => {
     expect(active[0]?.text()).toContain(label)
   })
 
-  it('Active-State: ein geoeffneter Lauf (ShelfObject) markiert "Läufe"', async () => {
-    await router.push({ name: 'ShelfObject', params: { kind: 'lauf', objectId: 'sim_1' } })
+  it('Active-State: ?view=with-report bleibt bei "Läufe"', async () => {
+    await router.push({ name: 'LibraryRuns', query: { view: 'with-report' } })
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },
     })
@@ -172,7 +171,54 @@ describe('Sidebar', () => {
     expect(active[0]?.text()).toContain('Läufe')
   })
 
-  it('Eintraege verlinken auf bestehende Adressen (Ablage-Filter, Vergleich-Fallback)', async () => {
+  it.each([
+    { path: '/library/graphs', label: 'Graphen' },
+    { path: '/graphs/proj_1', label: 'Graphen' },
+    { path: '/activity/jobs', label: 'Aktivität' },
+    { path: '/activity/jobs/run_1', label: 'Aktivität' },
+    { path: '/activity/log', label: 'Aktivität' },
+    { path: '/compare/sim_1', label: 'Vergleich' },
+    { path: '/simulations/sim_1', label: 'Läufe' },
+    { path: '/library/runs/new', label: 'Läufe' },
+  ])('Active-State: $path markiert "$label"', async ({ path, label }) => {
+    await router.push(path)
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const active = wrapper.findAll('.sidebar-item--active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.text()).toContain(label)
+  })
+
+  it('Active-State: ein Lauf-Arbeitsbereich mit Kind-Route (RunWorkspace > RunGraph) markiert "Läufe"', async () => {
+    const nested = makeTestRouter([
+      {
+        path: '/simulations/:simulationId',
+        name: 'RunWorkspace',
+        component: { template: '<div><router-view /></div>' },
+        children: [{ path: 'graph', name: 'RunGraph', component: { template: '<div/>' } }],
+      },
+    ])
+    await nested.push('/simulations/sim_1/graph')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [nested, i18n] },
+    })
+    const active = wrapper.findAll('.sidebar-item--active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.text()).toContain('Läufe')
+  })
+
+  it('Active-State: die alte Objektansicht (ShelfObject) markiert nach Art', async () => {
+    await router.push({ name: 'ShelfObject', params: { kind: 'bericht', objectId: 'report_1' } })
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const active = wrapper.findAll('.sidebar-item--active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.text()).toContain('Läufe')
+  })
+
+  it('Eintraege verlinken auf die Adressen der Etappe 2 (Vergleich ohne bekannte Simulation: /compare)', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },
@@ -181,16 +227,29 @@ describe('Sidebar', () => {
       .findAll('a.sidebar-item')
       .map((a) => [a.text().replace(/\d+$/, '').trim(), a.attributes('href')])
     const byLabel = Object.fromEntries(hrefs)
-    expect(byLabel['▶Läufe']).toBe('/ablage?filter=lauf')
-    expect(byLabel['◇Graphen']).toBe('/ablage?filter=graph')
-    expect(byLabel['◎Personasätze']).toBe('/ablage?filter=personasatz')
-    expect(byLabel['◌Läuft gerade']).toBe('/ablage?filter=lauf')
-    expect(byLabel['!Braucht dich']).toBe('/ablage?filter=lauf')
-    expect(byLabel['≡Aktivität']).toBe('/ablage?filter=jobs')
-    // Ohne bekannte Simulation: nächstliegende bestehende Adresse = Läufe-Liste.
-    expect(byLabel['⇄Vergleich']).toBe('/ablage?filter=lauf')
-    // System: die Seite, auf der der Systemzustand heute steht.
-    expect(byLabel['System' + 'Alle Dienste erreichbar']).toBe('/dashboard')
+    expect(byLabel['▶Läufe']).toBe('/library/runs')
+    expect(byLabel['◇Graphen']).toBe('/library/graphs')
+    // Personasätze haben bis Etappe 7 keine eigene Ansicht.
+    expect(byLabel['◎Personasätze']).toBe('/library/runs')
+    expect(byLabel['◌Läuft gerade']).toBe('/library/runs?view=running')
+    expect(byLabel['!Braucht dich']).toBe('/library/runs?view=attention')
+    expect(byLabel['≡Aktivität']).toBe('/activity/jobs')
+    expect(byLabel['⇄Vergleich']).toBe('/compare')
+    // System: bis zum Einstellungsfenster (Etappe 3) die Allgemein-Einstellungen
+    // (das Dashboard mit der Systemzustands-Karte entfaellt).
+    expect(byLabel['System' + 'Alle Dienste erreichbar']).toBe('/settings/general')
+  })
+
+  it('DOM-Reihenfolge der Seitenleiste entspricht der Sichtreihenfolge (Bauplan 3.1)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const labels = wrapper
+      .findAll('a.sidebar-item')
+      .map((a) => a.text().replace(/\d+$/, '').replace(/^[^\p{L}]+/u, '').trim())
+      .slice(0, 7)
+    expect(labels).toEqual(['Läufe', 'Graphen', 'Personasätze', 'Läuft gerade', 'Braucht dich', 'Vergleich', 'Aktivität'])
   })
 
   it('zeigt die Zaehler neutral neben den Eintraegen und haengt sie in den zugaenglichen Namen', async () => {

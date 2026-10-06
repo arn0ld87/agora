@@ -26,7 +26,7 @@ test.describe('Slice 7.3.2 · Mobiler Drawer — Focus-Trap', () => {
   });
 
   test('Hamburger öffnet Drawer und setzt initialen Fokus hinein', async ({ page }) => {
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
 
     const hamburger = page.locator(HAMBURGER_SELECTOR);
     await hamburger.click();
@@ -46,7 +46,7 @@ test.describe('Slice 7.3.2 · Mobiler Drawer — Focus-Trap', () => {
   });
 
   test('Tab am letzten Element im Drawer springt zyklisch zum ersten', async ({ page }) => {
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
     await page.locator(HAMBURGER_SELECTOR).click();
 
     const drawer = page.locator(DRAWER_SELECTOR);
@@ -73,7 +73,7 @@ test.describe('Slice 7.3.2 · Mobiler Drawer — Focus-Trap', () => {
   });
 
   test('Shift+Tab am ersten Element im Drawer springt zyklisch zum letzten', async ({ page }) => {
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
     await page.locator(HAMBURGER_SELECTOR).click();
 
     const drawer = page.locator(DRAWER_SELECTOR);
@@ -95,7 +95,7 @@ test.describe('Slice 7.3.2 · Mobiler Drawer — Focus-Trap', () => {
   });
 
   test('Main und Topbar sind waehrend geoeffnetem Drawer inert (nicht fokussierbar)', async ({ page }) => {
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
     await page.locator(HAMBURGER_SELECTOR).click();
     await expect(page.locator(DRAWER_SELECTOR)).toBeVisible();
 
@@ -104,7 +104,7 @@ test.describe('Slice 7.3.2 · Mobiler Drawer — Focus-Trap', () => {
   });
 
   test('Escape schliesst den Drawer und Fokus kehrt zum Hamburger zurueck', async ({ page }) => {
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
     const hamburger = page.locator(HAMBURGER_SELECTOR);
     await hamburger.click();
     await expect(page.locator(DRAWER_SELECTOR)).toBeVisible();

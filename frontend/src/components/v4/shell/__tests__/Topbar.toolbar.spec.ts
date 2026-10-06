@@ -119,14 +119,14 @@ describe('Topbar Werkzeugleiste', () => {
     expect(mountTopbar().find(`[data-testid="${ShellTestId.logsTrigger}"]`).exists()).toBe(false)
   })
 
-  it('"Neuer Lauf" fuehrt zum bestehenden Start im Dashboard', async () => {
+  it('"Neuer Lauf" fuehrt zum bestehenden Start (NewRun mit HeroNewRun)', async () => {
     mockMatchMedia(false)
-    await router.push('/runs')
+    await router.push('/library/runs')
     const wrapper = mountTopbar()
     const button = wrapper.find('[data-testid="topbar-new-run"]')
     expect(button.text()).toContain('Neuer Lauf')
     await button.trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.name).toBe('Dashboard')
+    expect(router.currentRoute.value.name).toBe('NewRun')
   })
 })
