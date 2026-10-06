@@ -42,6 +42,11 @@ export interface JobUsage {
   costMicros: number | null
 }
 
+export interface JobRoute {
+  providerId: string
+  model: string
+}
+
 export interface JobInfo {
   runId: string
   runType: string
@@ -50,8 +55,12 @@ export interface JobInfo {
   startedAt: string | null
   completedAt: string | null
   updatedAt: string
-  /** Tatsächlich gelaufenes Modell (Job-Summary), sonst Modelle aus dem Ledger. */
+  /** Rückfall ohne Routen-Snapshot: Modelle aus dem Verbrauchs-Ledger (`usage.by_model`). */
   models: string[]
+  /** Beim Jobstart festgeschriebene Route (`llm-routing`-Snapshot der Stufe). */
+  route?: JobRoute | null
+  /** Der Snapshot ließ sich nicht laden (sichtbar, nicht als "nicht erfasst" getarnt). */
+  routeLoadFailed?: boolean
   usage: JobUsage | null
   error: string | null
   /** Nur am Personas-Job gesetzt (`summary.persona_count`). */
