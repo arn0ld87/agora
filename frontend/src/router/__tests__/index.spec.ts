@@ -89,6 +89,12 @@ vi.mock('../../views/library/NewRunView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/RunWorkspaceView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/RunOverviewView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/RunGraphView.vue', () => VIEW_STUB)
+// Etappe 4 (#1801): Simulation als Reiter am Lauf.
+vi.mock('../../views/run/simulation/RunSimulationView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/simulation/RunSimulationFeedView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/simulation/RunSimulationPostView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/simulation/RunSimulationRoundsView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/simulation/RunSimulationDiagnosticsView.vue', () => VIEW_STUB)
 vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityLogView.vue', () => VIEW_STUB)
@@ -152,35 +158,37 @@ describe('Router – Routen-Resolution', () => {
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
+  // Etappe 4 (#1801): feed/threads/thread/rounds/actions sind Weiterleitungen
+  // auf die Unterreiter am Lauf; die Erwartung war vorher der alte Routenname.
   it('löst /v4/simulation/:simulationId/feed mit param auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/feed')
-    expect(router.currentRoute.value.name).toBe('StepSimulationFeed')
+    expect(router.currentRoute.value.name).toBe('RunSimulationFeed')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
   // Slice UI-2b (#1713): Diskurs-, Strang-, Runden- und Protokoll-Kind-Routen.
   it('löst /v4/simulation/:simulationId/threads mit param auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/threads')
-    expect(router.currentRoute.value.name).toBe('SimThreads')
+    expect(router.currentRoute.value.name).toBe('RunSimulationFeed')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
   it('löst /v4/simulation/:simulationId/thread/:postId mit beiden Params auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/thread/post_1')
-    expect(router.currentRoute.value.name).toBe('SimThreadFocus')
+    expect(router.currentRoute.value.name).toBe('RunSimulationPost')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
     expect(router.currentRoute.value.params.postId).toBe('post_1')
   })
 
   it('löst /v4/simulation/:simulationId/rounds mit param auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/rounds')
-    expect(router.currentRoute.value.name).toBe('SimRounds')
+    expect(router.currentRoute.value.name).toBe('RunSimulationRounds')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
   it('löst /v4/simulation/:simulationId/actions mit param auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/actions')
-    expect(router.currentRoute.value.name).toBe('SimActions')
+    expect(router.currentRoute.value.name).toBe('RunSimulationRounds')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
@@ -344,12 +352,92 @@ describe('Router – Redirects', () => {
   // Fix #1713 (Befund 6): /live war eine verwaiste Route ohne Anschluss an
   // die Tab-Navigation. Slice UI-2b: Ziel ist jetzt die Runden-Ansicht (naeher
   // am urspruenglichen Zweck als der Feed); Parameter + Query bleiben erhalten.
-  it('/v4/simulation/:id/live → SimRounds, Query bleibt erhalten', async () => {
+  it('/v4/simulation/:id/live → RunSimulationRounds, Query bleibt erhalten', async () => {
     await pushAndSettle('/v4/simulation/sim_live_1/live?projectId=project_1')
 
-    expect(router.currentRoute.value.name).toBe('SimRounds')
+    expect(router.currentRoute.value.name).toBe('RunSimulationRounds')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_live_1')
     expect(router.currentRoute.value.query.projectId).toBe('project_1')
+  })
+})
+
+describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
+  beforeEach(() => {
+    vi.mocked(getAgoraToken).mockReturnValue('tkn')
+  })
+
+  it.each([
+    ['/simulations/sim_1/simulation', 'RunSimulationFeed'],
+    ['/simulations/sim_1/simulation/feed', 'RunSimulationFeed'],
+    ['/simulations/sim_1/simulation/feed/twitter', 'RunSimulationFeed'],
+    ['/simulations/sim_1/simulation/feed/reddit', 'RunSimulationFeed'],
+    ['/simulations/sim_1/simulation/post/post_1', 'RunSimulationPost'],
+    ['/simulations/sim_1/simulation/rounds', 'RunSimulationRounds'],
+    ['/simulations/sim_1/simulation/diagnostics', 'RunSimulationDiagnostics'],
+  ])('löst %s → %s auf', async (path, name) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe(name)
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_1')
+    expect(router.currentRoute.value.matched.some((r) => r.name === 'RunSimulation')).toBe(true)
+  })
+
+  it('network ist nur twitter oder reddit', async () => {
+    await pushAndSettle('/simulations/sim_1/simulation/feed/twitter')
+    expect(router.currentRoute.value.params.network).toBe('twitter')
+    await pushAndSettle('/simulations/sim_1/simulation/feed/mastodon')
+    expect(router.currentRoute.value.name).toBe('NotFound')
+  })
+
+  it('postId mit Doppelpunkten bleibt erhalten', async () => {
+    await pushAndSettle('/simulations/sim_1/simulation/post/reddit:comment:7?claim=c1')
+    expect(router.currentRoute.value.name).toBe('RunSimulationPost')
+    expect(router.currentRoute.value.params.postId).toBe('reddit:comment:7')
+    expect(router.currentRoute.value.query.claim).toBe('c1')
+  })
+
+  it('router.push per Name mit postId mit Doppelpunkten und claim-Query', async () => {
+    await router.push({
+      name: 'RunSimulationPost',
+      params: { simulationId: 'sim_1', postId: 'twitter:123' },
+      query: { claim: 'c9' },
+    })
+    expect(router.currentRoute.value.params.postId).toBe('twitter:123')
+    expect(router.currentRoute.value.query.claim).toBe('c9')
+  })
+
+  it.each([
+    ['/v4/simulation/sim_1/feed?persona=p1#x', 'RunSimulationFeed'],
+    ['/v4/simulation/sim_1/threads?persona=p1#x', 'RunSimulationFeed'],
+    ['/v4/simulation/sim_1/rounds?persona=p1#x', 'RunSimulationRounds'],
+    ['/v4/simulation/sim_1/live?persona=p1#x', 'RunSimulationRounds'],
+    ['/v4/simulation/sim_1/actions?persona=p1#x', 'RunSimulationRounds'],
+  ])('Weiterleitung %s → %s, Query und Hash bleiben', async (path, name) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe(name)
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_1')
+    expect(router.currentRoute.value.query.persona).toBe('p1')
+    expect(router.currentRoute.value.hash).toBe('#x')
+  })
+
+  it.each([
+    ['/v4/simulation/sim_1/thread/twitter:123?claim=c1', 'twitter:123'],
+    ['/v4/simulation/sim_1/thread/reddit:comment:7?claim=c1', 'reddit:comment:7'],
+  ])('Weiterleitung %s → RunSimulationPost mit postId und claim', async (path, postId) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe('RunSimulationPost')
+    expect(router.currentRoute.value.params.postId).toBe(postId)
+    expect(router.currentRoute.value.query.claim).toBe('c1')
+  })
+
+  it('Pipeline-Seite, alte Start-Adressen und Interviews bleiben unberührt', async () => {
+    await pushAndSettle('/v4/simulation/sim_1')
+    expect(router.currentRoute.value.name).toBe('StepSimulation')
+    await pushAndSettle('/simulation/sim_1/start')
+    expect(router.currentRoute.value.name).toBe('StepSimulation')
+    await pushAndSettle('/simulation/sim_1')
+    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
+    await pushAndSettle('/v4/simulation/sim_1/interviews')
+    expect(router.currentRoute.value.name).toBe('RunInterviewsLegacy')
   })
 })
 
@@ -446,12 +534,8 @@ describe('Router – Struktur-Integrität', () => {
       'StepGraphBuild',
       'StepEnvSetup',
       'StepSimulation',
-      'StepSimulationFeed',
-      // Slice UI-2b (#1713): Diskurs/Strang/Runden/Protokoll-Kind-Routen.
-      'SimThreads',
-      'SimThreadFocus',
-      'SimRounds',
-      'SimActions',
+      // Etappe 4 (#1801): Feed, Strang, Runden, Protokoll sind Weiterleitungen
+      // (Redirects-Suite) und zaehlen nicht mehr als produktive Routen.
       // Fix #1713 (Befund 6): /live ist jetzt ein Redirect (Ziel: SimRounds),
       // keine eigene produktive Route mehr (siehe Redirects-Suite oben).
       'StepReport',
@@ -471,6 +555,13 @@ describe('Router – Struktur-Integrität', () => {
       'RunWorkspace',
       'RunOverview',
       'RunGraph',
+      // Etappe 4 (#1801): Simulation als Reiter; RunSimulationIndex ist die
+      // Weiterleitung und faellt heraus.
+      'RunSimulation',
+      'RunSimulationFeed',
+      'RunSimulationPost',
+      'RunSimulationRounds',
+      'RunSimulationDiagnostics',
       'GraphLibraryDetail',
       'Compare',
       'ActivityJobs',

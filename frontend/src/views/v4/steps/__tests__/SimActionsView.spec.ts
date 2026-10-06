@@ -167,7 +167,7 @@ describe('SimActionsView', () => {
 
     expect(routerPushMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'SimThreadFocus',
+        name: 'RunSimulationPost',
         params: expect.objectContaining({ simulationId: 'test-sim-actions', postId: 'target-1' }),
       }),
     )

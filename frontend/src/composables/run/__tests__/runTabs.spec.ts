@@ -13,7 +13,7 @@ describe('deriveRunTabs', () => {
       { name: 'RunOverview', params: { simulationId: 'sim_1' } },
       { name: 'RunGraph', params: { simulationId: 'sim_1' } },
       { name: 'StepEnvSetup', params: { projectId: 'proj_1' } },
-      { name: 'StepSimulationFeed', params: { simulationId: 'sim_1' } },
+      { name: 'RunSimulationFeed', params: { simulationId: 'sim_1' } },
       { name: 'StepReport', params: { reportId: 'report_9' } },
       { name: 'RunInterviewsLegacy', params: { simulationId: 'sim_1' } },
     ])

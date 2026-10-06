@@ -2283,6 +2283,19 @@
       }
     },
     "run": {
+      "simulation": {
+        "tabsLabel": "Ansichten der Simulation",
+        "tab": {
+          "feed": "Feed",
+          "rounds": "Runden",
+          "diagnostics": "Diagnose"
+        },
+        "headerSlotLabel": "Kopf der Simulation",
+        "diagnostics": {
+          "title": "Diagnose",
+          "pending": "Folgt in dieser Etappe."
+        }
+      },
       "overview": {
         "title": "Übersicht",
         "stagesLabel": "Stufen des Laufs",

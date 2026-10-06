@@ -75,7 +75,7 @@ const currentRound = computed<number | null>(() => root.value?.round_num ?? null
 const lastSimTime = computed<string | null>(() => root.value?.sim_time ?? root.value?.timestamp ?? null)
 
 function goBack(): void {
-  void router.push({ name: 'SimThreads', query: route.query })
+  void router.push({ name: 'RunSimulationFeed', params: { simulationId }, query: route.query })
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -86,7 +86,7 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 function openThread(postId: string): void {
-  void router.push({ name: 'SimThreadFocus', params: { simulationId, postId }, query: route.query })
+  void router.push({ name: 'RunSimulationPost', params: { simulationId, postId }, query: route.query })
 }
 </script>
 

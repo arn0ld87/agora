@@ -2283,6 +2283,19 @@
       }
     },
     "run": {
+      "simulation": {
+        "tabsLabel": "Simulation views",
+        "tab": {
+          "feed": "Feed",
+          "rounds": "Rounds",
+          "diagnostics": "Diagnostics"
+        },
+        "headerSlotLabel": "Simulation header",
+        "diagnostics": {
+          "title": "Diagnostics",
+          "pending": "Coming in this stage."
+        }
+      },
       "overview": {
         "title": "Overview",
         "stagesLabel": "Stages of the run",

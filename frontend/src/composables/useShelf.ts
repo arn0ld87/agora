@@ -195,7 +195,7 @@ export function nextActionFor(latest: RunDetail, t: Translate): NextAction | nul
 
   if (latest.status === 'processing' || latest.status === 'pending') {
     if (latest.run_type === 'simulation_run' && simId) {
-      return { label: t('shelf.action.watch'), to: { name: 'StepSimulationFeed', params: { simulationId: simId } }, kind: 'neutral' }
+      return { label: t('shelf.action.watch'), to: { name: 'RunSimulationFeed', params: { simulationId: simId } }, kind: 'neutral' }
     }
     return { label: t('shelf.action.watch'), to: { name: 'RunDetail', params: { id: latest.run_id } }, kind: 'neutral' }
   }

@@ -178,7 +178,7 @@ const degradation = computed<SimRunHeaderDegradation | null>(() => {
 
 function openThread(postId: string): void {
   void router.push({
-    name: 'SimThreadFocus',
+    name: 'RunSimulationPost',
     params: { simulationId, postId },
     query: route.query,
   })

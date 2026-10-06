@@ -170,9 +170,9 @@ describe('nextActionFor — Tabellen-Test ueber run_type x status', () => {
 
   const cases: Case[] = [
     {
-      name: 'processing + simulation_run + sim_id -> StepSimulationFeed (watch)',
+      name: 'processing + simulation_run + sim_id -> RunSimulationFeed (watch)',
       run: { status: 'processing', run_type: 'simulation_run', linked_ids: { simulation_id: 'sim_1' } },
-      expected: { to: 'StepSimulationFeed', labelKey: 'shelf.action.watch', kind: 'neutral', params: { simulationId: 'sim_1' } },
+      expected: { to: 'RunSimulationFeed', labelKey: 'shelf.action.watch', kind: 'neutral', params: { simulationId: 'sim_1' } },
     },
     {
       name: 'paused + sim_id -> StepSimulation (resume, accent)',

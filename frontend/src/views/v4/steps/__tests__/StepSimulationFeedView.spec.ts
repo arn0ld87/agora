@@ -234,7 +234,7 @@ describe('StepSimulationFeedView', () => {
 
     expect(routerPushMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'SimThreadFocus',
+        name: 'RunSimulationPost',
         params: expect.objectContaining({ simulationId: 'test-sim-1', postId: 'snap-r-1' }),
       }),
     )

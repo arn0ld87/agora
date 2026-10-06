@@ -128,7 +128,7 @@ describe('SimThreadsView', () => {
     await w.get('[role="button"]').trigger('click')
     expect(routerPushMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'SimThreadFocus',
+        name: 'RunSimulationPost',
         params: expect.objectContaining({ simulationId: 'test-sim-threads', postId: 'root-click' }),
       }),
     )

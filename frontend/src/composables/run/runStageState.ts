@@ -230,7 +230,7 @@ function nextStepFor(
         : disabled('noProject', stepKind)
     case 'simulation':
       return stepKind === 'view'
-        ? enabled('view', target('StepSimulationFeed', { simulationId: data.simulationId }))
+        ? enabled('view', target('RunSimulationFeed', { simulationId: data.simulationId }))
         : enabled(stepKind, target('StepSimulation', { simulationId: data.simulationId }, startQuery))
     case 'report': {
       if (reportId) return enabled('view', target('StepReport', { reportId }))

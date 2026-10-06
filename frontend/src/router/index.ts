@@ -4,7 +4,13 @@ import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
 import { useAuthStore } from '../store/auth'
 import { safeNext } from '../auth/safeNext'
-import { shelfObjectGuard, shelfRedirect } from './legacyRedirects'
+import {
+  shelfObjectGuard,
+  shelfRedirect,
+  simulationFeedRedirect,
+  simulationPostRedirect,
+  simulationRoundsRedirect,
+} from './legacyRedirects'
 import {
   DEFAULT_SETTINGS_SECTION,
   getSettingsSection,
@@ -194,38 +200,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/v4/steps/StepSimulationView.vue'),
         props: true,
       },
-      {
-        path: 'feed',
-        name: 'StepSimulationFeed',
-        component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
-        props: true,
-      },
-      // Slice UI-2b (#1713): Diskurs-, Strang-, Runden- und Protokollansichten
-      // als eigenstaendige Kind-Routen — siehe docs/design/simulation-feed.md §1.
-      {
-        path: 'threads',
-        name: 'SimThreads',
-        component: () => import('../views/v4/steps/SimThreadsView.vue'),
-        props: true,
-      },
-      {
-        path: 'thread/:postId',
-        name: 'SimThreadFocus',
-        component: () => import('../views/v4/steps/SimThreadFocusView.vue'),
-        props: true,
-      },
-      {
-        path: 'rounds',
-        name: 'SimRounds',
-        component: () => import('../views/v4/steps/SimRoundsView.vue'),
-        props: true,
-      },
-      {
-        path: 'actions',
-        name: 'SimActions',
-        component: () => import('../views/v4/steps/SimActionsView.vue'),
-        props: true,
-      },
+      // Etappe 4 (#1801, Bauplan §6.2): Feed, Strang, Runden und Protokoll sind
+      // Unterreiter am Lauf (/simulations/:id/simulation/…). Die alten Namen
+      // bleiben als Weiterleitungen bestehen; Query und Hash bleiben erhalten.
+      { path: 'feed', name: 'StepSimulationFeed', redirect: simulationFeedRedirect },
+      { path: 'threads', name: 'SimThreads', redirect: simulationFeedRedirect },
+      { path: 'thread/:postId', name: 'SimThreadFocus', redirect: simulationPostRedirect },
+      { path: 'rounds', name: 'SimRounds', redirect: simulationRoundsRedirect },
+      { path: 'actions', name: 'SimActions', redirect: simulationRoundsRedirect },
     ],
   },
   // Redesign PR 7 (Audit §5 "Simulation live") legte ein eigenstaendiges
@@ -235,11 +217,7 @@ const routes: RouteRecordRaw[] = [
   // der Feed) — SimulationLiveView.vue bleibt als Komponente erhalten.
   {
     path: '/v4/simulation/:simulationId/live',
-    redirect: (to) => ({
-      name: 'SimRounds',
-      params: { simulationId: String(to.params.simulationId) },
-      query: to.query,
-    }),
+    redirect: simulationRoundsRedirect,
   },
   {
     path: '/v4/report/:reportId',
@@ -329,6 +307,51 @@ const routes: RouteRecordRaw[] = [
         path: 'graph',
         name: 'RunGraph',
         component: () => import('../views/run/RunGraphView.vue'),
+      },
+      // Etappe 4 (#1801): Simulation als Reiter mit Unterreitern. Die Adresse
+      // selbst (leerer Kindpfad) fuehrt auf den Feed; die Kinder rendern in der
+      // Huelle.
+      {
+        path: 'simulation',
+        name: 'RunSimulation',
+        component: () => import('../views/run/simulation/RunSimulationView.vue'),
+        props: true,
+        children: [
+          {
+            path: '',
+            name: 'RunSimulationIndex',
+            redirect: (to) => ({
+              name: 'RunSimulationFeed',
+              params: { simulationId: String(to.params.simulationId) },
+              query: to.query,
+              hash: to.hash,
+            }),
+          },
+          {
+            path: 'feed/:network(twitter|reddit)?',
+            name: 'RunSimulationFeed',
+            component: () => import('../views/run/simulation/RunSimulationFeedView.vue'),
+            props: true,
+          },
+          {
+            path: 'post/:postId',
+            name: 'RunSimulationPost',
+            component: () => import('../views/run/simulation/RunSimulationPostView.vue'),
+            props: true,
+          },
+          {
+            path: 'rounds',
+            name: 'RunSimulationRounds',
+            component: () => import('../views/run/simulation/RunSimulationRoundsView.vue'),
+            props: true,
+          },
+          {
+            path: 'diagnostics',
+            name: 'RunSimulationDiagnostics',
+            component: () => import('../views/run/simulation/RunSimulationDiagnosticsView.vue'),
+            props: true,
+          },
+        ],
       },
     ],
   },

@@ -76,7 +76,7 @@ function makeRouter() {
       { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: Stub },
       { path: '/v4/graph-build/:projectId', name: 'StepGraphBuild', component: Stub },
       { path: '/v4/simulation/:simulationId', name: 'StepSimulation', component: Stub },
-      { path: '/v4/simulation/:simulationId/feed', name: 'StepSimulationFeed', component: Stub },
+      { path: '/simulations/:simulationId/simulation/feed', name: 'RunSimulationFeed', component: Stub },
       { path: '/v4/report/:reportId', name: 'StepReport', component: Stub },
       { path: '/v4/simulation/:simulationId/interviews', name: 'RunInterviewsLegacy', component: Stub },
       { path: '/library/runs', name: 'LibraryRuns', component: Stub },
@@ -161,7 +161,7 @@ describe('RunWorkspaceView: Reiter', () => {
     expect(href('overview')).toBe('/simulations/sim_1')
     expect(href('graph')).toBe('/simulations/sim_1/graph')
     expect(href('personas')).toBe('/v4/env-setup/proj_1')
-    expect(href('simulation')).toBe('/v4/simulation/sim_1/feed')
+    expect(href('simulation')).toBe('/simulations/sim_1/simulation/feed')
     expect(href('report')).toBe('/v4/report/report_1')
     expect(href('interviews')).toBe('/v4/simulation/sim_1/interviews')
     const current = wrapper.findAll('[aria-current="page"]').filter((e) => e.attributes('data-testid')?.startsWith('run-tab-'))

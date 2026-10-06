@@ -5,7 +5,7 @@
  * Prueft: Wurzel wird aus dem Feed-Store aufgeloest (Snapshot-Ladung nur,
  * wenn der Store noch leer ist), Strang-Knoten werden an SimThreadTree
  * durchgereicht, unbekannte postId zeigt den Placeholder, Esc navigiert
- * route-basiert zurueck zu SimThreads.
+ * route-basiert zurueck zum Feed (RunSimulationFeed).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -145,6 +145,6 @@ describe('SimThreadFocusView', () => {
     await flushPromises()
 
     await w.get('.stf-root').trigger('keydown', { key: 'Escape' })
-    expect(routerPushMock).toHaveBeenCalledWith(expect.objectContaining({ name: 'SimThreads' }))
+    expect(routerPushMock).toHaveBeenCalledWith(expect.objectContaining({ name: 'RunSimulationFeed' }))
   })
 })
