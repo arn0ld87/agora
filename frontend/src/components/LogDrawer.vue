@@ -227,7 +227,7 @@ onUnmounted(stopStream)
   z-index: 90;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-pop);
 }
 .reconnect-indicator {
   font-family: var(--ff-mono);

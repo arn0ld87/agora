@@ -90,7 +90,7 @@ watch(hasActiveChild, (active) => {
 }
 
 .sidebar-group__trigger:hover:not(.sidebar-group__trigger--active) {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
 }
 
 .sidebar-group__trigger--active {
@@ -136,7 +136,7 @@ watch(hasActiveChild, (active) => {
 }
 
 .sidebar-group__body :deep(.sidebar-sub-item:hover:not(.sidebar-sub-item--active)) {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
 }
 
 .sidebar-group__body :deep(.sidebar-sub-item--active) {

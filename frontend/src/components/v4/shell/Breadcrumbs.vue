@@ -114,7 +114,7 @@ const resolvedCrumbs = computed<InternalCrumb[]>(() => {
 }
 
 .breadcrumbs__link:focus-visible {
-  outline: 2px solid var(--accent, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 2px;
 }

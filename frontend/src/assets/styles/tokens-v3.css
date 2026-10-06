@@ -1,5 +1,5 @@
 /* ============================================================
-   Agora Design-Tokens (v4, dunkel-warm) — Stand 2026-09-05
+   Agora Design-Tokens (v4) — Stand 2026-10-06 (#1795: Werte in tokens-umbau.css)
    ============================================================
    Aufbau:
    1. :root — Flächen, Linien, Text, Akzent, Status (Rohwerte)
@@ -11,10 +11,10 @@
 
    Regeln (docs/ui/premium-redesign-2026-09/01-visual-audit.md, §4):
    - Vier Flächenebenen, kein Glow, kein Glas, keine Verläufe.
-   - Kupfer ist die einzige Handlungsfarbe, Türkis das einzige „lebt gerade“.
+   - Violett (--acc) ist der einzige Akzent; „läuft“ ist neutral (#1795).
    - Labels sind Satzschrift 11.5px/500 in Satzschreibung; Mono nur für
      IDs, Zahlen und Zeitstempel.
-   - Radius-Skala 0 / 4 / 6 / 10 / pill — mehr Stufen gibt es nicht.
+   - Radius-Skala 6 / 8 / 10 / 12 / 16 / pill (--ag-r-*) — mehr Stufen gibt es nicht.
    ============================================================ */
 
 :root, [data-theme="dark"] {
@@ -24,68 +24,72 @@
   color-scheme: dark;
 
   /* ─── Flächen ─────────────────────────────────────────── */
-  --surface-canvas:      #0b0a09;        /* Grund hinter allem */
-  --surface-base:        #14110f;        /* Seite */
-  --surface-elevated:    #1b1815;        /* Fläche auf der Seite */
-  --surface-inset:       #0d0c0a;        /* Eingaben, gruppierte Listen */
-  --surface-tint:        #100e0c;        /* Chrome (Sidebar, Kopfzeile) */
-  --surface-translucent: rgba(20,17,15,0.72);
-  --surface-hover:       rgba(242,236,228,0.06);
-  --surface-pressed:     rgba(242,236,228,0.10);
+  /* Seit #1795 zeigen alle Farb-, Flächen-, Text-, Linien-, Akzent-,
+     Zustands-, Schatten-, Schrift- und Radius-Namen auf die Tokens aus
+     tokens-umbau.css (--s0…--s4, --fg…, --acc…, --ok/--warn/--err …). Die
+     Werte für Dunkel und Hell stehen nur dort; hier steht kein Rohwert. */
+  --surface-canvas:      var(--s0);      /* Grund hinter allem */
+  --surface-base:        var(--s0);      /* Seite */
+  --surface-elevated:    var(--s2);      /* Fläche auf der Seite */
+  --surface-inset:       var(--field);   /* Eingaben, gruppierte Listen */
+  --surface-tint:        var(--s1);      /* Chrome (Sidebar, Kopfzeile) */
+  --surface-translucent: color-mix(in oklab, var(--s0) 72%, transparent);
+  --surface-hover:       var(--s3);
+  --surface-pressed:     var(--s4);
 
   --bg-canvas:    var(--surface-canvas);
   --bg-base:      var(--surface-base);
   --bg-elevated:  var(--surface-elevated);
   --bg-inset:     var(--surface-inset);
   --bg-hover:     var(--surface-hover);
-  --bg-selected:  rgba(208,138,82,0.10);
+  --bg-selected:  var(--acc-soft);
 
   /* ─── Linien ──────────────────────────────────────────── */
-  --separator:           rgba(242,236,228,0.08);
-  --hairline:            rgba(242,236,228,0.12);
-  --hairline-strong:     rgba(242,236,228,0.22);
+  --separator:           var(--line);
+  --hairline:            var(--line);
+  --hairline-strong:     color-mix(in oklab, var(--fg) 22%, var(--line));
   --border-subtle:       var(--separator);
   --border-default:      var(--hairline);
   --border-strong:       var(--hairline-strong);
 
   /* ─── Text ────────────────────────────────────────────── */
-  /* Kontraste auf --surface-base: primary 15.2:1, secondary 7.3:1,
-     tertiary 5.1:1 (Labels, Metazeilen), quaternary 2.3:1 — nur für
-     dekorative Zeichen, nie für Text im WCAG-Sinn. #7c736a aus der
-     Vorlage fiel als Textfarbe im axe-Gate durch (4.0:1). */
-  --text-primary:        #f2ece4;
-  --text-secondary:      #a89f94;
-  --text-tertiary:       #8d8378;
-  --text-quaternary:     #524d47;
-  --text-prose:          #e8e1d7;
-  --text-on-accent:      #1b120a;
+  /* Kontraste stehen im Entwurf (AgoraApp.dc.html); --text-quaternary ist
+     nur für dekorative Zeichen, nie für Text im WCAG-Sinn. */
+  --text-primary:        var(--fg);
+  --text-secondary:      var(--fg2);
+  --text-tertiary:       var(--fg3);
+  --text-quaternary:     color-mix(in oklab, var(--fg3) 55%, var(--s1));
+  --text-prose:          var(--fg);
+  --text-on-accent:      var(--on-acc);
   --text-muted:          var(--text-tertiary);
 
   /* ─── Akzent ──────────────────────────────────────────── */
-  --accent:              #d08a52;
-  --accent-hover:        #d89d6f;
-  --accent-pressed:      #c17334;
-  --accent-tint-bg:      rgba(208,138,82,0.14);
-  --accent-tint-bg-strong: rgba(208,138,82,0.22);
-  --accent-tint-text:    #e6b289;
+  /* Violett ist der einzige Akzent. */
+  --accent:              var(--acc);
+  --accent-hover:        var(--acc-hover);
+  --accent-pressed:      var(--acc-press);
+  --accent-tint-bg:      var(--acc-soft);
+  --accent-tint-bg-strong: color-mix(in oklab, var(--acc) 32%, transparent);
+  --accent-tint-text:    var(--acc-text);
   --accent-primary:      var(--accent);
   --accent-soft:         var(--accent-tint-bg);
 
   /* ─── Status ──────────────────────────────────────────── */
-  --status-green:        #7fa86a;
-  --status-green-bg:     rgba(127,168,106,0.14);
-  --status-orange:       #d09a3c;
-  --status-orange-bg:    rgba(208,154,60,0.14);
-  /* #d66351 fiel als TEXT auf der eigenen Tint-Fläche durch (4.1:1);
-     #e07a68 hält 4.9:1 auf der Tint-Fläche und 6.4:1 auf --surface-base. */
-  --status-red:          #e07a68;
-  --status-red-bg:       rgba(224,122,104,0.14);
-  --status-purple:       #9e81cf;
-  --status-purple-bg:    rgba(158,129,207,0.14);
-  --status-teal:         #5fb6c9;
-  --status-teal-bg:      rgba(95,182,201,0.14);
-  --status-gray:         #958c83;
-  --status-gray-bg:      rgba(149,140,131,0.14);
+  /* Zustandsfarben sind vom Akzent getrennt. Grün gehört nur „in Ordnung“;
+     „unvollständig/degradiert“ liegt auf Warnung. Namen ohne Entsprechung im
+     Entwurf (purple, teal, gray) sind neutral bzw. Akzent, nie Zustandsfarbe. */
+  --status-green:        var(--ok);
+  --status-green-bg:     var(--ok-soft);
+  --status-orange:       var(--warn);
+  --status-orange-bg:    var(--warn-soft);
+  --status-red:          var(--err);
+  --status-red-bg:       var(--err-soft);
+  --status-purple:       var(--acc-text);
+  --status-purple-bg:    var(--acc-soft);
+  --status-teal:         var(--fg2);
+  --status-teal-bg:      var(--s3);
+  --status-gray:         var(--fg3);
+  --status-gray-bg:      var(--s3);
 
   --status-success:      var(--status-green);
   --status-success-soft: var(--status-green-bg);
@@ -93,26 +97,26 @@
   --status-warning-soft: var(--status-orange-bg);
   --status-error:        var(--status-red);
   --status-error-soft:   var(--status-red-bg);
-  /* „lebt gerade“: laufende Simulation, aktiver Provider — sonst nichts */
-  --accent-live:         var(--status-teal);
-  --accent-live-soft:    var(--status-teal-bg);
-  --accent-live-text:    #8fd3de;
+  /* „Läuft“ braucht keine eigene Farbe: neutral (Entwurf, Abweichung 1) */
+  --accent-live:         var(--fg2);
+  --accent-live-soft:    var(--s3);
+  --accent-live-text:    var(--fg2);
 
-  /* ─── Warme Grauskala (nur Legacy-Aliase hängen daran) ── */
-  --gray-3: #4f4740;
-  --gray-4: #413a35;
-  --gray-5: #322e29;
-  --gray-6: #272320;
+  /* ─── Graustufen (nur Legacy-Aliase hängen daran) ─────── */
+  --gray-3: var(--s4);
+  --gray-4: var(--s3);
+  --gray-5: var(--s3);
+  --gray-6: var(--s2);
 
   /* ─── Fokus ───────────────────────────────────────────── */
-  --focus-ring:          rgba(208,138,82,0.35);
+  --focus-ring:          color-mix(in oklab, var(--acc) 35%, transparent);
 
   /* ─── Schrift ─────────────────────────────────────────── */
-  /* „… Variable" sind die Familiennamen aus @fontsource-variable; der
-     zweite Eintrag fängt eine lokal installierte statische Variante ab. */
-  --font-sans: "Archivo Variable", "Archivo", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* Sans und Mono sind seit #1795 die Systemschriften des Entwurfs; die
+     Leseschrift (Newsreader) bleibt dem Bericht vorbehalten. */
+  --font-sans: var(--ag-font-sans);
   --font-serif: "Newsreader Variable", "Newsreader", Georgia, "Times New Roman", serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: var(--ag-font-mono);
 
   /* Typo-Skala: acht Rollen, keine weiteren Größen in Komponenten.
      display  Seitentitel im Dossier / Bericht (fluid, bricht nie Wort für Wort)
@@ -134,21 +138,23 @@
   --fs-mono-lg: 22px;
 
   /* ─── Radius-Skala ────────────────────────────────────── */
-  /* Genau vier Stufen plus Pill. Die Nummern sind historisch; die Werte
-     sind die Skala. --r-1/--r-4/--r-6/--r-7/--r-8 sind in tokens-compat.css
-     auf diese Stufen gelegt. */
-  --r-2:    4px;   /* Chip, Tag, Tastenkürzel */
-  --r-3:    6px;   /* Button, Eingabe, Zeile */
-  --r-5:   10px;   /* Karte, Overlay, Dialog */
-  --r-pill: 9999px;
+  /* Die Skala des Entwurfs (6/8/10/12/16/999) steht als --ag-r-* in
+     tokens-umbau.css. Die alten Nummern sind historisch und zeigen auf die
+     Stufen, die sie bisher trugen; --r-1/--r-4/--r-6/--r-7/--r-8 liegen in
+     tokens-compat.css auf diesen. Die alte 4px-Stufe gibt es nicht mehr. */
+  --r-2:    var(--ag-r-6);    /* Chip, Tag, Tastenkürzel */
+  --r-3:    var(--ag-r-6);    /* Button, Eingabe, Zeile */
+  --r-5:    var(--ag-r-10);   /* Karte, Overlay, Dialog */
+  --r-pill: var(--ag-r-pill);
 
   /* ─── Schatten ────────────────────────────────────────── */
-  /* Auf dunklem Grund trägt Schwarz die Tiefe; die Innenkante wird hell. */
-  --shadow-1: 0 1px 2px rgba(0,0,0,0.30);
-  --shadow-2: 0 1px 2px rgba(0,0,0,0.26), 0 4px 12px rgba(0,0,0,0.34);
-  --shadow-3: 0 2px 4px rgba(0,0,0,0.30), 0 12px 28px rgba(0,0,0,0.42);
-  --shadow-4: 0 8px 24px rgba(0,0,0,0.40), 0 24px 64px rgba(0,0,0,0.52);
-  --shadow-control: 0 1px 2px rgba(0,0,0,0.28);
+  /* Der Entwurf kennt nur zwei Schatten: Popover und Dialog. Ruhende Flächen
+     trennen sich über die Flächenstufen, nicht über Schatten. */
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: var(--shadow-pop);
+  --shadow-4: var(--shadow-dlg);
+  --shadow-control: none;
 
   /* ─── Raster ──────────────────────────────────────────── */
   --sp-1:  4px;   --sp-2:  8px;   --sp-3: 12px;   --sp-4: 16px;
@@ -323,25 +329,25 @@ body {
    ============================================================ */
 :root, [data-theme="dark"] {
   --surface-glass: var(--surface-translucent);
-  --surface-glass-strong: rgba(27,24,21,0.85);
-  --surface-backdrop: rgba(0, 0, 0, 0.5);
+  --surface-glass-strong: color-mix(in oklab, var(--s2) 85%, transparent);
+  --surface-backdrop: var(--scrim);
 
-  --accent-warm: var(--status-orange);
-  --accent-warm-hover: #a47728;
+  /* „warm“ war der alte Kupfer-Akzent; heute ist es das Violett. */
+  --accent-warm: var(--acc);
+  --accent-warm-hover: var(--acc-hover);
 
-  --status-coral: #e2603f;
-  --status-coral-bg: rgba(226, 96, 63, 0.14);
+  /* Koralle war ein eigener Rot-Ton; heute ist es die Fehlerfarbe. */
+  --status-coral: var(--err);
+  --status-coral-bg: var(--err-soft);
 
-  /* Fokus-Kontrast: Alpha 0.6 gegenüber 0.35 in --focus-ring. */
-  --focus-ring-strong: rgba(208, 138, 82, 0.6);
+  /* Fokus-Kontrast: 60 % gegenüber 35 % in --focus-ring. */
+  --focus-ring-strong: color-mix(in oklab, var(--acc) 60%, transparent);
 }
 
 /* ============================================================
-   Light-Gerüst
-   Agora ist dark-first; eine Light-Palette wird bewusst nicht gepflegt
-   (Grilling Q28c, 18.08.2026). Der leere Block markiert die Tür: wer Light
-   zurückholen will, redefiniert hier dieselben Token-Namen wie oben.
+   Hell
+   Hell und Dunkel folgen seit #1795 dem System (useTheme). Die Hell-Werte
+   stehen in tokens-umbau.css ([data-theme="light"]); dieser Block muss
+   nichts redefinieren, weil alle Namen oben auf --s0…/--fg…/--acc… zeigen
+   und sich je Theme neu auflösen.
    ============================================================ */
-[data-theme="light"] {
-  /* absichtlich leer — siehe Kommentar oben */
-}

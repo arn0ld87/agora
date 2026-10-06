@@ -134,7 +134,7 @@ function handleClick(event: MouseEvent) {
   height: 18px;
   border-radius: var(--r-pill);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 10px;
   font-weight: 700;
   display: flex;

@@ -98,7 +98,7 @@ withDefaults(
 .topbar {
   height: var(--topbar-h, 64px);
   padding: 0 var(--topbar-px, 24px);
-  background: var(--surface-base, #fff);
+  background: var(--surface-base);
   border-bottom: 1px solid var(--hairline);
   display: flex;
   align-items: center;
@@ -138,7 +138,7 @@ withDefaults(
 }
 
 .topbar__icon-btn:hover {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -184,7 +184,7 @@ withDefaults(
 }
 
 .topbar__hamburger:hover {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 

@@ -10,11 +10,9 @@
    Dunkel steht auf :root und [data-theme="dark"], Hell auf
    [data-theme="light"]. Schrift und Radien sind themenunabhängig.
 
-   Namenskollision: --fg, --ok, --ok-soft, --warn, --warn-soft, --err und
-   --err-soft sind bis Ticket 2 noch in tokens-compat.css belegt. Diese Datei
-   wird deshalb VOR tokens-compat.css geladen; dort gewinnt bis dahin der
-   alte Wert, damit bestehende Ansichten unverändert aussehen. Ticket 2
-   entfernt die alten Definitionen.
+   Die alten Namen (tokens-v3.css, tokens-compat.css) zeigen per var() auf
+   diese Tokens. --fg, --ok, --warn und --err (je mit -soft) hießen vorher
+   schon in tokens-compat.css; die alten Definitionen sind dort entfernt.
    ============================================================ */
 
 :root, [data-theme="dark"] {

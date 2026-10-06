@@ -174,7 +174,7 @@ const navSettings = computed<NavSettingsItem[]>(() =>
 <style scoped>
 .sidebar {
   width: 220px;
-  background: var(--surface-base, #fff);
+  background: var(--surface-base);
   border-right: 1px solid var(--hairline);
   display: flex;
   flex-direction: column;
@@ -268,7 +268,7 @@ const navSettings = computed<NavSettingsItem[]>(() =>
 }
 
 .sidebar__footer:focus-visible {
-  outline: 2px solid var(--accent, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 

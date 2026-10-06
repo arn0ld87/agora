@@ -230,7 +230,7 @@ const activeSubRoute = computed<string>(() => {
   /* An --topbar-h gekoppelt: der Token schrumpft unter `pointer: coarse`
      auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen. */
   grid-template-rows: var(--topbar-h, 64px) 1fr;
-  background: var(--surface-canvas, #f5f5f7);
+  background: var(--surface-canvas);
   overflow: hidden;
 }
 
@@ -273,7 +273,7 @@ const activeSubRoute = computed<string>(() => {
   grid-column: 3;
   width: 360px;
   border-left: 1px solid var(--hairline);
-  background: var(--surface-base, #fff);
+  background: var(--surface-base);
   overflow: auto;
 }
 
@@ -357,7 +357,7 @@ const activeSubRoute = computed<string>(() => {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--scrim);
   }
 }
 </style>
