@@ -118,7 +118,7 @@ const isGraphMaximized = ref(false)
 const qualityBlocked = computed(() => hasBlockingDegradation(degradations.value) || graphIncomplete.value)
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
-  { label: t('step1.breadcrumbRuns'), path: '/runs' },
+  { label: t('step1.breadcrumbRuns'), path: '/library/runs' },
   crumbForId(props.projectId),
   { label: t('step1.breadcrumbTitle') },
 ])

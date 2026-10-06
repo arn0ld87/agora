@@ -57,7 +57,7 @@
           <span class="kbd">⌘K</span>
         </button>
 
-        <!-- Neuer Lauf → bestehender Start eines Laufs (Dashboard mit HeroNewRun) -->
+        <!-- Neuer Lauf → bestehender Start eines Laufs (NewRun mit HeroNewRun, bis Etappe 3) -->
         <button
           class="topbar__primary"
           type="button"
@@ -142,9 +142,9 @@ const consoleLabel = computed(() =>
     : t('topbar.consoleToggle'),
 )
 
-/** Ein neuer Lauf beginnt heute im Dashboard (HeroNewRun → Process/new). */
+/** Ein neuer Lauf beginnt bis Etappe 3 in NewRun (HeroNewRun → Process/new). */
 function startNewRun(): void {
-  void router.push({ name: 'Dashboard' })
+  void router.push({ name: 'NewRun' })
 }
 </script>
 

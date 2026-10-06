@@ -56,7 +56,7 @@ const resolvedSimulationId = computed<string | undefined>(
 )
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
-  { label: 'Runs', path: '/runs' },
+  { label: 'Runs', path: '/library/runs' },
   crumbForId((props.reportId ?? props.simulationId) as string),
   { label: 'Interaktion' },
 ])

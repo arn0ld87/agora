@@ -78,7 +78,7 @@ async function loadRun(): Promise<void> {
 }
 
 function goBack(): void {
-  void router.push({ name: 'Runs' })
+  void router.push({ name: 'ActivityJobs' })
 }
 
 onMounted(() => void loadRun())

@@ -132,7 +132,7 @@ const crumbs = computed<BreadcrumbItem[]>(() => {
     params: { simulationId: props.simulationId },
   }).path
   return [
-    { label: 'Runs', path: '/runs' },
+    { label: 'Runs', path: '/library/runs' },
     crumbForId(props.simulationId, withCurrentQuery(pipelinePath)),
     { label: t(TAB_LABEL_KEYS[activeTab.value]) },
   ]

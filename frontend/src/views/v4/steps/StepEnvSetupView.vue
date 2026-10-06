@@ -39,7 +39,7 @@ const route = useRoute()
 const router = useRouter()
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
-  { label: 'Runs', path: '/runs' },
+  { label: 'Runs', path: '/library/runs' },
   crumbForId(props.projectId),
   { label: 'Personas' },
 ])

@@ -95,6 +95,20 @@ describe('commandsStore', () => {
     expect(cmds.length).toBeGreaterThanOrEqual(5)
   })
 
+  // Etappe 2 (#1797): die Navigationsbefehle zeigen auf die neuen Adressen,
+  // die Ids bleiben (gespeicherte „zuletzt benutzt“-Eintraege).
+  it.each([
+    ['nav:dashboard', 'NewRun'],
+    ['nav:runs', 'LibraryRuns'],
+    ['nav:graphs', 'LibraryGraphs'],
+    ['nav:history', 'ActivityJobs'],
+  ])('Befehl %s navigiert auf %s', (id, routeName) => {
+    const store = useCommandsStore()
+    const cmd = store.buildStaticCommands(routerMock as never).find((c) => c.id === id)
+    cmd?.action()
+    expect(routerMock.push).toHaveBeenCalledWith({ name: routeName })
+  })
+
   it('filter() gibt alle Commands zurueck wenn query leer', () => {
     const store = useCommandsStore()
     const cmds = store.buildStaticCommands(routerMock as never)

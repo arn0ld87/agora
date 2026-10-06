@@ -37,9 +37,12 @@ interface StaticCommandDef {
 }
 
 const STATIC_DEFS: StaticCommandDef[] = [
-  { id: 'nav:dashboard',              labelDe: 'Dashboard',      labelEn: 'Dashboard',      routeName: 'Dashboard',             group: 'nav' },
-  { id: 'nav:runs',                   labelDe: 'Runs',            labelEn: 'Runs',            routeName: 'Runs',                  group: 'nav' },
-  { id: 'nav:history',                labelDe: 'Historie',        labelEn: 'History',         routeName: 'HistoryV4',             group: 'nav' },
+  // Etappe 2 (#1797): die Ids bleiben (gespeicherte „zuletzt benutzt“-Eintraege),
+  // die Ziele sind die neuen Adressen. `nav:dashboard` ist der Einstieg „Neuer Lauf“.
+  { id: 'nav:dashboard',              labelDe: 'Neuer Lauf',      labelEn: 'New run',         routeName: 'NewRun',                group: 'nav' },
+  { id: 'nav:runs',                   labelDe: 'Läufe',           labelEn: 'Runs',            routeName: 'LibraryRuns',           group: 'nav' },
+  { id: 'nav:graphs',                 labelDe: 'Graphen',         labelEn: 'Graphs',          routeName: 'LibraryGraphs',         group: 'nav' },
+  { id: 'nav:history',                labelDe: 'Aktivität',       labelEn: 'Activity',        routeName: 'ActivityJobs',          group: 'nav' },
   { id: 'nav:settings-general',       labelDe: 'Einstellungen — Allgemein',    labelEn: 'Settings — General',       routeName: 'SettingsGeneral',       group: 'nav' },
   { id: 'nav:settings-integrations',  labelDe: 'Einstellungen — Integrationen', labelEn: 'Settings — Integrations',  routeName: 'SettingsIntegrations',  group: 'nav' },
   { id: 'nav:settings-llm-routing',   labelDe: 'Einstellungen — LLM-Routing', labelEn: 'Settings — LLM Routing',   routeName: 'SettingsLlmRouting',    group: 'nav' },
