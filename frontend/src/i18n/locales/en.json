@@ -2116,10 +2116,113 @@
     },
     "run": {
       "overview": {
-        "title": "Overview"
+        "title": "Overview",
+        "stagesLabel": "Stages of the run",
+        "col": {
+          "stage": "Stage",
+          "state": "State",
+          "model": "Model",
+          "duration": "Duration",
+          "tokens": "Tokens",
+          "cost": "Cost",
+          "next": "Next step"
+        },
+        "notRecorded": "not recorded",
+        "modelPlannedHint": "The model planned before the start is not recorded in this view yet.",
+        "budgetTitle": "Budget status",
+        "budgetNone": "No job with recorded usage for this run yet.",
+        "cardsLabel": "Parts of the run",
+        "questionTitle": "Question",
+        "questionMissing": "Question not recorded",
+        "graphTitle": "Graph",
+        "graphMissing": "No graph recorded",
+        "openGraph": "View graph",
+        "personasTitle": "Persona set",
+        "personasCount": "{n} personas",
+        "personasMissing": "Persona set not recorded",
+        "openPersonas": "View personas",
+        "fallbackUnknown": "Whether fallback personas were created only shows in the report; without a report it is not recorded."
       },
       "graph": {
         "title": "Graph"
+      },
+      "header": {
+        "loading": "Loading run …",
+        "notFoundTitle": "Run not found",
+        "notFoundBody": "There is no run for “{id}”.",
+        "errorTitle": "Run could not be loaded",
+        "retry": "Reload",
+        "toRuns": "Back to runs",
+        "questionMissing": "Question not recorded",
+        "headline": "{stage}: {state}",
+        "stateLabel": "State of the run"
+      },
+      "tabs": {
+        "label": "Run tabs",
+        "overview": "Overview",
+        "graph": "Graph",
+        "personas": "Personas",
+        "simulation": "Simulation",
+        "report": "Report",
+        "interviews": "Interviews"
+      },
+      "disabled": {
+        "noProject": "The project of this run cannot be resolved.",
+        "noReport": "This run has no report yet.",
+        "afterSimulation": "Only possible after the simulation has finished."
+      },
+      "stage": {
+        "graph": "Graph",
+        "personas": "Personas",
+        "simulation": "Simulation",
+        "report": "Report",
+        "interviews": "Interviews"
+      },
+      "state": {
+        "notStarted": "Not started",
+        "queued": "Queued",
+        "running": "Running",
+        "paused": "Paused",
+        "done": "Done",
+        "degraded": "With limitation",
+        "fallback": "With fallback",
+        "incomplete": "Incomplete",
+        "stopped": "Stopped",
+        "budget": "Budget exhausted",
+        "failed": "Failed",
+        "notRecorded": "Not recorded"
+      },
+      "step": {
+        "start": "Start",
+        "resume": "Resume",
+        "view": "View"
+      },
+      "termination": {
+        "user_stop": "Stopped on request",
+        "user_cancel": "Cancelled on request",
+        "process_restart": "Process was restarted",
+        "error": "Ended with an error",
+        "budget_tokens": "Token budget exhausted",
+        "budget_cost": "Cost budget exhausted",
+        "budget_time": "Time budget exhausted",
+        "budget_calls": "Call budget exhausted",
+        "completed": "Ended normally"
+      },
+      "degradation": {
+        "persona_generation": "Fallback personas: rule-based placeholders instead of generated personas",
+        "simulation": "Simulation with limitation",
+        "simulation_positioning": "Too few voices take a position on the contested question",
+        "interview_agents": "Interviews without result",
+        "section_generation": "Sections not generated normally",
+        "section_metadata": "Section metadata missing",
+        "requirement_checker": "Analysis aspects missing in the report text",
+        "contract_export": "Contract export limited",
+        "outline_planning": "Outline from fallback schema",
+        "run_cancellation": "Sections missing after cancellation",
+        "missingSections": "{count} sections missing",
+        "evidenceOmitted": "Evidence omitted (evidence_omitted)",
+        "evidenceCheckFailed": "Evidence could not be checked",
+        "reportIncomplete": "Report is incomplete"
       }
     },
     "graphLibrary": {

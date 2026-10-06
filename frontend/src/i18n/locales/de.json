@@ -2116,10 +2116,113 @@
     },
     "run": {
       "overview": {
-        "title": "Übersicht"
+        "title": "Übersicht",
+        "stagesLabel": "Stufen des Laufs",
+        "col": {
+          "stage": "Stufe",
+          "state": "Zustand",
+          "model": "Modell",
+          "duration": "Dauer",
+          "tokens": "Tokens",
+          "cost": "Kosten",
+          "next": "Nächster Schritt"
+        },
+        "notRecorded": "nicht erfasst",
+        "modelPlannedHint": "Das geplante Modell vor dem Start ist in dieser Ansicht noch nicht erfasst.",
+        "budgetTitle": "Budgetstand",
+        "budgetNone": "Für diesen Lauf ist noch kein Job mit Verbrauch erfasst.",
+        "cardsLabel": "Bestandteile des Laufs",
+        "questionTitle": "Frage",
+        "questionMissing": "Frage nicht erfasst",
+        "graphTitle": "Graph",
+        "graphMissing": "Kein Graph erfasst",
+        "openGraph": "Graph ansehen",
+        "personasTitle": "Personasatz",
+        "personasCount": "{n} Personas",
+        "personasMissing": "Personasatz nicht erfasst",
+        "openPersonas": "Personas ansehen",
+        "fallbackUnknown": "Ob Fallback-Personas entstanden sind, zeigt erst der Bericht; ohne Bericht nicht erfasst."
       },
       "graph": {
         "title": "Graph"
+      },
+      "header": {
+        "loading": "Lauf wird geladen …",
+        "notFoundTitle": "Lauf nicht gefunden",
+        "notFoundBody": "Zu „{id}“ gibt es keinen Lauf.",
+        "errorTitle": "Lauf konnte nicht geladen werden",
+        "retry": "Erneut laden",
+        "toRuns": "Zu den Läufen",
+        "questionMissing": "Frage nicht erfasst",
+        "headline": "{stage}: {state}",
+        "stateLabel": "Zustand des Laufs"
+      },
+      "tabs": {
+        "label": "Reiter des Laufs",
+        "overview": "Übersicht",
+        "graph": "Graph",
+        "personas": "Personas",
+        "simulation": "Simulation",
+        "report": "Bericht",
+        "interviews": "Interviews"
+      },
+      "disabled": {
+        "noProject": "Das Projekt dieses Laufs lässt sich nicht auflösen.",
+        "noReport": "Für diesen Lauf gibt es noch keinen Bericht.",
+        "afterSimulation": "Erst nach abgeschlossener Simulation möglich."
+      },
+      "stage": {
+        "graph": "Graph",
+        "personas": "Personas",
+        "simulation": "Simulation",
+        "report": "Bericht",
+        "interviews": "Interviews"
+      },
+      "state": {
+        "notStarted": "Nicht gestartet",
+        "queued": "Wartet",
+        "running": "Läuft",
+        "paused": "Pausiert",
+        "done": "Fertig",
+        "degraded": "Mit Einschränkung",
+        "fallback": "Mit Fallback",
+        "incomplete": "Unvollständig",
+        "stopped": "Gestoppt",
+        "budget": "Budget erschöpft",
+        "failed": "Fehlgeschlagen",
+        "notRecorded": "Nicht erfasst"
+      },
+      "step": {
+        "start": "Starten",
+        "resume": "Fortsetzen",
+        "view": "Ansehen"
+      },
+      "termination": {
+        "user_stop": "Auf Wunsch gestoppt",
+        "user_cancel": "Auf Wunsch abgebrochen",
+        "process_restart": "Prozess wurde neu gestartet",
+        "error": "Mit Fehler beendet",
+        "budget_tokens": "Token-Budget erschöpft",
+        "budget_cost": "Kostenbudget erschöpft",
+        "budget_time": "Zeitbudget erschöpft",
+        "budget_calls": "Aufrufbudget erschöpft",
+        "completed": "Regulär beendet"
+      },
+      "degradation": {
+        "persona_generation": "Fallback-Personas: regelbasierte Platzhalter statt erzeugter Personas",
+        "simulation": "Simulation mit Einschränkung",
+        "simulation_positioning": "Zu wenige Stimmen beziehen Stellung zur Streitfrage",
+        "interview_agents": "Interviews ohne Ergebnis",
+        "section_generation": "Abschnitte nicht regulär erzeugt",
+        "section_metadata": "Abschnitts-Metadaten fehlen",
+        "requirement_checker": "Analyseaspekte fehlen im Berichtstext",
+        "contract_export": "Vertragsexport eingeschränkt",
+        "outline_planning": "Gliederung aus Ersatzschema",
+        "run_cancellation": "Nach Abbruch fehlen Abschnitte",
+        "missingSections": "{count} Abschnitte fehlen",
+        "evidenceOmitted": "Belege ausgelassen (evidence_omitted)",
+        "evidenceCheckFailed": "Belege konnten nicht geprüft werden",
+        "reportIncomplete": "Bericht ist unvollständig"
       }
     },
     "graphLibrary": {
