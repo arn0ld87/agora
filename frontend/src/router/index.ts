@@ -4,65 +4,54 @@ import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
 import { useAuthStore } from '../store/auth'
 import { safeNext } from '../auth/safeNext'
+import { shelfObjectGuard, shelfRedirect } from './legacyRedirects'
 
 const AUTH_ONLY_ROUTES = { Login: 1, Register: 1, PasswordReset: 1, EmailConfirm: 1 } as const
 
 const routes: RouteRecordRaw[] = [
-  // Root → Ablage. Redesign PR 10 (Legacy-Abbau): das Shell-Flag
-  // `useShellVariant` ist entfallen — es hielt eine zweite Huelle („classic")
-  // am Leben, und genau die zwei Navigationsmodelle nebeneinander sind der
-  // erste Befund des Audits (§Befunde 1, „Eine Shell"). Der Default stand seit
-  // Block B3 ohnehin auf „dossier"; `/dashboard` bleibt als eigene Route
-  // erreichbar, nur nicht mehr als alternativer Einstieg.
+  // Etappe 2 des Frontend-Umbaus (#1797, Ticket „Weiterleitungen"): die
+  // Bibliothek ist die Startseite, das Dashboard entfaellt (Bauplan §6.2).
+  // Alle alten Routen-Namen bleiben als Weiterleitungs-Routen bestehen, damit
+  // kein `router.push({ name })` im Bestand bricht. Query und Hash bleiben
+  // erhalten (vue-router uebernimmt sie, solange das Ziel sie nicht setzt).
   {
     path: '/',
-    redirect: { name: 'Shelf' },
+    redirect: { name: 'LibraryRuns' },
   },
 
-  // ADR-0010: /home → /dashboard (Entfernungsrelease 1.0.0). Home.vue selbst
-  // existiert nicht mehr im Baum; der Deep-Link-Redirect bleibt bis 1.0.0.
+  // ADR-0010: /home → Startseite (Entfernungsrelease 1.0.0).
   {
     path: '/home',
-    redirect: { name: 'Dashboard' },
+    redirect: { name: 'LibraryRuns' },
   },
 
-  // Dashboard — AppShell-Wrapper (Slice F)
+  // Dashboard entfaellt: HeroNewRun lebt weiter unter /library/runs/new
+  // (NewRun), die uebrigen Karten sind in Abschnitt „Dashboard“ des
+  // Umsetzungsberichts aufgelistet. DashboardView.vue bleibt als Datei stehen.
   {
     path: '/dashboard',
     name: 'Dashboard',
-    component: () => import('../views/v4/DashboardView.vue'),
+    redirect: { name: 'LibraryRuns' },
   },
-  // UX-Konsistenz: /v4/dashboard → /dashboard (alle v4-Step-Routes liegen unter /v4/*)
   {
     path: '/v4/dashboard',
-    redirect: { name: 'Dashboard' },
+    redirect: { name: 'LibraryRuns' },
   },
 
-  // Redesign PR 8 (Audit §7 "Läufe (/runs)"): /runs zieht in die Ablage um —
-  // Tabellenmodus in Shelf.vue mit Filter „lauf". Die abgeloeste
-  // RunsAppShellView.vue ist mit PR 10 geloescht; der Redirect bleibt als
-  // Deep-Link-Kompatibilitaet.
+  // /runs war die Listenansicht (Redesign PR 8: Ablage-Filter „lauf“), jetzt
+  // die Bibliothek → Läufe.
   {
     path: '/runs',
     name: 'Runs',
-    redirect: { name: 'Shelf', query: { filter: 'lauf' } },
+    redirect: { name: 'LibraryRuns' },
   },
-  // Redesign PR 8: /runs/:id bleibt bewusst auf der Detailansicht.
-  //
-  // Der Audit verlangt in §7 nur den Umzug der LISTE (`/runs` → Ablage) und
-  // den History-Redirect; die Detailroute nennt er nicht. Sie umzubiegen waere
-  // auch verfrueht: `usage-totals` (Verbrauchsanalyse) und
-  // `budget-exceeded-banner` leben ausschliesslich in RunDetailView.vue, das
-  // Dossier traegt beides nicht. Ein Redirect auf `/ablage/lauf/:id` wuerde
-  // den Verbrauch und den Budgetabbruch eines Laufs also ersatzlos
-  // unzugaenglich machen — kein Umzug, ein Verlust. Der Umstieg gehoert in
-  // PR 10 und setzt voraus, dass der Kennzahlstreifen des Dossiers die beiden
-  // Bloecke vorher uebernimmt.
+  // `/runs/:id` ist die Job-Detailansicht der RunRegistry; sie liegt jetzt unter
+  // `/activity/jobs/:runId`, die Kennung bleibt unveraendert (gespeicherte
+  // Links `/runs/<run_id>` oeffnen weiterhin den Job).
   {
     path: '/runs/:id',
     name: 'RunDetail',
-    component: () => import('../views/v4/RunDetailAppShellView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'ActivityJobDetail', params: { runId: String(to.params.id) } }),
   },
 
   // Onboarding — resumierbarer Erst-Einrichtungs-Wizard (Onboarding Slice 2)
@@ -282,44 +271,52 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/v4/compare/:simulationId',
     name: 'CompareV4',
-    component: () => import('../views/v4/CompareView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'Compare', params: { simulationId: String(to.params.simulationId) } }),
   },
-  // Redesign PR 8 (Audit §7): History entfällt zugunsten des Ablage-Filters
-  // „Alle Jobs" (Zeile 146 des Audits). Die abgeloeste HistoryView.vue ist mit
-  // PR 10 geloescht; der Redirect bleibt als Deep-Link-Kompatibilitaet.
+  // History → Aktivität → Jobs (Etappe 2).
   {
     path: '/v4/history',
     name: 'HistoryV4',
-    redirect: { name: 'Shelf', query: { filter: 'jobs' } },
+    redirect: { name: 'ActivityJobs' },
   },
 
-  // Block B3 — Neuhuelle „Richtung B · Dossier“ (PLAN.md).
-  // /ablage ist der Einstieg der Anwendung. Seit dem Legacy-Abbau (PR 10)
-  // ohne Feature-Flag: es gibt nur noch diese eine Huelle.
+  // Die Ablage-Startseite ist zur Bibliothek geworden: `/ablage?filter=…`
+  // leitet je Filter um (shelfRedirect). Der Name `Shelf` bleibt fuer Aufrufer
+  // bestehen.
   {
     path: '/ablage',
     name: 'Shelf',
-    component: () => import('../views/shell/ShelfView.vue'),
-    // In der einen Huelle, aber randlos: die Ablage hat ein eigenes Raster.
-    meta: { layout: 'flush' },
+    redirect: shelfRedirect,
   },
+  // Lauf und Graph leitet `beforeEnter` um; Bericht und Personasatz bleiben bis
+  // Etappe 5 bzw. 7 auf der alten Ablage-Ansicht (Bauplan §6.2). Ein einziger
+  // Eintrag, damit `{ name: 'ShelfObject', params: { kind } }` fuer alle vier
+  // Arten aufloesbar bleibt.
   {
     path: '/ablage/:kind(lauf|bericht|personasatz|graph)/:objectId',
     name: 'ShelfObject',
     component: () => import('../views/shell/ShelfView.vue'),
     props: true,
     meta: { layout: 'flush' },
+    beforeEnter: shelfObjectGuard,
   },
 
   // Etappe 2 des Frontend-Umbaus (#1797, Ticket „Adressen"): neue Adressen
-  // nach docs/plans/active/frontend-umbau.md §6.1. Die alten Adressen bleiben
-  // unveraendert auf ihren bisherigen Ansichten; Weiterleitungen folgen in
-  // spaeteren Tickets. Pfade englisch, Beschriftungen deutsch.
+  // nach docs/plans/active/frontend-umbau.md §6.1. Die alten Adressen der
+  // Etappe 2 leiten oben und in legacyRedirects.ts hierher um; alle spaeteren
+  // Zeilen aus §6.2 bleiben auf ihren alten Ansichten. Pfade englisch,
+  // Beschriftungen deutsch.
   {
     path: '/library/runs',
     name: 'LibraryRuns',
     component: () => import('../views/library/LibraryRunsView.vue'),
+  },
+  // Einstieg „Neuer Lauf“ bis Etappe 3 (Startdialog): bettet HeroNewRun ein,
+  // das weiter nach /process/new fuehrt.
+  {
+    path: '/library/runs/new',
+    name: 'NewRun',
+    component: () => import('../views/library/NewRunView.vue'),
   },
   {
     path: '/library/graphs',
@@ -467,10 +464,10 @@ router.beforeEach(async (to) => {
   // Ohne JWT gibt es keine Registrierung oder Bestätigung.
   if (to.meta?.public && String(to.name ?? '') in AUTH_ONLY_ROUTES) return '/'
 
-  // Legacy-Guard: requiresAuth-Routen ohne Token auf das Dashboard.
+  // Legacy-Guard: requiresAuth-Routen ohne Token auf die Startseite (Bibliothek).
   if (!to.meta?.requiresAuth) return true
   if (getAgoraToken()) return true
-  return { name: 'Dashboard', query: { authRequired: '1', next: to.fullPath } }
+  return { name: 'LibraryRuns', query: { authRequired: '1', next: to.fullPath } }
 })
 
 // Onboarding-Redirect — läuft NACH dem Auth-Guard (Onboarding Slice 2).

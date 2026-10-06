@@ -2113,6 +2113,10 @@
           "action": "New run"
         }
       },
+      "newRun": {
+        "title": "New run",
+        "subtitle": "Start a new run from a source: drop files, choose question, model and budget."
+      },
       "graphs": {
         "title": "Graphs"
       }

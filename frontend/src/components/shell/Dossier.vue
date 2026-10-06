@@ -395,7 +395,7 @@ function openObject(obj: ShelfObject): void {
 }
 
 function goToNewObject(): void {
-  void router.push({ name: 'Dashboard' })
+  void router.push({ name: 'NewRun' })
 }
 
 /** Ableiten gibt es nur beim Bericht, und nur wenn seine Simulation bekannt ist. */

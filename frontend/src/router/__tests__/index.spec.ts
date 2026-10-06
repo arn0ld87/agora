@@ -82,6 +82,7 @@ vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
 // Etappe 2 (#1797), Ticket „Adressen": Platzhalter-Ansichten.
 vi.mock('../../views/library/LibraryRunsView.vue', () => VIEW_STUB)
 vi.mock('../../views/library/LibraryGraphsView.vue', () => VIEW_STUB)
+vi.mock('../../views/library/NewRunView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/RunWorkspaceView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/RunOverviewView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/RunGraphView.vue', () => VIEW_STUB)
@@ -109,7 +110,8 @@ describe('Router – Routen-Resolution', () => {
   })
 
   it.each([
-    ['/dashboard', 'Dashboard'],
+    // `/dashboard` ist seit Etappe 2 eine Weiterleitung (siehe Redirects).
+    ['/library/runs/new', 'NewRun'],
     ['/settings/general', 'SettingsGeneral'],
     ['/settings/integrations', 'SettingsIntegrations'],
     ['/onboarding', 'Onboarding'],
@@ -123,9 +125,11 @@ describe('Router – Routen-Resolution', () => {
     expect(router.currentRoute.value.name).toBe(name)
   })
 
-  it('löst /v4/compare/:simulationId mit param auf', async () => {
+  // Etappe 2: /v4/compare/:simulationId leitet auf /compare/:simulationId um.
+  it('löst /v4/compare/:simulationId mit param auf (Weiterleitung auf Compare)', async () => {
     await pushAndSettle('/v4/compare/sim_abc')
-    expect(router.currentRoute.value.name).toBe('CompareV4')
+    expect(router.currentRoute.value.name).toBe('Compare')
+    expect(router.currentRoute.value.fullPath).toBe('/compare/sim_abc')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
@@ -198,60 +202,107 @@ describe('Router – Redirects', () => {
   })
 
   it.each([
-    // Die Wurzel fuehrt jetzt in die Ablage: der Shell-Standard ist
-    // seit B3/B4 „dossier”. /home und /v4/dashboard bleiben auf dem
-    // Dashboard, solange die klassische Huelle existiert.
-    ['/', 'Shelf'],
-    ['/v4/dashboard', 'Dashboard'],
-    ['/home', 'Dashboard'],
+    // Etappe 2 (#1797): die Bibliothek ist die Startseite, das Dashboard
+    // entfaellt (Bauplan §6.2).
+    ['/', 'LibraryRuns'],
+    ['/v4/dashboard', 'LibraryRuns'],
+    ['/home', 'LibraryRuns'],
+    ['/dashboard', 'LibraryRuns'],
     ['/settings', 'SettingsGeneral'],
     ['/settings-classic', 'SettingsGeneral'],
     ['/settings/users-teams', 'SettingsProfile'],
-    // Redesign PR 8 (Audit §7 “Läufe (/runs)”): Legacy-Registry und
-    // History entfallen zugunsten der Ablage mit Filter „lauf”/„jobs”.
-    ['/runs', 'Shelf'],
-    ['/v4/history', 'Shelf'],
+    // Legacy-Registry und History gehen in Bibliothek bzw. Aktivitaet auf.
+    ['/runs', 'LibraryRuns'],
+    ['/v4/history', 'ActivityJobs'],
   ])('%s → %s', async (from, to) => {
     await pushAndSettle(from)
     expect(router.currentRoute.value.name).toBe(to)
   })
 
-  // Redesign PR 8: /runs → Ablage mit Filter „lauf” vorselektiert (Audit
-  // Zeile 137: „/runs → Redirect /ablage?filter=lauf”).
-  it('/runs → Shelf mit query.filter=lauf', async () => {
-    await pushAndSettle('/runs')
-    expect(router.currentRoute.value.name).toBe('Shelf')
-    expect(router.currentRoute.value.query.filter).toBe('lauf')
+  // Etappe 2: Tabelle 6.2, Zeilen „/ablage?filter=…“.
+  it.each([
+    ['/ablage', '/library/runs'],
+    ['/ablage?filter=alle', '/library/runs'],
+    ['/ablage?filter=lauf', '/library/runs'],
+    ['/ablage?filter=bericht', '/library/runs?view=with-report'],
+    ['/ablage?filter=graph', '/library/graphs'],
+    // Personasaetze haben bis Etappe 7 keine eigene Ansicht.
+    ['/ablage?filter=personasatz', '/library/runs'],
+    ['/ablage?filter=jobs', '/activity/jobs'],
+    ['/ablage?filter=unbekannt', '/library/runs'],
+    ['/v4/history', '/activity/jobs'],
+    ['/runs', '/library/runs'],
+  ])('%s → %s (voller Pfad)', async (from, to) => {
+    await pushAndSettle(from)
+    expect(router.currentRoute.value.fullPath).toBe(to)
   })
 
-  // Redesign PR 8: /v4/history → Ablage mit Filter „jobs” (Audit Zeile 146:
-  // „History entfällt (Ablage-Filter ‚Alle Jobs')”).
-  it('/v4/history → Shelf mit query.filter=jobs', async () => {
-    await pushAndSettle('/v4/history')
-    expect(router.currentRoute.value.name).toBe('Shelf')
-    expect(router.currentRoute.value.query.filter).toBe('jobs')
+  it('Ablage-Weiterleitung behält fremde Query-Schlüssel und den Hash', async () => {
+    await pushAndSettle('/ablage?filter=graph&x=1#oben')
+    expect(router.currentRoute.value.fullPath).toBe('/library/graphs?x=1#oben')
   })
 
-  // Redesign PR 8: /runs/:id wird bewusst NICHT umgebogen. `usage-totals` und
-  // `budget-exceeded-banner` gibt es nur in RunDetailView.vue; das Dossier
-  // traegt beides nicht. Ein Redirect haette Verbrauch und Budgetabbruch eines
-  // Laufs unzugaenglich gemacht. Der Umstieg ist PR 10 und setzt voraus, dass
-  // der Kennzahlstreifen des Dossiers die beiden Bloecke vorher uebernimmt.
-  it('/runs/:id bleibt die Detailansicht und wird nicht in die Ablage umgeleitet', async () => {
-    await pushAndSettle('/runs/run_abc')
-    expect(router.currentRoute.value.name).toBe('RunDetail')
-    expect(router.currentRoute.value.params).toEqual({ id: 'run_abc' })
+  // Etappe 2: /ablage/lauf|graph/:objectId.
+  it.each([
+    ['/ablage/lauf/sim_42', 'RunOverview', { simulationId: 'sim_42' }],
+    ['/ablage/graph/proj_42', 'GraphLibraryDetail', { projectId: 'proj_42' }],
+    // Ein Lauf ohne Simulation fuehrt die Ablage unter der project_id bzw. run_id.
+    ['/ablage/lauf/proj_42', 'GraphLibraryDetail', { projectId: 'proj_42' }],
+    ['/ablage/lauf/run_42', 'ActivityJobDetail', { runId: 'run_42' }],
+  ])('%s → %s', async (from, name, params) => {
+    await pushAndSettle(from)
+    expect(router.currentRoute.value.name).toBe(name)
+    expect(router.currentRoute.value.params).toMatchObject(params)
+  })
+
+  it('/ablage/bericht und /ablage/personasatz bleiben bis Etappe 5 bzw. 7 auf der alten Ansicht', async () => {
+    await pushAndSettle('/ablage/bericht/report_42')
+    expect(router.currentRoute.value.name).toBe('ShelfObject')
+    expect(router.currentRoute.value.params).toMatchObject({ kind: 'bericht', objectId: 'report_42' })
+    await pushAndSettle('/ablage/personasatz/set_42')
+    expect(router.currentRoute.value.name).toBe('ShelfObject')
+    expect(router.currentRoute.value.params).toMatchObject({ kind: 'personasatz', objectId: 'set_42' })
+  })
+
+  // Abnahmekriterium Etappe 2: ein gespeicherter Link /runs/<run_id> oeffnet
+  // weiterhin den Job; die Kennung bleibt unveraendert, Query und Hash auch.
+  it('/runs/:id → /activity/jobs/:id mit unveränderter Kennung', async () => {
+    await pushAndSettle('/runs/run_abc?tab=budget#top')
+    expect(router.currentRoute.value.name).toBe('ActivityJobDetail')
+    expect(router.currentRoute.value.params).toEqual({ runId: 'run_abc' })
+    expect(router.currentRoute.value.fullPath).toBe('/activity/jobs/run_abc?tab=budget#top')
+  })
+
+  // Die alten Routen-Namen bleiben als Weiterleitung bestehen: kein toter Name.
+  it.each([
+    [{ name: 'Dashboard' }, '/library/runs'],
+    [{ name: 'Runs' }, '/library/runs'],
+    [{ name: 'Shelf' }, '/library/runs'],
+    [{ name: 'Shelf', query: { filter: 'jobs' } }, '/activity/jobs'],
+    [{ name: 'HistoryV4' }, '/activity/jobs'],
+    [{ name: 'RunDetail', params: { id: 'run_abc' } }, '/activity/jobs/run_abc'],
+    [{ name: 'CompareV4', params: { simulationId: 'sim_abc' } }, '/compare/sim_abc'],
+    [{ name: 'ShelfObject', params: { kind: 'lauf', objectId: 'sim_abc' } }, '/simulations/sim_abc'],
+  ])('alter Routen-Name %j löst auf %s', async (location, path) => {
+    await router.push(location)
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe(path.split('?')[0])
+  })
+
+  it('die alten Routen-Namen sind Weiterleitungs-Routen', () => {
+    for (const name of ['Dashboard', 'Runs', 'Shelf', 'HistoryV4', 'RunDetail', 'CompareV4']) {
+      const record = router.getRoutes().find((route) => route.name === name)
+      expect(record?.redirect, name).toBeDefined()
+    }
   })
 
   // Redesign PR 10 (Legacy-Abbau): die Wurzel haengt nicht mehr an einem
-  // Shell-Flag. `useShellVariant` hielt eine zweite Huelle („classic") am
-  // Leben — genau die zwei Navigationsmodelle nebeneinander sind der erste
-  // Befund des Audits. Der Redirect ist jetzt ein statisches Ziel; eine
-  // Funktion hier waere das Anzeichen, dass die Verzweigung zurueck ist.
-  it('/ ist ein statischer Redirect auf die Ablage, ohne Shell-Flag', () => {
+  // Shell-Flag. Der Redirect ist ein statisches Ziel; eine Funktion hier
+  // waere das Anzeichen, dass die Verzweigung zurueck ist.
+  it('/ ist ein statischer Redirect auf die Bibliothek, ohne Shell-Flag', () => {
     const root = router.getRoutes().find((route) => route.path === '/')
 
-    expect(root?.redirect).toEqual({ name: 'Shelf' })
+    expect(root?.redirect).toEqual({ name: 'LibraryRuns' })
     expect(typeof root?.redirect).not.toBe('function')
     expect(root?.components).toBeUndefined()
   })
@@ -381,12 +432,14 @@ describe('Router – Struktur-Integrität', () => {
   // im Auftrag. Fällt auf jede künftig hinzugefügte oder entfernte Route.
   it('produktive Route-Namen entsprechen exakt der gepflegten SOLL-Liste', () => {
     const SOLL_PRODUKTIVE_ROUTEN = [
-      'Dashboard',
+      // Etappe 2: Dashboard, RunDetail, CompareV4 und Shelf sind
+      // Weiterleitungen (alte Namen bleiben, siehe Redirects-Suite) und zaehlen
+      // nicht mehr als produktive Routen; neu ist NewRun (HeroNewRun-Einstieg).
+      'NewRun',
       'Onboarding',
       'SettingsGeneral',
       'SettingsIntegrations',
       'SettingsProfile',
-      'RunDetail',
       'SettingsApiKeys',
       'SettingsAuditLogs',
       'SettingsLlmRouting',
@@ -405,10 +458,8 @@ describe('Router – Struktur-Integrität', () => {
       // keine eigene produktive Route mehr (siehe Redirects-Suite oben).
       'StepReport',
       'StepInteraction',
-      'CompareV4',
-      // Block B3: die neue Huelle. Beide zeigen auf ShelfView; der
-      // Flag entscheidet nur, wohin '/' umleitet.
-      'Shelf',
+      // Block B3: ShelfObject zeigt weiter auf ShelfView (Bericht und
+      // Personasatz bis Etappe 5 bzw. 7); Lauf und Graph leitet beforeEnter um.
       'ShelfObject',
       // #1617: Supabase-Anmeldung, nur mit JWT erreichbar.
       'Login',
@@ -517,11 +568,11 @@ describe('Router – Auth-Guard', () => {
     vi.mocked(getAgoraToken).mockReset()
   })
 
-  it('ohne Token: /settings/api-keys → Dashboard mit authRequired + next', async () => {
+  it('ohne Token: /settings/api-keys → Startseite (Bibliothek) mit authRequired + next', async () => {
     vi.mocked(getAgoraToken).mockReturnValue('')
     await pushAndSettle('/settings/api-keys')
     const route = router.currentRoute.value
-    expect(route.name).toBe('Dashboard')
+    expect(route.name).toBe('LibraryRuns')
     expect(route.query.authRequired).toBe('1')
     expect(route.query.next).toBe('/settings/api-keys')
   })
@@ -536,10 +587,10 @@ describe('Router – Auth-Guard', () => {
     '/settings/audit-logs',
     '/settings/llm-routing',
     '/settings/llm-providers',
-  ])('ohne Token: %s → Dashboard', async (path) => {
+  ])('ohne Token: %s → Startseite (Bibliothek)', async (path) => {
     vi.mocked(getAgoraToken).mockReturnValue('')
     await pushAndSettle(path)
-    expect(router.currentRoute.value.name).toBe('Dashboard')
+    expect(router.currentRoute.value.name).toBe('LibraryRuns')
   })
 
   it('öffentliche Settings-Route bleibt ohne Token erreichbar', async () => {
@@ -624,21 +675,13 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     expect(route.params.reportId).toBeUndefined()
   })
 
-  it('alte Adressen lösen unverändert auf', async () => {
-    await pushAndSettle('/runs/run_abc')
-    expect(router.currentRoute.value.name).toBe('RunDetail')
-    expect(router.currentRoute.value.params.id).toBe('run_abc')
-    await pushAndSettle('/v4/compare/sim_abc')
-    expect(router.currentRoute.value.name).toBe('CompareV4')
+  it('Adressen späterer Etappen lösen unverändert auf', async () => {
     await pushAndSettle('/v4/interaction/report_abc')
     expect(router.currentRoute.value.name).toBe('StepInteraction')
     expect(router.currentRoute.value.params.reportId).toBe('report_abc')
     await pushAndSettle('/v4/simulation/sim_abc')
     expect(router.currentRoute.value.name).toBe('StepSimulation')
-    await pushAndSettle('/ablage')
-    expect(router.currentRoute.value.name).toBe('Shelf')
-    await pushAndSettle('/runs')
-    expect(router.currentRoute.value.name).toBe('Shelf')
-    expect(router.currentRoute.value.query.filter).toBe('lauf')
+    await pushAndSettle('/process/project_42')
+    expect(router.currentRoute.value.name).toBe('StepGraphBuild')
   })
 })

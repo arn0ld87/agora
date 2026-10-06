@@ -10,7 +10,7 @@
  * 6. Pause/Resume-Knopf nur bei pausierbarer aktiver Zeile, ruft die Simulation-API.
  * 7. Weiter-Aktion einer Zeile navigiert zum hinterlegten Routenziel.
  * 8. Filter "jobs" rendert die Rohebene als Tabelle statt der Zeilenliste.
- * 9. "Neues Objekt" navigiert zum Dashboard.
+ * 9. "Neues Objekt" navigiert zum Einstieg „Neuer Lauf“ (NewRun).
  * 10. Personasatz-Zeile ohne nextAction zeigt die Start-Aktion und navigiert zu StepEnvSetup;
  *     ein Fehlschlag zeigt eine sichtbare Meldung an der Zeile (Redesign PR 3).
  *
@@ -45,7 +45,7 @@ const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', mes
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/dashboard', name: 'Dashboard', component: { template: '<div/>' } },
+    { path: '/library/runs/new', name: 'NewRun', component: { template: '<div/>' } },
     { path: '/runs/:id', name: 'RunDetail', component: { template: '<div/>' } },
     { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: { template: '<div/>' } },
   ],
@@ -233,12 +233,12 @@ describe('Shelf', () => {
     expect(text).not.toContain('shelf.status.')
   })
 
-  it('"Neues Objekt" navigiert zum Dashboard', async () => {
+  it('"Neues Objekt" navigiert zum Einstieg Neuer Lauf', async () => {
     const { wrapper } = mountShelf([])
     await wrapper.find(`[data-testid="${ShelfTestId.newObject}"]`).trigger('click')
     await flushPromises()
 
-    expect(router.currentRoute.value.name).toBe('Dashboard')
+    expect(router.currentRoute.value.name).toBe('NewRun')
   })
 
   it('Personasatz ohne nextAction zeigt die Start-Aktion und navigiert zu StepEnvSetup (Redesign PR 3)', async () => {

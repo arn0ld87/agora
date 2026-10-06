@@ -73,6 +73,7 @@ function setup(runs: unknown[], reports: unknown[]) {
 async function mountAt(url: string): Promise<{ wrapper: VueWrapper; router: ReturnType<typeof makeTestRouter> }> {
   const router = makeTestRouter([
     { path: '/library/runs', name: 'LibraryRuns', component: stub },
+    { path: '/library/runs/new', name: 'NewRun', component: stub },
     { path: '/simulations/:simulationId', name: 'RunOverview', component: stub },
     { path: '/compare/:simulationId?', name: 'Compare', component: stub },
     { path: '/v4/report/:reportId', name: 'StepReport', component: stub },
@@ -217,7 +218,7 @@ describe('LibraryRunsView', () => {
     expect(router.currentRoute.value.params.simulationId).toBe('sim_a')
   })
 
-  it('Leerzustand: ein Satz und „Neuer Lauf“ (Route Dashboard)', async () => {
+  it('Leerzustand: ein Satz und „Neuer Lauf“ (Route NewRun)', async () => {
     setup([], [])
     const { wrapper, router } = await mountAt('/library/runs')
     expect(ids(wrapper)).toEqual([])
@@ -225,7 +226,7 @@ describe('LibraryRunsView', () => {
     expect(empty.text()).toContain('Ein Lauf ist ein ganzes Vorhaben')
     await wrapper.find('[data-testid="runs-empty-new"]').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.name).toBe('Dashboard')
+    expect(router.currentRoute.value.name).toBe('NewRun')
   })
 
   it('zeigt vor dem ersten Laden keinen Leerzustand', async () => {

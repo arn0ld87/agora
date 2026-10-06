@@ -39,7 +39,7 @@ const viewLabels: Record<RunsView, string> = {
 const filteredEmpty = computed(() => runs.loaded.value && !runs.isEmpty.value && runs.visible.value.length === 0)
 
 function newRun(): void {
-  void router.push({ name: 'Dashboard' })
+  void router.push({ name: 'NewRun' })
 }
 
 function compare(): void {

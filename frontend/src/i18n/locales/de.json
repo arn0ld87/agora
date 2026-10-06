@@ -2113,6 +2113,10 @@
           "action": "Neuer Lauf"
         }
       },
+      "newRun": {
+        "title": "Neuer Lauf",
+        "subtitle": "Neuen Lauf aus einer Quelle starten: Dateien ablegen, Frage, Modell und Budget wählen."
+      },
       "graphs": {
         "title": "Graphen"
       }
