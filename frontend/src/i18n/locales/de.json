@@ -2027,7 +2027,37 @@
       "subtitle": "Run- und Branch-Historie"
     },
     "compare": {
-      "title": "Compare"
+      "title": "Compare",
+      "pickRun": "Wähle einen Lauf, um seine Zweige zu vergleichen."
+    },
+    "library": {
+      "title": "Bibliothek",
+      "runs": {
+        "title": "Läufe"
+      },
+      "graphs": {
+        "title": "Graphen"
+      }
+    },
+    "run": {
+      "overview": {
+        "title": "Übersicht"
+      },
+      "graph": {
+        "title": "Graph"
+      }
+    },
+    "graphLibrary": {
+      "title": "Graph"
+    },
+    "activity": {
+      "title": "Aktivität",
+      "jobs": {
+        "title": "Jobs"
+      },
+      "log": {
+        "title": "Protokoll"
+      }
     },
     "stepEnvSetup": {
       "title": "Personas",

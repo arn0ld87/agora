@@ -2027,7 +2027,37 @@
       "subtitle": "Run and Branch History"
     },
     "compare": {
-      "title": "Compare"
+      "title": "Compare",
+      "pickRun": "Pick a run to compare its branches."
+    },
+    "library": {
+      "title": "Library",
+      "runs": {
+        "title": "Runs"
+      },
+      "graphs": {
+        "title": "Graphs"
+      }
+    },
+    "run": {
+      "overview": {
+        "title": "Overview"
+      },
+      "graph": {
+        "title": "Graph"
+      }
+    },
+    "graphLibrary": {
+      "title": "Graph"
+    },
+    "activity": {
+      "title": "Activity",
+      "jobs": {
+        "title": "Jobs"
+      },
+      "log": {
+        "title": "Log"
+      }
     },
     "stepEnvSetup": {
       "title": "Personas",

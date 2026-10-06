@@ -79,6 +79,15 @@ vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
 // mit PR 10 geloescht, deshalb dafür keine vi.mock()-Eintraege. /runs/:id
 // bleibt eine echte Route und braucht seinen Stub weiterhin.
 vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
+// Etappe 2 (#1797), Ticket „Adressen": Platzhalter-Ansichten.
+vi.mock('../../views/library/LibraryRunsView.vue', () => VIEW_STUB)
+vi.mock('../../views/library/LibraryGraphsView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/RunWorkspaceView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/RunOverviewView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/RunGraphView.vue', () => VIEW_STUB)
+vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
+vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
+vi.mock('../../views/activity/ActivityLogView.vue', () => VIEW_STUB)
 
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
@@ -408,6 +417,18 @@ describe('Router – Struktur-Integrität', () => {
       'EmailConfirm',
       'WorkspaceProviderKeys',
       'NotFound',
+      // Etappe 2 (#1797), Ticket „Adressen".
+      'LibraryRuns',
+      'LibraryGraphs',
+      'RunWorkspace',
+      'RunOverview',
+      'RunGraph',
+      'GraphLibraryDetail',
+      'Compare',
+      'ActivityJobs',
+      'ActivityJobDetail',
+      'ActivityLog',
+      'RunInterviewsLegacy',
     ].sort()
 
     const istProduktiveRouten = router
@@ -553,5 +574,71 @@ describe('Router – meta.requiresAuth Flag-Integrität', () => {
       const resolved = router.resolve(path)
       expect(resolved.meta.requiresAuth, `${path} soll KEIN requiresAuth`).toBeFalsy()
     }
+  })
+})
+
+describe('Router – Etappe 2 Adressen (#1797)', () => {
+  beforeEach(() => {
+    vi.mocked(getAgoraToken).mockReturnValue('tkn')
+  })
+
+  it.each([
+    ['/library/runs', 'LibraryRuns'],
+    ['/library/graphs', 'LibraryGraphs'],
+    ['/simulations/sim_abc', 'RunOverview'],
+    ['/simulations/sim_abc/graph', 'RunGraph'],
+    ['/graphs/proj_abc', 'GraphLibraryDetail'],
+    ['/compare', 'Compare'],
+    ['/compare/sim_abc', 'Compare'],
+    ['/activity/jobs', 'ActivityJobs'],
+    ['/activity/jobs/run_abc', 'ActivityJobDetail'],
+    ['/activity/log', 'ActivityLog'],
+    ['/v4/simulation/sim_abc/interviews', 'RunInterviewsLegacy'],
+  ])('löst %s → %s auf', async (path, name) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe(name)
+  })
+
+  it('Lauf-Kinder hängen unter RunWorkspace und tragen simulationId', async () => {
+    await pushAndSettle('/simulations/sim_abc/graph')
+    const route = router.currentRoute.value
+    expect(route.params.simulationId).toBe('sim_abc')
+    expect(route.matched.map((m) => m.name)).toEqual(['RunWorkspace', 'RunGraph'])
+  })
+
+  it('reicht :projectId, :runId und die optionale Vergleichskennung durch', async () => {
+    await pushAndSettle('/graphs/proj_abc')
+    expect(router.currentRoute.value.params.projectId).toBe('proj_abc')
+    await pushAndSettle('/activity/jobs/run_abc')
+    expect(router.currentRoute.value.params.runId).toBe('run_abc')
+    await pushAndSettle('/compare/sim_abc')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+    await pushAndSettle('/compare')
+    expect(router.currentRoute.value.params.simulationId).toBeFalsy()
+  })
+
+  it('Übergangsadresse trägt nur die simulationId, keine reportId', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc/interviews')
+    const route = router.currentRoute.value
+    expect(route.params.simulationId).toBe('sim_abc')
+    expect(route.params.reportId).toBeUndefined()
+  })
+
+  it('alte Adressen lösen unverändert auf', async () => {
+    await pushAndSettle('/runs/run_abc')
+    expect(router.currentRoute.value.name).toBe('RunDetail')
+    expect(router.currentRoute.value.params.id).toBe('run_abc')
+    await pushAndSettle('/v4/compare/sim_abc')
+    expect(router.currentRoute.value.name).toBe('CompareV4')
+    await pushAndSettle('/v4/interaction/report_abc')
+    expect(router.currentRoute.value.name).toBe('StepInteraction')
+    expect(router.currentRoute.value.params.reportId).toBe('report_abc')
+    await pushAndSettle('/v4/simulation/sim_abc')
+    expect(router.currentRoute.value.name).toBe('StepSimulation')
+    await pushAndSettle('/ablage')
+    expect(router.currentRoute.value.name).toBe('Shelf')
+    await pushAndSettle('/runs')
+    expect(router.currentRoute.value.name).toBe('Shelf')
+    expect(router.currentRoute.value.query.filter).toBe('lauf')
   })
 })

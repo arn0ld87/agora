@@ -20,7 +20,12 @@ const props = defineProps({
 
 defineEmits(['add-log', 'update-status'])
 
-const activeTab = ref('chat') // 'chat' | 'survey'
+// Ohne reportId (Uebergangsadresse /v4/simulation/:id/interviews) gibt es
+// keinen Bericht und damit keinen Berichtsagenten: die Ansicht oeffnet im
+// Interview-Teil (Umfrage), laedt keinen Bericht und blendet den Chat mit
+// dem Berichtsagenten aus.
+const hasReport = computed(() => Boolean(props.reportId))
+const activeTab = ref(props.reportId ? 'chat' : 'survey') // 'chat' | 'survey'
 
 const profiles = ref([])
 const reportData = ref(null)
@@ -78,7 +83,9 @@ const surveyFilteredProfiles = computed(() => {
 })
 
 const targetLabel = computed(() => {
-  if (selectedAgentId.value === null) return t('step5.selectReport')
+  if (selectedAgentId.value === null) {
+    return hasReport.value ? t('step5.selectReport') : t('step5.selectAgent')
+  }
   const p = profiles.value[selectedAgentId.value]
   return p?.name || p?.username || `agent_${selectedAgentId.value}`
 })
@@ -117,6 +124,7 @@ function pickReportAgent() {
 async function send() {
   const msg = chatInput.value.trim()
   if (!msg || isSending.value) return
+  if (selectedAgentId.value === null && !hasReport.value) return
   isSending.value = true
   chatHistory.value.push({ role: 'user', content: msg, ts: Date.now() })
   chatInput.value = ''
@@ -276,6 +284,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
         <Kicker num="01">{{ t('step5.selectAgent') }}</Kicker>
 
         <button
+          v-if="hasReport"
           class="agent-row"
           :class="{ active: selectedAgentId === null }"
           @click="pickReportAgent"
@@ -307,7 +316,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
             <Kicker num="02">{{ t('step5.title') }}</Kicker>
             <h2 class="target">{{ targetLabel }}</h2>
           </div>
-          <Badge :variant="selectedAgentId === null ? 'accent' : 'ghost'">
+          <Badge v-if="hasReport || selectedAgentId !== null" :variant="selectedAgentId === null ? 'accent' : 'ghost'">
             {{ selectedAgentId === null ? 'ReportAgent' : 'Agent' }}
           </Badge>
         </header>

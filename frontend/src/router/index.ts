@@ -312,6 +312,81 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: 'flush' },
   },
 
+  // Etappe 2 des Frontend-Umbaus (#1797, Ticket „Adressen"): neue Adressen
+  // nach docs/plans/active/frontend-umbau.md §6.1. Die alten Adressen bleiben
+  // unveraendert auf ihren bisherigen Ansichten; Weiterleitungen folgen in
+  // spaeteren Tickets. Pfade englisch, Beschriftungen deutsch.
+  {
+    path: '/library/runs',
+    name: 'LibraryRuns',
+    component: () => import('../views/library/LibraryRunsView.vue'),
+  },
+  {
+    path: '/library/graphs',
+    name: 'LibraryGraphs',
+    component: () => import('../views/library/LibraryGraphsView.vue'),
+  },
+  // Lauf-Arbeitsbereich unter /simulations/…, nicht /runs/…: `/runs/:id` ist
+  // die Job-Detailansicht der RunRegistry (§6). Reiter Personas, Simulation,
+  // Bericht, Interviews bekommen ihre Kind-Routen mit den spaeteren Etappen.
+  {
+    path: '/simulations/:simulationId',
+    name: 'RunWorkspace',
+    component: () => import('../views/run/RunWorkspaceView.vue'),
+    props: true,
+    children: [
+      {
+        path: '',
+        name: 'RunOverview',
+        component: () => import('../views/run/RunOverviewView.vue'),
+      },
+      {
+        path: 'graph',
+        name: 'RunGraph',
+        component: () => import('../views/run/RunGraphView.vue'),
+      },
+    ],
+  },
+  {
+    path: '/graphs/:projectId',
+    name: 'GraphLibraryDetail',
+    component: () => import('../views/graph/GraphLibraryDetailView.vue'),
+    props: true,
+  },
+  {
+    path: '/compare/:simulationId?',
+    name: 'Compare',
+    component: () => import('../views/v4/CompareView.vue'),
+    props: true,
+  },
+  {
+    path: '/activity/jobs',
+    name: 'ActivityJobs',
+    component: () => import('../views/activity/ActivityJobsView.vue'),
+  },
+  // `:runId` ist die Job-Kennung (`run_…`) wie bei `/runs/:id`; dieselbe
+  // Detailansicht, die Kennung kommt aus `params.runId`.
+  {
+    path: '/activity/jobs/:runId',
+    name: 'ActivityJobDetail',
+    component: () => import('../views/v4/RunDetailAppShellView.vue'),
+    props: true,
+  },
+  {
+    path: '/activity/log',
+    name: 'ActivityLog',
+    component: () => import('../views/activity/ActivityLogView.vue'),
+  },
+  // Uebergangsadresse bis Etappe 6: Gespraechsansicht nur mit simulationId,
+  // auch fuer Laeufe ohne Bericht. Etappe 6 leitet sie auf
+  // /simulations/:simulationId/interviews um.
+  {
+    path: '/v4/simulation/:simulationId/interviews',
+    name: 'RunInterviewsLegacy',
+    component: () => import('../views/v4/steps/StepInteractionView.vue'),
+    props: true,
+  },
+
   // Auth-Routen (#1617, Teil B1)
   {
     path: '/auth/login',

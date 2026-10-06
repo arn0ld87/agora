@@ -9,7 +9,10 @@
   <div>
     <PageHeader :title="$t('views.compare.title')" />
 
-    <div v-if="loadError" class="compare-view-error" role="alert">
+    <p v-if="!simulationId" class="compare-view-loading">
+      {{ $t('views.compare.pickRun') }}
+    </p>
+    <div v-else-if="loadError" class="compare-view-error" role="alert">
       {{ loadError }}
     </div>
     <div v-else-if="loading" class="compare-view-loading" aria-busy="true">
@@ -31,7 +34,8 @@ import { listSimulationBranches } from '@/api/simulation'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
-const props = defineProps<{ simulationId: string }>()
+// Optional: /compare/:simulationId? kennt auch die Adresse ohne Kennung.
+const props = defineProps<{ simulationId?: string }>()
 
 const crumbs: BreadcrumbItem[] = [{ label: 'Compare' }]
 
@@ -46,6 +50,10 @@ const loading = ref(true)
 const loadError = ref<string | null>(null)
 
 onMounted(async () => {
+  if (!props.simulationId) {
+    loading.value = false
+    return
+  }
   try {
     // Der Interceptor liefert die Envelope, nicht das Array — ein
     // direktes .map() darauf warf und landete im catch: die Liste zeigte

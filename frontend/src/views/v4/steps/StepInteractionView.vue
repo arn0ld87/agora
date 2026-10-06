@@ -12,7 +12,7 @@
     <PipelineStepper :current-step="5" />
     <Step5Interaction
       :report-id="reportId"
-      :simulation-id="simulationIdFromQuery ?? undefined"
+      :simulation-id="resolvedSimulationId"
     />
   </div>
 </template>
@@ -28,8 +28,13 @@ import { INTERACTION_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
 import { asSimulationId } from '@/contracts/runIdentifiers'
 import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
+// Zwei Adressen: /v4/interaction/:reportId (mit Bericht) und die
+// Uebergangsadresse /v4/simulation/:simulationId/interviews (nur Lauf, ohne
+// Bericht; Step5Interaction laedt dann keinen Bericht und blendet den Chat
+// mit dem Berichtsagenten aus).
 const props = defineProps<{
-  reportId: string
+  reportId?: string
+  simulationId?: string
 }>()
 
 // Die Route /v4/interaction/:reportId kennt nur die reportId. Chat, Interview
@@ -46,9 +51,13 @@ const simulationIdFromQuery = computed<string | null>(() => {
   return asSimulationId(value)
 })
 
+const resolvedSimulationId = computed<string | undefined>(
+  () => props.simulationId ?? simulationIdFromQuery.value ?? undefined,
+)
+
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Runs', path: '/runs' },
-  crumbForId(props.reportId),
+  crumbForId((props.reportId ?? props.simulationId) as string),
   { label: 'Interaktion' },
 ])
 
