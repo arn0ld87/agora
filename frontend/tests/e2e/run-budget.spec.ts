@@ -15,7 +15,7 @@
  *   6. Run pollen bis terminal. Erwartung: status="stopped" UND
  *      termination_reason="budget_calls" — kein technischer Fehler.
  *   7. Abschlussverbrauch: GET /api/runs/<id>/usage zeigt gezählte Aufrufe.
- *   8. UI: /runs/<run_id> zeigt Verbrauchsanalyse (usage-totals) und den
+ *   8. UI: /activity/jobs/<run_id> zeigt Verbrauchsanalyse (usage-totals) und den
  *      Budgetabbruch (budget-exceeded-banner).
  *   9. Accessibility: axe ohne critical/serious, 320px ohne Horizontal-Scroll.
  *  10. 0 Page-Errors während des gesamten Flows.
@@ -260,13 +260,13 @@ test.describe('#764 · Run-Budget-Smoke', () => {
         // onboardingGuard (router/onboardingGuard.ts:32) redirected JEDE
         // nicht-exempte Route auf /onboarding, solange onboarding_required
         // gilt — Default-Zustand eines frischen E2E-Stacks. Ohne diesen
-        // Aufruf landet page.goto('/runs/<id>') auf dem Einrichtungs-Wizard
+        // Aufruf landet page.goto('/activity/jobs/<id>') auf dem Einrichtungs-Wizard
         // und getByTestId('usage-totals') existiert schlicht nicht; der
         // DOM-Snapshot des fehlgeschlagenen CI-Laufs zeigte genau das.
         // Der Aufruf ist idempotent (onboarding_state_store.py::dismiss).
         await ensureOnboardingDismissed(page);
 
-        await page.goto(`${baseURL}/runs/${runId}`);
+        await page.goto(`${baseURL}/activity/jobs/${runId}`);
         await expect(
           page.getByTestId('usage-totals'),
           'Verbrauchsanalyse (Gesamtwerte) muss sichtbar sein',

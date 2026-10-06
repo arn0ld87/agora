@@ -68,8 +68,8 @@ test.describe('#1617 · Supabase-Login (gemockt)', () => {
   });
 
   test('1 · ohne Session landet jede Route auf dem Login', async ({ page }) => {
-    await page.goto('/ablage', { waitUntil: 'domcontentloaded' });
-    await expect(page).toHaveURL(/\/auth\/login\?next=(%2F|\/)ablage/);
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
+    await expect(page).toHaveURL(/\/auth\/login\?next=(%2F|\/)library(%2F|\/)runs/);
     await expect(page.getByLabel(/E-Mail|Email/i)).toBeVisible();
   });
 
@@ -82,12 +82,12 @@ test.describe('#1617 · Supabase-Login (gemockt)', () => {
       }
     });
 
-    await page.goto('/auth/login?next=/ablage', { waitUntil: 'domcontentloaded' });
+    await page.goto('/auth/login?next=/library/runs', { waitUntil: 'domcontentloaded' });
     await page.getByLabel(/E-Mail|Email/i).fill('e2e@example.test');
     await page.getByLabel(/Passwort|Password/i).fill('ein-langes-passwort');
     await page.getByRole('button', { name: /anmelden|sign in/i }).click();
 
-    await expect(page).toHaveURL(/\/ablage/);
+    await expect(page).toHaveURL(/\/library\/runs/);
     const bearer = () => agoraHeaders.filter((h) => h['authorization'] === `Bearer ${ACCESS_TOKEN}`);
     await expect.poll(() => bearer().length).toBeGreaterThan(0);
     const withBearer = bearer();
