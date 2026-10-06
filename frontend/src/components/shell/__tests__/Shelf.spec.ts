@@ -24,7 +24,7 @@ import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import { ShelfTableTestId, ShelfTestId } from '../../../contracts/testIds'
-import type { ShelfFilter, ShelfJobRow, ShelfObject } from '../../../types/shelf'
+import type { ShelfFilter, ShelfJobRow, ShelfObject, ShelfSource } from '../../../types/shelf'
 import type { useShelf } from '../../../composables/useShelf'
 
 vi.mock('../../../api/runs', () => ({
@@ -90,6 +90,7 @@ function makeShelf(objects: ShelfObject[] = [], jobs: ShelfJobRow[] = []): Retur
     activeObjects,
     loading,
     error,
+    unavailableSources: ref<ShelfSource[]>([]),
     reload: vi.fn().mockResolvedValue(undefined),
   }
 }

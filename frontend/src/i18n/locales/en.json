@@ -901,10 +901,29 @@
   },
   "sidebar": {
     "title": "Main navigation",
-    "nav": {
-      "dashboard": "Dashboard",
-      "runs": "Runs"
+    "groups": {
+      "library": "Library",
+      "focus": "In focus",
+      "tools": "Tools"
     },
+    "nav": {
+      "runs": "Runs",
+      "graphs": "Graphs",
+      "personas": "Persona sets",
+      "running": "Running now",
+      "attention": "Needs you",
+      "compare": "Compare",
+      "activity": "Activity"
+    },
+    "system": {
+      "label": "System",
+      "state": {
+        "ok": "All services reachable",
+        "err": "A service is unreachable",
+        "unknown": "System state unknown"
+      }
+    },
+    "countsError": "Counts could not be loaded completely.",
     "settings": {
       "label": "Settings",
       "general": "General",
@@ -983,7 +1002,23 @@
   "topbar": {
     "search": "Search",
     "openNavigation": "Open navigation",
+    "searchShort": "Search (Cmd+K)",
+    "newRun": "New run",
+    "console": "Console",
+    "consoleToggle": "Show or hide the console",
+    "consoleUnread": "{count} unread errors",
+    "copyIdent": "Copy identifier {ident}",
+    "identCopied": "Identifier copied",
+    "identCopyFailed": "Identifier could not be copied",
     "userMenu": {
+      "workspaceLocal": "Local workspace",
+      "appearance": "Appearance",
+      "theme": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "densityCompact": "Compact density",
       "trigger": "User menu, signed in as {name}",
       "triggerUnknown": "Open user menu",
       "profile": "Profile",
@@ -1014,7 +1049,13 @@
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
       "reconnect": "Reconnect",
-      "reconnecting": "Reconnecting…"
+      "resize": "Resize console (arrow up/down)",
+      "levelFilter": "Filter by level",
+      "reconnecting": "Reconnecting…",
+      "copy": "Copy",
+      "copyTitle": "Copy visible lines to the clipboard",
+      "copied": "Copied",
+      "copyFailed": "Copying failed. The clipboard is not available."
     }
   },
   "settings": {

@@ -38,6 +38,11 @@ Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: tru
 vi.mock('@/components/v4/shell/DemoPreviewStaticView.vue', () => ({
   default: { name: 'DemoPreviewStaticView', template: '<div class="static-stub">Static</div>' },
 }))
+// Die Huelle sitzt seit #1795 zentral in App.vue; ihr Aufbau (Sidebar,
+// Topbar) ist hier nicht Gegenstand — App.shell.spec.ts prueft ihre Einbindung.
+vi.mock('@/components/v4/shell/AppShell.vue', () => ({
+  default: { name: 'AppShell', props: ['demoFrame'], template: '<div class="shell-stub"><slot /></div>' },
+}))
 vi.mock('@/components/LogDrawer.vue', () => ({
   default: { name: 'LogDrawer', props: ['open'], template: '<div class="log-drawer-stub" />' },
 }))

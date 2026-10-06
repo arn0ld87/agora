@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
@@ -72,64 +71,62 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppShell>
-    <SettingsOverlay>
-      <PageHeader
-        :title="t('settings.v4.llmRouting.title')"
-        :subtitle="t('settings.v4.llmRouting.subtitle')"
-      />
+  <SettingsOverlay>
+    <PageHeader
+      :title="t('settings.v4.llmRouting.title')"
+      :subtitle="t('settings.v4.llmRouting.subtitle')"
+    />
 
-      <Card
-        :title="t('settings.v4.llmRouting.runSelectionTitle')"
-        :subtitle="t('settings.v4.llmRouting.runSelectionSubtitle')"
-      >
-        <div class="run-picker">
-          <Field :label="t('settings.v4.llmRouting.currentRunsLabel')">
-            <Select
-              v-model="selectedRunId"
-              :options="runOptions"
-              :disabled="loadingRuns || runOptions.length === 0"
-              :placeholder="t('settings.v4.llmRouting.runSelectPlaceholder')"
-            />
-          </Field>
+    <Card
+      :title="t('settings.v4.llmRouting.runSelectionTitle')"
+      :subtitle="t('settings.v4.llmRouting.runSelectionSubtitle')"
+    >
+      <div class="run-picker">
+        <Field :label="t('settings.v4.llmRouting.currentRunsLabel')">
+          <Select
+            v-model="selectedRunId"
+            :options="runOptions"
+            :disabled="loadingRuns || runOptions.length === 0"
+            :placeholder="t('settings.v4.llmRouting.runSelectPlaceholder')"
+          />
+        </Field>
 
-          <Field :label="t('settings.v4.llmRouting.runIdLabel')">
-            <Input
-              v-model="selectedRunId"
-              mono
-              :data-testid="LlmRoutingTestId.runId"
-              placeholder="run_..."
-            />
-          </Field>
+        <Field :label="t('settings.v4.llmRouting.runIdLabel')">
+          <Input
+            v-model="selectedRunId"
+            mono
+            :data-testid="LlmRoutingTestId.runId"
+            placeholder="run_..."
+          />
+        </Field>
 
-          <button
-            class="llmr-btn llmr-btn--secondary"
-            type="button"
-            :disabled="loadingRuns"
-            @click="loadRuns"
-          >
-            {{ t('settings.v4.llmRouting.refresh') }}
-          </button>
-        </div>
-
-        <p v-if="error" class="llmr-error">{{ error }}</p>
-      </Card>
-
-      <div v-if="selectedRunIdTrimmed" class="routing-panel">
-        <RunLlmRoutingPanel
-          :key="selectedRunIdTrimmed"
-          :run-id="selectedRunIdTrimmed"
-        />
+        <button
+          class="llmr-btn llmr-btn--secondary"
+          type="button"
+          :disabled="loadingRuns"
+          @click="loadRuns"
+        >
+          {{ t('settings.v4.llmRouting.refresh') }}
+        </button>
       </div>
 
-      <Card
-        v-else
-        class="routing-empty"
-        :title="t('settings.v4.llmRouting.emptyTitle')"
-        :subtitle="t('settings.v4.llmRouting.emptySubtitle')"
+      <p v-if="error" class="llmr-error">{{ error }}</p>
+    </Card>
+
+    <div v-if="selectedRunIdTrimmed" class="routing-panel">
+      <RunLlmRoutingPanel
+        :key="selectedRunIdTrimmed"
+        :run-id="selectedRunIdTrimmed"
       />
-    </SettingsOverlay>
-  </AppShell>
+    </div>
+
+    <Card
+      v-else
+      class="routing-empty"
+      :title="t('settings.v4.llmRouting.emptyTitle')"
+      :subtitle="t('settings.v4.llmRouting.emptySubtitle')"
+    />
+  </SettingsOverlay>
 </template>
 
 <style scoped>

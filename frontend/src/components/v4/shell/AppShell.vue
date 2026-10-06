@@ -40,7 +40,7 @@
     <!-- Topbar — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
     <div class="app-shell__topbar" :inert="shellStore.mobileNavOpen ? true : undefined">
       <slot name="topbar">
-        <Topbar :breadcrumbs="breadcrumbs" />
+        <Topbar :breadcrumbs="shellStore.breadcrumbs" />
       </slot>
     </div>
 
@@ -53,7 +53,11 @@
          die statische Erklaerkarte bringt Banner + Inhalt schon selbst mit,
          ein zweiter Banner + grauer/inert-Slot waere doppelt und falsch
          (die Karte ist keine gesperrte Ansicht, sondern der Ersatz dafuer). -->
-    <main class="app-shell__main" :inert="shellStore.mobileNavOpen ? true : undefined">
+    <main
+      class="app-shell__main"
+      :class="{ 'app-shell__main--flush': route.meta?.layout === 'flush' }"
+      :inert="shellStore.mobileNavOpen ? true : undefined"
+    >
       <DemoPreviewFrame v-if="demoFrame">
         <slot />
       </DemoPreviewFrame>
@@ -67,6 +71,9 @@
 
     <!-- Command-Palette (global, rendered einmalig in Shell) -->
     <CommandPalette v-if="wasPaletteOpened" />
+
+    <!-- Undo-Toast fuer „Abbrechen“ (global, einmalig in der Huelle) -->
+    <UndoToast />
   </div>
 </template>
 
@@ -82,19 +89,19 @@ import { MOBILE_BREAKPOINT_PX } from '@/constants/breakpoints'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import DemoPreviewFrame from './DemoPreviewFrame.vue'
-import type { BreadcrumbItem } from './Breadcrumbs.vue'
+import UndoToast from '@/components/shell/UndoToast.vue'
 
 // Async-Import: CommandPalette in eigenem Chunk → kein AppShell-Bundle-Overhead
 const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue'))
 
-const props = withDefaults(
+// Brotkrumen kommen nicht per Prop: die Huelle sitzt zentral in App.vue, die
+// Ansicht setzt sie ueber useShellBreadcrumbs (shellStore.breadcrumbs, #1795).
+withDefaults(
   defineProps<{
-    breadcrumbs?: BreadcrumbItem[]
     /** false: DemoPreviewFrame um den Hauptinhalt-Slot ueberspringen (#1697). */
     demoFrame?: boolean
   }>(),
   {
-    breadcrumbs: () => [],
     demoFrame: true,
   },
 )
@@ -224,18 +231,25 @@ const activeSubRoute = computed<string>(() => {
 <style scoped>
 .app-shell {
   width: 100%;
-  height: 100%;
+  /* Das Dokument scrollt, nicht der Hauptbereich (wie vor dem Umbau): Die
+     Seitenleiste und die Kopfzeile bleiben per sticky im Bild. Ein eigener
+     Scrollbereich im Hauptbereich liesse jeden Fokussprung (Browser scrollt
+     zwischen zwei Tab-Stops) als Rueckwaertssprung in der Tab-Reihenfolge-
+     Pruefung erscheinen. `clip` statt `hidden`: kein Scroll-Container,
+     sticky bleibt wirksam. */
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   /* An --topbar-h gekoppelt: der Token schrumpft unter `pointer: coarse`
      auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen. */
   grid-template-rows: var(--topbar-h, 64px) 1fr;
-  background: var(--surface-canvas, #f5f5f7);
-  overflow: hidden;
+  background: var(--surface-canvas);
+  overflow: clip;
 }
 
 .app-shell--inspector-open {
-  grid-template-columns: auto 1fr 360px;
+  grid-template-columns: auto minmax(0, 1fr) 360px;
 }
 
 .app-shell__sidebar {
@@ -244,12 +258,22 @@ const activeSubRoute = computed<string>(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Bleibt beim Scrollen der Seite stehen und fuellt genau den Viewport. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .app-shell__topbar {
   grid-row: 1;
   grid-column: 2;
   min-width: 0;
+  /* Werkzeugleiste bleibt oben stehen, auch wenn die Seite scrollt. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .app-shell--inspector-open .app-shell__topbar {
@@ -259,7 +283,6 @@ const activeSubRoute = computed<string>(() => {
 .app-shell__main {
   grid-row: 2;
   grid-column: 2;
-  overflow: auto;
   padding: 28px 36px;
   min-width: 0;
 }
@@ -271,9 +294,14 @@ const activeSubRoute = computed<string>(() => {
 .app-shell__inspector {
   grid-row: 1 / 3;
   grid-column: 3;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
   width: 360px;
   border-left: 1px solid var(--hairline);
-  background: var(--surface-base, #fff);
+  background: var(--surface-base);
   overflow: auto;
 }
 
@@ -282,12 +310,23 @@ const activeSubRoute = computed<string>(() => {
   display: none;
 }
 
+/* Randlose Flaeche (meta.layout 'flush', Ablage): die Ansicht liefert ihr
+   eigenes Raster und scrollt in den Spalten, nicht im Hauptbereich. Steht
+   nach dem Mobile-Block, damit er dessen Innenabstand ueberschreibt. */
+.app-shell__main--flush {
+  padding: 0;
+  overflow: hidden;
+  /* Das Raster der Ansicht rechnet mit height: 100% und braucht eine feste Hoehe. */
+  height: calc(100vh - var(--topbar-h, 64px));
+  height: calc(100dvh - var(--topbar-h, 64px));
+}
+
 /* ── Mobile (< 768 px) ──────────────────────────────────────── */
 /* SSoT: src/constants/breakpoints.ts (MOBILE_BREAKPOINT_PX = 768) —
    max-width: 767px bildet "< 768" ab (Slice 7.3.2, Breakpoint-Vereinheitlichung). */
 @media (max-width: 767px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 56px 1fr;
   }
 
@@ -304,6 +343,8 @@ const activeSubRoute = computed<string>(() => {
     z-index: 50;
     grid-row: unset;
     grid-column: unset;
+    height: auto;
+    align-self: stretch;
     transform: translateX(-100%);
     transition: transform var(--v4-state-motion-duration-base) var(--v4-state-motion-ease);
     /* Erzwingt volle Sidebar-Breite im Mobile-Drawer, auch wenn Desktop-Collapsed-State
@@ -336,6 +377,11 @@ const activeSubRoute = computed<string>(() => {
     padding: 16px;
   }
 
+  .app-shell__main--flush {
+    padding: 0;
+    height: calc(100dvh - 56px);
+  }
+
   .app-shell--inspector-open .app-shell__main {
     grid-column: 1;
   }
@@ -346,6 +392,8 @@ const activeSubRoute = computed<string>(() => {
     inset: 0;
     z-index: 60;
     width: 100%;
+    height: auto;
+    align-self: stretch;
     border-left: none;
     grid-row: unset;
     grid-column: unset;
@@ -357,7 +405,7 @@ const activeSubRoute = computed<string>(() => {
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--scrim);
   }
 }
 </style>

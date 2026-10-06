@@ -301,12 +301,15 @@ const routes: RouteRecordRaw[] = [
     path: '/ablage',
     name: 'Shelf',
     component: () => import('../views/shell/ShelfView.vue'),
+    // In der einen Huelle, aber randlos: die Ablage hat ein eigenes Raster.
+    meta: { layout: 'flush' },
   },
   {
     path: '/ablage/:kind(lauf|bericht|personasatz|graph)/:objectId',
     name: 'ShelfObject',
     component: () => import('../views/shell/ShelfView.vue'),
     props: true,
+    meta: { layout: 'flush' },
   },
 
   // Auth-Routen (#1617, Teil B1)
@@ -340,6 +343,7 @@ const routes: RouteRecordRaw[] = [
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('../views/NotFoundView.vue'),
+    meta: { layout: 'bare' },
   },
 ]
 

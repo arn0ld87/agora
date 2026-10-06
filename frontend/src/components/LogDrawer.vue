@@ -1,9 +1,32 @@
 <template>
-  <div v-if="open" class="log-drawer" role="region" :aria-label="t('logs.drawer.title')">
+  <div
+    v-if="open"
+    class="log-drawer"
+    role="region"
+    :aria-label="t('logs.drawer.title')"
+    :style="{ height: drawerHeight + 'px' }"
+  >
+    <div
+      class="resize-handle"
+      role="separator"
+      aria-orientation="horizontal"
+      tabindex="0"
+      :aria-label="t('logs.drawer.resize')"
+      :aria-valuemin="LOG_DRAWER_MIN_HEIGHT"
+      :aria-valuemax="logDrawerMaxHeight()"
+      :aria-valuenow="drawerHeight"
+      @pointerdown="onHandleDown"
+      @keydown="onHandleKey"
+    ></div>
     <header class="drawer-head">
       <span class="title">{{ t('logs.drawer.title') }}</span>
       <div class="filters">
-        <select v-model="level" class="level-select" @change="reload">
+        <select
+          v-model="level"
+          class="level-select"
+          :aria-label="t('logs.drawer.levelFilter')"
+          @change="reload"
+        >
           <option value="">{{ t('logs.drawer.allLevels') }}</option>
           <option value="error">ERROR</option>
           <option value="warn">WARN</option>
@@ -14,6 +37,7 @@
           v-model="search"
           class="search-input"
           :placeholder="t('logs.drawer.search')"
+          :aria-label="t('logs.drawer.search')"
           type="search"
         />
         <label class="pause-toggle">
@@ -31,11 +55,29 @@
           @click="manualReconnect"
           :title="t('logs.drawer.reconnect')"
         >&#x21bb; {{ t('logs.drawer.reconnect') }}</button>
-        <button class="close-btn" @click="$emit('close')" :title="t('common.close')">✕</button>
+        <button
+          type="button"
+          class="copy-btn"
+          :disabled="!canCopy"
+          :title="t('logs.drawer.copyTitle')"
+          @click="copyVisible"
+        >{{ t('logs.drawer.copy') }}</button>
+        <span
+          class="copy-status"
+          :class="{ 'is-error': copyState === 'failed' }"
+          role="status"
+          aria-live="polite"
+        >{{ copyState === 'copied' ? t('logs.drawer.copied') : copyState === 'failed' ? t('logs.drawer.copyFailed') : '' }}</span>
+        <button
+          class="close-btn"
+          @click="$emit('close')"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
+        >✕</button>
       </div>
     </header>
     <div class="drawer-body-wrap">
-      <div ref="scrollEl" class="drawer-body">
+      <div ref="scrollEl" class="drawer-body" role="log" :aria-label="t('logs.drawer.title')">
         <div v-if="loading && !lines.length" class="meta">{{ t('logs.drawer.loading') }}</div>
         <div v-else-if="errorMessage" class="meta is-error">{{ errorMessage }}</div>
         <div v-else-if="fileNotice" class="meta">{{ t(fileNotice) }}</div>
@@ -60,6 +102,12 @@ import { useI18n } from 'vue-i18n'
 import { fetchLogs, buildLogsStreamUrl } from '../api/logs'
 import { useStickyScroll } from '../composables/useStickyScroll'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
+import { collapseProgressLines } from '../utils/logProgress'
+import {
+  LOG_DRAWER_MIN_HEIGHT,
+  logDrawerMaxHeight,
+  useLogDrawerHeight,
+} from '../composables/useLogDrawer'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -97,11 +145,64 @@ const RING_BUFFER_MAX = 5000
 const RECONNECT_INDICATOR_DELAY_MS = 30000
 import { isErrorLine } from '@/utils/errorLinePattern'
 
+// Hoehe: Maus (Zeiger am Griff) und Tastatur (Pfeile, Pos1/Ende), gemerkt.
+const { height: drawerHeight, setHeight } = useLogDrawerHeight()
+const KEY_STEP = 24
+let dragStartY = 0
+let dragStartHeight = 0
+
+function onHandleMove(e) {
+  setHeight(dragStartHeight + (dragStartY - e.clientY))
+}
+function onHandleUp() {
+  window.removeEventListener('pointermove', onHandleMove)
+  window.removeEventListener('pointerup', onHandleUp)
+}
+function onHandleDown(e) {
+  e.preventDefault()
+  dragStartY = e.clientY
+  dragStartHeight = drawerHeight.value
+  window.addEventListener('pointermove', onHandleMove)
+  window.addEventListener('pointerup', onHandleUp)
+}
+function onHandleKey(e) {
+  const step = e.shiftKey ? KEY_STEP * 4 : KEY_STEP
+  if (e.key === 'ArrowUp') setHeight(drawerHeight.value + step)
+  else if (e.key === 'ArrowDown') setHeight(drawerHeight.value - step)
+  else if (e.key === 'Home') setHeight(logDrawerMaxHeight())
+  else if (e.key === 'End') setHeight(LOG_DRAWER_MIN_HEIGHT)
+  else return
+  e.preventDefault()
+}
+
+// Tqdm-artige Fortschrittsbalken: nur der letzte Stand je Balken.
+const displayLines = computed(() => collapseProgressLines(lines.value))
+
 const filteredLines = computed(() => {
-  if (!search.value) return lines.value
+  if (!search.value) return displayLines.value
   const needle = search.value.toLowerCase()
-  return lines.value.filter((ln) => typeof ln === 'string' && ln.toLowerCase().includes(needle))
+  return displayLines.value.filter((ln) => typeof ln === 'string' && ln.toLowerCase().includes(needle))
 })
+
+// Kopieren: genau die sichtbaren Zeilen (nach Stufe, Suche, zusammengefasste
+// Fortschrittsbalken), eine je Eintrag, im Format der Anzeige.
+const copyState = ref('idle')
+let _copyTimer = null
+const canCopy = computed(() => !errorMessage.value && !fileNotice.value && filteredLines.value.length > 0)
+
+async function copyVisible() {
+  if (!canCopy.value) return
+  if (_copyTimer !== null) window.clearTimeout(_copyTimer)
+  try {
+    await navigator.clipboard.writeText(filteredLines.value.join('\n'))
+    copyState.value = 'copied'
+    _copyTimer = window.setTimeout(() => { copyState.value = 'idle'; _copyTimer = null }, 2000)
+  } catch {
+    // Fehler bleibt sichtbar, bis erneut kopiert wird.
+    copyState.value = 'failed'
+    _copyTimer = null
+  }
+}
 
 let _eventSource = null
 let _streamGeneration = 0
@@ -214,91 +315,132 @@ watch(level, () => {
 })
 
 onMounted(() => { if (props.open) { reload(); startStream() } })
-onUnmounted(stopStream)
+onUnmounted(() => {
+  stopStream()
+  onHandleUp()
+  if (_copyTimer !== null) window.clearTimeout(_copyTimer)
+})
 </script>
 
 <style scoped>
 .log-drawer {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: min(50vh, 480px);
-  background: var(--bg-elevated);
-  border-top: 1px solid var(--rule);
+  background: var(--s1);
+  border-top: 1px solid var(--line);
   z-index: 90;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--ag-font-sans);
 }
+.resize-handle {
+  position: absolute;
+  top: -4px; left: 0; right: 0;
+  height: 9px;
+  cursor: ns-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 50%;
+  width: 36px; height: 3px;
+  margin-left: -18px;
+  border-radius: var(--ag-r-pill);
+  background: var(--s4);
+}
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after { background: var(--acc); }
+.resize-handle:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
 .reconnect-indicator {
-  font-family: var(--ff-mono);
-  font-size: 10px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
+  font-size: 12px;
+  color: var(--fg3);
   padding: 2px 8px;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-2);
-  opacity: 0.7;
+  border-radius: var(--ag-r-6);
+  background: var(--s3);
   animation: reconnect-pulse 1.6s ease-in-out infinite;
 }
 @keyframes reconnect-pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 0.9; }
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
 }
 .drawer-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s-3) var(--s-4);
-  border-bottom: 1px solid var(--rule);
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--fg3);
 }
-.drawer-head .title { color: var(--fg); }
-.filters { display: flex; gap: var(--s-3); align-items: center; }
+.drawer-head .title { color: var(--fg); font-weight: 600; font-size: 14px; }
+.filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .level-select, .search-input {
-  background: var(--bg);
-  border: 1px solid var(--rule);
+  background: var(--field);
+  border: none;
   color: var(--fg);
-  padding: 4px 8px;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  border-radius: var(--r-1);
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  border-radius: var(--ag-r-8);
 }
 .search-input { min-width: 180px; }
+.level-select:focus-visible, .search-input:focus-visible,
+.close-btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
 .pause-toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .close-btn {
   background: transparent;
-  border: 1px solid var(--rule);
-  color: var(--fg-muted);
-  width: 28px; height: 28px;
-  border-radius: var(--r-1);
+  border: none;
+  color: var(--fg2);
+  width: 32px; height: 32px;
+  border-radius: var(--ag-r-8);
   cursor: pointer;
+  font: inherit;
 }
-.close-btn:hover { color: var(--fg); border-color: var(--accent); }
-.reconnect-btn { width: auto; padding: 0 10px; color: var(--status-error); border-color: var(--status-error); }
-.reconnect-btn:hover { color: var(--fg); border-color: var(--accent); }
+.close-btn:hover { background: var(--s3); color: var(--fg); }
+.copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg2);
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--ag-r-8);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.copy-btn:hover:not(:disabled) { background: var(--s3); color: var(--fg); }
+.copy-btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 1px; }
+.copy-btn:disabled { opacity: 0.5; cursor: default; }
+.copy-status { font-size: 12px; color: var(--fg3); }
+.copy-status.is-error { color: var(--err); }
+.reconnect-btn { width: auto; padding: 0 10px; color: var(--err); background: var(--err-soft); }
+.reconnect-btn:hover { background: var(--err-soft); color: var(--fg); }
 
 .drawer-body-wrap {
   position: relative;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 .drawer-body {
   height: 100%;
   overflow-y: auto;
-  font-family: var(--ff-mono);
+  font-family: var(--ag-font-mono);
   font-size: 12px;
   line-height: 1.5;
-  padding: var(--s-3) var(--s-4);
-  color: var(--mono-100);
+  padding: 4px 16px 12px;
+  color: var(--fg);
   white-space: pre-wrap;
-  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }
-.log-line { padding: 1px 0; }
-.log-line.is-error { color: var(--status-error); }
-.meta { color: var(--fg-muted); }
+.log-line { padding: 3px 0; border-top: 1px solid var(--line); }
+.log-line:first-child { border-top: none; }
+.log-line.is-error { color: var(--err); }
+.meta { color: var(--fg3); font-family: var(--ag-font-sans); font-size: 13px; padding: 12px 0; }
+.meta.is-error { color: var(--err); }
 </style>

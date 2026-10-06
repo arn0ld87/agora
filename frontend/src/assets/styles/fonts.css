@@ -8,15 +8,14 @@
 
    Block B1 (18.08.2026) hat den Google-Fonts-CDN aus Slice D0 wieder
    entfernt und durch npm-Pakete ersetzt:
-     - Archivo     (UI)                    @fontsource-variable/archivo
      - Newsreader  (Berichts-Fliesstext)   @fontsource-variable/newsreader
-   Beide werden in src/main.ts importiert, nicht hier. Sie heissen im
-   CSS "Archivo Variable" bzw. "Newsreader Variable" — siehe
-   --font-sans / --font-serif in tokens-v3.css.
+   Newsreader wird in src/main.ts importiert, nicht hier, und heisst im
+   CSS "Newsreader Variable" — siehe --font-serif in tokens-v3.css.
+   Archivo (UI) ist mit #1795 entfallen: die Oberflaeche nutzt die
+   Systemschrift.
 
    Hier verbleibt nur Geist Mono (IDs, Zahlen, Logausgaben), das als
-   woff2 direkt im Repo liegt. Geist Sans ist mit dem Wechsel auf
-   Archivo entfallen.
+   woff2 direkt im Repo liegt.
    ============================================================ */
 
 @font-face {

@@ -7,6 +7,12 @@ html, body, #app {
   min-height: 100%;
 }
 
+/* Die Kopfzeile der Huelle ist sticky: ein per Tab oder Anker angesprungenes
+   Element darf nicht unter ihr landen (WCAG 2.4.11). */
+html {
+  scroll-padding-top: var(--topbar-h, 64px);
+}
+
 #app {
   display: flex;
   flex-direction: column;

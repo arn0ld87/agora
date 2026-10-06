@@ -2,7 +2,7 @@
   StepEnvSetupView — AppShell-Wrapper fuer Step 2 (Persona-Quoten / Env-Setup).
 -->
 <template>
-  <AppShell :breadcrumbs="crumbs">
+  <div>
     <PageHeader
       :title="$t('views.stepEnvSetup.title')"
       :subtitle="$t('views.stepEnvSetup.subtitle')"
@@ -17,19 +17,19 @@
       @next-step="handleNextStep"
       @go-back="handleGoBack"
     />
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import { readRunParamsFromQuery, toRunParamsQuery } from '@/contracts/runParamsQuery'
+import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   projectId: string
@@ -40,7 +40,7 @@ const router = useRouter()
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Runs', path: '/runs' },
-  { label: props.projectId },
+  crumbForId(props.projectId),
   { label: 'Personas' },
 ])
 
@@ -81,4 +81,6 @@ function handleGoBack(): void {
     params: { projectId: props.projectId },
   })
 }
+
+useShellBreadcrumbs(crumbs)
 </script>

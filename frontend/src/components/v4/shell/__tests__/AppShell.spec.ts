@@ -18,6 +18,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { makeTestRouter } from './testRouter'
 import { useCommandPalette } from '@/composables/useCommandPalette'
+import { useCancelAction } from '@/components/shell/useCancelAction'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 
@@ -35,6 +36,11 @@ const lsMock = (() => {
   }
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
+
+vi.mock('@/api/runs', () => ({ cancelRun: vi.fn().mockResolvedValue({ success: true }) }))
+// Die Seitenleiste ist hier nur Teil der Huelle: weder Ablage noch /api/status laden (#1795).
+vi.mock('@/composables/useLibraryCounts', async () => (await import('./sidebarMocks')).libraryCountsMock)
+vi.mock('@/composables/useSidebarSystem', async () => (await import('./sidebarMocks')).sidebarSystemMock)
 
 import AppShell from '../AppShell.vue'
 
@@ -80,6 +86,42 @@ describe('AppShell', () => {
     palette.close()
     await nextTick()
     expect(wrapper.find('[data-testid="command-palette"]').exists()).toBe(true)
+  })
+
+  it('Strg+K oeffnet die Command-Palette (erst nach dem ersten Oeffnen gemountet)', async () => {
+    await router.push('/')
+    const wrapper = mount(AppShell, {
+      attachTo: document.body,
+      global: {
+        plugins: [router, createPinia(), i18n],
+        stubs: { CommandPalette: commandPaletteStub },
+      },
+    })
+    expect(wrapper.find('[data-testid="command-palette"]').exists()).toBe(false)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="command-palette"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('zeigt den globalen Undo-Toast in der Huelle, solange ein Abbruch aussteht (#1795)', async () => {
+    await router.push('/')
+    const wrapper = mount(AppShell, {
+      global: { plugins: [router, createPinia(), i18n] },
+    })
+    const cancelAction = useCancelAction()
+    expect(wrapper.find('[data-testid="shell-undo-toast"]').exists()).toBe(false)
+
+    cancelAction.cancel('run_1')
+    await nextTick()
+    expect(wrapper.find('[data-testid="shell-undo-toast"]').exists()).toBe(true)
+
+    cancelAction.undo()
+    await nextTick()
+    expect(wrapper.find('[data-testid="shell-undo-toast"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('rendert Standard-Sidebar-Slot (Sidebar-Komponente)', async () => {

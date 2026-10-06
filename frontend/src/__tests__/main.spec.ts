@@ -17,6 +17,11 @@ vi.mock('../composables/useDensity', () => ({
   useDensity: vi.fn(() => ({ applyOnMount: vi.fn() })),
 }))
 
+const useThemeMock = vi.hoisted(() => vi.fn())
+vi.mock('../composables/useTheme', () => ({
+  useTheme: useThemeMock,
+}))
+
 vi.mock('../router', () => ({
   default: { install: vi.fn() },
 }))
@@ -66,6 +71,7 @@ describe('main.ts Bootstrap', () => {
   // zu lesen.
   let initFrontendTracingCallCount = -1
   let ensureInitCallCount = -1
+  let useThemeCallCount = -1
 
   beforeAll(async () => {
     // Stelle sicher, dass #app im DOM vorhanden ist
@@ -81,17 +87,19 @@ describe('main.ts Bootstrap', () => {
     const { initFrontendTracing } = await import('../observability/tracing')
     initFrontendTracingCallCount = (initFrontendTracing as ReturnType<typeof vi.fn>).mock.calls.length
     ensureInitCallCount = authMock.ensureInit.mock.calls.length
+    useThemeCallCount = useThemeMock.mock.calls.length
   })
 
   it('startet den Auth-Store genau einmal (#1617)', () => {
     expect(ensureInitCallCount).toBe(1)
   })
 
-  // Block B1 (18.08.2026): Agora ist dark-first. Der Wert wird zweimal
-  // gesetzt — einmal inline in index.html vor dem ersten Paint, damit der
-  // Grund nicht hell aufblitzt, und einmal hier. Beide muessen "dark" sagen.
-  it('setzt data-theme="dark" auf <html>', () => {
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  // #1795: Hell/Dunkel folgt dem System bzw. der gespeicherten Wahl. Der Wert
+  // wird zweimal gesetzt — inline in index.html vor dem ersten Paint (kein
+  // Aufblitzen) und hier ueber useTheme(), bevor die App mountet. Die Logik
+  // selbst deckt useTheme.spec.ts ab.
+  it('initialisiert das Theme genau einmal über useTheme() (#1795)', () => {
+    expect(useThemeCallCount).toBe(1)
   })
 
   it('setzt data-ui-version auf <html> (nicht null)', () => {

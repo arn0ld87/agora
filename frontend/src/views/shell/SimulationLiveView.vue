@@ -57,7 +57,6 @@ import {
   formatElapsed,
   formatSecondsPerRound,
 } from '@/composables/useSimulationLiveMetrics'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
 import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
@@ -248,7 +247,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppShell>
+  <div>
     <PageHeader :title="t('step3.live.title')" />
     <div class="sl-root" :data-testid="SimulationLiveTestId.root">
       <header class="sl-header" role="status" :aria-label="t('step3.live.title')">
@@ -400,7 +399,7 @@ onBeforeUnmount(() => {
         </aside>
       </div>
     </div>
-  </AppShell>
+  </div>
 </template>
 
 <style scoped>

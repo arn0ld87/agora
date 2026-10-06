@@ -8,7 +8,7 @@ import { useOperatorAccess } from './useOperatorAccess'
 import type { RunDetail } from '../contracts/runsContract'
 import type { Report } from '../contracts/reportContract'
 import type { ProjectResponse } from '../api/graph'
-import type { NextAction, ShelfFilter, ShelfJobRow, ShelfObject } from '../types/shelf'
+import type { NextAction, ShelfFilter, ShelfJobRow, ShelfObject, ShelfSource } from '../types/shelf'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
 type TranslateExists = (key: string) => boolean
@@ -32,6 +32,14 @@ type TranslateExists = (key: string) => boolean
 function linkedString(run: RunDetail, key: string): string | null {
   const v = (run.linked_ids as Record<string, unknown>)[key]
   return typeof v === 'string' && v ? v : null
+}
+
+/** `termination_reason` steht je nach Endpunkt am Job selbst oder in dessen `metadata`. */
+function terminationReasonOf(run: RunDetail): string | null {
+  const top = run.termination_reason
+  if (typeof top === 'string' && top) return top
+  const meta = run.metadata?.termination_reason
+  return typeof meta === 'string' && meta ? meta : null
 }
 
 /** Vorhaben-Schluessel eines Jobs: sim_ vor proj_, sonst eigene run_id. */
@@ -283,6 +291,7 @@ export function buildShelfObjects(
         messageKey: j.message_key,
         updatedAt: j.updated_at,
         linkedIds: j.linked_ids as Record<string, unknown>,
+        terminationReason: terminationReasonOf(j),
       })),
     })
   }
@@ -301,6 +310,7 @@ export function buildShelfObjects(
       updatedAt: r.completed_at || r.created_at || '',
       metaId: r.report_id,
       simulationId: r.simulation_id || null,
+      reportStatus: r.status,
       nextAction: {
         label: t('shelf.action.readReport'),
         to: { name: 'StepReport', params: { reportId: r.report_id } },
@@ -362,6 +372,7 @@ export function useShelf(t: Translate, te?: TranslateExists) {
   const filter = ref<ShelfFilter>('alle')
   const loading = ref(false)
   const error = ref('')
+  const unavailableSources = ref<ShelfSource[]>([])
 
   const filtered = computed(() => {
     if (filter.value === 'alle' || filter.value === 'jobs') return objects.value
@@ -410,6 +421,15 @@ export function useShelf(t: Translate, te?: TranslateExists) {
         : []
     const failures = [runsRes, reportsRes, projectsRes, templatesRes].filter((r) => r.status === 'rejected').length
     if (failures > 0) error.value = t('shelf.partialLoad', { n: failures })
+    // Je Quelle festhalten, was NICHT geladen wurde — wer zaehlt (Seitenleiste),
+    // darf eine fehlende Quelle nicht als „0“ ausgeben. Die Persona-Bibliothek
+    // wird ohne Betreiber-Zugang gar nicht erst angefragt: ebenfalls unbekannt.
+    const unavailable: ShelfSource[] = []
+    if (runsRes.status === 'rejected') unavailable.push('runs')
+    if (reportsRes.status === 'rejected') unavailable.push('reports')
+    if (projectsRes.status === 'rejected') unavailable.push('projects')
+    if (templatesRes.status === 'rejected' || !operatorAccess.value) unavailable.push('templates')
+    unavailableSources.value = unavailable
 
     objects.value = buildShelfObjects(runs, Array.isArray(reports) ? reports : [], Array.isArray(projects) ? projects : [], Array.isArray(templates) ? templates : [], t, te)
     jobs.value = runs
@@ -426,5 +446,5 @@ export function useShelf(t: Translate, te?: TranslateExists) {
     loading.value = false
   }
 
-  return { objects, jobs, filter, filtered, counts, activeObjects, loading, error, reload }
+  return { objects, jobs, filter, filtered, counts, activeObjects, loading, error, unavailableSources, reload }
 }

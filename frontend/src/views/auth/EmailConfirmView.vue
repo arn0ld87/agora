@@ -80,8 +80,8 @@ onMounted(async () => {
 }
 
 .auth-card {
-  background: var(--color-surface, #1e1e2e);
-  border: 1px solid var(--color-border, #313244);
+  background: var(--s2);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg, 12px);
   padding: var(--space-8, 2rem);
   width: 100%;
@@ -95,24 +95,24 @@ onMounted(async () => {
 }
 
 .auth-checking {
-  color: var(--color-text-muted, #a6adc8);
+  color: var(--fg2);
   font-size: var(--text-sm, 0.875rem);
 }
 
 .auth-error {
-  color: var(--color-error, #f38ba8);
+  color: var(--err);
   font-size: var(--text-sm, 0.875rem);
   margin-bottom: var(--space-4, 1rem);
   padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
-  background: var(--color-error-bg, rgba(243, 139, 168, 0.1));
+  background: var(--err-soft);
   border-radius: var(--radius-sm, 6px);
 }
 
 .auth-success {
-  color: var(--color-success, #a6e3a1);
+  color: var(--ok);
   font-size: var(--text-sm, 0.875rem);
   padding: var(--space-3, 0.75rem);
-  background: var(--color-success-bg, rgba(166, 227, 161, 0.1));
+  background: var(--ok-soft);
   border-radius: var(--radius-sm, 6px);
 }
 
@@ -122,12 +122,12 @@ onMounted(async () => {
 }
 
 .auth-links a {
-  color: var(--color-accent, #89b4fa);
+  color: var(--acc-text);
   text-decoration: underline;
 }
 
 .auth-links a:focus-visible {
-  outline: 2px solid var(--color-accent, #89b4fa);
+  outline: 2px solid var(--acc-text);
   outline-offset: 2px;
 }
 </style>

@@ -7,6 +7,9 @@
    Namen aus tokens-v3.css; diese Datei schrumpft mit jedem Umbau-PR und
    verschwindet mit dem letzten Legacy-View (Redesign-PR 10).
 
+   Seit dem Frontend-Umbau (Issue 1795) liegen die Werte in tokens-umbau.css; --fg, --ok, --warn und
+   --err (je mit -soft) werden dort definiert und nicht mehr hier.
+
    Regel: Wer hier einen Alias braucht, der noch nicht existiert, hat den
    falschen Token gewählt — nicht die Datei erweitern.
 
@@ -20,18 +23,17 @@
   --brand-mint: var(--status-teal);
   --brand-violet: var(--status-purple);
   /* ink */
-  --ink-800: #a89e94;
-  --ink-900: #d9d2c9;
+  --ink-800: var(--fg2);
+  --ink-900: var(--fg);
   /* bg */
   --bg: var(--surface-base);
   --bg-sunken: var(--surface-canvas);
   --bg-glass: var(--surface-translucent);
-  --bg-glass-hi: rgba(27,24,21,0.85);
+  --bg-glass-hi: var(--surface-glass-strong);
   --bg-panel: var(--surface-tint);
   --bg-panel-2: var(--surface-elevated);
   --bg-inverse: var(--text-primary);
   /* fg */
-  --fg: var(--text-primary);
   --fg-body: var(--text-primary);
   --fg-muted: var(--text-secondary);
   --fg-meta: var(--text-tertiary);
@@ -47,15 +49,7 @@
   /* info */
   --info: var(--accent);
   --info-soft: var(--accent-tint-bg);
-  /* ok */
-  --ok: var(--status-green);
-  --ok-soft: var(--status-green-bg);
-  /* warn */
-  --warn: var(--status-orange);
-  --warn-soft: var(--status-orange-bg);
-  /* err */
-  --err: var(--status-red);
-  --err-soft: var(--status-red-bg);
+  /* ok / warn / err: stehen in tokens-umbau.css (Zustandsfarben) */
   /* shadow */
   --shadow-glass: var(--shadow-2);
   --shadow-popover: var(--shadow-3);

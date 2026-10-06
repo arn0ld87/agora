@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 const pipeline = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -50,6 +51,7 @@ import StepGraphBuildView from '../StepGraphBuildView.vue'
 
 describe('StepGraphBuildView', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     pipeline.degradations = { schema_version: 1, events: [] }
     pipeline.graphIncomplete = false
@@ -62,7 +64,6 @@ describe('StepGraphBuildView', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -94,7 +95,6 @@ describe('StepGraphBuildView', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -115,7 +115,6 @@ describe('StepGraphBuildView', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -138,7 +137,6 @@ describe('StepGraphBuildView', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -175,7 +173,6 @@ describe('StepGraphBuildView', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -214,7 +211,6 @@ describe('StepGraphBuildView', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -244,7 +240,6 @@ describe('StepGraphBuildView', () => {
         global: {
           mocks: { $t: (key: any) => key },
           stubs: {
-            AppShell: { template: '<main><slot /></main>' },
             PageHeader: { template: '<header><slot /></header>' },
             PipelineStepper: true,
             StepModelOverrideChip: true,

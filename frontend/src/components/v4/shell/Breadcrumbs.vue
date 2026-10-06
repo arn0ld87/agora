@@ -16,14 +16,23 @@
           v-if="idx !== resolvedCrumbs.length - 1 && crumb.to"
           :to="crumb.to"
           class="breadcrumbs__link"
-        >{{ crumb.label }}</RouterLink><template v-else>{{ crumb.label }}</template></li>
+        >{{ crumb.label }}</RouterLink><template v-else>{{ crumb.label }}</template><button
+          v-if="crumb.ident"
+          type="button"
+          class="breadcrumbs__ident"
+          data-testid="breadcrumb-ident"
+          :aria-label="t('topbar.copyIdent', { ident: crumb.ident })"
+          :title="t('topbar.copyIdent', { ident: crumb.ident })"
+          @click="copyIdent(crumb.ident)"
+        >{{ crumb.ident }}</button></li>
       </template>
     </ol>
+    <span class="breadcrumbs__status" aria-live="polite" aria-atomic="true" data-testid="breadcrumb-status">{{ copyStatus }}</span>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -31,11 +40,15 @@ import { useI18n } from 'vue-i18n'
 export interface BreadcrumbItem {
   label: string
   path?: string
+  /** Technische Kennung (sim_…, report_…, proj_…): erscheint als kleine,
+   *  kopierbare Marke neben dem Titel. */
+  ident?: string
 }
 
 interface InternalCrumb {
   label: string
   to?: string
+  ident?: string
 }
 
 const props = withDefaults(
@@ -66,10 +79,30 @@ const derivedCrumbs = computed<InternalCrumb[]>(() =>
 const resolvedCrumbs = computed<InternalCrumb[]>(() => {
   if (props.items) return props.items
   if (props.crumbs && props.crumbs.length > 0) {
-    return props.crumbs.map((c) => ({ label: c.label, to: c.path }))
+    return props.crumbs.map((c) => ({ label: c.label, to: c.path, ident: c.ident }))
   }
   return derivedCrumbs.value
 })
+
+/** Rueckmeldung fuer Screenreader (role=status) und Sehende (kurzer Text). */
+const copyStatus = ref('')
+let statusTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyIdent(ident: string): Promise<void> {
+  let ok: boolean
+  try {
+    await navigator.clipboard.writeText(ident)
+    ok = true
+  } catch {
+    ok = false
+  }
+  copyStatus.value = ok ? t('topbar.identCopied') : t('topbar.identCopyFailed')
+  if (statusTimer !== null) clearTimeout(statusTimer)
+  statusTimer = setTimeout(() => {
+    copyStatus.value = ''
+    statusTimer = null
+  }, 2500)
+}
 </script>
 
 <style scoped>
@@ -113,8 +146,40 @@ const resolvedCrumbs = computed<InternalCrumb[]>(() => {
   text-decoration: underline;
 }
 
+.breadcrumbs__ident {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--ag-r-6, 6px);
+  background: var(--s2, transparent);
+  color: var(--fg3, var(--text-secondary));
+  font-family: var(--ag-font-mono, var(--font-mono));
+  font-size: 11px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.breadcrumbs__ident:hover {
+  background: var(--s3, var(--surface-hover));
+  color: var(--fg, var(--text-primary));
+}
+
+.breadcrumbs__ident:focus-visible {
+  outline: 2px solid var(--acc, var(--accent));
+  outline-offset: 2px;
+}
+
+.breadcrumbs__status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .breadcrumbs__link:focus-visible {
-  outline: 2px solid var(--accent, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 2px;
 }

@@ -27,6 +27,11 @@ const lsMock = (() => {
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
 
+// Zaehler und Systemzustand haben eigene Specs (useLibraryCounts.spec, Sidebar.counts.spec):
+// hier laedt die Seitenleiste weder die Ablage noch /api/status.
+vi.mock('@/composables/useLibraryCounts', async () => (await import('./sidebarMocks')).libraryCountsMock)
+vi.mock('@/composables/useSidebarSystem', async () => (await import('./sidebarMocks')).sidebarSystemMock)
+
 import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
@@ -102,15 +107,23 @@ describe('Sidebar', () => {
     expect(wrapper.find('img').exists()).toBe(false)
   })
 
-  it('rendert Workspace-Nav-Items (Dashboard, Runs vorhanden)', async () => {
+  it('rendert die Gliederung Bibliothek / Im Blick / Werkzeuge mit allen Eintraegen (#1795)', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },
     })
     const text = wrapper.text()
-    // DE-Locale: dashboard="Dashboard", runs="Runs"
-    expect(text).toContain('Dashboard')
-    expect(text).toContain('Runs')
+    for (const label of [
+      'Bibliothek', 'Läufe', 'Graphen', 'Personasätze',
+      'Im Blick', 'Läuft gerade', 'Braucht dich',
+      'Werkzeuge', 'Vergleich', 'Aktivität',
+      'System', 'Einstellungen',
+    ]) {
+      expect(text).toContain(label)
+    }
+    // Dashboard und Runs sind keine Eintraege mehr (ihre Adressen bleiben bestehen).
+    expect(text).not.toContain('Dashboard')
+    expect(text).not.toContain('Runs')
   })
 
   it('rendert Settings-Gruppe (DE: "Einstellungen")', async () => {
@@ -122,15 +135,89 @@ describe('Sidebar', () => {
     expect(wrapper.text()).toContain('Einstellungen')
   })
 
-  it('Active-State via Router: Dashboard-Route markiert Dashboard-Item als aktiv', async () => {
-    await router.push('/dashboard')
+  it('Active-State: auf der Ablage mit Filter lauf ist genau "Läufe" aktiv und traegt aria-current', async () => {
+    await router.push({ name: 'Shelf', query: { filter: 'lauf' } })
     await router.isReady()
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },
     })
-    // SidebarItem nutzt useLink (isExactActive/isActive) fuer active-Klasse
-    const activeItems = wrapper.findAll('.sidebar-item--active')
-    expect(activeItems.length).toBeGreaterThan(0)
+    // „Läuft gerade“ und „Braucht dich“ teilen sich die Adresse, sind aber nie selbst aktiv.
+    const active = wrapper.findAll('.sidebar-item--active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.text()).toContain('Läufe')
+    expect(active[0]?.attributes('aria-current')).toBe('page')
+  })
+
+  it.each([
+    { query: 'graph', label: 'Graphen' },
+    { query: 'personasatz', label: 'Personasätze' },
+    { query: 'jobs', label: 'Aktivität' },
+  ])('Active-State: Ablage-Filter $query markiert "$label"', async ({ query, label }) => {
+    await router.push({ name: 'Shelf', query: { filter: query } })
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const active = wrapper.findAll('.sidebar-item--active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.text()).toContain(label)
+  })
+
+  it('Active-State: ein geoeffneter Lauf (ShelfObject) markiert "Läufe"', async () => {
+    await router.push({ name: 'ShelfObject', params: { kind: 'lauf', objectId: 'sim_1' } })
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const active = wrapper.findAll('.sidebar-item--active')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.text()).toContain('Läufe')
+  })
+
+  it('Eintraege verlinken auf bestehende Adressen (Ablage-Filter, Vergleich-Fallback)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const hrefs = wrapper
+      .findAll('a.sidebar-item')
+      .map((a) => [a.text().replace(/\d+$/, '').trim(), a.attributes('href')])
+    const byLabel = Object.fromEntries(hrefs)
+    expect(byLabel['▶Läufe']).toBe('/ablage?filter=lauf')
+    expect(byLabel['◇Graphen']).toBe('/ablage?filter=graph')
+    expect(byLabel['◎Personasätze']).toBe('/ablage?filter=personasatz')
+    expect(byLabel['◌Läuft gerade']).toBe('/ablage?filter=lauf')
+    expect(byLabel['!Braucht dich']).toBe('/ablage?filter=lauf')
+    expect(byLabel['≡Aktivität']).toBe('/ablage?filter=jobs')
+    // Ohne bekannte Simulation: nächstliegende bestehende Adresse = Läufe-Liste.
+    expect(byLabel['⇄Vergleich']).toBe('/ablage?filter=lauf')
+    // System: die Seite, auf der der Systemzustand heute steht.
+    expect(byLabel['System' + 'Alle Dienste erreichbar']).toBe('/dashboard')
+  })
+
+  it('zeigt die Zaehler neutral neben den Eintraegen und haengt sie in den zugaenglichen Namen', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const counts = wrapper.findAll('.sidebar-item__count').map((c) => c.text())
+    // Bibliothek 9/3/2, Im Blick 0/2, Aktivität 42 (Stub); Vergleich hat keinen Zaehler.
+    expect(counts).toEqual(['9', '3', '2', '0', '2', '42'])
+  })
+
+  it('eingeklappt: nur Symbole, aber zugaengliche Namen mit Zaehler und kein Gruppentitel', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      props: { collapsed: true },
+      global: { plugins: [router, i18n] },
+    })
+    expect(wrapper.find('.sidebar__group-title').exists()).toBe(false)
+    expect(wrapper.find('.sidebar-item__label').exists()).toBe(false)
+    const runs = wrapper.findAll('a.sidebar-item').find((a) => a.attributes('aria-label')?.startsWith('Läufe'))
+    expect(runs?.attributes('aria-label')).toBe('Läufe, 9')
+    expect(runs?.attributes('title')).toBe('Läufe, 9')
+    const system = wrapper.findAll('a.sidebar-item').find((a) => a.attributes('aria-label')?.startsWith('System'))
+    expect(system?.attributes('aria-label')).toBe('System: Alle Dienste erreichbar')
+    // Einstellungen: ein Symbol zur ersten Einstellungsseite statt der Gruppe.
+    expect(wrapper.find('.sidebar-group').exists()).toBe(false)
   })
 
   it('kein active-Item wenn Route "/" (redirect, kein Exact-Match auf Item)', async () => {

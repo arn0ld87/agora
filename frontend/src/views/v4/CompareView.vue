@@ -6,7 +6,7 @@
   Laedt availableBranches via listSimulationBranches, reicht beides als Props weiter.
 -->
 <template>
-  <AppShell :breadcrumbs="crumbs">
+  <div>
     <PageHeader :title="$t('views.compare.title')" />
 
     <div v-if="loadError" class="compare-view-error" role="alert">
@@ -20,16 +20,16 @@
       :simulation-id="simulationId"
       :available-branches="branches"
     />
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import BranchComparePanel from '@/components/compare/BranchComparePanel.vue'
 import { listSimulationBranches } from '@/api/simulation'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{ simulationId: string }>()
 
@@ -67,6 +67,8 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+useShellBreadcrumbs(crumbs)
 </script>
 
 <style scoped>

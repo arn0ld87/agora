@@ -15,6 +15,8 @@ import { createI18n } from 'vue-i18n'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import { makeTestRouter } from './testRouter'
+import { defineComponent, h } from 'vue'
+import AppShell from '../AppShell.vue'
 import DemoPreviewStaticView from '../DemoPreviewStaticView.vue'
 
 const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
@@ -28,11 +30,16 @@ async function mountStaticView(routeName: string) {
   await router.push({ name: routeName })
   await router.isReady()
 
-  return mount(DemoPreviewStaticView, { global: { plugins: [router, pinia, i18n] } })
+  // Die Huelle liegt seit #1795 zentral in App.vue um die Ansicht (mit
+  // demo-frame=false fuer die statische Vorschau) — hier nachgestellt.
+  const Host = defineComponent({
+    setup: () => () => h(AppShell, { demoFrame: false }, { default: () => h(DemoPreviewStaticView) }),
+  })
+  return mount(Host, { global: { plugins: [router, pinia, i18n] } })
 }
 
 describe('DemoPreviewStaticView', () => {
-  it('rendert AppShell (Sidebar bleibt bedienbar, kein inert)', async () => {
+  it('liegt in der zentralen Huelle (Sidebar bleibt bedienbar, kein inert)', async () => {
     const wrapper = await mountStaticView('SettingsApiKeys')
     expect(wrapper.find('.app-shell').exists()).toBe(true)
     expect(wrapper.find('.app-shell__sidebar').exists()).toBe(true)

@@ -901,10 +901,29 @@
   },
   "sidebar": {
     "title": "Hauptnavigation",
-    "nav": {
-      "dashboard": "Dashboard",
-      "runs": "Runs"
+    "groups": {
+      "library": "Bibliothek",
+      "focus": "Im Blick",
+      "tools": "Werkzeuge"
     },
+    "nav": {
+      "runs": "Läufe",
+      "graphs": "Graphen",
+      "personas": "Personasätze",
+      "running": "Läuft gerade",
+      "attention": "Braucht dich",
+      "compare": "Vergleich",
+      "activity": "Aktivität"
+    },
+    "system": {
+      "label": "System",
+      "state": {
+        "ok": "Alle Dienste erreichbar",
+        "err": "Ein Dienst ist nicht erreichbar",
+        "unknown": "Systemzustand unbekannt"
+      }
+    },
+    "countsError": "Zähler konnten nicht vollständig geladen werden.",
     "settings": {
       "label": "Einstellungen",
       "general": "Allgemein",
@@ -983,7 +1002,23 @@
   "topbar": {
     "search": "Suche",
     "openNavigation": "Navigation öffnen",
+    "searchShort": "Suchen (Cmd+K)",
+    "newRun": "Neuer Lauf",
+    "console": "Konsole",
+    "consoleToggle": "Konsole ein- oder ausblenden",
+    "consoleUnread": "{count} ungelesene Fehler",
+    "copyIdent": "Kennung {ident} kopieren",
+    "identCopied": "Kennung kopiert",
+    "identCopyFailed": "Kennung konnte nicht kopiert werden",
     "userMenu": {
+      "workspaceLocal": "Lokaler Arbeitsbereich",
+      "appearance": "Darstellung",
+      "theme": {
+        "system": "System",
+        "light": "Hell",
+        "dark": "Dunkel"
+      },
+      "densityCompact": "Kompakte Dichte",
       "trigger": "Nutzermenü, angemeldet als {name}",
       "triggerUnknown": "Nutzermenü öffnen",
       "profile": "Profil",
@@ -1014,7 +1049,13 @@
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
       "reconnect": "Erneut verbinden",
-      "reconnecting": "Verbindung wird wiederhergestellt…"
+      "resize": "Höhe der Konsole ändern (Pfeil hoch/runter)",
+      "levelFilter": "Stufe filtern",
+      "reconnecting": "Verbindung wird wiederhergestellt…",
+      "copy": "Kopieren",
+      "copyTitle": "Sichtbare Zeilen in die Zwischenablage kopieren",
+      "copied": "Kopiert",
+      "copyFailed": "Kopieren fehlgeschlagen. Die Zwischenablage ist nicht verfügbar."
     }
   },
   "settings": {

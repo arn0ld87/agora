@@ -9,7 +9,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
@@ -78,39 +77,37 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppShell>
-    <SettingsOverlay>
-      <PageHeader :title="t('profileSettings.title')" :subtitle="t('profileSettings.subtitle')">
-        <template #right>
-          <Button variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
-            {{ t('profileSettings.reopenOnboardingBtn') }}
-          </Button>
-        </template>
-      </PageHeader>
+  <SettingsOverlay>
+    <PageHeader :title="t('profileSettings.title')" :subtitle="t('profileSettings.subtitle')">
+      <template #right>
+        <Button variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
+          {{ t('profileSettings.reopenOnboardingBtn') }}
+        </Button>
+      </template>
+    </PageHeader>
 
-      <Card>
-        <p
-          v-if="saveError"
-          class="settings-profile__banner settings-profile__banner--error"
-          role="alert"
-        >
-          {{ saveError }}
-        </p>
-        <p v-if="saveSuccess" class="settings-profile__banner settings-profile__banner--success">
-          {{ t('profileSettings.saveSuccess') }}
-        </p>
+    <Card>
+      <p
+        v-if="saveError"
+        class="settings-profile__banner settings-profile__banner--error"
+        role="alert"
+      >
+        {{ saveError }}
+      </p>
+      <p v-if="saveSuccess" class="settings-profile__banner settings-profile__banner--success">
+        {{ t('profileSettings.saveSuccess') }}
+      </p>
 
-        <ProfileForm
-          :profile="store.profile"
-          :avatar-url="avatarImageUrl"
-          :saving="saving"
-          @save="handleSave"
-          @upload-avatar="handleUploadAvatar"
-          @delete-avatar="handleDeleteAvatar"
-        />
-      </Card>
-    </SettingsOverlay>
-  </AppShell>
+      <ProfileForm
+        :profile="store.profile"
+        :avatar-url="avatarImageUrl"
+        :saving="saving"
+        @save="handleSave"
+        @upload-avatar="handleUploadAvatar"
+        @delete-avatar="handleDeleteAvatar"
+      />
+    </Card>
+  </SettingsOverlay>
 </template>
 
 <style scoped>

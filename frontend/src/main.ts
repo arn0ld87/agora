@@ -6,17 +6,18 @@ import i18n from './i18n'
 import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
+import { useTheme } from './composables/useTheme'
 import { useAuthStore } from './store/auth'
 
-// Self-hosted Webfonts (Block B1): Archivo traegt die Oberflaeche,
-// Newsreader den Berichts-Fliesstext inkl. kursiver Zitate.
-// Geist Mono bleibt lokal in fonts.css registriert.
-import '@fontsource-variable/archivo/wght.css'
+// Self-hosted Webfonts: Newsreader traegt den Berichts-Fliesstext inkl.
+// kursiver Zitate. Die Oberflaeche nutzt seit #1795 die Systemschrift,
+// Archivo ist entfallen. Geist Mono bleibt lokal in fonts.css registriert.
 import '@fontsource-variable/newsreader/wght.css'
 import '@fontsource-variable/newsreader/wght-italic.css'
 
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
+import './assets/styles/tokens-umbau.css'
 import './assets/styles/tokens-compat.css'
 import './assets/styles/global.css'
 import './assets/styles/states.css'
@@ -24,7 +25,10 @@ import './assets/styles/states.css'
 // Observability: initialise before Vue so the first fetch spans are captured.
 initFrontendTracing()
 
-document.documentElement.setAttribute('data-theme', 'dark')
+// Theme: data-theme + color-scheme folgen dem System bzw. der gespeicherten
+// Wahl (#1795). Vor app.mount() aufrufen; index.html setzt es vor dem ersten
+// Paint mit derselben Logik.
+useTheme()
 
 // Density: data-density auf <html> setzen bevor Vue mountet → kein FOUC.
 // Slice FE-Redesign-6 · 2026-05-15

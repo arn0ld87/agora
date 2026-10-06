@@ -200,11 +200,14 @@ async function readTabStop(page: Page): Promise<TabStopProbe> {
 
     return {
       kind: 'stop',
+      // Dokumentkoordinaten statt Viewportkoordinaten: Scrollt der Browser beim
+      // Tab das Dokument, verschiebt sich sonst nur der spaeter gemessene Stop,
+      // und zwei untereinander liegende Stops sehen wie ein Sprung nach oben aus.
       rect: {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
+        top: rect.top + window.scrollY,
+        bottom: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        right: rect.right + window.scrollX,
         width: rect.width,
         height: rect.height,
       },

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 // Regressionstest fuer B-09/B-27: Runden/Tage aus Schritt 2 kamen in Schritt 3
 // nie an. Beide Views werden hier gemeinsam geprueft, weil der Fehler nicht in
@@ -50,7 +51,6 @@ function mountEnvSetup() {
       stubs: {
         // Slot-tragende Huellen muessen ihre Slots rendern, sonst sieht der
         // Test die zu pruefenden Kinder nicht.
-        AppShell: { template: '<main><slot /></main>' },
         PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
         Step2EnvSetup: {
           name: 'Step2EnvSetup',
@@ -82,6 +82,7 @@ function mountSimulation() {
 }
 
 beforeEach(() => {
+    setActivePinia(createPinia())
   routerPush.mockClear()
   route.name = 'StepSimulation'
   route.query = {}

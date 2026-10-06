@@ -152,7 +152,6 @@ const i18n = createI18n({
 })
 
 const SHELL_STUBS = {
-  AppShell: { template: '<main><slot /></main>' },
   PageHeader: { template: '<header><slot /></header>' },
 }
 

@@ -17,7 +17,6 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
@@ -361,7 +360,7 @@ function errorMessage(err: unknown): string {
 </script>
 
 <template>
-  <AppShell>
+  <div>
     <SettingsOverlay>
     <PageHeader :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
       <!-- PageHeader rendert ausschliesslich den benannten Slot "right";
@@ -761,7 +760,7 @@ function errorMessage(err: unknown): string {
       </div>
     </div>
     </SettingsOverlay>
-  </AppShell>
+  </div>
 </template>
 
 <style scoped>

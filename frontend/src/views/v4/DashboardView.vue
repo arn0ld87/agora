@@ -6,7 +6,6 @@
  * leitet Stats lokal ab und propagiert nach unten in die Sub-Components.
  */
 import { computed, onMounted, onUnmounted } from 'vue'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import HeroNewRun from '@/components/v4/dashboard/HeroNewRun.vue'
 import StatsRow from '@/components/v4/dashboard/StatsRow.vue'
@@ -17,6 +16,7 @@ import QuickActionsRow from '@/components/v4/dashboard/QuickActionsRow.vue'
 import { useRunsPolling } from '@/composables/useRunsPolling'
 import { useSystemStatus } from '@/composables/useSystemStatus'
 import type { RunDetail } from '@/contracts/runsContract'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const BREADCRUMBS = [{ label: 'Dashboard' }]
 
@@ -91,10 +91,12 @@ const personasInFlight = computed(() => {
   }
   return total
 })
+
+useShellBreadcrumbs(BREADCRUMBS)
 </script>
 
 <template>
-  <AppShell :breadcrumbs="BREADCRUMBS">
+  <div>
     <PageHeader
       :title="$t('dashboard.title')"
       :subtitle="$t('dashboard.subtitle')"
@@ -129,7 +131,7 @@ const personasInFlight = computed(() => {
 
       <QuickActionsRow />
     </div>
-  </AppShell>
+  </div>
 </template>
 
 <style scoped>

@@ -57,9 +57,45 @@
             {{ t('topbar.userMenu.settings') }}
           </DropdownMenuItem>
         </template>
+        <!-- Einmandantig: ein Workspace-Eintrag, nur Anzeige. Mit Session
+             zeigt die Workspace-Liste oben den echten Workspace. -->
+        <p
+          v-if="!hasSession"
+          class="user-menu__account"
+          data-testid="user-menu-workspace-local"
+        >{{ t('topbar.userMenu.workspaces') }}: {{ t('topbar.userMenu.workspaceLocal') }}</p>
         <DropdownMenuItem @select="() => { close(); openHelp() }">
           {{ t('topbar.userMenu.help') }}
         </DropdownMenuItem>
+        <div
+          class="user-menu__appearance"
+          role="group"
+          :aria-label="t('topbar.userMenu.appearance')"
+          data-testid="user-menu-appearance"
+        >
+          <p class="user-menu__group-label" aria-hidden="true">{{ t('topbar.userMenu.appearance') }}</p>
+          <DropdownMenuItem
+            v-for="opt in THEME_OPTIONS"
+            :key="opt"
+            role="menuitemradio"
+            :aria-checked="themeChoice === opt"
+            :data-testid="`user-menu-theme-${opt}`"
+            @select="() => { close(); setThemeChoice(opt) }"
+          >
+            <span class="user-menu__check" aria-hidden="true">{{ themeChoice === opt ? '✓' : '' }}</span>
+            {{ t(`topbar.userMenu.theme.${opt}`) }}
+          </DropdownMenuItem>
+          <!-- Dichte bleibt bis Etappe 3 erreichbar (ex DensityToggle in der Leiste). -->
+          <DropdownMenuItem
+            role="menuitemcheckbox"
+            :aria-checked="density === 'compact'"
+            data-testid="user-menu-density"
+            @select="() => { close(); toggleDensity() }"
+          >
+            <span class="user-menu__check" aria-hidden="true">{{ density === 'compact' ? '✓' : '' }}</span>
+            {{ t('topbar.userMenu.densityCompact') }}
+          </DropdownMenuItem>
+        </div>
         <DropdownMenuItem
           v-if="hasSession"
           data-testid="user-menu-sign-out"
@@ -81,6 +117,8 @@ import DropdownMenuItem from '../v4/forms/DropdownMenuItem.vue'
 import { ShellTestId } from '../../contracts/testIds'
 import { useUserProfileStore } from '../../store/userProfile'
 import { useAuthStore } from '../../store/auth'
+import { useTheme, type ThemeChoice } from '../../composables/useTheme'
+import { useDensity } from '../../composables/useDensity'
 
 /**
  * UserMenu — das Nutzermenue oben rechts.
@@ -100,8 +138,12 @@ import { useAuthStore } from '../../store/auth'
 
 const HELP_URL = 'https://github.com/arn0ld87/agora#readme'
 
+const THEME_OPTIONS: ReadonlyArray<ThemeChoice> = ['system', 'light', 'dark']
+
 const { t } = useI18n()
 const router = useRouter()
+const { choice: themeChoice, setChoice: setThemeChoice } = useTheme()
+const { density, toggle: toggleDensity } = useDensity()
 const userProfileStore = useUserProfileStore()
 const auth = useAuthStore()
 
@@ -206,6 +248,14 @@ function openHelp(): void {
   border-bottom: 1px solid var(--hairline);
   padding-bottom: 4px;
   margin-bottom: 4px;
+}
+
+.user-menu__appearance {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hairline);
+  padding-top: 4px;
+  margin-top: 4px;
 }
 
 .user-menu__check {

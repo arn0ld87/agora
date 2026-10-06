@@ -1,0 +1,107 @@
+/* ============================================================
+   Agora — Tokens des Frontend-Umbaus (#1795, Etappe 1)
+   ============================================================
+   Quelle: docs/design/frontend-umbau/AgoraApp.dc.html (die Werte in
+   AgoraBausteine.dc.html sind identisch). Neutrales Graphit, Violett
+   (Farbton 293) als einziger Akzent, Zustandsfarben getrennt vom Akzent.
+   Der Entwurf kommt mit 26 Farb- und Schatten-Tokens aus; dazu kommen
+   Systemschrift, Festbreite und die Radien 6/8/10/12/16/Pille.
+
+   Dunkel steht auf :root und [data-theme="dark"], Hell auf
+   [data-theme="light"]. Schrift und Radien sind themenunabhängig.
+
+   Die alten Namen (tokens-v3.css, tokens-compat.css) zeigen per var() auf
+   diese Tokens. --fg, --ok, --warn und --err (je mit -soft) hießen vorher
+   schon in tokens-compat.css; die alten Definitionen sind dort entfernt.
+   ============================================================ */
+
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Flächen */
+  --s0: oklch(0.185 0.004 265);
+  --s1: oklch(0.215 0.004 265);
+  --s2: oklch(0.248 0.005 265);
+  --s3: oklch(0.29 0.006 265);
+  --s4: oklch(0.335 0.006 265);
+  --field: oklch(0.205 0.004 265);
+  --line: oklch(0.31 0.005 265);
+
+  /* Text */
+  --fg: oklch(0.96 0.003 265);
+  --fg2: oklch(0.8 0.006 265);
+  --fg3: oklch(0.7 0.008 265);
+
+  /* Akzent (Violett) */
+  --acc: oklch(0.55 0.2 293);
+  --acc-hover: oklch(0.6 0.2 293);
+  --acc-press: oklch(0.5 0.2 293);
+  --acc-text: oklch(0.78 0.13 293);
+  --acc-soft: oklch(0.55 0.2 293 / 0.24);
+  --acc-line: oklch(0.7 0.16 293 / 0.55);
+  --on-acc: #fff;
+
+  /* Zustände */
+  --ok: oklch(0.8 0.15 152);
+  --ok-soft: oklch(0.8 0.15 152 / 0.15);
+  --warn: oklch(0.86 0.15 88);
+  --warn-soft: oklch(0.86 0.15 88 / 0.15);
+  --err: oklch(0.74 0.17 25);
+  --err-soft: oklch(0.74 0.17 25 / 0.16);
+
+  /* Überlagerung */
+  --scrim: oklch(0.1 0.005 265 / 0.6);
+  --shadow-pop: 0 -8px 32px oklch(0 0 0 / 0.35);
+  --shadow-dlg: 0 24px 64px oklch(0 0 0 / 0.5), 0 0 0 1px oklch(1 0 0 / 0.06);
+
+  /* Schrift (themenunabhängig) */
+  --ag-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --ag-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Radien (themenunabhängig) */
+  --ag-r-6: 6px;
+  --ag-r-8: 8px;
+  --ag-r-10: 10px;
+  --ag-r-12: 12px;
+  --ag-r-16: 16px;
+  --ag-r-pill: 999px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --s0: oklch(0.972 0.002 265);
+  --s1: oklch(0.945 0.003 265);
+  --s2: oklch(1 0 0);
+  --s3: oklch(0.935 0.004 265);
+  --s4: oklch(0.9 0.005 265);
+  --field: oklch(0.972 0.002 265);
+  --line: oklch(0.9 0.004 265);
+
+  --fg: oklch(0.21 0.006 265);
+  --fg2: oklch(0.4 0.008 265);
+  --fg3: oklch(0.46 0.01 265);
+
+  --acc: oklch(0.5 0.2 293);
+  --acc-hover: oklch(0.45 0.2 293);
+  --acc-press: oklch(0.42 0.2 293);
+  --acc-text: oklch(0.47 0.2 293);
+  --acc-soft: oklch(0.5 0.2 293 / 0.12);
+  --acc-line: oklch(0.5 0.2 293 / 0.45);
+  --on-acc: #fff;
+
+  /* --ok und --err weichen vom Entwurf ab (0.5 / 0.52 → 0.46 / 0.48): Text in
+     diesen Farben auf der eigenen -soft-Fläche (Badges, Versionsmarken) lag
+     auf --s0/--s1/--s3 bei 4.0–4.5:1 und riss WCAG AA (axe color-contrast).
+     Jetzt ≥ 4.5:1 auf --s0 bis --s3; tokensUmbau.spec rechnet das nach. */
+  --ok: oklch(0.46 0.13 152);
+  --ok-soft: oklch(0.6 0.14 152 / 0.14);
+  --warn: oklch(0.52 0.11 70);
+  --warn-soft: oklch(0.82 0.14 85 / 0.3);
+  --err: oklch(0.48 0.19 25);
+  --err-soft: oklch(0.6 0.19 25 / 0.12);
+
+  --scrim: oklch(0.2 0.01 265 / 0.35);
+  --shadow-pop: 0 -6px 24px oklch(0.2 0.02 265 / 0.12);
+  --shadow-dlg: 0 20px 56px oklch(0.2 0.02 265 / 0.2), 0 0 0 1px oklch(0.2 0.02 265 / 0.06);
+}

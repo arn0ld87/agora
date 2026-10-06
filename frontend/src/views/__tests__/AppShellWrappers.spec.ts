@@ -8,7 +8,8 @@
  * `usage-totals` und `budget-exceeded-banner` nur in RunDetailView.vue
  * existieren.
  *
- * Prueft: mountet ohne Crash, AppShell wird gerendert.
+ * Prueft: mountet ohne Crash, bettet RunDetailView ein, setzt Brotkrumen in
+ * die zentrale Huelle (Shell-Store, #1795).
  *
  * Hinweis: DashboardView ist seit dem Workbench-Rebuild (2026-05-14) ein
  * eigener Spec unter src/views/v4/__tests__/DashboardView.spec.ts —
@@ -19,13 +20,6 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { makeTestRouter } from '@/components/v4/shell/__tests__/testRouter'
 
-vi.mock('@/components/v4/shell/AppShell.vue', () => ({
-  default: {
-    name: 'AppShell',
-    props: ['breadcrumbs'],
-    template: '<div class="app-shell-stub"><slot /></div>',
-  },
-}))
 vi.mock('@/components/v4/shell/PageHeader.vue', () => ({
   default: {
     name: 'PageHeader',
@@ -50,6 +44,7 @@ vi.mock('@/views/RunDetailView.vue', () => ({
 }))
 
 import RunDetailAppShellView from '../v4/RunDetailAppShellView.vue'
+import { useShellStore } from '@/stores/shell'
 
 async function mountView(component: object, path: string) {
   const router = makeTestRouter()
@@ -80,19 +75,6 @@ describe('RunDetailAppShellView', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert AppShell', async () => {
-    const router = makeTestRouter()
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    await router.push('/runs/abc-123')
-    await router.isReady()
-    const w = mount(RunDetailAppShellView, {
-      global: { plugins: [router, pinia] },
-    })
-    await flushPromises()
-    expect(w.find('.app-shell-stub').exists()).toBe(true)
-  })
-
   it('bettet RunDetailView ein', async () => {
     const router = makeTestRouter()
     const pinia = createPinia()
@@ -116,8 +98,7 @@ describe('RunDetailAppShellView', () => {
       global: { plugins: [router, pinia] },
     })
     await flushPromises()
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
+    const crumbs = useShellStore().breadcrumbs
     const labels = crumbs.map((c) => c.label)
     expect(labels).toContain('Runs')
     expect(labels).toContain('abc-123')

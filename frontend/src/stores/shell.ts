@@ -1,5 +1,13 @@
 import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
+import type { ShelfObject, ShelfSource } from '@/types/shelf'
+
+/** Geladener Ablage-Stand samt der Quellen, die dabei fehlten. */
+export interface ShelfSnapshot {
+  objects: ShelfObject[]
+  unavailable: ShelfSource[]
+}
 
 const KEYS = {
   sidebarCollapsed: 'agora.v4.shell.sidebarCollapsed',
@@ -32,6 +40,19 @@ export const useShellStore = defineStore('shell', () => {
 
   // Mobile-Nav — kein localStorage, soll bei jedem Reload geschlossen sein
   const mobileNavOpen = ref<boolean>(false)
+
+  // Brotkrumen der aktuellen Ansicht (#1795): gesetzt ueber
+  // useShellBreadcrumbs, gelesen von AppShell. Fluechtig, nie persistiert.
+  const breadcrumbs = ref<BreadcrumbItem[]>([])
+
+  // Laufende Ablage-Objekte fuer den Aktivitaets-Indikator in der Kopfleiste
+  // (#1795): ShelfView meldet sie, ShelfActivity liest sie. Fluechtig.
+  const activeObjects = ref<ShelfObject[]>([])
+
+  // Letzter geladener Stand der Ablage (#1795): ShelfView und die Zaehler der
+  // Seitenleiste schreiben ihn, die Seitenleiste liest ihn. Ein gemeinsamer
+  // Stand statt zweier Ladevorgaenge. null = noch nie geladen. Fluechtig.
+  const shelfSnapshot = ref<ShelfSnapshot | null>(null)
 
   watch(sidebarCollapsed, (v) => writeBool(KEYS.sidebarCollapsed, v))
   watch(settingsGroupOpen, (v) => writeBool(KEYS.settingsGroupOpen, v))
@@ -74,6 +95,9 @@ export const useShellStore = defineStore('shell', () => {
     settingsGroupOpen,
     inspectorOpen,
     mobileNavOpen,
+    breadcrumbs,
+    activeObjects,
+    shelfSnapshot,
     toggleSidebar,
     toggleSettingsGroup,
     toggleInspector,

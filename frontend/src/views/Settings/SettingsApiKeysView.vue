@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
@@ -121,7 +120,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppShell>
+  <div>
     <SettingsOverlay>
     <PageHeader
       :title="t('settings.v4.apiKeys.title')"
@@ -339,7 +338,7 @@ onMounted(() => {
       </div>
     </Teleport>
     </SettingsOverlay>
-  </AppShell>
+  </div>
 </template>
 
 <style scoped>

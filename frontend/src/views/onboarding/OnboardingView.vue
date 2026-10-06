@@ -23,7 +23,6 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Button from '@/components/v4/forms/Button.vue'
@@ -37,6 +36,7 @@ import type {
   OperatingMode,
   UserProfileUpdateRequest,
 } from '@/contracts/userProfileContract'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -278,10 +278,12 @@ onMounted(async () => {
   viewStep.value = store.onboarding.state?.current_step ?? 'welcome'
   selectedOperatingMode.value = store.onboarding.state?.operating_mode ?? null
 })
+
+useShellBreadcrumbs(() => [{ label: t('onboarding.wizard.title') }])
 </script>
 
 <template>
-  <AppShell :breadcrumbs="[{ label: t('onboarding.wizard.title') }]">
+  <div>
     <PageHeader :title="t('onboarding.wizard.title')" />
 
     <ol class="onboarding-steps" :aria-label="t('onboarding.wizard.progressLabel')">
@@ -493,7 +495,7 @@ onMounted(async () => {
       </div>
       </section>
     </Card>
-  </AppShell>
+  </div>
 </template>
 
 <style scoped>

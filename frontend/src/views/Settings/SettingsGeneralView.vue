@@ -14,7 +14,6 @@
  */
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
@@ -48,28 +47,26 @@ async function setWorkspaceDefault(aiRef: AiModelRef | null): Promise<void> {
 </script>
 
 <template>
-  <AppShell>
-    <SettingsOverlay>
-      <PageHeader
-        :title="t('settings.v4.general.title')"
-        :subtitle="t('settings.v4.general.subtitle')"
+  <SettingsOverlay>
+    <PageHeader
+      :title="t('settings.v4.general.title')"
+      :subtitle="t('settings.v4.general.subtitle')"
+    />
+
+    <LlmProfileManager style="margin-bottom: 16px;" />
+    <section class="settings-general__model-picker">
+      <label for="settings-general-model-picker">{{ t('settings.v4.general.workspaceDefaultModel') }}</label>
+      <AiModelPicker
+        id="settings-general-model-picker"
+        v-model="selectedModel"
+        mode="chat"
+        :allow-workspace-default="true"
+        @update:model-value="setWorkspaceDefault"
       />
+    </section>
 
-      <LlmProfileManager style="margin-bottom: 16px;" />
-      <section class="settings-general__model-picker">
-        <label for="settings-general-model-picker">{{ t('settings.v4.general.workspaceDefaultModel') }}</label>
-        <AiModelPicker
-          id="settings-general-model-picker"
-          v-model="selectedModel"
-          mode="chat"
-          :allow-workspace-default="true"
-          @update:model-value="setWorkspaceDefault"
-        />
-      </section>
-
-      <SettingsSectionPanel :allowed-sections="GENERAL_SETTINGS_SECTIONS" />
-    </SettingsOverlay>
-  </AppShell>
+    <SettingsSectionPanel :allowed-sections="GENERAL_SETTINGS_SECTIONS" />
+  </SettingsOverlay>
 </template>
 
 <style scoped>

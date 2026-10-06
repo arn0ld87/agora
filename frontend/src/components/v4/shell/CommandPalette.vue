@@ -157,7 +157,7 @@ function pickCommand(value: unknown): void {
 .cmdk-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--scrim);
   backdrop-filter: blur(2px);
   z-index: 200;
   animation: cmdk-overlay-in 120ms ease;
@@ -176,12 +176,11 @@ function pickCommand(value: unknown): void {
   transform: translateX(-50%);
   z-index: 201;
   width: min(600px, calc(100vw - 32px));
-  background: var(--surface-base, #fff);
+  background: var(--surface-base);
   border-radius: var(--r-5);
   box-shadow:
     0 0 0 1px var(--hairline),
-    0 20px 60px rgba(0, 0, 0, 0.18),
-    0 8px 20px rgba(0, 0, 0, 0.1);
+    var(--shadow-dlg);
   overflow: hidden;
   animation: cmdk-content-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -268,7 +267,7 @@ function pickCommand(value: unknown): void {
 }
 
 .cmdk-item[data-highlighted] {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover);
 }
 
 .cmdk-item:focus-visible {
@@ -295,8 +294,8 @@ function pickCommand(value: unknown): void {
 }
 
 .cmdk-item__badge--recent {
-  background: var(--accent-tint-bg, rgba(0, 122, 255, 0.08));
-  color: var(--accent, #007aff);
+  background: var(--accent-tint-bg);
+  color: var(--accent);
 }
 
 /* Empty-State */
@@ -333,7 +332,7 @@ function pickCommand(value: unknown): void {
   height: 20px;
   padding: 0 4px;
   border-radius: var(--r-2);
-  background: var(--surface-hover, rgba(0, 0, 0, 0.06));
+  background: var(--surface-hover);
   border: 1px solid var(--hairline);
   font-family: inherit;
   font-size: 10px;

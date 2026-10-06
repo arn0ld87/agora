@@ -104,24 +104,30 @@ describe('Slice 7.1 — Focus-Vertrag (tokens-v3.css)', () => {
     expect(tokens).toMatch(def('--focus-ring-strong'))
   })
 
-  it('--focus-ring-strong hat ein gültiges RGBA-Format', () => {
+  // Seit #1795 steht kein Rohwert mehr in tokens-v3.css: der Fokusring ist
+  // ein color-mix des Akzents mit transparent. Der Vertrag bleibt derselbe:
+  // gültiges Format und Deckung >= 50 % (stärker als --focus-ring mit 35 %).
+  const mixPattern = /^color-mix\(\s*in oklab\s*,\s*var\(--acc\)\s+([\d.]+)%\s*,\s*transparent\s*\)$/
+
+  it('--focus-ring-strong hat ein gültiges color-mix-Format auf dem Akzent', () => {
     const m = tokens.match(/--focus-ring-strong\s*:\s*([^;]+);/)
     expect(m, '--focus-ring-strong fehlt').not.toBeNull()
-    const rgba = m![1].trim().match(
-      /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/,
-    )
-    expect(rgba, `--focus-ring-strong hat kein gültiges RGBA-Format: "${m![1].trim()}"`).not.toBeNull()
+    expect(
+      m![1].trim().match(mixPattern),
+      `--focus-ring-strong hat kein gültiges Format: "${m![1].trim()}"`,
+    ).not.toBeNull()
   })
 
-  it('--focus-ring-strong hat Alpha ≥ 0.5 (stärker als --focus-ring mit 0.35)', () => {
-    const m = tokens.match(/--focus-ring-strong\s*:\s*rgba?\([^)]+\)/)
-    expect(m, '--focus-ring-strong fehlt').not.toBeNull()
-    const alpha = m![0].match(/,\s*([\d.]+)\s*\)$/)
-    expect(alpha, 'Alpha-Komponente fehlt').not.toBeNull()
+  it('--focus-ring-strong hat Deckung ≥ 50 % (stärker als --focus-ring mit 35 %)', () => {
+    const strong = tokens.match(/--focus-ring-strong\s*:\s*([^;]+);/)![1].trim().match(mixPattern)
+    expect(strong, '--focus-ring-strong fehlt oder ist nicht parsebar').not.toBeNull()
+    const weak = tokens.match(/--focus-ring\s*:\s*([^;]+);/)![1].trim().match(mixPattern)
+    expect(weak, '--focus-ring ist nicht parsebar').not.toBeNull()
     expect(
-      Number(alpha![1]),
-      `--focus-ring-strong Alpha ${alpha![1]} ist < 0.5 — verliert "strong"-Bedeutung`,
-    ).toBeGreaterThanOrEqual(0.5)
+      Number(strong![1]),
+      `--focus-ring-strong ${strong![1]} % ist < 50 — verliert "strong"-Bedeutung`,
+    ).toBeGreaterThanOrEqual(50)
+    expect(Number(strong![1])).toBeGreaterThan(Number(weak![1]))
   })
 })
 
@@ -195,10 +201,20 @@ describe('Redesign PR 1 — Typo- und Radius-Skala (tokens-v3.css)', () => {
     expect(m![1].trim()).toBe('11.5px')
   })
 
-  it('Radius-Skala hat genau die Stufen 4 / 6 / 10 / pill', () => {
+  it('Radius-Skala des Entwurfs hat genau die Stufen 6 / 8 / 10 / 12 / 16 / 999', () => {
+    const umbau = readFileSync(resolve(here, '../tokens-umbau.css'), 'utf8')
+    const scaleDefs = umbau.match(/--ag-r-[a-z0-9]+\s*:\s*[^;]+;/g) ?? []
+    const values = scaleDefs.map((d) => d.replace(/^[^:]+:\s*/, '').replace(/;$/, '').trim())
+    expect(new Set(values)).toEqual(new Set(['6px', '8px', '10px', '12px', '16px', '999px']))
+  })
+
+  it('alte Radius-Namen in tokens-v3.css zeigen nur auf Stufen der Skala', () => {
     const native = tokens.match(/--r-[a-z0-9]+\s*:\s*[^;]+;/g) ?? []
+    expect(native.length).toBeGreaterThanOrEqual(4)
     const values = native.map((d) => d.replace(/^[^:]+:\s*/, '').replace(/;$/, '').trim())
-    expect(new Set(values)).toEqual(new Set(['4px', '6px', '10px', '9999px']))
+    expect(new Set(values)).toEqual(
+      new Set(['var(--ag-r-6)', 'var(--ag-r-10)', 'var(--ag-r-pill)']),
+    )
   })
 
   it('Compat-Radien zeigen nur auf Skalenstufen', () => {
@@ -215,9 +231,9 @@ describe('Redesign PR 1 — Typo- und Radius-Skala (tokens-v3.css)', () => {
   })
 
   it('tokens-compat.css trägt nur Aliase und alte Größennamen, keine neuen Farbwerte', () => {
+    // Seit #1795 gibt es auch die zwei v2-Rohwerte (--ink-*) nicht mehr.
     const hexes = compat.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
-    // --ink-800/--ink-900 sind die einzigen Rohwerte, die noch aus v2 stammen.
-    expect(hexes.length).toBeLessThanOrEqual(2)
+    expect(hexes.length).toBe(0)
     expect(compat).not.toMatch(/--(golden|a26|mesh|glow-info)-/)
   })
 

@@ -50,6 +50,11 @@ export interface ShelfObject {
   metaId: string
   /** Nur bei kind='bericht': die Simulation, aus der er stammt — Grundlage fuers Ableiten. */
   simulationId?: string | null
+  /**
+   * Nur bei kind='bericht': Rohstatus des Berichts (`completed`, `incomplete`, …).
+   * Die Seitenleiste zaehlt daran unvollstaendige Berichte als „braucht dich“.
+   */
+  reportStatus?: string | null
   /** Nur bei kind='graph': die Graph-ID des Projekts, fuer das Nachladen im Dossier. */
   graphId?: string | null
   /**
@@ -104,9 +109,14 @@ export interface ShelfLaufJob {
   /** Stabiler i18n-Schluessel fuer `message` (Issue #1557), Aufloesung via `resolveStatusMessage`. */
   messageKey?: string | null
   updatedAt: string
+  /** Beendigungsgrund des Jobs (z. B. `budget_tokens`, `user_stop`), falls die Registry ihn liefert. */
+  terminationReason?: string | null
   /** Fuer die Bestandteile-Verlinkung (project_id/simulation_id/report_id). */
   linkedIds: Record<string, unknown>
 }
+
+/** Datenquellen der Ablage; nicht geladene Quellen meldet `useShelf.unavailableSources`. */
+export type ShelfSource = 'runs' | 'reports' | 'projects' | 'templates'
 
 /** Filterleiste der Ablage (Entwurf: Alle 24 · Laeufe 9 · …). */
 export type ShelfFilter = 'alle' | ShelfObjectKind | 'jobs'
