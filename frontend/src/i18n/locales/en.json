@@ -2044,6 +2044,49 @@
       "embedding": {
         "notice": "Note: some consumers still read the environment variables. The configuration shown here is not necessarily the one in effect. Status:"
       },
+      "appearance": {
+        "groupTheme": "Color scheme",
+        "groupText": "Density and type",
+        "theme": { "label": "Appearance", "hint": "System follows your device setting.", "system": "System", "light": "Light", "dark": "Dark" },
+        "density": { "label": "Density", "hint": "Compact tightens the sidebar and the top bar.", "comfortable": "Comfortable", "compact": "Compact" },
+        "fontSize": { "label": "Font size", "hint": "Affects body text, headings and hint text of the interface.", "small": "Small", "normal": "Normal", "large": "Large" },
+        "local": "This choice applies to this browser only."
+      },
+      "system": {
+        "groupServices": "Services",
+        "groupApp": "Application",
+        "loading": "Checking status…",
+        "loadError": "The system status could not be retrieved.",
+        "retry": "Check again",
+        "state": { "ok": "OK", "down": "Unreachable", "unknown": "Unknown", "skipped": "Not checked" },
+        "backend": { "label": "Backend", "hint": "Application server of this instance." },
+        "neo4j": { "label": "Neo4j", "hint": "Graph database for sources and entities." },
+        "ollama": { "label": "Ollama", "hint": "Local model service.", "skipped": "The active provider is {provider}; Ollama is not checked." },
+        "disk": { "label": "Upload storage", "free": "{free} free", "used": "{pct} % used" },
+        "version": { "label": "Version", "unknown": "unknown" },
+        "unreported": "The backend does not currently report Redis and PostgreSQL; their state is not visible here.",
+        "console": { "label": "Console", "hint": "Shows the backend log.", "open": "Open console", "unavailable": "Operator only." }
+      },
+      "budgets": {
+        "intro": "These default limits apply only to new runs without a budget of their own. A budget set in the start dialog replaces the default limits entirely.",
+        "noLimit": "0 = no limit.",
+        "groupLimits": "Default limits",
+        "groupEnforcement": "Enforcement",
+        "loading": "Loading budgets…",
+        "loadError": "The budgets could not be loaded.",
+        "tokens": { "label": "Tokens", "hint": "Maximum number of tokens per run." },
+        "cost": { "label": "Cost in US dollars", "hint": "Maximum cost per run, e.g. 12.50." },
+        "duration": { "label": "Duration", "hint": "Maximum duration per run.", "unit": "Unit", "minutes": "Minutes", "hours": "Hours" },
+        "calls": { "label": "Model calls", "hint": "Maximum number of calls to the language model per run." },
+        "enforcement": { "label": "Enforcement", "hint": "Hard ends the run when exceeded, soft only warns.", "hard": "Hard (run ends)", "soft": "Soft (warning only)" },
+        "invalidNumber": "Enter a number greater than or equal to 0.",
+        "invalidInteger": "Enter a whole number greater than or equal to 0.",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "Saved.",
+        "discard": "Discard",
+        "saveError": "Saving failed: {message}"
+      },
       "sections": {
         "general": "General",
         "appearance": "Appearance",

@@ -2044,6 +2044,49 @@
       "embedding": {
         "notice": "Hinweis: Einzelne Verbraucher lesen noch die Umgebungsvariablen. Die hier angezeigte Konfiguration ist nicht in jedem Fall die wirksame. Stand:"
       },
+      "appearance": {
+        "groupTheme": "Farbschema",
+        "groupText": "Dichte und Schrift",
+        "theme": { "label": "Darstellung", "hint": "System folgt der Einstellung deines Geräts.", "system": "System", "light": "Hell", "dark": "Dunkel" },
+        "density": { "label": "Dichte", "hint": "Kompakt rückt Seitenleiste und Kopfzeile enger zusammen.", "comfortable": "Komfort", "compact": "Kompakt" },
+        "fontSize": { "label": "Schriftgröße", "hint": "Wirkt auf Fließtext, Überschriften und Hilfetexte der Oberfläche.", "small": "Klein", "normal": "Normal", "large": "Groß" },
+        "local": "Diese Auswahl gilt nur für diesen Browser."
+      },
+      "system": {
+        "groupServices": "Dienste",
+        "groupApp": "Anwendung",
+        "loading": "Zustand wird geprüft…",
+        "loadError": "Der Systemzustand konnte nicht abgerufen werden.",
+        "retry": "Erneut prüfen",
+        "state": { "ok": "In Ordnung", "down": "Nicht erreichbar", "unknown": "Unbekannt", "skipped": "Nicht geprüft" },
+        "backend": { "label": "Backend", "hint": "Anwendungsserver dieser Instanz." },
+        "neo4j": { "label": "Neo4j", "hint": "Graphdatenbank für Quellen und Entitäten." },
+        "ollama": { "label": "Ollama", "hint": "Lokaler Modelldienst.", "skipped": "Der aktive Anbieter ist {provider}; Ollama wird nicht geprüft." },
+        "disk": { "label": "Speicher für Uploads", "free": "{free} frei", "used": "{pct} % belegt" },
+        "version": { "label": "Version", "unknown": "unbekannt" },
+        "unreported": "Redis und PostgreSQL meldet das Backend derzeit nicht; ihr Zustand ist hier nicht sichtbar.",
+        "console": { "label": "Konsole", "hint": "Zeigt das Protokoll des Backends.", "open": "Konsole öffnen", "unavailable": "Nur für Betreiber." }
+      },
+      "budgets": {
+        "intro": "Diese Standardgrenzen gelten nur für neue Läufe ohne eigenes Budget. Ein im Startdialog gesetztes Budget ersetzt die Standardgrenzen vollständig.",
+        "noLimit": "0 = kein Limit.",
+        "groupLimits": "Standardgrenzen",
+        "groupEnforcement": "Durchsetzung",
+        "loading": "Budgets werden geladen…",
+        "loadError": "Die Budgets konnten nicht geladen werden.",
+        "tokens": { "label": "Tokens", "hint": "Höchstzahl der Tokens je Lauf." },
+        "cost": { "label": "Kosten in US-Dollar", "hint": "Höchstkosten je Lauf, z. B. 12,50." },
+        "duration": { "label": "Laufzeit", "hint": "Höchstdauer je Lauf.", "unit": "Einheit", "minutes": "Minuten", "hours": "Stunden" },
+        "calls": { "label": "Modellaufrufe", "hint": "Höchstzahl der Aufrufe an das Sprachmodell je Lauf." },
+        "enforcement": { "label": "Durchsetzung", "hint": "Hart beendet den Lauf bei Überschreitung, weich warnt nur.", "hard": "Hart (Lauf endet)", "soft": "Weich (nur Warnung)" },
+        "invalidNumber": "Bitte eine Zahl größer oder gleich 0 eingeben.",
+        "invalidInteger": "Bitte eine ganze Zahl größer oder gleich 0 eingeben.",
+        "save": "Speichern",
+        "saving": "Wird gespeichert…",
+        "saved": "Gespeichert.",
+        "discard": "Verwerfen",
+        "saveError": "Speichern fehlgeschlagen: {message}"
+      },
       "sections": {
         "general": "Allgemein",
         "appearance": "Aussehen",

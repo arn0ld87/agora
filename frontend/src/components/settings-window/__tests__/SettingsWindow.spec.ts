@@ -124,9 +124,10 @@ describe('SettingsWindow', () => {
     expect(q('[data-testid="embedding-stub"]')).not.toBeNull()
   })
 
-  it('die übrigen Abschnitte zeigen Überschrift und den Satz "kommt in dieser Etappe"', async () => {
+  it('Budgets zeigt den eigenen Inhalt statt des Platzhalters', async () => {
     await mountWindow('/settings/budgets')
-    expect(q('.sw__content')?.textContent).toContain('Dieser Abschnitt kommt in dieser Etappe.')
+    expect(q('.sw__content')?.textContent).toContain('Diese Standardgrenzen gelten nur für neue Läufe')
+    expect(q('.sw__content')?.textContent).not.toContain('kommt in dieser Etappe')
   })
 
   it('nur genau ein Eintrag der Liste trägt aria-current', async () => {
