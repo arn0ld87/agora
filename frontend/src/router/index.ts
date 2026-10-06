@@ -12,7 +12,7 @@ import {
   normalizeSettingsSection,
   settingsSectionPath,
 } from '../components/settings-window/sections'
-import { useSettingsWindowStore } from '../stores/settingsWindow'
+import { isWindowRoute, useSettingsWindowStore } from '../stores/settingsWindow'
 
 const AUTH_ONLY_ROUTES = { Login: 1, Register: 1, PasswordReset: 1, EmailConfirm: 1 } as const
 
@@ -332,12 +332,13 @@ const routes: RouteRecordRaw[] = [
     name: 'LibraryRuns',
     component: () => import('../views/library/LibraryRunsView.vue'),
   },
-  // Einstieg „Neuer Lauf“ bis Etappe 3 (Startdialog): bettet HeroNewRun ein,
-  // das weiter nach /process/new fuehrt.
+  // Startdialog „Neuer Lauf“ (#1799, Etappe 3): liegt wie das Einstellungsfenster
+  // als Fenster ueber der zuletzt gezeigten Ansicht (meta.windowOverBackground).
   {
     path: '/library/runs/new',
     name: 'NewRun',
     component: () => import('../views/library/NewRunView.vue'),
+    meta: { windowOverBackground: true },
   },
   {
     path: '/library/graphs',
@@ -530,9 +531,9 @@ router.afterEach((to, from, failure) => {
     // Pinia noch nicht aktiv (z.B. Unit-Tests ohne Store).
     return
   }
-  if (to.meta?.settingsWindow !== true) {
+  if (!isWindowRoute(to.meta)) {
     store.reset()
-  } else if (from.meta?.settingsWindow !== true) {
+  } else if (!isWindowRoute(from.meta)) {
     store.open(from.matched.length > 0 ? from.fullPath : null)
   }
 })

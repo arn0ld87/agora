@@ -2026,6 +2026,81 @@
     }
   },
   "views": {
+    "newRun": {
+      "title": "New run",
+      "close": "Close dialog",
+      "question": {
+        "legend": "Question",
+        "label": "Simulation question",
+        "belongsToGraph": "The question belongs to the graph. To ask a different question, build a new graph from the source.",
+        "noneStored": "No question is stored for this graph.",
+        "contestedLater": "You set the contested question during preparation, after the graph is built."
+      },
+      "graph": {
+        "legend": "Graph",
+        "existing": "Choose an existing one",
+        "selectLabel": "Existing graph",
+        "fromSource": "New from source",
+        "none": "Without a graph",
+        "noneWhy": "Not available yet. Simulation and interviews would be possible, a report would not.",
+        "noneYet": "There is no finished graph yet.",
+        "loading": "Loading graphs …",
+        "loadError": "The graphs could not be loaded.",
+        "rejected": "{n} graphs were unreadable and are not offered."
+      },
+      "source": {
+        "dropHint": "Drop files here or choose them",
+        "fileList": "Chosen files"
+      },
+      "personas": {
+        "legend": "Persona set",
+        "generate": "Generate",
+        "existing": "Choose an existing one",
+        "existingWhy": "Arrives with persona sets in the library.",
+        "laterWithSource": "With a new source you set the upper limit during preparation."
+      },
+      "models": {
+        "legend": "Models",
+        "scope": "Applies to all stages of this run. Per-stage deviations are chosen at the stage's start button."
+      },
+      "scope": {
+        "legend": "Scope and budget",
+        "days": "Days (1–365)",
+        "rounds": "Rounds (3–30)",
+        "activityLater": "With a new source you set the activity mode during preparation.",
+        "budgetUnavailable": "The instance's default limits apply.",
+        "budgetReplaces": "A custom budget replaces the default limits entirely.",
+        "estimateNeedsCap": "Without an upper limit on personas no estimate is possible.",
+        "estimateBasis": "The estimate assumes at most {agents} personas and {rounds} rounds."
+      },
+      "blockers": {
+        "graph": "Choose an existing graph.",
+        "files": "Add at least one source file.",
+        "question": "The simulation question is missing.",
+        "contested": "The contested question needs 10 to 300 characters or stays empty.",
+        "agents": "The persona upper limit is at least 10.",
+        "days": "The number of days is between 1 and 365.",
+        "rounds": "The number of rounds is between 3 and 30."
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "start": "Start",
+        "buildGraph": "Build graph",
+        "createOnly": "Create only",
+        "createOnlyWhy": "A run is created as soon as the graph is built."
+      },
+      "progress": {
+        "create": "Creating the run …",
+        "prepare": "Preparing the personas …"
+      },
+      "errors": {
+        "create": "The run could not be created.",
+        "createShape": "The response when creating the run was incomplete.",
+        "prepare": "Preparation could not be started.",
+        "prepareAfterCreate": "Run {id} was created, but preparation failed: {message}",
+        "openCreated": "Go to the created run"
+      }
+    },
     "settingsWindow": {
       "title": "Settings",
       "close": "Close settings",

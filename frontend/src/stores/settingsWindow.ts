@@ -10,6 +10,16 @@ import { defineStore } from 'pinia'
  * `null` heißt: Direktaufruf (neuer Tab) — die Bibliothek der Läufe dient als
  * Hintergrund und als Ziel von „Schließen“.
  */
+/**
+ * Eine Route, die als Fenster über einer Hintergrundroute liegt: das
+ * Einstellungsfenster (`meta.settingsWindow`) und der Startdialog „Neuer Lauf“
+ * (`meta.windowOverBackground`). Beide teilen sich Store, Hintergrundauflösung
+ * in App.vue und das Merken der Rückkehradresse im Router.
+ */
+export function isWindowRoute(meta: Record<string | symbol, unknown> | undefined): boolean {
+  return meta?.settingsWindow === true || meta?.windowOverBackground === true
+}
+
 export const useSettingsWindowStore = defineStore('settingsWindow', () => {
   const returnTo = ref<string | null>(null)
 

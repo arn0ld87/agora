@@ -2026,6 +2026,81 @@
     }
   },
   "views": {
+    "newRun": {
+      "title": "Neuer Lauf",
+      "close": "Dialog schließen",
+      "question": {
+        "legend": "Frage",
+        "label": "Simulationsfrage",
+        "belongsToGraph": "Die Frage gehört zum Graphen. Für eine andere Frage einen neuen Graphen aus der Quelle bauen.",
+        "noneStored": "Zu diesem Graphen ist keine Frage gespeichert.",
+        "contestedLater": "Die Streitfrage legst du nach dem Graphenbau bei der Vorbereitung fest."
+      },
+      "graph": {
+        "legend": "Graph",
+        "existing": "Vorhandenen wählen",
+        "selectLabel": "Vorhandener Graph",
+        "fromSource": "Neu aus Quelle",
+        "none": "Ohne Graph",
+        "noneWhy": "Noch nicht verfügbar. Simulation und Interviews wären möglich, ein Bericht nicht.",
+        "noneYet": "Es gibt noch keinen fertigen Graphen.",
+        "loading": "Graphen werden geladen …",
+        "loadError": "Die Graphen konnten nicht geladen werden.",
+        "rejected": "{n} Graphen waren unlesbar und werden nicht angeboten."
+      },
+      "source": {
+        "dropHint": "Dateien hierher ziehen oder auswählen",
+        "fileList": "Gewählte Dateien"
+      },
+      "personas": {
+        "legend": "Personasatz",
+        "generate": "Erzeugen lassen",
+        "existing": "Vorhandenen wählen",
+        "existingWhy": "Kommt mit den Personasätzen in der Bibliothek.",
+        "laterWithSource": "Bei einer neuen Quelle stellst du die Obergrenze bei der Vorbereitung ein."
+      },
+      "models": {
+        "legend": "Modelle",
+        "scope": "Gilt für alle Stufen dieses Laufs. Abweichungen je Stufe wählst du am Startknopf der Stufe."
+      },
+      "scope": {
+        "legend": "Umfang und Budget",
+        "days": "Tage (1–365)",
+        "rounds": "Runden (3–30)",
+        "activityLater": "Bei einer neuen Quelle stellst du den Aktivitätsmodus bei der Vorbereitung ein.",
+        "budgetUnavailable": "Es gelten die Standardgrenzen der Instanz.",
+        "budgetReplaces": "Ein eigenes Budget ersetzt die Standardgrenzen vollständig.",
+        "estimateNeedsCap": "Ohne Obergrenze der Personas ist keine Schätzung möglich.",
+        "estimateBasis": "Die Schätzung rechnet mit höchstens {agents} Personas und {rounds} Runden."
+      },
+      "blockers": {
+        "graph": "Wähle einen vorhandenen Graphen.",
+        "files": "Lege mindestens eine Quelldatei ab.",
+        "question": "Die Simulationsfrage fehlt.",
+        "contested": "Die Streitfrage braucht 10 bis 300 Zeichen oder bleibt leer.",
+        "agents": "Die Obergrenze der Personas beträgt mindestens 10.",
+        "days": "Die Zahl der Tage liegt zwischen 1 und 365.",
+        "rounds": "Die Zahl der Runden liegt zwischen 3 und 30."
+      },
+      "actions": {
+        "cancel": "Abbrechen",
+        "start": "Starten",
+        "buildGraph": "Graph bauen",
+        "createOnly": "Nur anlegen",
+        "createOnlyWhy": "Ein Lauf entsteht, sobald der Graph gebaut ist."
+      },
+      "progress": {
+        "create": "Der Lauf wird angelegt …",
+        "prepare": "Die Personas werden vorbereitet …"
+      },
+      "errors": {
+        "create": "Der Lauf konnte nicht angelegt werden.",
+        "createShape": "Die Antwort beim Anlegen des Laufs war unvollständig.",
+        "prepare": "Die Vorbereitung konnte nicht gestartet werden.",
+        "prepareAfterCreate": "Der Lauf {id} wurde angelegt, die Vorbereitung ist aber fehlgeschlagen: {message}",
+        "openCreated": "Zum angelegten Lauf"
+      }
+    },
     "settingsWindow": {
       "title": "Einstellungen",
       "close": "Einstellungen schließen",

@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { RouteLocationNormalized } from 'vue-router'
 import LogDrawer from './components/LogDrawer.vue'
 import { SETTINGS_FALLBACK_PATH } from './components/settings-window/sections'
-import { useSettingsWindowStore } from './stores/settingsWindow'
+import { isWindowRoute, useSettingsWindowStore } from './stores/settingsWindow'
 import AppShell from './components/v4/shell/AppShell.vue'
 import DemoPreviewStaticView from './components/v4/shell/DemoPreviewStaticView.vue'
 import { useDemoPreview } from './composables/useDemoPreview'
@@ -38,12 +38,13 @@ const demoPreview = useDemoPreview()
 // Adresse, bei Direktaufruf die Bibliothek der Laeufe. Das Fenster selbst
 // rendert ein zweiter router-view (Komponente der aktuellen Route).
 const settingsWindowStore = useSettingsWindowStore()
-const isSettingsWindow = computed(() => route.meta?.settingsWindow === true)
+// Derselbe Mechanismus traegt den Startdialog „Neuer Lauf“ (meta.windowOverBackground).
+const isSettingsWindow = computed(() => isWindowRoute(route.meta))
 const shownRoute = computed<RouteLocationNormalized>(() => {
   if (!isSettingsWindow.value) return route as RouteLocationNormalized
   const behind = router.resolve(settingsWindowStore.returnTo ?? SETTINGS_FALLBACK_PATH)
   // Nie ein Fenster unter dem Fenster.
-  const target = behind.meta?.settingsWindow === true ? router.resolve(SETTINGS_FALLBACK_PATH) : behind
+  const target = isWindowRoute(behind.meta) ? router.resolve(SETTINGS_FALLBACK_PATH) : behind
   // resolve() liefert dieselbe Form wie die aktuelle Route, nur `name` ist `null` statt `undefined`-fähig.
   return target as RouteLocationNormalized
 })
