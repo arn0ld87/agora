@@ -217,6 +217,41 @@ describe('deriveStages: genau ein nächster Schritt', () => {
   })
 })
 
+describe('deriveStages: vorgemerkte Startparameter (#1799)', () => {
+  const startQuery = { maxRounds: '12', simulationDays: '3' }
+  const plain = { name: 'StepSimulation', params: { simulationId: 'sim_1' } }
+
+  it('Start und Fortsetzen der Simulation tragen die Startquery', () => {
+    const start = row(deriveStages(data({ hasGraph: false }), startQuery), 'simulation').next
+    expect(start).toMatchObject({ kind: 'start', to: { name: 'StepSimulation', query: startQuery } })
+    const stopped = deriveStages(
+      data({ jobs: { simulation_run: job('simulation_run', { status: 'stopped', terminationReason: 'user_stop' }) } }),
+      startQuery,
+    )
+    expect(row(stopped, 'simulation').next.to).toMatchObject({ name: 'StepSimulation', query: startQuery })
+  })
+
+  it('der Berichtsstart über die Simulation trägt sie ebenfalls', () => {
+    const rows = deriveStages(data({ jobs: { simulation_run: job('simulation_run') } }), startQuery)
+    expect(row(rows, 'report').next.to).toMatchObject({ name: 'StepSimulation', query: startQuery })
+  })
+
+  it('ohne Eintrag (leere oder fehlende Query) bleibt das Ziel unverändert', () => {
+    expect(row(deriveStages(data({ hasGraph: false }), {}), 'simulation').next.to).toEqual(plain)
+    expect(row(deriveStages(data({ hasGraph: false })), 'simulation').next.to).toEqual(plain)
+  })
+
+  it('andere Ziele (Ansehen, Personas, Interviews) bekommen keine Query', () => {
+    const rows = deriveStages(
+      data({ jobs: { simulation_prepare: job('simulation_prepare'), simulation_run: job('simulation_run') } }),
+      startQuery,
+    )
+    expect(row(rows, 'personas').next.to).not.toHaveProperty('query')
+    expect(row(rows, 'simulation').next.to).not.toHaveProperty('query')
+    expect(row(rows, 'interviews').next.to).not.toHaveProperty('query')
+  })
+})
+
 describe('deriveHeadline', () => {
   it('laufende Stufe gewinnt', () => {
     const rows = deriveStages(

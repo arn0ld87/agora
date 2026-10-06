@@ -27,6 +27,7 @@ import {
   type RunWorkspaceData,
   type StageRow,
 } from './runStageState'
+import { pendingRunParamsQuery } from '@/composables/new-run/pendingRunParams'
 import { deriveRunTabs, type RunTab } from './runTabs'
 
 const SimulationLookupSchema = z
@@ -278,7 +279,9 @@ export function useRunWorkspace(simulationId: () => string): RunWorkspace {
     }
   }
 
-  const stages = computed(() => (data.value ? deriveStages(data.value) : []))
+  const stages = computed(() =>
+    data.value ? deriveStages(data.value, pendingRunParamsQuery(data.value.simulationId)) : [],
+  )
   const headline = computed(() => deriveHeadline(stages.value))
   const tabs = computed(() =>
     deriveRunTabs({

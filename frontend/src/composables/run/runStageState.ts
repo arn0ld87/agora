@@ -96,6 +96,8 @@ export type StepKind = 'start' | 'resume' | 'view'
 export interface RouteTarget {
   name: string
   params: Record<string, string>
+  /** Nur gesetzt, wenn das Ziel Query-Werte mitnimmt (Startparameter). */
+  query?: Record<string, string>
 }
 
 export interface NextStep {
@@ -191,8 +193,8 @@ function hasBlocking(report: ReportInfo | null, stage: StageKey): boolean {
   return !!report?.degradations.some((d) => d.severity === 'blocking' && (COMPONENT_STAGE[d.component] ?? 'report') === stage)
 }
 
-function target(name: string, params: Record<string, string>): RouteTarget {
-  return { name, params }
+function target(name: string, params: Record<string, string>, query?: Record<string, string>): RouteTarget {
+  return query && Object.keys(query).length > 0 ? { name, params, query } : { name, params }
 }
 
 function disabled(reason: string, kind: StepKind): NextStep {
@@ -211,6 +213,7 @@ function nextStepFor(
   data: RunWorkspaceData,
   reportId: string | null,
   rows: Map<StageKey, StageStateKind>,
+  startQuery: Record<string, string>,
 ): NextStep {
   const stepKind: StepKind =
     state === 'notStarted' ? 'start' : RESUMABLE.has(state) ? 'resume' : 'view'
@@ -228,20 +231,24 @@ function nextStepFor(
     case 'simulation':
       return stepKind === 'view'
         ? enabled('view', target('StepSimulationFeed', { simulationId: data.simulationId }))
-        : enabled(stepKind, target('StepSimulation', { simulationId: data.simulationId }))
+        : enabled(stepKind, target('StepSimulation', { simulationId: data.simulationId }, startQuery))
     case 'report': {
       if (reportId) return enabled('view', target('StepReport', { reportId }))
       const sim = rows.get('simulation') ?? 'notStarted'
       if (!DONE_KINDS.includes(sim)) return disabled('afterSimulation', 'start')
-      return enabled('start', target('StepSimulation', { simulationId: data.simulationId }))
+      return enabled('start', target('StepSimulation', { simulationId: data.simulationId }, startQuery))
     }
     case 'interviews':
       return enabled('view', target('RunInterviewsLegacy', { simulationId: data.simulationId }))
   }
 }
 
-/** Je Stufe eine Zeile; die Reihenfolge entspricht `STAGE_ORDER`. */
-export function deriveStages(data: RunWorkspaceData): StageRow[] {
+/**
+ * Je Stufe eine Zeile; die Reihenfolge entspricht `STAGE_ORDER`. `startQuery`
+ * (vorgemerkte Startparameter des Startdialogs) hängt nur an den Zielen, die
+ * zum Simulationsstart führen.
+ */
+export function deriveStages(data: RunWorkspaceData, startQuery: Record<string, string> = {}): StageRow[] {
   const latestReport = data.reports[0] ?? null
   const reportJob = data.jobs['report_generate'] ?? null
 
@@ -306,7 +313,7 @@ export function deriveStages(data: RunWorkspaceData): StageRow[] {
       degradations,
       job,
       reportId,
-      next: nextStepFor(key, state, data, reportId, kinds),
+      next: nextStepFor(key, state, data, reportId, kinds, startQuery),
       updatedAt,
     })
   }

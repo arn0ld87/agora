@@ -40,6 +40,7 @@ vi.mock('@/api/llmRoutingDefaults', async (orig) => ({
   getRoutingDefaults: api.getRoutingDefaults,
 }))
 
+import { PENDING_RUN_PARAMS_PREFIX, writePendingRunParams } from '@/composables/new-run/pendingRunParams'
 import RunWorkspaceView from '../RunWorkspaceView.vue'
 import RunOverviewView from '../RunOverviewView.vue'
 
@@ -205,6 +206,33 @@ describe('RunOverviewView: Stufen', () => {
     expect(wrapper.get('[data-testid="stage-next-graph"]').attributes('href')).toBe('/simulations/sim_1/graph')
     expect(wrapper.get('[data-testid="stage-next-report"]').attributes('href')).toBe('/v4/report/report_1')
     expect(wrapper.get('[data-testid="stage-model-graph"]').text()).toContain('snap-graph_build')
+  })
+
+  describe('Startparameter aus dem Startdialog (#1799)', () => {
+    beforeEach(() => window.sessionStorage.clear())
+
+    it('mit vorgemerktem Eintrag trägt der Startlink Runden und Tage', async () => {
+      writePendingRunParams('sim_1', { maxRounds: 10, simulationDays: 2, budget: null })
+      arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
+      const { wrapper } = await mountAt()
+      const href = wrapper.get('[data-testid="stage-next-simulation"]').attributes('href') ?? ''
+      expect(href.startsWith('/v4/simulation/sim_1?')).toBe(true)
+      expect(href).toContain('maxRounds=10')
+      expect(href).toContain('simulationDays=2')
+    })
+
+    it('ohne Eintrag bleibt der Startlink ohne Query', async () => {
+      arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
+      const { wrapper } = await mountAt()
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/v4/simulation/sim_1')
+    })
+
+    it('ein beschädigter Eintrag wird ignoriert', async () => {
+      window.sessionStorage.setItem(`${PENDING_RUN_PARAMS_PREFIX}sim_1`, '{"maxRounds":"viele"')
+      arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
+      const { wrapper } = await mountAt()
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/v4/simulation/sim_1')
+    })
   })
 
   it('Verbrauch kommt aus dem Ledger, Fehlendes steht als "nicht erfasst"', async () => {
