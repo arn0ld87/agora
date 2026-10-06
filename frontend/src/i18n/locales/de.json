@@ -1055,7 +1055,10 @@
       "copy": "Kopieren",
       "copyTitle": "Sichtbare Zeilen in die Zwischenablage kopieren",
       "copied": "Kopiert",
-      "copyFailed": "Kopieren fehlgeschlagen. Die Zwischenablage ist nicht verfügbar."
+      "copyFailed": "Kopieren fehlgeschlagen. Die Zwischenablage ist nicht verfügbar.",
+      "showAll": "Alles zeigen",
+      "scopeNote": "Nur Zeilen, die „{id}“ enthalten (Textsuche im Zeilentext, nicht exakt).",
+      "emptyScoped": "Keine Zeilen mit dieser Laufkennung."
     }
   },
   "settings": {
@@ -2230,11 +2233,71 @@
     },
     "activity": {
       "title": "Aktivität",
+      "tabs": "Bereiche der Aktivität",
       "jobs": {
-        "title": "Jobs"
+        "title": "Jobs",
+        "caption": "Jobs der Registry mit Art, Lauf, Zustand, Fortschritt und Dauer",
+        "col": {
+          "kind": "Art",
+          "run": "Lauf",
+          "state": "Zustand",
+          "progress": "Fortschritt",
+          "started": "Gestartet",
+          "duration": "Dauer",
+          "actions": "Aktionen"
+        },
+        "filter": {
+          "kind": "Art",
+          "state": "Zustand",
+          "all": "Alle",
+          "none": "Filter zurücksetzen"
+        },
+        "kind": {
+          "graph_build": "Graph-Aufbau",
+          "ontology_generate": "Ontologie",
+          "simulation_prepare": "Vorbereitung",
+          "simulation_run": "Simulation",
+          "report_generate": "Bericht",
+          "report_generation": "Bericht"
+        },
+        "state": {
+          "pending": "Wartet",
+          "running": "Läuft",
+          "paused": "Pausiert",
+          "completed": "Fertig",
+          "stopped": "Gestoppt",
+          "budget": "Budget erschöpft",
+          "failed": "Fehlgeschlagen"
+        },
+        "reason": {
+          "user_stop": "vom Nutzer gestoppt",
+          "user_cancel": "vom Nutzer abgebrochen",
+          "process_restart": "Prozess wurde neu gestartet",
+          "error": "Fehler",
+          "budget_tokens": "Token-Budget",
+          "budget_cost": "Kosten-Budget",
+          "budget_time": "Zeit-Budget",
+          "budget_calls": "Aufruf-Budget"
+        },
+        "action": {
+          "toRun": "Zum Lauf",
+          "cancel": "Abbrechen",
+          "cancelConfirm": "Job wirklich abbrechen?",
+          "cancelYes": "Ja, abbrechen",
+          "cancelNo": "Nein",
+          "cancelRequested": "Abbruch angefordert",
+          "cancelFailed": "Abbruch fehlgeschlagen"
+        },
+        "open": "Job {id} öffnen",
+        "unknownRun": "ohne Lauf",
+        "loading": "Jobs werden geladen…",
+        "error": "Jobs konnten nicht geladen werden: {message}",
+        "empty": "Noch keine Jobs.",
+        "emptyFiltered": "Kein Job passt zu diesem Filter."
       },
       "log": {
-        "title": "Protokoll"
+        "title": "Protokoll",
+        "pageTitle": "Backend-Protokoll"
       }
     },
     "stepEnvSetup": {

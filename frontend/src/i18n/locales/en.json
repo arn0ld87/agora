@@ -1055,7 +1055,10 @@
       "copy": "Copy",
       "copyTitle": "Copy visible lines to the clipboard",
       "copied": "Copied",
-      "copyFailed": "Copying failed. The clipboard is not available."
+      "copyFailed": "Copying failed. The clipboard is not available.",
+      "showAll": "Show everything",
+      "scopeNote": "Only lines containing “{id}” (text search in the line, not exact).",
+      "emptyScoped": "No lines with this run identifier."
     }
   },
   "settings": {
@@ -2230,11 +2233,71 @@
     },
     "activity": {
       "title": "Activity",
+      "tabs": "Activity sections",
       "jobs": {
-        "title": "Jobs"
+        "title": "Jobs",
+        "caption": "Registry jobs with kind, run, state, progress and duration",
+        "col": {
+          "kind": "Kind",
+          "run": "Run",
+          "state": "State",
+          "progress": "Progress",
+          "started": "Started",
+          "duration": "Duration",
+          "actions": "Actions"
+        },
+        "filter": {
+          "kind": "Kind",
+          "state": "State",
+          "all": "All",
+          "none": "Reset filters"
+        },
+        "kind": {
+          "graph_build": "Graph build",
+          "ontology_generate": "Ontology",
+          "simulation_prepare": "Preparation",
+          "simulation_run": "Simulation",
+          "report_generate": "Report",
+          "report_generation": "Report"
+        },
+        "state": {
+          "pending": "Waiting",
+          "running": "Running",
+          "paused": "Paused",
+          "completed": "Done",
+          "stopped": "Stopped",
+          "budget": "Budget exhausted",
+          "failed": "Failed"
+        },
+        "reason": {
+          "user_stop": "stopped by user",
+          "user_cancel": "cancelled by user",
+          "process_restart": "process was restarted",
+          "error": "error",
+          "budget_tokens": "token budget",
+          "budget_cost": "cost budget",
+          "budget_time": "time budget",
+          "budget_calls": "call budget"
+        },
+        "action": {
+          "toRun": "Go to run",
+          "cancel": "Cancel",
+          "cancelConfirm": "Really cancel this job?",
+          "cancelYes": "Yes, cancel",
+          "cancelNo": "No",
+          "cancelRequested": "Cancel requested",
+          "cancelFailed": "Cancel failed"
+        },
+        "open": "Open job {id}",
+        "unknownRun": "no run",
+        "loading": "Loading jobs…",
+        "error": "Jobs could not be loaded: {message}",
+        "empty": "No jobs yet.",
+        "emptyFiltered": "No job matches this filter."
       },
       "log": {
-        "title": "Log"
+        "title": "Log",
+        "pageTitle": "Backend log"
       }
     },
     "stepEnvSetup": {
