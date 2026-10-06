@@ -214,7 +214,9 @@ Backend-Tests grün.
 
 ### B3 — Objektmodell (der Brocken)
 
-Vorlagen liegen fertig zerlegt in `docs/design/screens/`:
+Vorlagen lagen fertig zerlegt in `docs/design/screens/` (mit #1794 entfernt,
+im Git-Verlauf bis `01990616` abrufbar; abgelöst durch
+`docs/design/frontend-umbau/`):
 `01-ablage.html`, `02-kommandopalette.html`, `03-laeufe.html`,
 `04-simulation.html`, `05-akteure.html`, `06-quellenumfeld.html`,
 `07-bericht.html`, `08-einstellungen.html`, `09-systemregeln.html`.

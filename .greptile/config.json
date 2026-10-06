@@ -13,7 +13,7 @@
   "excludeAuthors": [
     "dependabot[bot]"
   ],
-  "ignorePatterns": "**/*.lock\nbackend/uv.lock\nfrontend/bun.lock\nfrontend/dist/**\nbackend/radon-allowlist.txt\ndocs/archive/**\n.claude/**\n.pandaos/**\n*.min.js\n*.map",
+  "ignorePatterns": "**/*.lock\nbackend/uv.lock\nfrontend/bun.lock\nfrontend/dist/**\nbackend/radon-allowlist.txt\ndocs/archive/**\ndocs/design/frontend-umbau/**\n.claude/**\n.pandaos/**\n*.min.js\n*.map",
   "summarySection": {
     "included": true,
     "collapsible": true,

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap">
+</helmet>
+<div style="position:{{ rootPos }};inset:0;display:flex;flex-direction:column;gap:12px;padding-bottom:20px;box-sizing:border-box;">
+
+<sc-if value="{{ isDruck }}">
+  <article style="width:794px;box-sizing:border-box;margin:0 auto;background:#fff;color:#1d1d22;padding:72px 80px 80px;font-family:'Source Serif 4',Georgia,serif;font-size:11pt;line-height:1.6;box-shadow:0 1px 3px oklch(0 0 0 / 0.12);">
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:9pt;color:#55555e;display:flex;justify-content:space-between;border-bottom:1px solid #d9d9de;padding-bottom:8px;margin-bottom:28px;"><span>Agora · lauf_a81f55 · Fassung 2 vom 04.10.2026</span><span>Seite 1</span></div>
+    <h1 style="margin:0 0 6px;font-size:21pt;line-height:1.25;font-weight:700;">Kooperationsmodell für die Hebammen im Südkreis</h1>
+    <p style="margin:0 0 16px;font-size:10.5pt;color:#44444c;">Frage: Wie reagieren die freiberuflichen Hebammen im Südkreis, wenn die Kliniken Hollerau ihnen ein Kooperationsmodell für Brenkhausen anbieten?</p>
+    <div style="border:1px solid #1d1d22;padding:10px 14px;margin:0 0 22px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:9.5pt;line-height:1.5;">
+      <b>Unvollständig.</b> 2 von 7 Abschnitten fehlen: 5 „Versorgung im Südkreis“ (Zeitüberschreitung beim Modell) und 6 „Finanzierung“ (keine Belege). Abschnitt 4 stützt sich teilweise auf Fallback-Personas.<br>Alle Zitate von Personas sind synthetische Modellausgabe (SIM). Der Bericht beschreibt plausible Reaktionen und ist keine Vorhersage.
+    </div>
+    <sc-for list="{{ printSections }}" as="s" hint-placeholder-count="5">
+      <section style="margin:0 0 18px;">
+        <h2 style="margin:0 0 8px;font-size:13pt;font-weight:700;">{{ s.num }} {{ s.title }}<sc-if value="{{ s.isMangel }}"><span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:8.5pt;font-weight:600;border:1px solid #1d1d22;padding:0 4px;margin-left:8px;vertical-align:2px;">mit Mängeln</span></sc-if></h2>
+        <sc-for list="{{ s.blocks }}" as="b" hint-placeholder-count="2">
+          <sc-if value="{{ b.isP }}"><p style="margin:0 0 10px;text-wrap:pretty;"><sc-for list="{{ b.parts }}" as="pt" hint-placeholder-count="3"><sc-if value="{{ pt.isText }}">{{ pt.t }}</sc-if><sc-if value="{{ pt.isClaim }}">{{ pt.t }}<sup style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:7pt;font-weight:600;">{{ pt.fn }}</sup></sc-if><sc-if value="{{ pt.isHyp }}"><span style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:7.5pt;font-weight:700;letter-spacing:0.04em;">[HYPOTHESE] </span><i>{{ pt.t }}</i></sc-if></sc-for></p></sc-if>
+          <sc-if value="{{ b.isQuote }}"><blockquote style="margin:4px 0 12px 20px;padding:0 0 0 0;font-style:italic;">„{{ b.text }}“<span style="font-style:normal;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:8.5pt;color:#44444c;"> · {{ b.name }}, Runde {{ b.round }} · SIM{{ b.fbNote }}</span></blockquote></sc-if>
+          <sc-if value="{{ b.isGap }}"><p style="margin:0 0 10px;padding:6px 10px;border:1px dashed #6b6b73;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:9.5pt;"><b>Datenlücke:</b> {{ b.text }}</p></sc-if>
+          <sc-if value="{{ b.isMangel }}"><p style="margin:0 0 10px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:9pt;color:#44444c;">Hinweis: {{ b.text }}</p></sc-if>
+          <sc-if value="{{ b.isMissing }}"><p style="margin:0 0 10px;padding:8px 10px;border:1px solid #6b6b73;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:9.5pt;"><b>Abschnitt fehlt.</b> {{ b.text }}</p></sc-if>
+        </sc-for>
+      </section>
+    </sc-for>
+    <section style="margin-top:28px;padding-top:12px;border-top:1px solid #1d1d22;font-size:9pt;line-height:1.5;">
+      <h2 style="margin:0 0 8px;font-size:10pt;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">Belege</h2>
+      <sc-for list="{{ footnotes }}" as="f" hint-placeholder-count="9">
+        <p style="margin:0 0 5px;display:flex;gap:8px;"><span style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-weight:600;width:16px;flex:none;text-align:right;">{{ f.n }}</span><span><b>Belastbarkeit {{ f.level }}.</b> {{ f.text }}</span></p>
+      </sc-for>
+    </section>
+  </article>
+</sc-if>
+
+<sc-if value="{{ isScreen }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:none;">
+    <button aria-label="Fassung wählen" style="display:flex;align-items:center;gap:10px;height:32px;padding:0 10px 0 12px;border-radius:8px;border:none;background:var(--s2);color:var(--fg);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)"><span style="font-weight:600;">Fassung 2</span><span style="color:var(--fg2);font-variant-numeric:tabular-nums;">04.10.2026, 17:48</span><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg3);">claude-sonnet-4.5</span><span style="color:var(--fg2);font-size:10px;">▾</span></button>
+    <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--warn-soft);color:var(--warn);"><span style="font-size:10.5px;">◐</span>Unvollständig</span>
+    <span style="flex:1;"></span>
+    <sc-if value="{{ narrow }}"><button onClick="{{ toggleLeft }}" style="height:32px;padding:0 12px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;">☰ Gliederung</button></sc-if>
+    <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Neu erzeugen mit …</button>
+    <button style="height:32px;padding:0 12px 0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Exportieren <span style="font-size:10px;">▾</span></button>
+  </div>
+
+  <div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:12px 16px;border-radius:12px;background:var(--warn-soft);flex:none;">
+    <span style="color:var(--warn);font-weight:700;margin-top:1px;">◐</span>
+    <div style="flex:1;display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.45;">
+      <span style="font-weight:600;font-size:14px;color:var(--fg);">Dieser Bericht ist unvollständig. 2 von 7 Abschnitten fehlen.</span>
+      <span style="color:var(--fg2);"><b style="color:var(--fg);font-weight:600;">5 Versorgung im Südkreis:</b> Zeitüberschreitung beim Modell nach 120 s.</span>
+      <span style="color:var(--fg2);"><b style="color:var(--fg);font-weight:600;">6 Finanzierung:</b> In Graph und Dokument fanden sich keine Belege.</span>
+      <span style="color:var(--fg2);"><b style="color:var(--fg);font-weight:600;">4 Reaktionen von Klinik und Politik:</b> stützt sich teilweise auf 4 Fallback-Personas.</span>
+    </div>
+    <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;flex:none;" style-hover="background:var(--s4)">Fehlende Abschnitte erzeugen</button>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;gap:16px;position:relative;">
+    <sc-if value="{{ showLeft }}" hint-placeholder-val="{{ true }}">
+      <nav aria-label="Gliederung" style="width:232px;flex:none;display:flex;flex-direction:column;gap:2px;overflow:auto;min-height:0;position:{{ lp.pos }};left:0;top:0;bottom:0;z-index:4;background:{{ lp.bg }};box-shadow:{{ lp.sh }};padding:{{ lp.pad }};border-radius:12px;box-sizing:border-box;">
+        <span style="font-size:12px;font-weight:600;color:var(--fg3);padding:0 8px 6px;">Gliederung</span>
+        <sc-for list="{{ outline }}" as="o" hint-placeholder-count="7">
+          <button onClick="{{ o.onClick }}" style="display:flex;align-items:flex-start;gap:10px;padding:7px 8px;border:none;border-radius:7px;background:{{ o.bg }};color:var(--fg);font:inherit;font-size:13px;line-height:1.35;cursor:pointer;text-align:left;" style-hover="background:var(--s3)">
+            <span style="width:16px;color:var(--fg3);font-variant-numeric:tabular-nums;flex:none;">{{ o.num }}</span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;"><span style="color:{{ o.titleFg }};">{{ o.title }}</span><span style="font-size:11.5px;font-weight:600;color:{{ o.color }};">{{ o.glyph }} {{ o.label }}</span></span>
+          </button>
+        </sc-for>
+        <div style="height:14px;"></div>
+        <sc-for list="{{ extras }}" as="x" hint-placeholder-count="2">
+          <button onClick="{{ x.onClick }}" aria-pressed="{{ x.on }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border:none;border-radius:7px;background:{{ x.bg }};color:var(--fg);font:inherit;font-size:13px;cursor:pointer;text-align:left;" style-hover="background:var(--s3)">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;border:{{ x.bd }};font-size:10px;font-weight:700;color:var(--fg2);box-sizing:border-box;flex:none;">{{ x.glyph }}</span>
+            <span style="flex:1;">{{ x.label }}</span>
+            <span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;font-size:11.5px;font-weight:600;background:var(--s3);color:var(--fg2);">{{ x.count }}</span>
+          </button>
+        </sc-for>
+      </nav>
+    </sc-if>
+
+    <div ref="{{ docRef }}" style="flex:1;min-width:0;overflow:auto;min-height:0;background:var(--s2);border-radius:12px;position:relative;">
+      <article style="max-width:680px;margin:0 auto;padding:40px 44px 64px;font-family:'Source Serif 4',Georgia,'Times New Roman',serif;font-size:17px;line-height:1.72;color:var(--fg);">
+        <h1 style="margin:0 0 8px;font-size:29px;line-height:1.25;font-weight:600;letter-spacing:-0.005em;">Kooperationsmodell für die Hebammen im Südkreis</h1>
+        <p style="margin:0 0 30px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5;color:var(--fg2);">Synthetische Diskussion mit 14 Personas über 24 Runden. Der Bericht beschreibt plausible Reaktionen und ist keine Vorhersage.</p>
+        <sc-for list="{{ sections }}" as="s" hint-placeholder-count="5">
+          <section data-sec="{{ s.id }}" style="margin:0 0 30px;">
+            <h2 style="margin:0 0 12px;font-size:21px;line-height:1.35;font-weight:600;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="color:var(--fg3);font-variant-numeric:tabular-nums;">{{ s.num }}</span><span>{{ s.title }}</span><sc-if value="{{ s.isMangel }}"><span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;align-self:center;">◐ mit Mängeln</span></sc-if></h2>
+            <sc-for list="{{ s.blocks }}" as="b" hint-placeholder-count="2">
+              <sc-if value="{{ b.isP }}"><p style="margin:0 0 16px;text-wrap:pretty;"><sc-for list="{{ b.parts }}" as="pt" hint-placeholder-count="3"><sc-if value="{{ pt.isText }}">{{ pt.t }}</sc-if><sc-if value="{{ pt.isClaim }}"><span data-claim="{{ pt.id }}" role="button" tabindex="0" onClick="{{ pt.onClick }}" title="Aussage: Belege anzeigen" style="cursor:pointer;border-bottom:1.5px solid var(--acc-line);background:{{ pt.bg }};border-radius:3px;padding:1px 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone;" style-hover="background:var(--acc-soft)">{{ pt.t }}<span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;background:var(--s3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:10.5px;font-weight:600;color:var(--fg2);line-height:1;white-space:nowrap;"><span style="display:inline-flex;gap:1.5px;align-items:flex-end;"><sc-for list="{{ pt.bars }}" as="br" hint-placeholder-count="3"><span style="width:3px;height:{{ br.h }};border-radius:1px;background:{{ br.bg }};"></span></sc-for></span>{{ pt.level }}</span></span></sc-if><sc-if value="{{ pt.isHyp }}"><span role="button" tabindex="0" onClick="{{ pt.onClick }}" title="Hypothese: nicht ausreichend belegt" style="cursor:pointer;font-style:italic;border-bottom:1.5px dashed var(--fg3);background:{{ pt.bg }};border-radius:3px;padding:1px 1px;color:var(--fg2);" style-hover="background:var(--s3)">{{ pt.t }}<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-style:normal;font-size:10.5px;font-weight:600;color:var(--fg2);line-height:1;white-space:nowrap;">H Hypothese</span></span></sc-if></sc-for></p></sc-if>
+              <sc-if value="{{ b.isQuote }}">
+                <figure style="margin:4px 0 20px;padding:14px 16px;border-radius:10px;background:var(--s3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column;gap:8px;">
+                  <figcaption style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;">
+                    <span style="width:24px;height:24px;border-radius:{{ b.rad }};background:{{ b.av }};color:#fff;display:grid;place-items:center;font-size:9px;font-weight:700;">{{ b.ini }}</span>
+                    <span style="font-weight:650;font-size:13px;">{{ b.name }}</span><span style="color:var(--fg3);">· Runde {{ b.round }}</span>
+                    <span style="flex:1;"></span>
+                    <sc-if value="{{ b.fallback }}"><span style="display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11px;font-weight:600;">↺ Fallback</span></sc-if>
+                    <span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span>
+                  </figcaption>
+                  <blockquote style="margin:0;font-family:'Source Serif 4',Georgia,serif;font-size:16px;line-height:1.6;font-style:italic;text-wrap:pretty;">„{{ b.text }}“</blockquote>
+                  <button onClick="{{ b.onJump }}" style="align-self:flex-start;height:26px;padding:0 6px;margin-left:-6px;border:none;border-radius:6px;background:transparent;color:var(--acc-text);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Im Feed zeigen →</button>
+                </figure>
+              </sc-if>
+              <sc-if value="{{ b.isGap }}">
+                <div role="button" tabindex="0" onClick="{{ b.onClick }}" style="display:flex;gap:12px;align-items:flex-start;margin:0 0 18px;padding:12px 14px;border-radius:10px;border:1.5px dotted var(--fg3);background:{{ b.bg }};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;cursor:pointer;" style-hover="background:var(--s3)">
+                  <span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;background:var(--s4);font-size:11px;font-weight:700;color:var(--fg);white-space:nowrap;flex:none;">∅ Datenlücke</span>
+                  <span style="font-size:14px;line-height:1.5;color:var(--fg2);text-wrap:pretty;">{{ b.text }}</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ b.isMangel }}"><p style="margin:0 0 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5;color:var(--fg2);display:flex;gap:8px;"><span style="color:var(--warn);font-weight:700;">◐</span><span>{{ b.text }}</span></p></sc-if>
+              <sc-if value="{{ b.isMissing }}">
+                <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:10px;background:var(--err-soft);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;">
+                  <span style="color:var(--err);font-weight:700;">✕</span>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.5;"><span style="font-weight:600;">Dieser Abschnitt fehlt.</span><span style="color:var(--fg2);">{{ b.text }}</span></div>
+                  <button style="height:30px;padding:0 12px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;flex:none;" style-hover="background:var(--s4)">Erzeugen</button>
+                </div>
+              </sc-if>
+            </sc-for>
+          </section>
+        </sc-for>
+      </article>
+    </div>
+
+    <aside aria-label="Belege" style="width:340px;flex:none;background:var(--s2);border-radius:12px;overflow:auto;min-height:0;">
+      <sc-if value="{{ sideNone }}">
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+          <span style="font-size:15px;font-weight:600;">Belege</span>
+          <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--fg2);">Wähle eine markierte Aussage im Text. Hier erscheinen ihre Belege, gruppiert nach Art, jeweils mit Sprung an den Ursprung.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;padding-top:6px;">
+            <span style="display:flex;gap:10px;align-items:baseline;"><span style="border-bottom:1.5px solid var(--acc-line);font-family:'Source Serif 4',Georgia,serif;font-size:15px;">Aussage</span><span style="color:var(--fg2);">belegt, mit Belastbarkeit</span></span>
+            <span style="display:flex;gap:10px;align-items:baseline;"><span style="border-bottom:1.5px dashed var(--fg3);font-family:'Source Serif 4',Georgia,serif;font-style:italic;font-size:15px;color:var(--fg2);">Hypothese</span><span style="color:var(--fg2);">plausibel, nicht ausreichend belegt</span></span>
+            <span style="display:flex;gap:10px;align-items:center;"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--s4);font-size:11px;font-weight:700;">∅ Datenlücke</span><span style="color:var(--fg2);">Information fehlt in den Quellen</span></span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ sideClaim }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:18px 20px 24px;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:12.5px;color:var(--fg3);flex:1;">Aussage in Abschnitt {{ claim.sec }}</span><button onClick="{{ clearSide }}" title="Schließen" style="width:28px;height:28px;border:none;border-radius:7px;background:transparent;color:var(--fg2);font:inherit;cursor:pointer;" style-hover="background:var(--s3)">✕</button></div>
+          <p style="margin:0;font-family:'Source Serif 4',Georgia,serif;font-size:15.5px;line-height:1.55;text-wrap:pretty;">{{ claim.text }}</p>
+          <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:var(--s1);">
+            <span style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;"><span style="display:inline-flex;gap:2px;align-items:flex-end;"><sc-for list="{{ claim.bars }}" as="br" hint-placeholder-count="3"><span style="width:4px;height:{{ br.hL }};border-radius:1px;background:{{ br.bg }};"></span></sc-for></span>Belastbarkeit {{ claim.level }}<span style="font-weight:400;color:var(--fg3);">· {{ claim.count }}</span></span>
+            <span style="font-size:12.5px;line-height:1.45;color:var(--fg2);">{{ claim.why }}</span>
+          </div>
+          <sc-for list="{{ claim.groups }}" as="gr" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <span style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--fg3);padding-top:4px;"><span style="width:20px;height:20px;border-radius:50%;background:var(--s3);display:grid;place-items:center;font-size:10px;color:var(--fg2);">{{ gr.glyph }}</span>{{ gr.label }} <span style="font-weight:400;">{{ gr.n }}</span></span>
+              <sc-for list="{{ gr.items }}" as="it" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;background:{{ it.bg }};border:{{ it.bd }};box-sizing:border-box;">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;">
+                    <sc-if value="{{ it.hasAv }}"><span style="width:20px;height:20px;border-radius:{{ it.rad }};background:{{ it.av }};color:#fff;display:grid;place-items:center;font-size:8.5px;font-weight:700;">{{ it.ini }}</span></sc-if>
+                    <span style="font-weight:600;font-size:13px;">{{ it.title }}</span>
+                    <span style="color:var(--fg3);">{{ it.meta }}</span>
+                    <span style="flex:1;"></span>
+                    <sc-if value="{{ it.manual }}"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;">✎ manuell</span></sc-if>
+                    <sc-if value="{{ it.fallback }}"><span style="display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11px;font-weight:600;">↺ Fallback</span></sc-if>
+                    <sc-if value="{{ it.isInterview }}"><span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:5px;border:1px solid var(--fg3);color:var(--fg);font-size:11px;font-weight:600;box-sizing:border-box;">❝ Interview</span></sc-if>
+                    <sc-if value="{{ it.sim }}"><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></sc-if>
+                  </div>
+                  <p style="margin:0;font-size:13px;line-height:1.5;color:var(--fg2);text-wrap:pretty;font-style:{{ it.fs }};">{{ it.text }}</p>
+                  <button onClick="{{ it.onJump }}" style="align-self:flex-start;height:26px;padding:0 6px;margin-left:-6px;border:none;border-radius:6px;background:transparent;color:var(--acc-text);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s3)">{{ it.jump }}</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ sideList }}">
+        <div style="padding:18px 20px 24px;display:flex;flex-direction:column;gap:12px;">
+          <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:15px;font-weight:600;flex:1;">{{ list.title }}</span><button onClick="{{ clearSide }}" title="Schließen" style="width:28px;height:28px;border:none;border-radius:7px;background:transparent;color:var(--fg2);font:inherit;cursor:pointer;" style-hover="background:var(--s3)">✕</button></div>
+          <p style="margin:0;font-size:13px;line-height:1.5;color:var(--fg2);">{{ list.intro }}</p>
+          <sc-for list="{{ list.items }}" as="li" hint-placeholder-count="3">
+            <button onClick="{{ li.onClick }}" style="display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:10px;border:{{ li.bd }};background:{{ li.bg }};color:var(--fg);font:inherit;text-align:left;cursor:pointer;box-sizing:border-box;">
+              <span style="font-size:12px;color:var(--fg3);">Abschnitt {{ li.sec }}</span>
+              <span style="font-family:'Source Serif 4',Georgia,serif;font-size:15px;line-height:1.5;font-style:{{ li.fs }};text-wrap:pretty;">{{ li.text }}</span>
+              <span style="font-size:12.5px;line-height:1.45;color:var(--fg2);">{{ li.why }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1300,&quot;height&quot;:820},&quot;mode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;druck&quot;],&quot;default&quot;:&quot;normal&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;narrow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;init&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;nav&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(o: object) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  docRef = React.createRef();
+  componentDidMount() { this.scrollToSel(); }
+  scrollToSel() {
+    const c = (this.props.init || {}).claim; const box = this.docRef.current;
+    if (!c || !box) return;
+    setTimeout(() => { const el = box.querySelector('[data-claim="' + c + '"]'); if (el) box.scrollTop = Math.max(0, el.offsetTop - 120); }, 60);
+  }
+  renderVals() {
+    const nav = this.props.nav || (() => {});
+    const narrow = !!this.props.narrow;
+    const init = this.props.init || {};
+    const druck = this.props.mode === 'druck';
+    const side = this.state.side !== undefined ? this.state.side : (init.claim ? { k: 'claim', id: init.claim } : null);
+    const leftOpen = !!this.state.leftOpen;
+    const PS = { gf: ['Geschäftsführung', 'GF', 250, 'K', 0], wue: ['Anke Wübbena', 'AW', 20, 'E', 0], hv: ['Hebammenverband', 'HV', 45, 'K', 1], rd: ['Rettungsdienst des Landkreises', 'RD', 200, 'K', 0], san: ['Dr. Birgit Sander', 'BS', 170, 'E', 0], cdu: ['CDU-Kreistagsfraktion', 'CDU', 230, 'K', 1], ini: ['Initiative „Kreißsaal bleibt in Brenkhausen“', 'IN', 140, 'K', 1] };
+    const per = (id) => { const p = PS[id]; return { name: p[0], ini: p[1], av: 'oklch(0.5 0.08 ' + p[2] + ')', rad: p[3] === 'K' ? '6px' : '50%', fallback: !!p[4] }; };
+    const POSTS = {
+      p1: ['gf', 1, 'Beschlussvorlage: Die Geschäftsführung der Kliniken Hollerau gGmbH schlägt vor, die Geburtshilfe in Brenkhausen zum 30. Juni 2027 zu schließen …', 'twitter'],
+      p2: ['wue', 2, 'Als Sprecherin der freiberuflichen Hebammengruppe im Südkreis kann ich diesen Beschlussvorschlag nicht unwidersprochen stehen lassen. Die 23 Tage Kreißsaal-Schließung sind eine direkte Folge unbesetzter Stellen und mangelnder Kooperationsbereitschaft mit uns freiberuflichen Kolleginnen.', 'twitter'],
+      p3: ['hv', 2, 'Wir lehnen die Schließung ab, solange das Land nicht über einen Sicherstellungszuschlag entschieden hat.', 'twitter'],
+      p4: ['rd', 3, 'Die Fahrzeit von Moorhagen nach Hollerau-Nord liegt bei 52 Minuten, bei Glätte bis zu 72 Minuten, deutlich über dem Richtwert von 40 Minuten.', 'twitter'],
+      p5: ['san', 3, 'Mit Kinderklinik im Haus ist die Versorgung von Risikogeburten in Hollerau-Nord sicherer.', 'twitter'],
+      p7: ['gf', 5, 'Wir haben den freiberuflichen Hebammen im Frühjahr Gespräche angeboten. Ein Kooperationsmodell für Brenkhausen bleibt möglich, ersetzt aber keine festen Stellen.', 'twitter'],
+      p8: ['cdu', 6, 'Wir tragen die Bündelung mit, wenn das Land einen Sicherstellungszuschlag zahlt …', 'twitter'],
+      p9: ['ini', 6, '6.400 Unterschriften, 900 Teilnehmende bei der Demonstration.', 'twitter'],
+      p10: ['wue', 7, 'Ein Angebot ohne verlässliche Dienstpläne und ohne Zuschuss zur Haftpflicht ist kein Kooperationsmodell. Wir sind gesprächsbereit, aber nicht zu diesen Bedingungen.', 'twitter'],
+      rc1: ['rd', 3, 'Kommentar unter „Beschlussvorlage Brenkhausen: Was heißt das konkret für Moorhagen?“: Die Fahrzeit liegt bei 52 Minuten, bei Glätte bis zu 72 Minuten.', 'reddit'],
+    };
+    const T = (t) => ({ t, isText: true });
+    const C = (id, t) => ({ id, t, isClaim: true });
+    const H = (id, t) => ({ id, t, isHyp: true });
+    const SEC = [
+      { id: 's1', num: 1, title: 'Zusammenfassung', st: 'ok', blocks: [{ p: [T('Die Diskussion zeigt zwei Linien. '), C('c1', 'Die freiberuflichen Hebammen lehnen das angebotene Kooperationsmodell in seiner jetzigen Form ab'), T(', '), C('c2', 'knüpfen eine Zusage aber an verlässliche Dienstpläne und einen Zuschuss zur Haftpflicht'), T('. Die Geschäftsführung stellt das Modell als Ergänzung dar, nicht als Ersatz für feste Stellen. '), H('h1', 'Eine Einigung erscheint möglich, falls das Land einen Sicherstellungszuschlag zusagt.')] }] },
+      { id: 's2', num: 2, title: 'Ausgangslage', st: 'ok', blocks: [{ p: [T('Die Geschäftsführung der Kliniken Hollerau gGmbH schlägt vor, die Geburtshilfe in Brenkhausen zum 30. Juni 2027 zu schließen und in Hollerau-Nord zu bündeln. '), C('c3', 'Als Gründe nennt die Vorlage unbesetzte Hebammenstellen, 23 Tage Kreißsaal-Schließung im Jahr 2025 und ein Defizit von 1,9 Mio. €.'), T(' Über die Vorlage entscheidet der Kreistag.')] }] },
+      { id: 's3', num: 3, title: 'Haltung der freiberuflichen Hebammen', st: 'ok', blocks: [
+        { p: [C('c4', 'Die Sprecherin der freiberuflichen Hebammen führt die Schließtage auf unbesetzte Stellen und fehlende Kooperation der Klinik zurück.'), T(' Sie bleibt gesprächsbereit, lehnt das Angebot aber zu den genannten Bedingungen ab.')] },
+        { quote: 'p2' },
+        { p: [C('c5', 'Der Hebammenverband unterstützt diese Haltung und verbindet sie mit der offenen Entscheidung des Landes über einen Sicherstellungszuschlag.'), T(' '), H('h2', 'Die Bereitschaft zur Kooperation könnte steigen, wenn die Klinik feste Belegschichten im Kreißsaal zusagt.')] },
+      ] },
+      { id: 's4', num: 4, title: 'Reaktionen von Klinik und Politik', st: 'mangel', blocks: [
+        { mangel: 'Dieser Abschnitt stützt sich zum Teil auf Fallback-Personas (CDU-Kreistagsfraktion, Hebammenverband). Ihre Beiträge sind weniger spezifisch.' },
+        { p: [C('c6', 'Die Geschäftsführung verweist auf Gesprächsangebote aus dem Frühjahr und betont, ein Kooperationsmodell ersetze keine festen Stellen.'), T(' '), C('c7', 'Die CDU-Kreistagsfraktion würde die Bündelung mittragen, wenn das Land einen Sicherstellungszuschlag zahlt.')] },
+        { p: [T('Gegen die Bündelung spricht vor allem die Erreichbarkeit. '), C('c8', 'Der Rettungsdienst gibt die Fahrzeit von Moorhagen nach Hollerau-Nord mit 52 Minuten an, bei Glätte bis zu 72 Minuten.'), T(' Die Chefärztin in Hollerau-Nord hält dem die Sicherheit bei Risikogeburten entgegen.')] },
+        { quote: 'p5' },
+        { gap: 'g1', text: 'Ob der Rettungsdienst zusätzliche Fahrzeuge für den Südkreis vorhalten würde, geht aus den Quellen nicht hervor.' },
+      ] },
+      { id: 's5', num: 5, title: 'Versorgung im Südkreis', st: 'fehlt', blocks: [{ missing: 'Zeitüberschreitung beim Modell nach 120 s. Die Belege für diesen Abschnitt liegen vor.' }] },
+      { id: 's6', num: 6, title: 'Finanzierung', st: 'fehlt', blocks: [{ missing: 'In Graph und Dokument fanden sich keine Belege. Der Abschnitt wurde deshalb ausgelassen und nicht geraten.' }] },
+      { id: 's7', num: 7, title: 'Offene Punkte', st: 'ok', blocks: [
+        { p: [C('c9', 'Die Initiative „Kreißsaal bleibt in Brenkhausen“ verweist auf 6.400 Unterschriften und 900 Teilnehmende bei der Demonstration.'), T(' '), H('h3', 'Der Betriebsrat könnte die Initiative stärker unterstützen, falls Stellen in Brenkhausen wegfallen.')] },
+        { gap: 'g2', text: 'Zur Zahl der freiberuflichen Hebammen im Südkreis enthalten die Quellen keine Angabe.' },
+      ] },
+    ];
+    const DOC = { '§3': 'Die Geschäftsführung begründet den Vorschlag mit unbesetzten Hebammenstellen, 23 Tagen Kreißsaal-Schließung im Jahr 2025 und einem Defizit von 1,9 Mio. €.', '§4.1': 'Die freiberuflichen Hebammen sehen in der fehlenden Kooperation eine Ursache für die Schließtage.', '§4.2': 'Der Hebammenverband lehnt die Schließung ab, solange über den Sicherstellungszuschlag nicht entschieden ist.', '§5': 'Die Fahrzeit von Moorhagen nach Hollerau-Nord liegt bei 52 Minuten, bei Glätte bis zu 72 Minuten.', '§4.5': 'Die Initiative übergab 6.400 Unterschriften; an der Demonstration nahmen 900 Menschen teil.' };
+    const SECN = { '§3': 'Beschlussvorlage', '§4.1': 'Stellungnahmen', '§4.2': 'Stellungnahmen', '§5': 'Erreichbarkeit', '§4.5': 'Stellungnahmen' };
+    const EDGES = { k21: ['e1', 'Kliniken Hollerau → Anke Wübbena', 'bietet Kooperation an', '02.10.2026'], k4: ['e5', 'Geschäftsführung → Kreißsaal Brenkhausen', 'schlägt Schließung vor · belegt durch §3'], k7: ['e7', 'Anke Wübbena → Geschäftsführung', 'kritisiert · belegt durch §4.1'], k9: ['e6', 'Hebammenverband → Landesministerium', 'fordert Zuschlag von · belegt durch §4.2'], k14: ['e14', 'Moorhagen → Hollerau-Nord', 'Fahrzeit 52 min, bei Glätte 72 min · belegt durch §5'], k17: ['e13', 'CDU → Landesministerium', 'knüpft Zustimmung an Zuschlag von · belegt durch §4.6'] };
+    const IV = { 'i1a': ['Warum lehnen Sie das Kooperationsangebot ab?', 'Wir lehnen nicht die Kooperation ab, sondern diese Bedingungen. … Zu diesen Bedingungen nicht.'], 'i1b': ['Was wäre für Sie ein annehmbares Angebot?', 'Feste Belegschichten im Kreißsaal Brenkhausen, ein Zuschuss zur Haftpflicht und ein gemeinsamer Dienstplan, den wir mitgestalten.'] };
+    const B = {
+      c1: ['hoch', 'Mehrere übereinstimmende Beiträge und ein Interview. Das Angebot selbst ist im Graph nur manuell erfasst.', [], ['k21'], ['p2', 'p10'], ['i1a']],
+      c2: ['mittel', 'Ein Beitrag und ein Interview derselben Persona; im Dokument nicht erwähnt.', [], [], ['p10'], ['i1b']],
+      c3: ['hoch', 'Dokument, Graph und Simulation stimmen überein.', ['§3'], ['k4'], ['p1'], []],
+      c4: ['hoch', 'Dokument, Graph und Simulation stimmen überein.', ['§4.1'], ['k7'], ['p2'], []],
+      c5: ['mittel', 'Im Dokument belegt; der Simulationsbeleg stammt von einer Fallback-Persona.', ['§4.2'], ['k9'], ['p3'], []],
+      c6: ['mittel', 'Nur durch Beiträge belegt; das Dokument nennt die Gesprächsangebote nicht.', [], [], ['p7'], []],
+      c7: ['niedrig', 'Der einzige Simulationsbeleg stammt von einer Fallback-Persona.', [], ['k17'], ['p8'], []],
+      c8: ['hoch', 'Dokument, Graph und zwei Beiträge in beiden Räumen stimmen überein.', ['§5'], ['k14'], ['p4', 'rc1'], []],
+      c9: ['mittel', 'Im Dokument belegt; der Simulationsbeleg stammt von einer Fallback-Persona.', ['§4.5'], [], ['p9'], []],
+    };
+    const HY = { h1: ['1', 'Eine Einigung erscheint möglich, falls das Land einen Sicherstellungszuschlag zusagt.', 'Nur aus zwei Beiträgen abgeleitet; über den Zuschlag ist nichts entschieden.'], h2: ['3', 'Die Bereitschaft zur Kooperation könnte steigen, wenn die Klinik feste Belegschichten im Kreißsaal zusagt.', 'Gestützt auf ein Interview, nicht auf die Diskussion.'], h3: ['7', 'Der Betriebsrat könnte die Initiative stärker unterstützen, falls Stellen in Brenkhausen wegfallen.', 'Einziger Hinweis ist eine manuell angelegte Kante im Graph; der Betriebsrat ist eine Fallback-Persona.'] };
+    const GA = { g1: ['4', 'Ob der Rettungsdienst zusätzliche Fahrzeuge für den Südkreis vorhalten würde, geht aus den Quellen nicht hervor.', 'Gesucht in Dokument (§5) und Graph (Rettungsdienst, 2 Kanten). Kein Treffer.'], g2: ['7', 'Zur Zahl der freiberuflichen Hebammen im Südkreis enthalten die Quellen keine Angabe.', 'Gesucht in Dokument und Graph. Die Simulation nennt keine Zahl, und Agora erfindet keine.'] };
+    const BAR = { hoch: 3, mittel: 2, niedrig: 1 };
+    const bars = (lv) => [1, 2, 3].map(i => ({ h: (4 + i * 2) + 'px', hL: (5 + i * 3) + 'px', bg: i <= BAR[lv] ? 'var(--fg)' : 'var(--fg3)' }));
+    const claimSec = {}; SEC.forEach(s => s.blocks.forEach(b => (b.p || []).forEach(pt => { if (pt.isClaim) claimSec[pt.id] = s.num; })));
+    const setSide = (v) => this.setState({ side: v });
+    let fnN = 0; const fnMap = {};
+    const mapSec = (s) => ({
+      id: s.id, num: s.num, title: s.title, isMangel: s.st === 'mangel',
+      blocks: s.blocks.map(b => {
+        if (b.p) return { isP: true, parts: b.p.map(pt => {
+          if (pt.isClaim) { if (!fnMap[pt.id]) fnMap[pt.id] = ++fnN; const lv = B[pt.id][0]; const on = side && side.k === 'claim' && side.id === pt.id; return { ...pt, level: lv, bars: bars(lv), fn: fnMap[pt.id], bg: on ? 'var(--acc-soft)' : 'transparent', onClick: () => setSide({ k: 'claim', id: pt.id }) }; }
+          if (pt.isHyp) { const on = side && side.k === 'hyp' && side.id === pt.id; return { ...pt, bg: on ? 'var(--s3)' : 'transparent', onClick: () => setSide({ k: 'hyp', id: pt.id }) }; }
+          return pt;
+        }) };
+        if (b.quote) { const q = POSTS[b.quote], p = per(q[0]); return { isQuote: true, ...p, round: q[1], text: q[2], fbNote: p.fallback ? ', Fallback-Persona' : '', onJump: () => nav({ tab: 'simulation', init: { post: b.quote, claim: b.quote === 'p2' ? 'c4' : 'c8' } }) }; }
+        if (b.gap) { const on = side && side.k === 'gap' && side.id === b.gap; return { isGap: true, text: b.text, bg: on ? 'var(--s3)' : 'transparent', onClick: () => setSide({ k: 'gap', id: b.gap }) }; }
+        if (b.mangel) return { isMangel: true, text: b.mangel };
+        if (b.missing) return { isMissing: true, text: b.missing };
+        return {};
+      }),
+    });
+    const sections = SEC.map(mapSec);
+    const ST = { ok: ['✓', 'fertig', 'var(--ok)'], mangel: ['◐', 'mit Mängeln', 'var(--warn)'], fehlt: ['✕', 'fehlt', 'var(--err)'] };
+    const scrollTo = (id) => () => { const box = this.docRef.current; if (!box) return; const el = box.querySelector('[data-sec="' + id + '"]'); if (el) box.scrollTop = el.offsetTop - 16; this.setState({ leftOpen: false }); };
+    const outline = SEC.map(s => ({ num: s.num, title: s.title, glyph: ST[s.st][0], label: ST[s.st][1], color: ST[s.st][2], titleFg: s.st === 'fehlt' ? 'var(--fg2)' : 'var(--fg)', bg: 'transparent', onClick: scrollTo(s.id) }));
+    const extras = [
+      { label: 'Hypothesen', count: 3, glyph: 'H', bd: '1px dashed var(--fg3)', on: !!(side && side.k === 'hyplist'), onClick: () => setSide({ k: 'hyplist' }) },
+      { label: 'Datenlücken', count: 2, glyph: '∅', bd: '1.5px dotted var(--fg3)', on: !!(side && side.k === 'gaplist'), onClick: () => setSide({ k: 'gaplist' }) },
+    ].map(x => ({ ...x, bg: x.on ? 'var(--acc-soft)' : 'transparent' }));
+
+    let claim = { bars: [], groups: [] };
+    if (side && side.k === 'claim' && B[side.id]) {
+      const [lv, why, docs, edges, sims, ivs] = B[side.id];
+      const allTexts = {}; SEC.forEach(s => s.blocks.forEach(b => (b.p || []).forEach(pt => { if (pt.isClaim) allTexts[pt.id] = pt.t; })));
+      const groups = [];
+      if (docs.length) groups.push({ label: 'Dokument', glyph: '¶', items: docs.map(d => ({ title: d + ' ' + SECN[d], meta: '', text: '„' + DOC[d] + '“', fs: 'normal', jump: 'Zur Stelle im Dokument ↗', onJump: () => {}, bg: 'var(--s1)', bd: 'none' })) });
+      if (edges.length) groups.push({ label: 'Graph', glyph: '◇', items: edges.map(k => { const e = EDGES[k]; return { title: e[1], meta: '', text: e[2], fs: 'normal', manual: !!e[3], jump: 'Kante im Graph zeigen →', onJump: () => nav({ tab: 'graph', init: { edge: k, entity: e[0], graphView: 'netz', claim: side.id } }), bg: 'var(--s1)', bd: e[3] ? '1px dashed var(--fg3)' : 'none' }; }) });
+      if (sims.length) groups.push({ label: 'Simulation', glyph: '⇆', items: sims.map(pid => { const q = POSTS[pid], p = per(q[0]); return { hasAv: true, ...p, title: p.name, meta: '· Runde ' + q[1] + ' · ' + (q[3] === 'reddit' ? 'Reddit' : 'Twitter'), text: q[2], fs: 'normal', sim: true, jump: 'Im Feed zeigen →', onJump: () => nav({ tab: 'simulation', init: q[3] === 'reddit' ? { comment: pid, claim: side.id } : { post: pid, claim: side.id } }), bg: 'var(--s1)', bd: 'none' }; }) });
+      if (ivs.length) groups.push({ label: 'Interview', glyph: '❝', items: ivs.map(iv => { const p = per('wue'); return { hasAv: true, ...p, fallback: false, title: p.name, meta: '· 05.10.', text: 'Frage: ' + IV[iv][0] + ' Antwort: ' + IV[iv][1], fs: 'normal', sim: true, isInterview: true, jump: 'Gespräch öffnen →', onJump: () => nav({ tab: 'interviews', init: { conv: 'i1', claim: side.id } }), bg: 'transparent', bd: '1px solid var(--fg3)' }; }) });
+      const n = docs.length + edges.length + sims.length + ivs.length;
+      claim = { sec: claimSec[side.id], text: allTexts[side.id], level: lv, bars: bars(lv), why, count: n + ' Belege aus ' + groups.length + ' Arten', groups: groups.map(g => ({ ...g, n: g.items.length, items: g.items.map(it => ({ hasAv: false, manual: false, fallback: false, sim: false, isInterview: false, ...it })) })) };
+    }
+    let list = { items: [] };
+    if (side && (side.k === 'hyp' || side.k === 'hyplist')) list = { title: 'Hypothesen', intro: 'Plausibel, aber nicht ausreichend belegt. Agora führt sie getrennt, damit sie nicht als Ergebnis gelesen werden.', items: Object.entries(HY).map(([id, [sec, text, why]]) => { const on = side.id === id; return { sec, text, why, fs: 'italic', bd: on ? '2px solid var(--acc)' : '1px dashed var(--fg3)', bg: on ? 'var(--acc-soft)' : 'transparent', onClick: () => setSide({ k: 'hyp', id }) }; }) };
+    if (side && (side.k === 'gap' || side.k === 'gaplist')) list = { title: 'Datenlücken', intro: 'Die Quellen enthalten die nötige Information nicht. Agora füllt diese Stellen nicht mit Vermutungen.', items: Object.entries(GA).map(([id, [sec, text, why]]) => { const on = side.id === id; return { sec, text, why, fs: 'normal', bd: on ? '2px solid var(--acc)' : '1.5px dotted var(--fg3)', bg: on ? 'var(--acc-soft)' : 'transparent', onClick: () => setSide({ k: 'gap', id }) }; }) };
+
+    const FNT = {};
+    Object.entries(B).forEach(([id, [lv, , docs, edges, sims, ivs]]) => {
+      const parts = [];
+      docs.forEach(d => parts.push('Dokument seed-3-geburtshilfe-hollerau.md, ' + d + ' ' + SECN[d]));
+      edges.forEach(k => parts.push('Graph: ' + EDGES[k][1] + (EDGES[k][3] ? ' (manuell, ' + EDGES[k][3] + ')' : '')));
+      sims.forEach(pid => { const q = POSTS[pid], p = per(q[0]); parts.push('Simulation, ' + (q[3] === 'reddit' ? 'Reddit' : 'Twitter') + ', Runde ' + q[1] + ': ' + p.name + (p.fallback ? ' (Fallback-Persona)' : '') + ' (SIM)'); });
+      ivs.forEach(() => parts.push('Interview mit Anke Wübbena, 05.10.2026 (SIM, Interview)'));
+      FNT[id] = { level: lv, text: parts.join('; ') + '.' };
+    });
+    const footnotes = Object.entries(fnMap).sort((a, b) => a[1] - b[1]).map(([id, n]) => ({ n, ...FNT[id] }));
+
+    return {
+      isDruck: druck, isScreen: !druck, rootPos: druck ? 'relative' : 'absolute',
+      printSections: sections, footnotes,
+      narrow, showLeft: !narrow || leftOpen, toggleLeft: () => this.setState({ leftOpen: !leftOpen }),
+      lp: narrow ? { pos: 'absolute', bg: 'var(--s1)', sh: 'var(--shadow-dlg)', pad: '14px' } : { pos: 'relative', bg: 'transparent', sh: 'none', pad: '0' },
+      outline, extras, sections, docRef: this.docRef,
+      sideNone: !side, sideClaim: !!(side && side.k === 'claim'), sideList: !!(side && side.k !== 'claim'),
+      claim, list, clearSide: () => setSide(null),
+    };
+  }
+}
+</script>
+</body>
+</html>

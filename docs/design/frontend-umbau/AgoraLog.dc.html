@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:{{ headPad }};">
+    <sc-if value="{{ hasTitle }}" hint-placeholder-val="{{ true }}"><span style="font-weight:600;font-size:14px;">{{ title }}</span></sc-if>
+    <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg3);"><span style="width:7px;height:7px;border-radius:50%;background:{{ liveDot }};"></span>{{ liveLabel }}</span>
+    <span style="flex:1;"></span>
+    <div role="group" aria-label="Stufe filtern" style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;">
+      <sc-for list="{{ levelSeg }}" as="l" hint-placeholder-count="4">
+        <button onClick="{{ l.onClick }}" aria-pressed="{{ l.on }}" style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:none;border-radius:6px;font:inherit;font-size:12.5px;cursor:pointer;background:{{ l.bg }};color:var(--fg);">
+          <span style="color:{{ l.color }};font-size:10.5px;font-weight:700;">{{ l.glyph }}</span>{{ l.label }}<span style="color:var(--fg3);font-variant-numeric:tabular-nums;">{{ l.count }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;width:210px;height:32px;padding:0 10px;box-sizing:border-box;border-radius:8px;background:var(--field);color:var(--fg3);font-size:13px;">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"></circle><line x1="11" y1="11" x2="14.5" y2="14.5"></line></svg>
+      <input value="{{ q }}" onChange="{{ onQ }}" placeholder="Meldungen durchsuchen" aria-label="Meldungen durchsuchen" style="flex:1;min-width:0;border:none;background:transparent;color:var(--fg);font:inherit;font-size:13px;outline:none;">
+    </label>
+    <sc-if value="{{ canPause }}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{ togglePause }}" aria-pressed="{{ paused }}" style="height:32px;padding:0 12px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">{{ pauseLabel }}</button>
+    </sc-if>
+    <sc-if value="{{ closable }}">
+      <button onClick="{{ onClose }}" title="Konsole schließen" style="width:32px;height:32px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:15px;cursor:pointer;" style-hover="background:var(--s3)">✕</button>
+    </sc-if>
+  </div>
+  <div role="log" style="flex:1;min-height:0;overflow:auto;padding:{{ bodyPad }};font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:1.5;">
+    <sc-for list="{{ logs }}" as="lg" hint-placeholder-count="8">
+      <div style="display:grid;grid-template-columns:70px 92px 130px minmax(0,1fr);gap:12px;padding:6px 0;border-top:1px solid var(--line);">
+        <span style="color:var(--fg3);">{{ lg.t }}</span>
+        <span style="color:{{ lg.color }};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-weight:600;font-size:12px;">{{ lg.glyph }} {{ lg.level }}</span>
+        <span style="color:var(--fg2);">{{ lg.src }}</span>
+        <span style="color:var(--fg);overflow-wrap:anywhere;">{{ lg.msg }}</span>
+      </div>
+    </sc-for>
+    <sc-if value="{{ noLogs }}"><div style="padding:24px 0;border-top:1px solid var(--line);color:var(--fg3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;">Keine Meldungen für diesen Filter.</div></sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1100,&quot;height&quot;:420},&quot;scope&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;alle&quot;,&quot;r1&quot;,&quot;r2&quot;],&quot;default&quot;:&quot;alle&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;inset&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;closable&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;onClose&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = { level: 'alle', paused: false, q: '' };
+  renderVals() {
+    const scope = this.props.scope || 'alle';
+    const inset = !!this.props.inset;
+    const LV = { info: { glyph: 'i', label: 'Info', color: 'var(--fg2)' }, warn: { glyph: '▲', label: 'Warnung', color: 'var(--warn)' }, err: { glyph: '✕', label: 'Fehler', color: 'var(--err)' } };
+    const SETS = {
+      alle: [
+        ['14:32:08', 'info', 'sim.runner', 'Runde 11 von 24 gestartet, 14 Personas aktiv (lauf_7f3a2c)'],
+        ['14:32:07', 'info', 'sim.runner', 'Runde 10 abgeschlossen: 38 Beiträge, 112 Aktionen'],
+        ['14:31:52', 'warn', 'llm.openai', 'Rate-Limit erreicht, neuer Versuch in 4 s (Versuch 2 von 5)'],
+        ['14:31:40', 'info', 'sim.twitter', 'Anke Wübbena antwortet auf Beitrag #4182 der Geschäftsführung'],
+        ['14:30:15', 'info', 'budget', 'lauf_7f3a2c: 2,15 € von 8,00 € verbraucht'],
+        ['14:29:58', 'warn', 'sim.reddit', 'Kommentar gekürzt: 2.140 Zeichen über der Grenze von 2.000'],
+        ['14:12:44', 'info', 'personas', 'Personasatz „Südkreis Geburtshilfe“ geladen, 14 Personas'],
+        ['14:10:02', 'info', 'pipeline', 'lauf_7f3a2c gestartet, Profil „Ausgewogen“'],
+        ['11:05:31', 'err', 'graph.neo4j', 'Verbindung abgelehnt: bolt://neo4j:7687, Zeitüberschreitung nach 30 s (lauf_19bd04)'],
+        ['11:05:31', 'err', 'pipeline', 'lauf_19bd04 fehlgeschlagen in Stufe Graph'],
+        ['10:48:12', 'warn', 'budget', 'lauf_c2e910: Kostengrenze 5,00 € erreicht, Simulation in Runde 17 beendet'],
+        ['10:47:03', 'warn', 'personas', '4 Personas aus Ersatzvorlage erzeugt (lauf_a81f55)'],
+      ],
+      r1: [
+        ['14:32:08', 'info', 'sim.runner', 'Runde 11 von 24 gestartet, 14 Personas aktiv'],
+        ['14:32:07', 'info', 'sim.runner', 'Runde 10 abgeschlossen: 38 Beiträge, 112 Aktionen'],
+        ['14:31:58', 'info', 'tool', 'sim.post_create(persona="anke_wuebbena", reply_to=4182) → #4190, 288 ms'],
+        ['14:31:52', 'warn', 'llm.openai', 'Rate-Limit erreicht, neuer Versuch in 4 s (Versuch 2 von 5)'],
+        ['14:31:20', 'info', 'tool', 'graph.neighbors(entity="Moorhagen") → 3 Kanten, 22 ms'],
+        ['14:29:58', 'warn', 'sim.reddit', 'Kommentar gekürzt: 2.140 Zeichen über der Grenze von 2.000'],
+        ['14:12:44', 'info', 'personas', 'Personasatz „Südkreis Geburtshilfe“ geladen, 14 Personas'],
+        ['14:10:02', 'info', 'pipeline', 'Lauf gestartet, Profil „Ausgewogen“'],
+      ],
+      r2: [
+        ['17:52:10', 'info', 'pipeline', 'Lauf abgeschlossen mit Mängeln: Bericht unvollständig'],
+        ['17:51:58', 'err', 'report.writer', 'Abschnitt „Versorgung im Südkreis“: Zeitüberschreitung nach 120 s (claude-sonnet-4.5)'],
+        ['17:51:02', 'warn', 'report.evidence', 'Abschnitt „Finanzierung“: keine Belege in Graph oder Dokument, Abschnitt ausgelassen'],
+        ['17:48:30', 'info', 'report.writer', 'Fassung 2 begonnen, 7 Abschnitte geplant'],
+        ['17:47:12', 'info', 'tool', 'graph.search(query="Sicherstellungszuschlag") → 3 Treffer, 41 ms'],
+        ['17:47:09', 'info', 'tool', 'sim.posts(round<=24, persona="anke_wuebbena") → 9 Beiträge, 18 ms'],
+        ['17:09:44', 'info', 'sim.runner', 'Runde 24 von 24 abgeschlossen: 41 Beiträge'],
+        ['16:52:31', 'warn', 'llm.openai', 'Rate-Limit erreicht, neuer Versuch in 4 s (Versuch 2 von 5)'],
+        ['16:31:05', 'info', 'tool', 'sim.post_create(persona="geschaeftsfuehrung", round=1) → #1, 312 ms'],
+        ['16:30:40', 'warn', 'personas', '4 Kollektive aus Ersatzvorlage erzeugt: Hebammenverband, Betriebsrat, Initiative, CDU-Kreistagsfraktion'],
+        ['16:30:12', 'err', 'personas', 'Erzeugung der Kollektive fehlgeschlagen: Antwort entsprach nicht dem Schema (claude-sonnet-4.5)'],
+        ['16:27:00', 'info', 'pipeline', 'Lauf gestartet, Profil „Ausgewogen“'],
+      ],
+    };
+    const base = SETS[scope] || SETS.alle;
+    const finished = scope === 'r2';
+    const { level, paused, q } = this.state;
+    const ql = q.trim().toLowerCase();
+    const logs = base.filter(l => (level === 'alle' || l[1] === level) && (!ql || (l[2] + ' ' + l[3]).toLowerCase().includes(ql)))
+      .map(([t, lv, src, msg]) => ({ t, src, msg, level: LV[lv].label, glyph: LV[lv].glyph, color: LV[lv].color }));
+    const cnt = (k) => k === 'alle' ? base.length : base.filter(l => l[1] === k).length;
+    const levelSeg = [['alle', 'Alle', '', 'var(--fg3)'], ['err', 'Fehler', '✕', 'var(--err)'], ['warn', 'Warnung', '▲', 'var(--warn)'], ['info', 'Info', 'i', 'var(--fg2)']]
+      .map(([k, label, glyph, color]) => ({ label, glyph, color, count: cnt(k), on: level === k, bg: level === k ? 'var(--s4)' : 'transparent', onClick: () => this.setState({ level: k }) }));
+    return {
+      title: this.props.title || '', hasTitle: !!this.props.title,
+      headPad: inset ? '8px 14px 10px 20px' : '0 0 12px',
+      bodyPad: inset ? '0 20px 12px' : '0',
+      levelSeg, logs, noLogs: logs.length === 0, q,
+      onQ: (e) => this.setState({ q: e.target.value }),
+      canPause: !finished, paused, pauseLabel: paused ? 'Fortsetzen' : 'Pause',
+      togglePause: () => this.setState({ paused: !paused }),
+      liveDot: finished || paused ? 'var(--fg3)' : 'var(--ok)',
+      liveLabel: finished ? 'Lauf abgeschlossen' : (paused ? 'pausiert' : 'live'),
+      closable: !!this.props.closable, onClose: this.props.onClose || (() => {}),
+    };
+  }
+}
+</script>
+</body>
+</html>

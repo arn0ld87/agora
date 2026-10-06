@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+html,body{margin:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+[data-ag-theme="dark"]{color-scheme:dark;--s0:oklch(0.185 0.004 265);--s1:oklch(0.215 0.004 265);--s2:oklch(0.248 0.005 265);--s3:oklch(0.29 0.006 265);--s4:oklch(0.335 0.006 265);--field:oklch(0.205 0.004 265);--line:oklch(0.31 0.005 265);--fg:oklch(0.96 0.003 265);--fg2:oklch(0.8 0.006 265);--fg3:oklch(0.7 0.008 265);--acc:oklch(0.55 0.2 293);--acc-hover:oklch(0.6 0.2 293);--acc-press:oklch(0.5 0.2 293);--acc-text:oklch(0.78 0.13 293);--acc-soft:oklch(0.55 0.2 293 / 0.24);--acc-line:oklch(0.7 0.16 293 / 0.55);--on-acc:#fff;--ok:oklch(0.8 0.15 152);--ok-soft:oklch(0.8 0.15 152 / 0.15);--warn:oklch(0.86 0.15 88);--warn-soft:oklch(0.86 0.15 88 / 0.15);--err:oklch(0.74 0.17 25);--err-soft:oklch(0.74 0.17 25 / 0.16);--scrim:oklch(0.1 0.005 265 / 0.6);--shadow-pop:0 -8px 32px oklch(0 0 0 / 0.35);--shadow-dlg:0 24px 64px oklch(0 0 0 / 0.5),0 0 0 1px oklch(1 0 0 / 0.06);}
+[data-ag-theme="light"]{color-scheme:light;--s0:oklch(0.972 0.002 265);--s1:oklch(0.945 0.003 265);--s2:oklch(1 0 0);--s3:oklch(0.935 0.004 265);--s4:oklch(0.9 0.005 265);--field:oklch(0.972 0.002 265);--line:oklch(0.9 0.004 265);--fg:oklch(0.21 0.006 265);--fg2:oklch(0.4 0.008 265);--fg3:oklch(0.46 0.01 265);--acc:oklch(0.5 0.2 293);--acc-hover:oklch(0.45 0.2 293);--acc-press:oklch(0.42 0.2 293);--acc-text:oklch(0.47 0.2 293);--acc-soft:oklch(0.5 0.2 293 / 0.12);--acc-line:oklch(0.5 0.2 293 / 0.45);--on-acc:#fff;--ok:oklch(0.5 0.13 152);--ok-soft:oklch(0.6 0.14 152 / 0.14);--warn:oklch(0.52 0.11 70);--warn-soft:oklch(0.82 0.14 85 / 0.3);--err:oklch(0.52 0.19 25);--err-soft:oklch(0.6 0.19 25 / 0.12);--scrim:oklch(0.2 0.01 265 / 0.35);--shadow-pop:0 -6px 24px oklch(0.2 0.02 265 / 0.12);--shadow-dlg:0 20px 56px oklch(0.2 0.02 265 / 0.2),0 0 0 1px oklch(0.2 0.02 265 / 0.06);}
+[data-ag-theme] a{color:var(--acc-text);text-decoration:none}
+[data-ag-theme] a:hover{text-decoration:underline}
+[data-ag-theme] :focus-visible{outline:2px solid var(--acc-text);outline-offset:2px}
+@keyframes agspin{to{transform:rotate(360deg)}}
+@keyframes agpulse{0%,100%{opacity:.5}50%{opacity:1}}
+</style>
+</helmet>
+<div data-ag-theme="{{ theme }}" style="position:relative;display:flex;justify-content:center;width:{{ wPx }};height:{{ hPx }};padding:{{ rootPad }};box-sizing:border-box;overflow:hidden;background:{{ rootBg }};color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.43;">
+
+<sc-if value="{{ bare }}">
+  <dc-import name="AgoraBericht" mode="druck" hint-size="794px,1800px"></dc-import>
+</sc-if>
+
+<sc-if value="{{ notBare }}" hint-placeholder-val="{{ true }}">
+  <aside aria-label="Navigation" style="flex:none;width:{{ sideW }};display:flex;flex-direction:column;background:var(--s1);padding:14px 10px 12px;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;gap:10px;height:32px;padding:0 9px;margin-bottom:18px;justify-content:{{ sideJustify }};">
+      <span style="width:22px;height:22px;border-radius:7px;background:var(--acc);color:var(--on-acc);display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;">A</span>
+      <sc-if value="{{ sideOpen }}" hint-placeholder-val="{{ true }}"><span style="font-weight:700;font-size:15px;letter-spacing:-0.01em;">Agora</span></sc-if>
+    </div>
+    <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:16px;">
+        <sc-if value="{{ g.showHead }}" hint-placeholder-val="{{ true }}"><div style="font-size:11.5px;font-weight:600;color:var(--fg3);padding:0 10px 4px;">{{ g.title }}</div></sc-if>
+        <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="2">
+          <button onClick="{{ it.onClick }}" title="{{ it.label }}" aria-current="{{ it.current }}" style="position:relative;display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border:none;border-radius:8px;background:{{ it.bg }};color:var(--fg);font:inherit;font-size:13.5px;cursor:pointer;text-align:left;justify-content:{{ it.justify }};" style-hover="background:{{ it.hoverBg }}">
+            <span style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:11px;background:{{ it.plBg }};color:{{ it.plFg }};">{{ it.glyph }}</span>
+            <sc-if value="{{ sideOpen }}" hint-placeholder-val="{{ true }}"><span style="flex:1;min-width:0;">{{ it.label }}</span></sc-if>
+            <sc-if value="{{ it.showCount }}"><span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;background:{{ it.countBg }};color:{{ it.countFg }};">{{ it.count }}</span></sc-if>
+            <sc-if value="{{ it.bubble }}"><span style="position:absolute;top:2px;right:6px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;font-size:10px;font-weight:700;background:var(--warn);color:var(--s0);">{{ it.count }}</span></sc-if>
+          </button>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="margin-top:auto;display:flex;flex-direction:{{ footDir }};align-items:center;gap:6px;">
+      <button onClick="{{ openSystem }}" title="System: alle Dienste erreichbar" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none;"></span>
+        <sc-if value="{{ sideOpen }}" hint-placeholder-val="{{ true }}"><span>System</span></sc-if>
+      </button>
+      <sc-if value="{{ sideOpen }}" hint-placeholder-val="{{ true }}"><span style="flex:1;"></span></sc-if>
+      <button onClick="{{ openSettings }}" title="Einstellungen" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">
+        <span style="font-size:14px;">⚙︎</span>
+        <sc-if value="{{ sideOpen }}" hint-placeholder-val="{{ true }}"><span>Einstellungen</span></sc-if>
+      </button>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;position:relative;">
+    <header style="flex:none;height:56px;display:flex;align-items:center;gap:10px;padding:0 18px 0 12px;">
+      <button onClick="{{ toggleSide }}" title="Seitenleiste ein- oder ausklappen" style="width:32px;height:32px;border:none;border-radius:8px;background:transparent;color:var(--fg2);display:grid;place-items:center;cursor:pointer;flex:none;" style-hover="background:var(--s3)">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"></rect><line x1="6" y1="3" x2="6" y2="13"></line></svg>
+      </button>
+      <nav aria-label="Brotkrumen" style="display:flex;align-items:center;gap:6px;min-width:0;font-size:13.5px;">
+        <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2">
+          <sc-if value="{{ c.sep }}"><span style="color:var(--fg3);">›</span></sc-if>
+          <button onClick="{{ c.onClick }}" style="border:none;background:transparent;padding:4px 4px;border-radius:6px;font:inherit;color:{{ c.color }};font-weight:{{ c.fw }};cursor:pointer;white-space:nowrap;">{{ c.label }}</button>
+        </sc-for>
+      </nav>
+      <div style="flex:1;"></div>
+      <sc-if value="{{ isLib }}" hint-placeholder-val="{{ true }}">
+        <div role="group" aria-label="Darstellung" style="display:flex;padding:2px;border-radius:8px;background:var(--s2);gap:2px;">
+          <sc-for list="{{ viewSeg }}" as="s" hint-placeholder-count="2">
+            <button onClick="{{ s.onClick }}" aria-pressed="{{ s.on }}" style="height:28px;padding:0 10px;border:none;border-radius:6px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ s.bg }};color:{{ s.fg }};">{{ s.label }}</button>
+          </sc-for>
+        </div>
+        <button style="display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;" style-hover="background:var(--s3)">{{ sortLabel }} <span style="font-size:10px;">▾</span></button>
+      </sc-if>
+      <sc-if value="{{ wideSearch }}" hint-placeholder-val="{{ true }}">
+        <button style="display:flex;align-items:center;gap:8px;width:220px;height:32px;padding:0 8px 0 10px;box-sizing:border-box;border:none;border-radius:8px;background:var(--s2);color:var(--fg3);font:inherit;font-size:13px;cursor:text;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"></circle><line x1="11" y1="11" x2="14.5" y2="14.5"></line></svg>
+          <span style="flex:1;text-align:left;">Suchen</span>
+          <kbd style="font-family:inherit;font-size:11px;padding:1px 6px;border-radius:5px;background:var(--s3);color:var(--fg2);">⌘K</kbd>
+        </button>
+      </sc-if>
+      <sc-if value="{{ narrowSearch }}">
+        <button title="Suchen (⌘K)" style="width:32px;height:32px;border:none;border-radius:8px;background:var(--s2);color:var(--fg2);display:grid;place-items:center;cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"></circle><line x1="11" y1="11" x2="14.5" y2="14.5"></line></svg>
+        </button>
+      </sc-if>
+      <button onClick="{{ toggleConsole }}" aria-pressed="{{ consoleOpen }}" title="Konsole" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 10px;border:none;border-radius:8px;background:{{ consoleBtnBg }};color:var(--fg);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg2);">&gt;_</span>
+        <span>Konsole</span>
+        <span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;font-size:11px;font-weight:600;background:var(--s4);color:var(--fg);">12</span>
+      </button>
+      <button onClick="{{ openDialog }}" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 14px 0 12px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;" style-hover="background:var(--acc-hover)" style-active="background:var(--acc-press)"><span style="font-size:16px;line-height:1;">+</span> Neuer Lauf</button>
+      <button title="Profil" style="width:32px;height:32px;border-radius:50%;border:none;background:var(--s3);color:var(--fg);font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;flex:none;">AS</button>
+    </header>
+
+    <main style="flex:1;min-height:0;overflow:{{ mainOverflow }};display:flex;flex-direction:column;padding:{{ mainPad }};box-sizing:border-box;">
+
+      <sc-if value="{{ isLib }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 16px;flex:none;">
+          <h1 style="margin:0;font-size:22px;font-weight:650;letter-spacing:-0.01em;">Läufe</h1>
+          <span style="color:var(--fg3);font-size:14px;font-variant-numeric:tabular-nums;">{{ runCountLabel }}</span>
+        </div>
+
+        <sc-if value="{{ showBand }}" hint-placeholder-val="{{ true }}">
+          <section aria-label="Im Blick" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;background:var(--s1);border-radius:12px;padding:8px 10px 8px 16px;margin-bottom:20px;flex:none;">
+            <span style="font-size:12px;font-weight:600;color:var(--fg3);">Im Blick</span>
+            <button onClick="{{ openR1 }}" style="display:flex;align-items:center;gap:10px;min-width:0;height:34px;padding:0 10px;border:none;border-radius:8px;background:transparent;color:var(--fg);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">
+              <span style="width:12px;height:12px;box-sizing:border-box;border-radius:50%;border:2px solid var(--fg);border-right-color:transparent;animation:agspin 0.9s linear infinite;flex:none;"></span>
+              <span style="font-weight:600;">Läuft</span>
+              <span style="color:var(--fg2);white-space:nowrap;">Risiken Brenkhausen</span>
+              <span style="color:var(--fg3);white-space:nowrap;font-variant-numeric:tabular-nums;">Runde 11 von 24</span>
+              <span style="width:72px;height:4px;border-radius:2px;background:var(--s4);overflow:hidden;flex:none;"><span style="display:block;width:46%;height:100%;background:var(--fg);"></span></span>
+            </button>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:13px;color:var(--fg2);">Braucht dich</span>
+              <sc-for list="{{ attention }}" as="a" hint-placeholder-count="3">
+                <button onClick="{{ a.onOpen }}" style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:none;border-radius:999px;background:var(--s2);color:var(--fg);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;" style-hover="background:var(--s3)">
+                  <span style="color:{{ a.fg }};font-weight:700;font-size:11px;">{{ a.glyph }}</span>
+                  <span style="color:{{ a.fg }};font-weight:600;">{{ a.label }}</span>
+                  <span style="color:var(--fg2);max-width:150px;overflow:hidden;text-overflow:ellipsis;">{{ a.short }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ modeTiles }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+            <sc-for list="{{ runs }}" as="r" hint-placeholder-count="6">
+              <article tabindex="0" onClick="{{ r.onOpen }}" aria-label="{{ r.aria }}" style="display:flex;flex-direction:column;gap:12px;background:var(--s2);border-radius:12px;padding:16px 18px;cursor:pointer;min-width:0;" style-hover="background:var(--s3)">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ r.badge.bg }};color:{{ r.badge.fg }};white-space:nowrap;">
+                    <sc-if value="{{ r.badge.spin }}"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin 0.9s linear infinite;"></span></sc-if>
+                    <sc-if value="{{ r.badge.hasGlyph }}"><span style="font-size:10.5px;line-height:1;">{{ r.badge.glyph }}</span></sc-if>
+                    {{ r.badge.label }}
+                  </span>
+                  <span style="flex:1;"></span>
+                  <span style="font-size:12.5px;color:var(--fg3);font-variant-numeric:tabular-nums;">{{ r.date }}</span>
+                </div>
+                <h3 style="margin:0;font-size:15.5px;line-height:1.42;font-weight:600;text-wrap:pretty;min-height:44px;">{{ r.q }}</h3>
+                <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg3);overflow-wrap:anywhere;">{{ r.src }}</div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:auto;">
+                  <div role="img" aria-label="{{ r.dotsAria }}" style="display:flex;gap:5px;align-items:center;">
+                    <sc-for list="{{ r.dots }}" as="d" hint-placeholder-count="5">
+                      <span title="{{ d.title }}" style="width:11px;height:11px;box-sizing:border-box;flex:none;background:{{ d.bg }};border:{{ d.bd }};border-right-color:{{ d.brc }};border-radius:{{ d.rad }};transform:{{ d.tf }};animation:{{ d.anim }};"></span>
+                    </sc-for>
+                  </div>
+                  <span style="font-size:12.5px;color:var(--fg2);">{{ r.summary }}</span>
+                </div>
+                <sc-if value="{{ r.hasProgress }}">
+                  <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--fg2);font-variant-numeric:tabular-nums;">
+                    <span style="flex:1;height:4px;border-radius:2px;background:var(--s4);overflow:hidden;"><span style="display:block;width:{{ r.progress }};height:100%;background:var(--fg);"></span></span>
+                    <span>{{ r.progressLabel }}</span>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ r.hasReason }}">
+                  <p style="margin:0;display:flex;gap:8px;font-size:13px;line-height:1.45;color:var(--fg2);text-wrap:pretty;"><span style="color:{{ r.badge.fg }};font-weight:700;flex:none;">{{ r.badge.glyph }}</span><span>{{ r.reason }}</span></p>
+                </sc-if>
+                <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--fg3);">
+                  <span>Profil {{ r.profile }}</span>
+                  <span style="font-variant-numeric:tabular-nums;color:var(--fg2);">{{ r.cost }}</span>
+                </div>
+              </article>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ modeList }}">
+          <div role="table" aria-label="Läufe" style="background:var(--s2);border-radius:12px;overflow:hidden;">
+            <div role="row" style="display:grid;grid-template-columns:160px minmax(0,1fr) 250px 150px 96px 72px;gap:16px;padding:10px 20px;font-size:12px;font-weight:600;color:var(--fg3);">
+              <span>Zustand</span><span>Frage</span><span>Quelle</span><span>Stufen</span><span>Datum</span><span style="text-align:right;">Kosten</span>
+            </div>
+            <sc-for list="{{ runs }}" as="r" hint-placeholder-count="6">
+              <div role="row" tabindex="0" onClick="{{ r.onOpen }}" style="display:grid;grid-template-columns:160px minmax(0,1fr) 250px 150px 96px 72px;gap:16px;align-items:center;padding:{{ rowPad }};border-top:1px solid var(--line);cursor:pointer;font-size:{{ rowFont }};" style-hover="background:var(--s3)">
+                <span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ r.badge.bg }};color:{{ r.badge.fg }};white-space:nowrap;">
+                  <sc-if value="{{ r.badge.spin }}"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin 0.9s linear infinite;"></span></sc-if>
+                  <sc-if value="{{ r.badge.hasGlyph }}"><span style="font-size:10.5px;line-height:1;">{{ r.badge.glyph }}</span></sc-if>
+                  {{ r.badge.label }}</span></span>
+                <span style="min-width:0;display:flex;flex-direction:column;gap:2px;">
+                  <span style="font-weight:600;text-wrap:pretty;">{{ r.q }}</span>
+                  <sc-if value="{{ r.hasNote }}"><span style="font-size:12.5px;color:var(--fg2);">{{ r.listNote }}</span></sc-if>
+                </span>
+                <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg3);overflow-wrap:anywhere;">{{ r.src }}</span>
+                <span role="img" aria-label="{{ r.dotsAria }}" style="display:flex;gap:5px;align-items:center;">
+                  <sc-for list="{{ r.dots }}" as="d" hint-placeholder-count="5">
+                    <span title="{{ d.title }}" style="width:11px;height:11px;box-sizing:border-box;flex:none;background:{{ d.bg }};border:{{ d.bd }};border-right-color:{{ d.brc }};border-radius:{{ d.rad }};transform:{{ d.tf }};animation:{{ d.anim }};"></span>
+                  </sc-for>
+                </span>
+                <span style="color:var(--fg2);font-variant-numeric:tabular-nums;">{{ r.date }}</span>
+                <span style="color:var(--fg2);font-variant-numeric:tabular-nums;text-align:right;">{{ r.cost }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ modeEmpty }}">
+          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;max-width:440px;margin:120px auto 0;">
+            <span style="width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--s2);color:var(--fg2);font-size:20px;">▶</span>
+            <h2 style="margin:0;font-size:19px;font-weight:650;">Noch kein Lauf</h2>
+            <p style="margin:0;color:var(--fg2);font-size:14px;line-height:1.55;text-wrap:pretty;">Ein Lauf führt von einer Quelle über Graph, Personas und Simulation zu einem Bericht mit Belegen. Du brauchst dafür eine Frage und ein Dokument.</p>
+            <button onClick="{{ openDialog }}" style="display:flex;align-items:center;gap:6px;height:36px;padding:0 16px 0 14px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;margin-top:4px;" style-hover="background:var(--acc-hover)"><span style="font-size:16px;line-height:1;">+</span> Neuer Lauf</button>
+            <span style="font-size:12.5px;color:var(--fg3);">Quellen als Markdown, PDF oder Text</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ modeLoading }}">
+          <div aria-busy="true" aria-label="Läufe werden geladen" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+            <sc-for list="{{ skeletons }}" as="k" hint-placeholder-count="6">
+              <div style="display:flex;flex-direction:column;gap:14px;background:var(--s2);border-radius:12px;padding:18px;animation:agpulse 1.6s ease-in-out infinite;animation-delay:{{ k.delay }};">
+                <span style="width:96px;height:22px;border-radius:999px;background:var(--s3);"></span>
+                <span style="width:92%;height:14px;border-radius:4px;background:var(--s3);"></span>
+                <span style="width:70%;height:14px;border-radius:4px;background:var(--s3);"></span>
+                <span style="width:52%;height:10px;border-radius:4px;background:var(--s3);"></span>
+                <span style="width:40%;height:10px;border-radius:4px;background:var(--s3);margin-top:12px;"></span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ isRun }}">
+        <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin:6px 0 10px;font-size:12.5px;color:var(--fg3);flex:none;">
+            <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ run.badge.bg }};color:{{ run.badge.fg }};">
+              <sc-if value="{{ run.badge.spin }}"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin 0.9s linear infinite;"></span></sc-if>
+              <sc-if value="{{ run.badge.hasGlyph }}"><span style="font-size:10.5px;line-height:1;">{{ run.badge.glyph }}</span></sc-if>
+              {{ run.badge.label }}</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;">{{ run.src }}</span>
+            <span>Profil {{ run.profile }}</span>
+            <span>{{ run.started }}</span>
+            <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;">{{ run.lid }}</span>
+          </div>
+          <h1 style="margin:0;max-width:980px;font-size:21px;line-height:1.38;font-weight:650;letter-spacing:-0.005em;text-wrap:pretty;flex:none;">{{ run.q }}</h1>
+        </sc-if>
+        <sc-if value="{{ tabCompact }}">
+          <div style="display:flex;align-items:center;gap:12px;margin:4px 0 0;min-width:0;flex:none;">
+            <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ run.badge.bg }};color:{{ run.badge.fg }};flex:none;">
+              <sc-if value="{{ run.badge.spin }}"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin 0.9s linear infinite;"></span></sc-if>
+              <sc-if value="{{ run.badge.hasGlyph }}"><span style="font-size:10.5px;line-height:1;">{{ run.badge.glyph }}</span></sc-if>
+              {{ run.badge.label }}</span>
+            <h1 title="{{ run.q }}" style="margin:0;font-size:16px;line-height:1.4;font-weight:650;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ run.q }}</h1>
+          </div>
+        </sc-if>
+
+        <nav aria-label="Reiter des Laufs" style="display:flex;gap:4px;margin:{{ tabsMargin }};flex-wrap:wrap;flex:none;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+            <button onClick="{{ t.onClick }}" aria-current="{{ t.current }}" title="{{ t.title }}" style="display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border:none;border-radius:8px;background:{{ t.bg }};color:{{ t.fg }};font:inherit;font-size:13.5px;font-weight:{{ t.fw }};cursor:pointer;" style-hover="background:var(--s2)">
+              {{ t.label }}
+              <sc-if value="{{ t.hasDot }}"><span style="width:9px;height:9px;box-sizing:border-box;flex:none;background:{{ t.dot.bg }};border:{{ t.dot.bd }};border-right-color:{{ t.dot.brc }};border-radius:{{ t.dot.rad }};transform:{{ t.dot.tf }};animation:{{ t.dot.anim }};"></span></sc-if>
+            </button>
+          </sc-for>
+        </nav>
+
+        <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ true }}">
+          <section aria-label="Stufen" style="background:var(--s2);border-radius:12px;padding:2px 0 4px;flex:none;">
+            <div style="display:grid;grid-template-columns:minmax(220px,1.5fr) 150px minmax(200px,1fr) 96px 96px 72px 172px;gap:16px;padding:12px 20px 10px;font-size:12px;font-weight:600;color:var(--fg3);">
+              <span>Stufe</span><span>Zustand</span><span>Modell</span><span style="text-align:right;">Dauer</span><span style="text-align:right;">Tokens</span><span style="text-align:right;">Kosten</span><span></span>
+            </div>
+            <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:minmax(220px,1.5fr) 150px minmax(200px,1fr) 96px 96px 72px 172px;gap:16px;align-items:center;padding:14px 20px;border-top:1px solid var(--line);">
+                <div style="display:flex;gap:12px;align-items:center;min-width:0;">
+                  <span style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none;background:var(--s3);color:var(--fg2);font-size:12px;">{{ s.glyph }}</span>
+                  <div style="min-width:0;display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-weight:600;">{{ s.name }}</span>
+                    <span style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;color:var(--fg2);line-height:1.4;">
+                      <sc-if value="{{ s.fallback }}"><span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;">↺ Fallback</span></sc-if>
+                      <span style="text-wrap:pretty;">{{ s.note }}</span>
+                    </span>
+                  </div>
+                </div>
+                <span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ s.badge.bg }};color:{{ s.badge.fg }};white-space:nowrap;">
+                  <sc-if value="{{ s.badge.spin }}"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin 0.9s linear infinite;"></span></sc-if>
+                  <sc-if value="{{ s.badge.hasGlyph }}"><span style="font-size:10.5px;line-height:1;">{{ s.badge.glyph }}</span></sc-if>
+                  {{ s.badge.label }}</span></span>
+                <div style="min-width:0;">
+                  <sc-if value="{{ s.modelLocked }}">
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--fg2);">{{ s.model }}</span>
+                      <span style="font-size:11.5px;color:var(--fg3);">{{ s.provider }}</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.modelEditable }}">
+                    <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;">
+                      <button aria-label="Modell für {{ s.name }} wählen" style="display:flex;align-items:center;gap:10px;height:32px;padding:0 10px 0 12px;border-radius:8px;border:1px solid var(--acc-line);background:var(--field);color:var(--fg);font:inherit;cursor:pointer;" style-hover="background:var(--s3)">
+                        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;">{{ s.model }}</span>
+                        <span style="color:var(--acc-text);font-size:10px;">▾</span>
+                      </button>
+                      <span style="font-size:11.5px;color:var(--fg3);">vor dem Start änderbar</span>
+                    </div>
+                  </sc-if>
+                </div>
+                <span style="text-align:right;font-variant-numeric:tabular-nums;color:var(--fg2);">{{ s.dur }}</span>
+                <span style="text-align:right;font-variant-numeric:tabular-nums;color:var(--fg2);">{{ s.tok }}</span>
+                <span style="text-align:right;font-variant-numeric:tabular-nums;color:var(--fg2);">{{ s.cost }}</span>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+                  <button onClick="{{ s.onAct }}" disabled="{{ s.actDisabled }}" style="height:32px;padding:0 14px;border:none;border-radius:8px;background:{{ s.actBg }};color:{{ s.actFg }};font:inherit;font-size:13px;font-weight:600;cursor:{{ s.actCursor }};white-space:nowrap;">{{ s.act }}</button>
+                  <sc-if value="{{ s.hasActNote }}"><span style="font-size:11.5px;color:var(--fg3);">{{ s.actNote }}</span></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </section>
+
+          <section aria-label="Budget" style="background:var(--s2);border-radius:12px;padding:16px 20px 18px;margin-top:16px;flex:none;">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
+              <h2 style="margin:0;font-size:15px;font-weight:600;">Budget</h2>
+              <span style="font-size:12.5px;color:var(--fg3);">verbraucht von erlaubt</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px;margin-top:12px;">
+              <sc-for list="{{ meters }}" as="m" hint-placeholder-count="4">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <span style="font-size:12.5px;color:var(--fg3);">{{ m.label }}</span>
+                  <span style="font-variant-numeric:tabular-nums;"><span style="font-size:16px;font-weight:600;">{{ m.used }}</span> <span style="color:var(--fg3);font-size:13px;">von {{ m.max }}</span></span>
+                  <span style="height:4px;border-radius:2px;background:var(--s4);overflow:hidden;"><span style="display:block;width:{{ m.pct }};height:100%;background:{{ m.color }};"></span></span>
+                  <span style="font-size:12px;color:{{ m.noteColor }};font-variant-numeric:tabular-nums;">{{ m.note }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px;flex:none;">
+            <section style="background:var(--s2);border-radius:12px;padding:16px 20px;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:12.5px;color:var(--fg3);">Frage</span>
+                <p style="margin:0;font-size:14px;line-height:1.5;text-wrap:pretty;">{{ run.q }}</p>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:12.5px;color:var(--fg3);">Streitfrage</span>
+                <p style="margin:0;font-size:14px;line-height:1.5;color:var(--fg2);">Soll der Kreißsaal Brenkhausen über den 30. Juni 2027 hinaus erhalten bleiben?</p>
+              </div>
+            </section>
+            <section style="background:var(--s2);border-radius:12px;padding:16px 20px;display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--s3);color:var(--fg2);font-size:12px;">◇</span>
+                <span style="font-size:12.5px;color:var(--fg3);">Graph</span>
+              </div>
+              <span style="font-weight:600;font-size:15px;">{{ gcard.title }}</span>
+              <span style="font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ gcard.meta }}</span>
+              <span style="font-size:12.5px;color:var(--fg3);">{{ gcard.sub }}</span>
+              <button onClick="{{ toGraph }}" style="margin-top:auto;align-self:flex-start;border:none;background:transparent;padding:0;font:inherit;font-size:13px;font-weight:600;color:var(--acc-text);cursor:pointer;">Im Reiter Graph öffnen →</button>
+            </section>
+            <section style="background:var(--s2);border-radius:12px;padding:16px 20px;display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--s3);color:var(--fg2);font-size:12px;">◉</span>
+                <span style="font-size:12.5px;color:var(--fg3);">Personasatz</span>
+              </div>
+              <span style="font-weight:600;font-size:15px;">Südkreis Geburtshilfe</span>
+              <span style="font-size:13px;color:var(--fg2);">14 Personas · 8 Einzelpersonen, 6 Kollektive</span>
+              <sc-if value="{{ run.fallback }}"><span style="display:inline-flex;align-self:flex-start;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;">↺ 4 Fallback-Personas</span></sc-if>
+              <button onClick="{{ toPersonas }}" style="margin-top:auto;align-self:flex-start;border:none;background:transparent;padding:0;font:inherit;font-size:13px;font-weight:600;color:var(--acc-text);cursor:pointer;">Personasatz öffnen →</button>
+            </section>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabGraph }}">
+          <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraGraph" mode="{{ graphMode }}" init="{{ childInit }}" nav="{{ nav }}" narrow="{{ narrow }}" hint-size="100%,100%"></dc-import></div>
+        </sc-if>
+        <sc-if value="{{ tabSim }}">
+          <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraSim" run-id="{{ runIdSim }}" init="{{ childInit }}" nav="{{ nav }}" narrow="{{ narrow }}" hint-size="100%,100%"></dc-import></div>
+        </sc-if>
+        <sc-if value="{{ tabBericht }}">
+          <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraBericht" init="{{ childInit }}" nav="{{ nav }}" narrow="{{ narrow }}" hint-size="100%,100%"></dc-import></div>
+        </sc-if>
+        <sc-if value="{{ tabInterviews }}">
+          <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraInterviews" init="{{ childInit }}" nav="{{ nav }}" narrow="{{ narrow }}" hint-size="100%,100%"></dc-import></div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ isGraphen }}">
+        <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraGraph" mode="{{ graphenMode }}" init="{{ childInit }}" nav="{{ nav }}" narrow="{{ narrow }}" hint-size="100%,100%"></dc-import></div>
+      </sc-if>
+      <sc-if value="{{ isPersonas }}">
+        <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraPersonas" mode="{{ personasMode }}" nav="{{ nav }}" hint-size="100%,100%"></dc-import></div>
+      </sc-if>
+      <sc-if value="{{ isAktivitaet }}">
+        <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraAktivitaet" init="{{ childInit }}" hint-size="100%,100%"></dc-import></div>
+      </sc-if>
+    </main>
+
+    <sc-if value="{{ consoleOpen }}">
+      <section aria-label="Konsole" style="position:absolute;left:0;right:0;bottom:0;height:340px;display:flex;flex-direction:column;background:var(--s1);border-radius:14px 14px 0 0;box-shadow:var(--shadow-pop);z-index:5;">
+        <div style="width:36px;height:4px;border-radius:2px;background:var(--s4);margin:7px auto 0;cursor:ns-resize;flex:none;" title="Ziehen, um die Höhe zu ändern"></div>
+        <div style="flex:1;min-height:0;position:relative;"><dc-import name="AgoraLog" scope="alle" title="Konsole" inset="{{ true }}" closable="{{ true }}" on-close="{{ toggleConsole }}" hint-size="100%,300px"></dc-import></div>
+      </section>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ dialogOpen }}">
+    <div style="position:absolute;inset:0;background:var(--scrim);display:flex;align-items:flex-start;justify-content:center;padding:40px 24px;box-sizing:border-box;z-index:10;">
+      <div role="dialog" aria-modal="true" aria-label="Neuer Lauf" style="width:720px;max-width:100%;max-height:100%;display:flex;flex-direction:column;background:var(--s2);border-radius:16px;box-shadow:var(--shadow-dlg);overflow:hidden;">
+        <div style="display:flex;align-items:center;padding:18px 20px 6px 24px;">
+          <h2 style="margin:0;font-size:17px;font-weight:650;flex:1;">Neuer Lauf</h2>
+          <button onClick="{{ closeDialog }}" title="Schließen" style="width:32px;height:32px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:15px;cursor:pointer;" style-hover="background:var(--s3)">✕</button>
+        </div>
+        <div style="flex:1;min-height:0;overflow:auto;padding:10px 24px 24px;display:flex;flex-direction:column;gap:26px;">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:baseline;gap:8px;"><h3 style="margin:0;font-size:14px;font-weight:600;">Frage</h3><span style="font-size:12px;color:var(--fg3);">Pflichtfeld</span></div>
+            <div role="textbox" aria-label="Frage" tabindex="0" style="min-height:64px;padding:10px 12px;border-radius:8px;background:var(--field);border:1px solid var(--acc);box-shadow:0 0 0 3px var(--acc-soft);font-size:14px;line-height:1.5;text-wrap:pretty;">Welche Risiken entstehen für Schwangere, Beschäftigte und die Versorgung im Südkreis, wenn der Kreistag die Schließung des Kreißsaals Brenkhausen beschließt?</div>
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Streitfrage, optional
+              <div style="height:36px;display:flex;align-items:center;padding:0 12px;border-radius:8px;background:var(--field);border:1px solid transparent;font-size:14px;color:var(--fg3);">z. B. Soll der Kreißsaal Brenkhausen erhalten bleiben?</div>
+            </label>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <h3 style="margin:0;font-size:14px;font-weight:600;">Graph</h3>
+            <div role="radiogroup" aria-label="Graph" style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;align-self:flex-start;">
+              <button role="radio" aria-checked="true" style="height:30px;padding:0 12px;border:none;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;background:var(--s4);color:var(--fg);font-weight:600;">Vorhandenen wählen</button>
+              <button role="radio" aria-checked="false" style="height:30px;padding:0 12px;border:none;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;background:transparent;color:var(--fg2);">Neu aus Quelle</button>
+              <button role="radio" aria-checked="false" style="height:30px;padding:0 12px;border:none;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;background:transparent;color:var(--fg2);">Ohne Graph</button>
+            </div>
+            <button style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border:none;border-radius:8px;background:var(--field);color:var(--fg);font:inherit;font-size:14px;cursor:pointer;text-align:left;">
+              <span style="font-weight:600;">Geburtshilfe Hollerau</span>
+              <span style="color:var(--fg3);font-size:12.5px;flex:1;">14 Entitäten · 22 Beziehungen · aus seed-3-geburtshilfe-hollerau.md</span>
+              <span style="color:var(--fg2);font-size:10px;">▾</span>
+            </button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <h3 style="margin:0;font-size:14px;font-weight:600;">Personasatz</h3>
+            <div role="radiogroup" aria-label="Personasatz" style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;align-self:flex-start;">
+              <button role="radio" aria-checked="true" style="height:30px;padding:0 12px;border:none;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;background:var(--s4);color:var(--fg);font-weight:600;">Vorhandenen wählen</button>
+              <button role="radio" aria-checked="false" style="height:30px;padding:0 12px;border:none;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;background:transparent;color:var(--fg2);">Erzeugen lassen</button>
+            </div>
+            <button style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border:none;border-radius:8px;background:var(--field);color:var(--fg);font:inherit;font-size:14px;cursor:pointer;text-align:left;">
+              <span style="font-weight:600;">Südkreis Geburtshilfe</span>
+              <span style="color:var(--fg3);font-size:12.5px;flex:1;">14 Personas · passt zum Graph</span>
+              <span style="color:var(--fg2);font-size:10px;">▾</span>
+            </button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <h3 style="margin:0;font-size:14px;font-weight:600;">Modelle</h3>
+            <div role="radiogroup" aria-label="Modell-Profil" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+              <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="3">
+                <button role="radio" aria-checked="{{ p.on }}" onClick="{{ p.onClick }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;border-radius:10px;border:{{ p.border }};background:{{ p.bg }};color:var(--fg);font:inherit;cursor:pointer;text-align:left;">
+                  <span style="display:flex;width:100%;align-items:center;gap:8px;"><span style="font-weight:600;font-size:14px;flex:1;">{{ p.name }}</span><span style="font-size:12.5px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ p.cost }}</span></span>
+                  <span style="font-size:12.5px;color:var(--fg2);line-height:1.4;">{{ p.desc }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <button onClick="{{ toggleExpand }}" aria-expanded="{{ expanded }}" style="display:flex;align-items:center;gap:6px;align-self:flex-start;height:30px;padding:0 8px;margin-left:-8px;border:none;border-radius:6px;background:transparent;color:var(--acc-text);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s3)"><span style="font-size:10px;">{{ expandGlyph }}</span> Je Stufe anpassen</button>
+            <sc-if value="{{ expanded }}">
+              <div style="border-radius:10px;background:var(--field);padding:2px 14px;">
+                <sc-for list="{{ stageModels }}" as="sm" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:120px minmax(0,1fr) 90px;gap:14px;align-items:center;padding:8px 0;border-top:{{ sm.bt }};">
+                    <span style="font-weight:600;font-size:13.5px;">{{ sm.name }}</span>
+                    <button style="display:flex;align-items:center;justify-content:space-between;gap:10px;height:32px;padding:0 10px 0 12px;border-radius:8px;border:1px solid var(--acc-line);background:var(--s2);color:var(--fg);font:inherit;cursor:pointer;">
+                      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;">{{ sm.model }}</span>
+                      <span style="color:var(--fg3);font-size:12px;flex:1;text-align:left;">{{ sm.provider }}</span>
+                      <span style="color:var(--acc-text);font-size:10px;">▾</span>
+                    </button>
+                    <span style="text-align:right;font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ sm.cost }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <h3 style="margin:0;font-size:14px;font-weight:600;">Umfang und Budget</h3>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+              <sc-for list="{{ budgetFields }}" as="b" hint-placeholder-count="6">
+                <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">{{ b.label }}
+                  <div style="height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:8px;background:var(--field);font-size:14px;color:var(--fg);font-variant-numeric:tabular-nums;"><span style="flex:1;">{{ b.value }}</span><span style="color:var(--fg3);font-size:12.5px;">{{ b.unit }}</span></div>
+                </label>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:var(--s1);">
+              <span style="color:var(--ok);font-weight:700;font-size:12px;margin-top:2px;">✓</span>
+              <div style="display:flex;flex-direction:column;gap:3px;font-size:13px;">
+                <span><span style="font-weight:600;">Vorabschätzung:</span> {{ estimate }}</span>
+                <span style="color:var(--fg2);">Liegt innerhalb aller Grenzen. Grundlage: Profil „{{ profileName }}“, 14 Personas, 24 Runden.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 20px 16px 24px;background:var(--s1);">
+          <button onClick="{{ closeDialog }}" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:13px;cursor:pointer;" style-hover="background:var(--s3)">Abbrechen</button>
+          <span style="flex:1;"></span>
+          <button style="height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Nur anlegen</button>
+          <button style="height:34px;padding:0 18px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--acc-hover)">Starten</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ settingsOpen }}">
+    <div style="position:absolute;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;padding:32px 24px;box-sizing:border-box;z-index:10;">
+      <dc-import name="AgoraEinstellungen" section="{{ settings }}" nav="{{ nav }}" hint-size="960px,660px"></dc-import>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ personaEditor }}">
+    <div style="position:absolute;inset:0;background:var(--scrim);display:flex;justify-content:center;padding:28px 24px;box-sizing:border-box;z-index:10;">
+      <div style="position:relative;width:980px;max-width:100%;height:100%;"><dc-import name="AgoraPersonas" mode="editor" nav="{{ nav }}" hint-size="980px,100%"></dc-import></div>
+    </div>
+  </sc-if>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;bibliothek&quot;,&quot;lauf-uebersicht&quot;,&quot;graph-lauf&quot;,&quot;feed-twitter&quot;,&quot;feed-faden&quot;,&quot;feed-sprung&quot;,&quot;feed-live&quot;,&quot;feed-reddit&quot;,&quot;reddit-beitrag&quot;,&quot;feed-leer&quot;,&quot;runden&quot;,&quot;diagnose&quot;,&quot;bericht&quot;,&quot;bericht-leer&quot;,&quot;bericht-druck&quot;,&quot;interview-einzel&quot;,&quot;interview-gruppe&quot;,&quot;graphen&quot;,&quot;graph-tabelle&quot;,&quot;graph-netz&quot;,&quot;graph-gesperrt&quot;,&quot;personas&quot;,&quot;personas-satz&quot;,&quot;persona-editor&quot;,&quot;einst-anbieter&quot;,&quot;einst-profile&quot;,&quot;einst-system&quot;,&quot;aktivitaet-jobs&quot;,&quot;aktivitaet-protokoll&quot;,&quot;zustand-fehler&quot;,&quot;zustand-laden&quot;,&quot;zustand-ohnegraph&quot;],&quot;default&quot;:&quot;bibliothek&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Ansicht&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;,&quot;system&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Darstellung&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;komfort&quot;,&quot;kompakt&quot;],&quot;default&quot;:&quot;komfort&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Darstellung&quot;},&quot;libMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;kacheln&quot;,&quot;liste&quot;,&quot;leer&quot;,&quot;laden&quot;],&quot;default&quot;:&quot;kacheln&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Ansicht&quot;},&quot;sidebarCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Hülle&quot;},&quot;consoleOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Hülle&quot;},&quot;width&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1440,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Größe&quot;},&quot;height&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:900,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Größe&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  componentDidMount() {
+    if (window.matchMedia) {
+      this.mq = window.matchMedia('(prefers-color-scheme: light)');
+      this.mqh = () => this.forceUpdate();
+      this.mq.addEventListener && this.mq.addEventListener('change', this.mqh);
+      this.forceUpdate();
+    }
+  }
+  componentWillUnmount() { this.mq && this.mq.removeEventListener && this.mq.removeEventListener('change', this.mqh); }
+  preset() {
+    const L2 = { view: 'lauf', runId: 'r2' };
+    const P = {
+      'bibliothek': {},
+      'lauf-uebersicht': { ...L2 },
+      'graph-lauf': { ...L2, tab: 'graph', init: { entity: 'e10' } },
+      'feed-twitter': { ...L2, tab: 'simulation', init: {} },
+      'feed-faden': { ...L2, tab: 'simulation', init: { thread: 'p1', persona: 'wue' } },
+      'feed-sprung': { ...L2, tab: 'simulation', init: { post: 'p4', claim: 'c8' } },
+      'feed-live': { view: 'lauf', runId: 'r1', tab: 'simulation', init: {} },
+      'feed-reddit': { ...L2, tab: 'simulation', init: { net: 'reddit' } },
+      'reddit-beitrag': { ...L2, tab: 'simulation', init: { net: 'reddit', thread: 'rp1', persona: 'rd' } },
+      'feed-leer': { view: 'lauf', runId: 'r10', tab: 'simulation', init: {} },
+      'runden': { ...L2, tab: 'simulation', init: { sub: 'runden' } },
+      'diagnose': { ...L2, tab: 'simulation', init: { sub: 'diagnose' } },
+      'bericht': { ...L2, tab: 'bericht', init: { claim: 'c8' } },
+      'bericht-leer': { ...L2, tab: 'bericht', init: {} },
+      'bericht-druck': { bare: true },
+      'interview-einzel': { ...L2, tab: 'interviews', init: { conv: 'i1' } },
+      'interview-gruppe': { ...L2, tab: 'interviews', init: { conv: 'i2' } },
+      'graphen': { view: 'graphen', graphenMode: 'bibliothek' },
+      'graph-tabelle': { view: 'graphen', graphenMode: 'editor', init: { graphView: 'tabelle', sel: ['e4', 'e15'], entity: 'e4' } },
+      'graph-netz': { view: 'graphen', graphenMode: 'editor', init: { graphView: 'netz', entity: 'e14', sel: ['e14'] } },
+      'graph-gesperrt': { view: 'graphen', graphenMode: 'gesperrt', init: { graphView: 'tabelle', entity: 'e1' } },
+      'personas': { view: 'personas', personasMode: 'bibliothek' },
+      'personas-satz': { view: 'personas', personasMode: 'satz' },
+      'persona-editor': { view: 'personas', personasMode: 'satz', personaEditor: true },
+      'einst-anbieter': { settings: 'anbieter' },
+      'einst-profile': { settings: 'profile' },
+      'einst-system': { settings: 'system' },
+      'aktivitaet-jobs': { view: 'aktivitaet', init: { tab: 'jobs' } },
+      'aktivitaet-protokoll': { view: 'aktivitaet', init: { tab: 'protokoll' } },
+      'zustand-fehler': { view: 'lauf', runId: 'r5', tab: 'graph', init: {} },
+      'zustand-laden': { ...L2, tab: 'graph', graphOverride: 'laden', init: {} },
+      'zustand-ohnegraph': { view: 'lauf', runId: 'r10', tab: 'graph', init: {} },
+    };
+    return P[this.props.screen] || {};
+  }
+  v(k, d) {
+    if (this.state[k] !== undefined) return this.state[k];
+    const p = this.preset();
+    if (p[k] !== undefined) return p[k];
+    if (this.props[k] !== undefined && this.props[k] !== null) return this.props[k];
+    return d;
+  }
+
+  badge(tone, label) {
+    const T = {
+      run: { bg: 'var(--s3)', fg: 'var(--fg)', label: 'Läuft', spin: true },
+      done: { bg: 'var(--ok-soft)', fg: 'var(--ok)', label: 'Fertig', glyph: '✓' },
+      partial: { bg: 'var(--warn-soft)', fg: 'var(--warn)', label: 'Unvollständig', glyph: '◐' },
+      fallback: { bg: 'var(--warn-soft)', fg: 'var(--warn)', label: 'Mit Fallback', glyph: '↺' },
+      stopped: { bg: 'var(--s3)', fg: 'var(--fg2)', label: 'Gestoppt', glyph: '■' },
+      budget: { bg: 'var(--warn-soft)', fg: 'var(--warn)', label: 'Budget erschöpft', glyph: '€' },
+      failed: { bg: 'var(--err-soft)', fg: 'var(--err)', label: 'Fehlgeschlagen', glyph: '✕' },
+      pending: { bg: 'var(--s3)', fg: 'var(--fg2)', label: 'Wartet', glyph: '○' },
+      created: { bg: 'var(--s3)', fg: 'var(--fg2)', label: 'Angelegt', glyph: '○' },
+      skipped: { bg: 'var(--s3)', fg: 'var(--fg2)', label: 'Übersprungen', glyph: '—' },
+    };
+    const t = T[tone];
+    return { bg: t.bg, fg: t.fg, label: label || t.label, spin: !!t.spin, hasGlyph: !!t.glyph, glyph: t.glyph || '' };
+  }
+  dot(st, name) {
+    const M = {
+      done: { bg: 'var(--ok)', bd: 'none', rad: '50%', l: 'abgeschlossen' },
+      run: { bg: 'transparent', bd: '2px solid var(--fg)', brc: 'transparent', rad: '50%', anim: 'agspin 0.9s linear infinite', l: 'läuft' },
+      partial: { bg: 'linear-gradient(90deg,var(--warn) 50%,transparent 50%)', bd: '2px solid var(--warn)', rad: '50%', l: 'unvollständig' },
+      fallback: { bg: 'linear-gradient(90deg,var(--warn) 50%,transparent 50%)', bd: '2px solid var(--warn)', rad: '50%', l: 'mit Fallback' },
+      failed: { bg: 'var(--err)', bd: 'none', rad: '2px', tf: 'rotate(45deg) scale(0.82)', l: 'fehlgeschlagen' },
+      stopped: { bg: 'var(--fg3)', bd: 'none', rad: '2px', tf: 'scale(0.85)', l: 'angehalten' },
+      pending: { bg: 'transparent', bd: '1.5px solid var(--fg3)', rad: '50%', l: 'ausstehend' },
+      skipped: { bg: 'var(--fg3)', bd: 'none', rad: '2px', tf: 'scaleY(0.28)', l: 'übersprungen' },
+    };
+    const m = M[st];
+    return { bg: m.bg, bd: m.bd, brc: m.brc || (m.bd === 'none' ? 'transparent' : m.bd.split(' ').slice(2).join(' ')), rad: m.rad, tf: m.tf || 'none', anim: m.anim || 'none', title: name + ': ' + m.l, l: m.l };
+  }
+  runsData() {
+    return [
+      { id: 'r10', lid: 'lauf_d03e61', st: 'created', q: 'Wie bewerten die Beschäftigten in Brenkhausen ein Rotationsmodell zwischen beiden Standorten?', short: 'Rotationsmodell', src: 'seed-3-geburtshilfe-hollerau.md', date: '06.10.2026', cost: '0,58 €', profile: 'Ausgewogen', stages: ['skipped', 'done', 'pending', 'pending', 'pending'], summary: 'Ohne Graph, bereit zur Simulation', started: 'angelegt 06.10.2026, 09:15', noGraph: true },
+      { id: 'r1', lid: 'lauf_7f3a2c', st: 'run', q: 'Welche Risiken entstehen für Schwangere, Beschäftigte und die Versorgung im Südkreis, wenn der Kreistag die Schließung des Kreißsaals Brenkhausen beschließt?', short: 'Risiken Brenkhausen', src: 'seed-3-geburtshilfe-hollerau.md', date: '05.10.2026', cost: '2,15 €', profile: 'Ausgewogen', stages: ['done', 'done', 'run', 'pending', 'pending'], summary: 'Simulation läuft', progress: '46%', progressLabel: 'Runde 11 von 24 · noch etwa 14 min', started: 'gestartet 05.10.2026, 14:10' },
+      { id: 'r2', lid: 'lauf_a81f55', st: 'partial', q: 'Wie reagieren die freiberuflichen Hebammen im Südkreis, wenn die Kliniken Hollerau ihnen ein Kooperationsmodell für Brenkhausen anbieten?', short: 'Kooperation Hebammen', src: 'seed-3-geburtshilfe-hollerau.md', date: '04.10.2026', cost: '3,48 €', profile: 'Ausgewogen', stages: ['done', 'fallback', 'done', 'partial', 'pending'], summary: 'Bericht unvollständig', reason: 'Bericht lesbar, aber 2 von 7 Abschnitten fehlen. 4 Personas stammen aus der Ersatzvorlage.', started: 'abgeschlossen 04.10.2026, 17:52', fallback: true },
+      { id: 'r3', lid: 'lauf_c2e910', st: 'budget', q: 'Unter welchen Bedingungen würde der Kreistag einer Bündelung in Hollerau-Nord zustimmen, wenn das Land einen Sicherstellungszuschlag zahlt?', short: 'Sicherstellungszuschlag', src: 'seed-3-geburtshilfe-hollerau.md', date: '03.10.2026', cost: '5,00 €', profile: 'Gründlich', stages: ['done', 'done', 'stopped', 'pending', 'pending'], summary: 'Simulation beendet in Runde 17', reason: 'Die Kostengrenze von 5,00 € wurde in Runde 17 von 24 erreicht.', started: 'beendet 03.10.2026, 10:48' },
+      { id: 'r4', lid: 'lauf_5d0e77', st: 'stopped', q: 'Wie wird die Beschlussvorlage der Geschäftsführung im Südkreis aufgenommen, bevor der Kreistag berät?', short: 'Beschlussvorlage', src: 'seed-3-geburtshilfe-hollerau.md', date: '03.10.2026', cost: '0,94 €', profile: 'Sparsam', stages: ['done', 'done', 'stopped', 'pending', 'pending'], summary: 'Simulation angehalten', reason: 'Von dir in Runde 6 von 24 angehalten.', started: 'angehalten 03.10.2026, 14:12' },
+      { id: 'r5', lid: 'lauf_19bd04', st: 'failed', q: 'Welche Konflikte zeichnen sich zwischen den im Dokument genannten Beteiligten ab?', short: 'seed_document.md', src: 'seed_document.md', date: '02.10.2026', cost: '0,03 €', profile: 'Ausgewogen', stages: ['failed', 'pending', 'pending', 'pending', 'pending'], summary: 'Graph fehlgeschlagen', reason: 'Graph-Aufbau abgebrochen: Die Graph-Datenbank war nicht erreichbar (Zeitüberschreitung nach 30 s).', started: 'fehlgeschlagen 02.10.2026, 11:05' },
+      { id: 'r6', lid: 'lauf_e4410b', st: 'done', q: 'Wie verändern sich Anfahrtswege und Notfallversorgung für Gebärende aus Moorhagen bei einer Bündelung in Hollerau-Nord?', src: 'seed-3-geburtshilfe-hollerau.md', date: '30.09.2026', cost: '2,61 €', profile: 'Ausgewogen', stages: ['done', 'done', 'done', 'done', 'done'], summary: 'Alle Stufen abgeschlossen', started: 'abgeschlossen 30.09.2026' },
+      { id: 'r7', lid: 'lauf_0b77c1', st: 'done', q: 'Welche Argumente teilen Betriebsrat und Initiative „Kreißsaal bleibt in Brenkhausen“, und wo trennen sich ihre Positionen?', src: 'seed-3-geburtshilfe-hollerau.md', date: '28.09.2026', cost: '2,37 €', profile: 'Ausgewogen', stages: ['done', 'done', 'done', 'done', 'done'], summary: 'Alle Stufen abgeschlossen', started: 'abgeschlossen 28.09.2026' },
+      { id: 'r8', lid: 'lauf_91c2aa', st: 'done', q: 'Wie verteilen die Beteiligten die Verantwortung für die 23 Tage Kreißsaal-Schließung im Jahr 2025?', src: 'seed-3-geburtshilfe-hollerau.md', date: '25.09.2026', cost: '1,12 €', profile: 'Sparsam', stages: ['done', 'done', 'done', 'done', 'done'], summary: 'Alle Stufen abgeschlossen', started: 'abgeschlossen 25.09.2026' },
+      { id: 'r9', lid: 'lauf_3fa80d', st: 'done', q: 'Welche Folgen hätte eine befristete Schließung des Kreißsaals Brenkhausen für die Gewinnung von Hebammen?', src: 'seed-3-geburtshilfe-hollerau.md', date: '22.09.2026', cost: '6,90 €', profile: 'Gründlich', stages: ['done', 'done', 'done', 'done', 'done'], summary: 'Alle Stufen abgeschlossen', started: 'abgeschlossen 22.09.2026' },
+    ];
+  }
+  stageRows(id, goTab) {
+    const P = (t) => ({ primary: { bg: 'var(--acc)', fg: 'var(--on-acc)' }, secondary: { bg: 'var(--s3)', fg: 'var(--fg)' }, disabled: { bg: 'var(--s3)', fg: 'var(--fg3)' } }[t]);
+    const TAB = { Graph: 'graph', Personas: null, Simulation: 'simulation', Bericht: 'bericht', Interviews: 'interviews' };
+    let rows;
+    if (id === 'r1') rows = [
+      { name: 'Graph', glyph: '◇', tone: 'done', note: '14 Entitäten, 22 Beziehungen', model: 'gpt-4.1-mini', provider: 'OpenAI', locked: true, dur: '4 min 12 s', tok: '182.400', cost: '0,41 €', act: 'Ansehen', k: 'secondary' },
+      { name: 'Personas', glyph: '◉', tone: 'done', note: '14 Personas', model: 'claude-sonnet-4.5', provider: 'Anthropic', locked: true, dur: '2 min 48 s', tok: '64.900', cost: '0,62 €', act: 'Ansehen', k: 'secondary' },
+      { name: 'Simulation', glyph: '⇆', tone: 'run', note: 'Runde 11 von 24 · 412 Beiträge', model: 'gpt-4.1-mini', provider: 'OpenAI', locked: true, dur: '18 min 05 s', tok: '412.000', cost: '1,12 €', act: 'Live ansehen', k: 'primary' },
+      { name: 'Bericht', glyph: '¶', tone: 'pending', note: 'startet nach der Simulation', model: 'claude-sonnet-4.5', locked: false, dur: '—', tok: '—', cost: '≈ 0,40 €', act: 'Starten', k: 'disabled', actNote: 'nach der Simulation' },
+      { name: 'Interviews', glyph: '?', tone: 'pending', badgeLabel: 'Nicht gestartet', note: 'Befragung einzelner Personas', model: 'claude-haiku-4.5', locked: false, dur: '—', tok: '—', cost: '—', act: 'Starten', k: 'disabled', actNote: 'nach dem Bericht' },
+    ];
+    else if (id === 'r10') rows = [
+      { name: 'Graph', glyph: '◇', tone: 'skipped', badgeLabel: 'Ohne Graph', note: 'beim Anlegen abgewählt', model: '—', provider: '', locked: true, dur: '—', tok: '—', cost: '—', act: 'Ansehen', k: 'secondary' },
+      { name: 'Personas', glyph: '◉', tone: 'done', note: 'Satz „Südkreis Geburtshilfe“, 14 Personas', model: 'vorhandener Satz', provider: '', locked: true, dur: '—', tok: '—', cost: '0,00 €', act: 'Ansehen', k: 'secondary' },
+      { name: 'Simulation', glyph: '⇆', tone: 'pending', badgeLabel: 'Bereit', note: 'wartet auf Start · 24 Runden', model: 'gpt-4.1-mini', locked: false, dur: '—', tok: '—', cost: '≈ 1,10 €', act: 'Starten', k: 'primary' },
+      { name: 'Bericht', glyph: '¶', tone: 'pending', note: 'startet nach der Simulation', model: 'claude-sonnet-4.5', locked: false, dur: '—', tok: '—', cost: '≈ 0,40 €', act: 'Starten', k: 'disabled', actNote: 'nach der Simulation' },
+      { name: 'Interviews', glyph: '?', tone: 'pending', badgeLabel: 'Nicht gestartet', note: 'Befragung einzelner Personas', model: 'claude-haiku-4.5', locked: false, dur: '—', tok: '—', cost: '—', act: 'Starten', k: 'disabled', actNote: 'nach dem Bericht' },
+    ];
+    else rows = [
+      { name: 'Graph', glyph: '◇', tone: 'done', note: '14 Entitäten, 22 Beziehungen', model: 'gpt-4.1-mini', provider: 'OpenAI', locked: true, dur: '4 min 12 s', tok: '182.400', cost: '0,41 €', act: 'Ansehen', k: 'secondary' },
+      { name: 'Personas', glyph: '◉', tone: 'fallback', fallback: true, note: '4 von 14 aus Ersatzvorlage, weil die Erzeugung der Kollektive scheiterte', model: 'claude-sonnet-4.5', provider: 'Anthropic', locked: true, dur: '3 min 31 s', tok: '71.200', cost: '0,68 €', act: 'Neu erzeugen mit …', k: 'secondary' },
+      { name: 'Simulation', glyph: '⇆', tone: 'done', note: '24 von 24 Runden · 1.046 Beiträge', model: 'gpt-4.1-mini', provider: 'OpenAI', locked: true, dur: '38 min 40 s', tok: '1.021.000', cost: '1,94 €', act: 'Ansehen', k: 'secondary' },
+      { name: 'Bericht', glyph: '¶', tone: 'partial', note: 'Fassung 2 · es fehlen „Versorgung im Südkreis“ und „Finanzierung“', model: 'claude-sonnet-4.5', provider: 'Anthropic', locked: true, dur: '4 min 02 s', tok: '137.800', cost: '0,45 €', act: 'Ansehen', k: 'primary' },
+      { name: 'Interviews', glyph: '?', tone: 'done', badgeLabel: '4 Gespräche', note: 'Befragung einzelner Personas', model: 'claude-haiku-4.5', provider: 'Anthropic', locked: true, dur: '—', tok: '9.400', cost: '0,26 €', act: 'Ansehen', k: 'secondary' },
+    ];
+    return rows.map(r => {
+      const p = P(r.k), t = TAB[r.name];
+      return { ...r, badge: this.badge(r.tone, r.badgeLabel), fallback: !!r.fallback, modelLocked: !!r.locked, modelEditable: !r.locked, provider: r.provider || '', actBg: p.bg, actFg: p.fg, actDisabled: r.k === 'disabled', actCursor: r.k === 'disabled' ? 'not-allowed' : 'pointer', hasActNote: !!r.actNote, actNote: r.actNote || '', onAct: r.k !== 'disabled' && r.act === 'Ansehen' || r.act === 'Live ansehen' ? (t ? goTab(t) : goTab('personas')) : () => {} };
+    });
+  }
+
+  renderVals() {
+    let theme = this.v('theme', 'dark');
+    if (theme === 'system') theme = (this.mq && this.mq.matches) ? 'light' : 'dark';
+    const w = Number(this.props.width) || 1440, h = Number(this.props.height) || 900;
+    const bare = !!this.v('bare', false);
+    const view = this.v('view', 'bibliothek');
+    const libMode = this.v('libMode', 'kacheln');
+    const runId = this.v('runId', 'r1');
+    const tab = this.v('tab', 'uebersicht');
+    const narrow = w < 1200;
+    const isRunV = view === 'lauf';
+    const threeCol = (isRunV && ['graph', 'simulation', 'bericht', 'interviews'].includes(tab)) || view === 'graphen';
+    const collapsedDefault = this.props.sidebarCollapsed !== undefined && this.props.sidebarCollapsed !== null ? !!this.props.sidebarCollapsed : (narrow && threeCol);
+    const sideOpen = !(this.state.sidebarCollapsed !== undefined ? this.state.sidebarCollapsed : collapsedDefault);
+    const consoleOpen = !!this.v('consoleOpen', false);
+    const dense = this.v('density', 'komfort') === 'kompakt';
+    const dialog = this.v('dialog', 'none');
+    const profile = this.v('profile', 'Ausgewogen');
+    const settings = this.v('settings', null);
+    const personaEditor = !!this.v('personaEditor', false);
+    const childInit = this.v('init', {});
+    const set = (o) => () => this.setState(o);
+    const nav = (o) => this.setState({ ...o, dialog: 'none' });
+    const goTab = (t) => () => t === 'personas' ? this.setState({ view: 'personas', personasMode: 'satz', init: {} }) : this.setState({ tab: t, init: {} });
+    const openRun = (id) => () => this.setState({ view: 'lauf', runId: id, tab: 'uebersicht', init: {}, dialog: 'none' });
+    const empty = libMode === 'leer', loading = libMode === 'laden';
+    const isLib = view === 'bibliothek';
+    const STN = ['Graph', 'Personas', 'Simulation', 'Bericht', 'Interviews'];
+
+    const runs = this.runsData().map(r => {
+      const dots = r.stages.map((s, i) => this.dot(s, STN[i]));
+      const badge = this.badge(r.st);
+      return { ...r, badge, dots, dotsAria: dots.map(d => d.title).join(', '), hasProgress: !!r.progress, hasReason: !!r.reason, reason: r.reason || '', progress: r.progress || '0%', progressLabel: r.progressLabel || '', onOpen: openRun(r.id), aria: badge.label + ': ' + r.q, hasNote: !!(r.reason || r.progressLabel), listNote: r.reason || r.progressLabel || '' };
+    });
+    const runsShown = empty || loading ? [] : runs;
+    const nRun = empty ? 0 : runs.filter(r => r.st === 'run').length;
+    const att = empty ? [] : runs.filter(r => ['partial', 'budget', 'failed'].includes(r.st));
+
+    const navDef = [
+      { title: 'Bibliothek', items: [{ key: 'bibliothek', label: 'Läufe', glyph: '▶', count: empty ? 0 : runs.length, onClick: set({ view: 'bibliothek', settings: null }) }, { key: 'graphen', label: 'Graphen', glyph: '◇', count: empty ? 0 : 3, onClick: set({ view: 'graphen', graphenMode: 'bibliothek', init: {} }) }, { key: 'personas', label: 'Personasätze', glyph: '◉', count: empty ? 0 : 2, onClick: set({ view: 'personas', personasMode: 'bibliothek' }) }] },
+      { title: 'Im Blick', items: [{ key: 'laeuft', label: 'Läuft gerade', glyph: '◌', count: nRun, onClick: openRun('r1') }, { key: 'braucht', label: 'Braucht dich', glyph: '!', count: att.length, attention: true, onClick: set({ view: 'bibliothek' }) }] },
+      { title: 'Werkzeuge', items: [{ key: 'vergleich', label: 'Vergleich', glyph: '⇄' }, { key: 'aktivitaet', label: 'Aktivität', glyph: '≡', count: 7, onClick: set({ view: 'aktivitaet', init: {} }) }] },
+    ];
+    const curKey = view === 'lauf' ? 'bibliothek' : view;
+    const navGroups = navDef.map(g => ({
+      title: g.title, showHead: sideOpen,
+      items: g.items.map(it => {
+        const sel = it.key === curKey;
+        const hot = it.attention && it.count > 0;
+        return { label: it.label, glyph: it.glyph, onClick: it.onClick || (() => {}), current: sel ? 'page' : 'false', bg: sel ? 'var(--acc-soft)' : 'transparent', hoverBg: sel ? 'var(--acc-soft)' : 'var(--s3)', plBg: sel ? 'var(--acc)' : 'var(--s3)', plFg: sel ? 'var(--on-acc)' : 'var(--fg2)', justify: sideOpen ? 'flex-start' : 'center', showCount: sideOpen && it.count !== undefined, count: it.count, countBg: hot ? 'var(--warn-soft)' : 'transparent', countFg: hot ? 'var(--warn)' : 'var(--fg3)', bubble: !sideOpen && hot };
+      })
+    }));
+
+    const run = runs.find(r => r.id === runId) || runs[1];
+    const detailId = runId === 'r1' ? 'r1' : runId === 'r10' ? 'r10' : 'r2';
+    const stages = this.stageRows(detailId, goTab);
+    const TS = { r1: ['done', 'done', 'run', 'pending', 'pending'], r2: ['done', 'fallback', 'done', 'partial', 'done'], r10: ['skipped', 'done', 'pending', 'pending', 'pending'], r5: ['failed', 'pending', 'pending', 'pending', 'pending'] };
+    const tabStates = [null, ...(TS[runId] || TS.r2)];
+    const TABS = [['uebersicht', 'Übersicht'], ['graph', 'Graph'], ['personas', 'Personas'], ['simulation', 'Simulation'], ['bericht', 'Bericht'], ['interviews', 'Interviews']];
+    const tabs = TABS.map(([k, l], i) => {
+      const d = tabStates[i] ? this.dot(tabStates[i], l) : null;
+      const on = k === tab;
+      return { label: l, current: on ? 'page' : 'false', bg: on ? 'var(--s2)' : 'transparent', fg: on ? 'var(--fg)' : 'var(--fg2)', fw: on ? 600 : 500, hasDot: !!d, dot: d || {}, title: d ? d.title : l, onClick: goTab(k) };
+    });
+    const M = (label, used, max, pct) => { const hot = pct >= 80; return { label, used, max, pct: pct + '%', color: hot ? 'var(--warn)' : 'var(--fg2)', note: hot ? '▲ ' + pct + ' %, knapp' : pct + ' %', noteColor: hot ? 'var(--warn)' : 'var(--fg3)' }; };
+    const meters = detailId === 'r1'
+      ? [M('Zeit', '22 min', '60 min', 37), M('Tokens', '659.300', '2.000.000', 33), M('Kosten', '2,15 €', '8,00 €', 27), M('Aufrufe', '1.284', '5.000', 26)]
+      : detailId === 'r10' ? [M('Zeit', '1 min', '60 min', 2), M('Tokens', '0', '2.000.000', 0), M('Kosten', '0,58 €', '8,00 €', 7), M('Aufrufe', '12', '5.000', 0)]
+      : [M('Zeit', '51 min', '60 min', 85), M('Tokens', '1.412.900', '2.000.000', 71), M('Kosten', '3,48 €', '8,00 €', 44), M('Aufrufe', '3.920', '5.000', 78)];
+
+    const TABL = Object.fromEntries(TABS);
+    const graphenMode = this.v('graphenMode', 'bibliothek');
+    const personasMode = this.v('personasMode', 'bibliothek');
+    const C = (label, last, onClick) => ({ label, sep: false, color: last ? 'var(--fg)' : 'var(--fg2)', fw: last ? 600 : 500, onClick: onClick || (() => {}) });
+    let crumbs;
+    if (isLib) crumbs = [C('Bibliothek'), C('Läufe', true)];
+    else if (isRunV) crumbs = [C('Läufe', false, set({ view: 'bibliothek' })), C('Lauf vom ' + run.date, tab === 'uebersicht', goTab('uebersicht'))].concat(tab !== 'uebersicht' ? [C(TABL[tab], true)] : []);
+    else if (view === 'graphen') crumbs = [C('Bibliothek'), C('Graphen', graphenMode === 'bibliothek', set({ graphenMode: 'bibliothek', init: {} }))].concat(graphenMode !== 'bibliothek' ? [C(graphenMode === 'editor' ? 'Geburtshilfe Hollerau · Kopie' : 'Geburtshilfe Hollerau', true)] : []);
+    else if (view === 'personas') crumbs = [C('Bibliothek'), C('Personasätze', personasMode === 'bibliothek', set({ personasMode: 'bibliothek' }))].concat(personasMode === 'satz' ? [C('Südkreis Geburtshilfe', true)] : []);
+    else crumbs = [C('Werkzeuge'), C('Aktivität', true)];
+    crumbs = crumbs.map((c, i) => ({ ...c, sep: i > 0 }));
+
+    const isList = libMode === 'liste';
+    const viewSeg = [['Kacheln', 'kacheln'], ['Liste', 'liste']].map(([label, k]) => { const on = (k === 'liste') === isList; return { label, on, bg: on ? 'var(--s4)' : 'transparent', fg: on ? 'var(--fg)' : 'var(--fg2)', onClick: set({ libMode: k }) }; });
+
+    const PR = [{ name: 'Sparsam', desc: 'Kleine Modelle in allen Stufen', cost: '≈ 0,90 €' }, { name: 'Ausgewogen', desc: 'Größeres Modell für Personas und Bericht', cost: '≈ 2,50 €' }, { name: 'Gründlich', desc: 'Größtes verfügbares Modell in allen Stufen', cost: '≈ 7,80 €' }];
+    const profiles = PR.map(p => { const on = p.name === profile; return { ...p, on, border: on ? '2px solid var(--acc)' : '2px solid transparent', bg: on ? 'var(--acc-soft)' : 'var(--field)', onClick: set({ profile: p.name }) }; });
+    const SM = {
+      Sparsam: [['gpt-4.1-mini', 'OpenAI', '≈ 0,40 €'], ['gpt-4.1-mini', 'OpenAI', '≈ 0,15 €'], ['gpt-4.1-nano', 'OpenAI', '≈ 0,25 €'], ['gpt-4.1-mini', 'OpenAI', '≈ 0,10 €']],
+      Ausgewogen: [['gpt-4.1-mini', 'OpenAI', '≈ 0,40 €'], ['claude-sonnet-4.5', 'Anthropic', '≈ 0,60 €'], ['gpt-4.1-mini', 'OpenAI', '≈ 1,10 €'], ['claude-sonnet-4.5', 'Anthropic', '≈ 0,40 €']],
+      Gründlich: [['claude-opus-4.1', 'Anthropic', '≈ 1,60 €'], ['claude-opus-4.1', 'Anthropic', '≈ 1,20 €'], ['claude-sonnet-4.5', 'Anthropic', '≈ 3,80 €'], ['claude-opus-4.1', 'Anthropic', '≈ 1,20 €']],
+    };
+    const stageModels = ['Graph', 'Personas', 'Simulation', 'Bericht'].map((n, i) => ({ name: n, model: SM[profile][i][0], provider: SM[profile][i][1], cost: SM[profile][i][2], bt: i ? '1px solid var(--line)' : 'none' }));
+    const EST = { Sparsam: '0,70 bis 1,10 € · etwa 18 min · rund 520.000 Tokens · 1.100 Aufrufe', Ausgewogen: '2,10 bis 2,90 € · etwa 25 min · rund 700.000 Tokens · 1.300 Aufrufe', Gründlich: '6,40 bis 9,10 € · etwa 41 min · rund 760.000 Tokens · 1.300 Aufrufe' };
+
+    const fill = (isRunV && tab !== 'uebersicht') || ['graphen', 'personas', 'aktivitaet'].includes(view);
+    const graphMode = this.v('graphOverride', null) || (runId === 'r5' ? 'fehler' : runId === 'r10' ? 'ohne' : 'lauf');
+
+    return {
+      theme: bare ? 'light' : theme,
+      wPx: w + 'px', hPx: bare ? 'auto' : h + 'px', rootPad: bare ? '40px 24px' : '0', rootBg: bare ? 'var(--s1)' : 'var(--s0)',
+      bare, notBare: !bare,
+      sideOpen, sideW: sideOpen ? '232px' : '68px', sideJustify: sideOpen ? 'flex-start' : 'center', footDir: sideOpen ? 'row' : 'column',
+      navGroups, crumbs, isLib, isRun: isRunV, viewSeg,
+      sortLabel: w < 1200 ? 'Datum' : 'Zuletzt geändert',
+      wideSearch: w >= 1200, narrowSearch: w < 1200,
+      consoleOpen, consoleBtnBg: consoleOpen ? 'var(--s3)' : 'transparent',
+      toggleSide: () => this.setState({ sidebarCollapsed: sideOpen }),
+      toggleConsole: () => this.setState({ consoleOpen: !consoleOpen }),
+      openDialog: set({ dialog: 'zu' }), closeDialog: set({ dialog: 'none' }),
+      openSettings: set({ settings: 'anbieter' }), openSystem: set({ settings: 'system' }),
+      runCountLabel: loading ? '' : String(runsShown.length),
+      showBand: isLib && !empty && !loading,
+      modeTiles: libMode === 'kacheln', modeList: isList, modeEmpty: empty, modeLoading: loading,
+      runs: runsShown, openR1: openRun('r1'),
+      attention: att.map(a => ({ label: a.badge.label, glyph: a.badge.glyph, fg: a.badge.fg, short: a.short, onOpen: openRun(a.id) })),
+      rowPad: dense ? '7px 20px' : '14px 20px', rowFont: dense ? '13px' : '14px',
+      skeletons: [0, 1, 2, 3, 4, 5].map(i => ({ delay: (i * 0.12) + 's' })),
+      run: { ...run, fallback: detailId === 'r2' }, stages, tabs, meters,
+      tabOverview: tab === 'uebersicht', tabCompact: tab !== 'uebersicht',
+      tabsMargin: tab === 'uebersicht' ? '18px 0 20px' : '12px 0 14px',
+      tabGraph: tab === 'graph', tabSim: tab === 'simulation', tabBericht: tab === 'bericht', tabInterviews: tab === 'interviews',
+      graphMode, runIdSim: runId === 'r1' || runId === 'r10' ? runId : 'r2',
+      gcard: run.noGraph ? { title: 'Ohne Graph', meta: 'beim Anlegen abgewählt', sub: 'Belege stützen sich auf Dokument und Simulation' } : { title: 'Geburtshilfe Hollerau', meta: '14 Entitäten · 22 Beziehungen', sub: 'Gesperrt, verwendet von 2 Läufen' },
+      toGraph: goTab('graph'), toPersonas: goTab('personas'),
+      isGraphen: view === 'graphen', isPersonas: view === 'personas', isAktivitaet: view === 'aktivitaet',
+      graphenMode, personasMode, childInit, nav, narrow,
+      mainOverflow: fill ? 'hidden' : 'auto', mainPad: fill ? '6px 28px 0' : '6px 28px 32px',
+      dialogOpen: dialog !== 'none', expanded: dialog === 'auf', expandGlyph: dialog === 'auf' ? '▾' : '▸',
+      toggleExpand: set({ dialog: dialog === 'auf' ? 'zu' : 'auf' }),
+      profiles, stageModels, profileName: profile, estimate: EST[profile],
+      budgetFields: [{ label: 'Tage', value: '3', unit: 'simuliert' }, { label: 'Runden', value: '24', unit: '' }, { label: 'Zeit', value: '60', unit: 'min' }, { label: 'Tokens', value: '2.000.000', unit: '' }, { label: 'Kosten', value: '8,00', unit: '€' }, { label: 'Aufrufe', value: '5.000', unit: '' }],
+      settingsOpen: !!settings, settings: settings || 'anbieter', personaEditor,
+    };
+  }
+}
+</script>
+</body>
+</html>

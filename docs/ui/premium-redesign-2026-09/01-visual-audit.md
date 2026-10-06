@@ -148,6 +148,7 @@ Was **gestrichen** wird: `--bg-grid`, Mesh-Tokens, `--r-pill` als Default, v1-Al
 ## 6. Screenshots / visuelle Referenz
 
 - Ist: `docs/ui/premium-redesign-2026-09/shots/ist/{desktop,small,phone}--*.png`
+- Hinweis: `docs/design/screens/` und `docs/design/agora-neu.dc.html` wurden mit #1794 entfernt; die Dateien sind im Git-Verlauf bis `01990616` abrufbar.
 - Vorlage (Aug 2026): `docs/design/screens/01-ablage.html`, `04-simulation.html`, `07-bericht.html`, `03-laeufe.html`
 - Vorlagen gerendert (alle zehn `docs/design/screens/*.html`, inkl. Kommandopalette, Akteure, Quellenumfeld, Einstellungen, Systemregeln): `docs/ui/premium-redesign-2026-09/shots/design/{00-vorspann,01-ablage,02-kommandopalette,03-laeufe,04-simulation,05-akteure,06-quellenumfeld,07-bericht,08-einstellungen,09-systemregeln}.png`
 - Zielbilder dieses Audits (HTML auf `targets/tokens.css`, dem Referenz-Stylesheet für PR 1): `docs/ui/premium-redesign-2026-09/targets/{ablage-uebersicht,simulation-live,bericht-lesen}.html`

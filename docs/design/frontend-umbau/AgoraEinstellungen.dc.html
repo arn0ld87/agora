@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div role="dialog" aria-modal="true" aria-label="Einstellungen" style="width:960px;max-width:100%;height:660px;max-height:100%;display:flex;background:var(--s2);border-radius:16px;box-shadow:var(--shadow-dlg);overflow:hidden;">
+  <nav aria-label="Abschnitte" style="width:232px;flex:none;background:var(--s1);padding:16px 10px;display:flex;flex-direction:column;gap:2px;box-sizing:border-box;">
+    <span style="font-size:15px;font-weight:650;padding:2px 10px 12px;">Einstellungen</span>
+    <sc-for list="{{ secs }}" as="s" hint-placeholder-count="9">
+      <button onClick="{{ s.onClick }}" aria-current="{{ s.cur }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border:none;border-radius:8px;background:{{ s.bg }};color:var(--fg);font:inherit;font-size:13.5px;cursor:pointer;text-align:left;" style-hover="background:{{ s.hover }}">
+        <span style="width:24px;height:24px;border-radius:50%;background:{{ s.pl }};color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;flex:none;">{{ s.glyph }}</span>{{ s.label }}
+      </button>
+    </sc-for>
+  </nav>
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 16px 8px 26px;flex:none;">
+      <h2 style="margin:0;font-size:18px;font-weight:650;flex:1;">{{ title }}</h2>
+      <sc-if value="{{ isAnbieter }}" hint-placeholder-val="{{ true }}"><button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">+ Anbieter hinzufügen</button></sc-if>
+      <sc-if value="{{ isProfile }}"><button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">+ Profil</button></sc-if>
+      <button onClick="{{ close }}" title="Schließen" style="width:32px;height:32px;border:none;border-radius:8px;background:transparent;color:var(--fg2);font:inherit;font-size:15px;cursor:pointer;" style-hover="background:var(--s3)">✕</button>
+    </div>
+    <div style="flex:1;min-height:0;overflow:auto;padding:8px 26px 26px;display:flex;flex-direction:column;gap:16px;">
+
+      <sc-if value="{{ isAnbieter }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ providers }}" as="p" hint-placeholder-count="3">
+          <section style="background:var(--s1);border-radius:12px;padding:4px 16px 12px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 0;">
+              <span style="font-size:15px;font-weight:650;flex:1;">{{ p.name }}</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ p.stBg }};color:{{ p.stFg }};">{{ p.stGlyph }} {{ p.st }}</span>
+            </div>
+            <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:14px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px;">
+                <span style="color:var(--fg2);">{{ r.label }}</span>
+                <span style="font-family:{{ r.ff }};font-size:{{ r.fs }};color:var(--fg);overflow-wrap:anywhere;">{{ r.value }}</span>
+                <sc-if value="{{ r.hasAct }}"><button style="height:28px;padding:0 10px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">{{ r.act }}</button></sc-if>
+              </div>
+            </sc-for>
+            <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:start;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px;">
+              <span style="color:var(--fg2);padding-top:3px;">Modelle</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <sc-for list="{{ p.models }}" as="m" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:6px;background:var(--s3);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:{{ p.modelFg }};">{{ m }}</span></sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ p.hasHint }}"><div style="display:flex;gap:10px;align-items:center;padding:10px 12px;margin-top:4px;border-radius:8px;background:var(--err-soft);font-size:13px;"><span style="color:var(--err);font-weight:700;">✕</span><span style="flex:1;color:var(--fg);">{{ p.hint }}</span><button style="height:28px;padding:0 10px;border:none;border-radius:7px;background:var(--s3);color:var(--fg);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;">Erneut prüfen</button></div></sc-if>
+          </section>
+        </sc-for>
+        <p style="margin:0;font-size:12.5px;color:var(--fg3);line-height:1.5;">Schlüssel werden verschlüsselt gespeichert und nie im Klartext angezeigt. Sichtbar sind nur Anfang und Länge.</p>
+      </sc-if>
+
+      <sc-if value="{{ isProfile }}">
+        <section style="background:var(--s1);border-radius:12px;padding:2px 16px;">
+          <sc-for list="{{ profiles }}" as="pr" hint-placeholder-count="3">
+            <button onClick="{{ pr.onClick }}" aria-expanded="{{ pr.open }}" style="width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto auto 16px;gap:14px;align-items:center;padding:12px 0;border:none;border-top:{{ pr.bt }};background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:pointer;">
+              <span style="display:flex;flex-direction:column;gap:2px;"><span style="font-size:14px;font-weight:600;">{{ pr.name }}</span><span style="font-size:12.5px;color:var(--fg2);">{{ pr.desc }}</span></span>
+              <sc-if value="{{ pr.isDefault }}"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--acc-soft);color:var(--acc-text);font-size:12px;font-weight:600;">Standard</span></sc-if>
+              <span style="font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ pr.cost }}</span>
+              <span style="color:var(--fg3);font-size:10px;">{{ pr.chev }}</span>
+            </button>
+            <sc-if value="{{ pr.open }}">
+              <div style="padding:0 0 14px;display:flex;flex-direction:column;gap:0;">
+                <sc-for list="{{ pr.stages }}" as="st" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:110px minmax(0,1fr) 90px;gap:14px;align-items:center;padding:8px 12px;border-radius:0;background:var(--s2);border-top:{{ st.bt }};">
+                    <span style="font-size:13.5px;font-weight:600;">{{ st.name }}</span>
+                    <button style="display:flex;align-items:center;gap:10px;height:32px;padding:0 10px 0 12px;border-radius:8px;border:1px solid var(--acc-line);background:var(--field);color:var(--fg);font:inherit;cursor:pointer;justify-self:start;">
+                      <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;">{{ st.model }}</span><span style="color:var(--fg3);font-size:12px;">{{ st.provider }}</span><span style="color:var(--acc-text);font-size:10px;">▾</span>
+                    </button>
+                    <span style="text-align:right;font-size:13px;color:var(--fg2);font-variant-numeric:tabular-nums;">{{ st.cost }}</span>
+                  </div>
+                </sc-for>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0 0;font-size:13.5px;">
+                  <span>Als Standard für neue Läufe</span>
+                  <span role="switch" aria-checked="{{ pr.isDefault }}" style="width:36px;height:20px;border-radius:999px;background:{{ pr.track }};position:relative;flex:none;"><span style="position:absolute;top:2px;left:{{ pr.knob }};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px oklch(0 0 0 / 0.3);"></span></span>
+                </div>
+              </div>
+            </sc-if>
+          </sc-for>
+        </section>
+        <p style="margin:0;font-size:12.5px;color:var(--fg3);line-height:1.5;">Kosten sind Schätzungen für einen Lauf mit 14 Personas und 24 Runden. Im Dialog „Neuer Lauf“ lässt sich jede Stufe einzeln anpassen.</p>
+      </sc-if>
+
+      <sc-if value="{{ isSystem }}">
+        <section style="background:var(--s1);border-radius:12px;padding:2px 16px;">
+          <sc-for list="{{ services }}" as="sv" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 0;border-top:{{ sv.bt }};">
+              <span style="font-size:14px;font-weight:600;">{{ sv.name }}</span>
+              <span style="display:flex;flex-direction:column;gap:2px;min-width:0;"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--fg2);overflow-wrap:anywhere;">{{ sv.url }}</span><span style="font-size:12.5px;color:var(--fg3);font-variant-numeric:tabular-nums;">{{ sv.meta }}</span></span>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--ok-soft);color:var(--ok);">✓ verbunden</span>
+            </div>
+          </sc-for>
+        </section>
+        <section style="background:var(--s1);border-radius:12px;padding:2px 16px;">
+          <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;padding:12px 0;font-size:13.5px;"><span style="color:var(--fg2);">Version</span><span style="font-variant-numeric:tabular-nums;">Agora 0.9.0 · Oberfläche 0.9.0 · Stand 05.10.2026</span></div>
+          <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;padding:12px 0;border-top:1px solid var(--line);font-size:13.5px;"><span style="color:var(--fg2);">Letzte Störung</span><span>Neo4j nicht erreichbar, 02.10.2026, 11:05, für 30 s. Betroffen: <a href="#">lauf_19bd04</a></span></div>
+        </section>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <button onClick="{{ openConsole }}" style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--s4)">Konsole öffnen</button>
+          <span style="font-size:12.5px;color:var(--fg3);">Alle Meldungen aller Läufe, live</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isOther }}">
+        <p style="margin:0;font-size:13.5px;color:var(--fg2);">Dieser Abschnitt wird in einem späteren Durchgang ausgestaltet.</p>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:960,&quot;height&quot;:660},&quot;section&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;anbieter&quot;,&quot;profile&quot;,&quot;system&quot;,&quot;allgemein&quot;],&quot;default&quot;:&quot;anbieter&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;nav&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;(o: object) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = {};
+  renderVals() {
+    const nav = this.props.nav || (() => {});
+    const sec = this.state.sec || this.props.section || 'anbieter';
+    const S = [['allgemein', 'Allgemein', '⚙︎', 'oklch(0.55 0.01 265)'], ['aussehen', 'Aussehen', 'Aa', 'oklch(0.6 0.14 340)'], ['anbieter', 'Anbieter', '◎', 'oklch(0.58 0.13 230)'], ['profile', 'Profile', '≡', 'oklch(0.58 0.11 190)'], ['embedding', 'Embedding', '∷', 'oklch(0.56 0.14 270)'], ['pipeline', 'Pipeline', '→', 'oklch(0.62 0.13 55)'], ['budgets', 'Budgets', '€', 'oklch(0.58 0.12 125)'], ['zugang', 'Zugang', '⊡', 'oklch(0.56 0.13 310)'], ['system', 'System', '▤', 'oklch(0.45 0.01 265)']];
+    const secs = S.map(([id, label, glyph, pl]) => { const on = sec === id; return { label, glyph, pl, cur: on ? 'true' : 'false', bg: on ? 'var(--acc-soft)' : 'transparent', hover: on ? 'var(--acc-soft)' : 'var(--s3)', onClick: () => this.setState({ sec: id }) }; });
+    const mono = "ui-monospace,'SF Mono',Menlo,monospace";
+    const row = (label, value, act, isMono) => ({ label, value, hasAct: !!act, act: act || '', ff: isMono ? mono : 'inherit', fs: isMono ? '12.5px' : '13.5px' });
+    const providers = [
+      { name: 'OpenAI', st: 'Verbunden', stGlyph: '✓', stBg: 'var(--ok-soft)', stFg: 'var(--ok)', modelFg: 'var(--fg)', rows: [row('Verbindung', 'https://api.openai.com/v1', 'Prüfen', true), row('Schlüssel', 'sk-proj-•••• · 164 Zeichen · hinterlegt 12.09.2026', 'Ersetzen', false), row('Zuletzt geprüft', 'heute, 14:02 · 210 ms', null, false)], models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'text-embedding-3-small'], hasHint: false },
+      { name: 'Anthropic', st: 'Verbunden', stGlyph: '✓', stBg: 'var(--ok-soft)', stFg: 'var(--ok)', modelFg: 'var(--fg)', rows: [row('Verbindung', 'https://api.anthropic.com', 'Prüfen', true), row('Schlüssel', 'sk-ant-•••• · 108 Zeichen · hinterlegt 12.09.2026', 'Ersetzen', false), row('Zuletzt geprüft', 'heute, 14:02 · 340 ms', null, false)], models: ['claude-opus-4.1', 'claude-sonnet-4.5', 'claude-haiku-4.5'], hasHint: false },
+      { name: 'Ollama, lokal', st: 'Nicht erreichbar', stGlyph: '✕', stBg: 'var(--err-soft)', stFg: 'var(--err)', modelFg: 'var(--fg3)', rows: [row('Verbindung', 'http://localhost:11434', null, true), row('Schlüssel', 'nicht nötig', null, false)], models: ['llama3.1:8b', 'nomic-embed-text'], hasHint: true, hint: 'Antwortet seit 14:02 nicht. Läuft der Dienst? Starte ihn mit „ollama serve“.' },
+    ];
+    const open = this.state.open || 'Ausgewogen';
+    const SM = {
+      Sparsam: [['gpt-4.1-mini', 'OpenAI', '≈ 0,40 €'], ['gpt-4.1-mini', 'OpenAI', '≈ 0,15 €'], ['gpt-4.1-nano', 'OpenAI', '≈ 0,25 €'], ['gpt-4.1-mini', 'OpenAI', '≈ 0,10 €']],
+      Ausgewogen: [['gpt-4.1-mini', 'OpenAI', '≈ 0,40 €'], ['claude-sonnet-4.5', 'Anthropic', '≈ 0,60 €'], ['gpt-4.1-mini', 'OpenAI', '≈ 1,10 €'], ['claude-sonnet-4.5', 'Anthropic', '≈ 0,40 €']],
+      Gründlich: [['claude-opus-4.1', 'Anthropic', '≈ 1,60 €'], ['claude-opus-4.1', 'Anthropic', '≈ 1,20 €'], ['claude-sonnet-4.5', 'Anthropic', '≈ 3,80 €'], ['claude-opus-4.1', 'Anthropic', '≈ 1,20 €']],
+    };
+    const profiles = [['Sparsam', 'Kleine Modelle in allen Stufen', '≈ 0,90 €'], ['Ausgewogen', 'Größeres Modell für Personas und Bericht', '≈ 2,50 €'], ['Gründlich', 'Größtes verfügbares Modell in allen Stufen', '≈ 7,80 €']].map(([name, desc, cost], i) => {
+      const isOpen = open === name, def = name === 'Ausgewogen';
+      return { name, desc, cost, open: isOpen, isDefault: def, chev: isOpen ? '▾' : '▸', bt: i ? '1px solid var(--line)' : 'none', track: def ? 'var(--acc)' : 'var(--s4)', knob: def ? '18px' : '2px', onClick: () => this.setState({ open: isOpen ? null : name }),
+        stages: ['Graph', 'Personas', 'Simulation', 'Bericht'].map((n, j) => ({ name: n, model: SM[name][j][0], provider: SM[name][j][1], cost: SM[name][j][2], bt: j ? '1px solid var(--line)' : 'none' })) };
+    });
+    const services = [['Neo4j', 'bolt://neo4j:7687', 'Version 5.24 · Antwort 14 ms · 3 Graphen'], ['Redis', 'redis://redis:6379', 'Version 7.4 · Antwort 2 ms · 2 Jobs in der Warteschlange'], ['PostgreSQL', 'postgresql://agora@db:5432/agora', 'Version 16.4 · Antwort 5 ms']].map(([name, url, meta], i) => ({ name, url, meta, bt: i ? '1px solid var(--line)' : 'none' }));
+    const title = (S.find(s => s[0] === sec) || S[2])[1];
+    return {
+      secs, title, providers, profiles, services,
+      isAnbieter: sec === 'anbieter', isProfile: sec === 'profile', isSystem: sec === 'system', isOther: !['anbieter', 'profile', 'system'].includes(sec),
+      close: () => nav({ settings: null }), openConsole: () => nav({ settings: null, consoleOpen: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>

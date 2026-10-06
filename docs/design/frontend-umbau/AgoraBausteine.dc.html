@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+html,body{margin:0;}
+[data-ag-theme="dark"]{color-scheme:dark;--s0:oklch(0.185 0.004 265);--s1:oklch(0.215 0.004 265);--s2:oklch(0.248 0.005 265);--s3:oklch(0.29 0.006 265);--s4:oklch(0.335 0.006 265);--field:oklch(0.205 0.004 265);--line:oklch(0.31 0.005 265);--fg:oklch(0.96 0.003 265);--fg2:oklch(0.8 0.006 265);--fg3:oklch(0.7 0.008 265);--acc:oklch(0.55 0.2 293);--acc-hover:oklch(0.6 0.2 293);--acc-press:oklch(0.5 0.2 293);--acc-text:oklch(0.78 0.13 293);--acc-soft:oklch(0.55 0.2 293 / 0.24);--acc-line:oklch(0.7 0.16 293 / 0.55);--on-acc:#fff;--ok:oklch(0.8 0.15 152);--ok-soft:oklch(0.8 0.15 152 / 0.15);--warn:oklch(0.86 0.15 88);--warn-soft:oklch(0.86 0.15 88 / 0.15);--err:oklch(0.74 0.17 25);--err-soft:oklch(0.74 0.17 25 / 0.16);--scrim:oklch(0.1 0.005 265 / 0.6);--shadow-pop:0 -8px 32px oklch(0 0 0 / 0.35);--shadow-dlg:0 24px 64px oklch(0 0 0 / 0.5),0 0 0 1px oklch(1 0 0 / 0.06);}
+[data-ag-theme="light"]{color-scheme:light;--s0:oklch(0.972 0.002 265);--s1:oklch(0.945 0.003 265);--s2:oklch(1 0 0);--s3:oklch(0.935 0.004 265);--s4:oklch(0.9 0.005 265);--field:oklch(0.972 0.002 265);--line:oklch(0.9 0.004 265);--fg:oklch(0.21 0.006 265);--fg2:oklch(0.4 0.008 265);--fg3:oklch(0.46 0.01 265);--acc:oklch(0.5 0.2 293);--acc-hover:oklch(0.45 0.2 293);--acc-press:oklch(0.42 0.2 293);--acc-text:oklch(0.47 0.2 293);--acc-soft:oklch(0.5 0.2 293 / 0.12);--acc-line:oklch(0.5 0.2 293 / 0.45);--on-acc:#fff;--ok:oklch(0.5 0.13 152);--ok-soft:oklch(0.6 0.14 152 / 0.14);--warn:oklch(0.52 0.11 70);--warn-soft:oklch(0.82 0.14 85 / 0.3);--err:oklch(0.52 0.19 25);--err-soft:oklch(0.6 0.19 25 / 0.12);--scrim:oklch(0.2 0.01 265 / 0.35);--shadow-pop:0 -6px 24px oklch(0.2 0.02 265 / 0.12);--shadow-dlg:0 20px 56px oklch(0.2 0.02 265 / 0.2),0 0 0 1px oklch(0.2 0.02 265 / 0.06);}
+[data-ag-theme] a{color:var(--acc-text);text-decoration:none}
+[data-ag-theme] a:hover{text-decoration:underline}
+@keyframes agspin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div data-ag-theme="{{ theme }}" style="width:1440px;box-sizing:border-box;padding:48px 56px 64px;background:var(--s0);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI Variable','Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.43;display:flex;flex-direction:column;gap:40px;">
+  <div style="display:flex;flex-direction:column;gap:6px;">
+    <h1 style="margin:0;font-size:26px;font-weight:650;letter-spacing:-0.01em;">Agora · Bausteinblatt</h1>
+    <p style="margin:0;color:var(--fg2);max-width:760px;text-wrap:pretty;">Grundlage für die Tokens in frontend/src/assets/styles/. Violett nur für Auswahl, Hauptknopf und Verknüpfungen. Grün, Gelb und Rot nur für Zustände, immer zusammen mit Symbol und Wort.</p>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:16px;">
+    <h2 style="margin:0;font-size:17px;font-weight:600;">Farben</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+      <sc-for list="{{ palettes }}" as="pal" hint-placeholder-count="2">
+        <div data-ag-theme="{{ pal.theme }}" style="background:var(--s0);color:var(--fg);border-radius:14px;padding:18px 20px;box-shadow:0 0 0 1px oklch(0.5 0 0 / 0.25);">
+          <div style="font-weight:600;margin-bottom:8px;">{{ pal.title }}</div>
+          <sc-for list="{{ pal.rows }}" as="t" hint-placeholder-count="16">
+            <div style="display:grid;grid-template-columns:36px 130px 1fr auto;gap:12px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:13px;">
+              <span style="width:36px;height:24px;border-radius:6px;background:{{ t.value }};box-shadow:inset 0 0 0 1px oklch(0.5 0 0 / 0.3);"></span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;">{{ t.name }}</span>
+              <span style="color:var(--fg2);">{{ t.role }}</span>
+              <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px;color:var(--fg3);">{{ t.value }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:24px;">
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:4px;">
+      <h2 style="margin:0 0 8px;font-size:17px;font-weight:600;">Schrift</h2>
+      <sc-for list="{{ typeScale }}" as="ty" hint-placeholder-count="7">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line);">
+          <span style="font-size:{{ ty.size }};font-weight:{{ ty.weight }};font-family:{{ ty.family }};">{{ ty.label }}</span>
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px;color:var(--fg3);">{{ ty.spec }}</span>
+        </div>
+      </sc-for>
+      <p style="margin:8px 0 0;font-size:12.5px;color:var(--fg2);">Systemschrift: -apple-system, Segoe UI, system-ui. Festbreite: ui-monospace, SF Mono, Menlo. Zahlen in Tabellen mit tabular-nums.</p>
+    </div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;">
+      <h2 style="margin:0 0 4px;font-size:17px;font-weight:600;">Abstände</h2>
+      <sc-for list="{{ spaces }}" as="sp" hint-placeholder-count="8">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="width:56px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg2);">{{ sp.name }}</span>
+          <span style="height:12px;width:{{ sp.px }};background:var(--s4);border-radius:3px;"></span>
+          <span style="font-size:12px;color:var(--fg3);">{{ sp.use }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:24px;">
+      <div style="background:var(--s2);border-radius:12px;padding:18px 20px;">
+        <h2 style="margin:0 0 12px;font-size:17px;font-weight:600;">Radien</h2>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <sc-for list="{{ radii }}" as="ra" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+              <span style="width:52px;height:40px;background:var(--s4);border-radius:{{ ra.r }};"></span>
+              <span style="font-size:11.5px;color:var(--fg2);text-align:center;">{{ ra.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:var(--s2);border-radius:12px;padding:18px 20px;">
+        <h2 style="margin:0 0 12px;font-size:17px;font-weight:600;">Schatten</h2>
+        <div style="display:flex;gap:18px;">
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;"><span style="height:44px;border-radius:10px;background:var(--s3);"></span><span style="font-size:11.5px;color:var(--fg2);">Karte: keiner, nur Fläche</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;"><span style="height:44px;border-radius:10px;background:var(--s1);box-shadow:var(--shadow-pop);"></span><span style="font-size:11.5px;color:var(--fg2);">Auszug (Konsole)</span></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;"><span style="height:44px;border-radius:10px;background:var(--s2);box-shadow:var(--shadow-dlg);"></span><span style="font-size:11.5px;color:var(--fg2);">Dialog</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:var(--s2);border-radius:12px;padding:18px 20px;">
+    <h2 style="margin:0 0 12px;font-size:17px;font-weight:600;">Knöpfe</h2>
+    <div style="display:grid;grid-template-columns:120px repeat(5,minmax(0,1fr));gap:12px 16px;align-items:center;">
+      <span></span>
+      <sc-for list="{{ btnCols }}" as="bc" hint-placeholder-count="5"><span style="font-size:12px;font-weight:600;color:var(--fg3);">{{ bc }}</span></sc-for>
+      <sc-for list="{{ btnRows }}" as="br" hint-placeholder-count="3">
+        <span style="font-size:13px;color:var(--fg2);">{{ br.name }}</span>
+        <sc-for list="{{ br.cells }}" as="c" hint-placeholder-count="5">
+          <span><button style="height:32px;padding:0 14px;border:none;border-radius:8px;font:inherit;font-size:13px;font-weight:600;background:{{ c.bg }};color:{{ c.fg }};outline:{{ c.outline }};outline-offset:2px;cursor:default;">{{ br.label }}</button></span>
+        </sc-for>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;">
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Eingabefeld</h2>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Normal<div style="height:36px;display:flex;align-items:center;padding:0 12px;border-radius:8px;background:var(--field);border:1px solid transparent;font-size:14px;color:var(--fg3);">Frage eingeben</div></label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Fokus<div style="height:36px;display:flex;align-items:center;padding:0 12px;border-radius:8px;background:var(--field);border:1px solid var(--acc);box-shadow:0 0 0 3px var(--acc-soft);font-size:14px;color:var(--fg);">Kreißsaal Brenkhausen</div></label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Fehler<div style="height:36px;display:flex;align-items:center;padding:0 12px;border-radius:8px;background:var(--field);border:1px solid var(--err);font-size:14px;color:var(--fg3);"></div><span style="color:var(--err);font-size:12px;">✕ Die Frage ist ein Pflichtfeld.</span></label>
+    </div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Auswahl</h2>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Feste Auswahl<div style="height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-radius:8px;background:var(--field);font-size:14px;color:var(--fg);">Südkreis Geburtshilfe<span style="color:var(--fg2);font-size:10px;">▾</span></div></label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Stellschraube Modell<div style="align-self:flex-start;height:32px;display:flex;align-items:center;gap:10px;padding:0 10px 0 12px;border-radius:8px;background:var(--field);border:1px solid var(--acc-line);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--fg);">claude-sonnet-4.5<span style="color:var(--acc-text);font-size:10px;">▾</span></div><span style="font-size:11.5px;color:var(--fg3);">vor dem Start änderbar</span></label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);">Gesperrt (nach Start)<div style="display:flex;flex-direction:column;gap:2px;"><span style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--fg2);">gpt-4.1-mini</span><span style="font-size:11.5px;color:var(--fg3);">OpenAI</span></div></label>
+    </div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:4px;">
+      <h2 style="margin:0 0 8px;font-size:17px;font-weight:600;">Schalter</h2>
+      <sc-for list="{{ switches }}" as="sw" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);opacity:{{ sw.op }};">
+          <span style="font-size:13.5px;">{{ sw.label }}</span>
+          <span role="switch" aria-checked="{{ sw.on }}" style="width:36px;height:20px;border-radius:999px;background:{{ sw.track }};position:relative;flex:none;"><span style="position:absolute;top:2px;left:{{ sw.knob }};width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px oklch(0 0 0 / 0.3);"></span></span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Segmentwahl</h2>
+      <div style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;align-self:flex-start;">
+        <span style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:12.5px;background:var(--s4);color:var(--fg);font-weight:600;">Kacheln</span>
+        <span style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:12.5px;color:var(--fg2);">Liste</span>
+      </div>
+      <div style="display:flex;padding:2px;border-radius:8px;background:var(--field);gap:2px;align-self:flex-start;">
+        <span style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:12.5px;color:var(--fg2);">Sparsam</span>
+        <span style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:12.5px;background:var(--s4);color:var(--fg);font-weight:600;">Ausgewogen</span>
+        <span style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:12.5px;color:var(--fg2);">Gründlich</span>
+      </div>
+      <h2 style="margin:8px 0 0;font-size:17px;font-weight:600;">Reiter</h2>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <span style="height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:8px;background:var(--s3);font-weight:600;font-size:13px;">Übersicht</span>
+        <span style="height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:8px;color:var(--fg2);font-size:13px;">Graph<span style="width:9px;height:9px;border-radius:50%;background:var(--ok);"></span></span>
+        <span style="height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:8px;color:var(--fg2);font-size:13px;">Simulation<span style="width:9px;height:9px;box-sizing:border-box;border-radius:50%;border:2px solid var(--fg);border-right-color:transparent;animation:agspin .9s linear infinite;"></span></span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Zustandsmarken der Läufe</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        <sc-for list="{{ badges }}" as="b" hint-placeholder-count="6">
+          <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:{{ b.bg }};color:{{ b.fg }};">
+            <sc-if value="{{ b.spin }}"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin .9s linear infinite;"></span></sc-if>
+            <sc-if value="{{ b.hasGlyph }}"><span style="font-size:10.5px;line-height:1;">{{ b.glyph }}</span></sc-if>{{ b.label }}</span>
+        </sc-for>
+      </div>
+      <h3 style="margin:8px 0 0;font-size:14px;font-weight:600;">Stufenpunkte</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 20px;">
+        <sc-for list="{{ dots }}" as="d" hint-placeholder-count="6">
+          <span style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg2);"><span style="width:11px;height:11px;box-sizing:border-box;background:{{ d.bg }};border:{{ d.bd }};border-right-color:{{ d.brc }};border-radius:{{ d.rad }};transform:{{ d.tf }};animation:{{ d.anim }};"></span>{{ d.l }}</span>
+        </sc-for>
+      </div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);text-wrap:pretty;">Jeder Zustand unterscheidet sich in Form und Wort, nicht nur in der Farbe. „Unvollständig“ ist gelb und halb gefüllt, „Fertig“ grün und voll.</p>
+    </div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Marken</h2>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:12px 16px;align-items:center;">
+        <span style="justify-self:start;display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;font-weight:700;letter-spacing:0.06em;">SIM</span>
+        <span style="font-size:13px;color:var(--fg2);">Jede synthetische Äußerung: Beitrag, Kommentar, Interview-Antwort, Zitat im Bericht.</span>
+        <span style="justify-self:start;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">✎ manuell</span>
+        <span style="font-size:13px;color:var(--fg2);">Von Hand angelegter oder geänderter Graph-Eintrag. Gestrichelt wie die manuelle Kante.</span>
+        <span style="justify-self:start;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;">↺ Fallback</span>
+        <span style="font-size:13px;color:var(--fg2);">Ersatz-Persona aus Vorlage. Qualitätsminderung, daher Warnfarbe.</span>
+        <span style="justify-self:start;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:5px;border:1px solid var(--fg3);color:var(--fg);font-size:11.5px;font-weight:600;box-sizing:border-box;">❝ Interview</span>
+        <span style="font-size:13px;color:var(--fg2);">Nachträgliche Befragung, nie Teil der Diskussion. Steht immer zusammen mit SIM.</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Kachel</h2>
+      <article style="display:flex;flex-direction:column;gap:12px;background:var(--s2);border-radius:12px;padding:16px 18px;max-width:380px;">
+        <div style="display:flex;align-items:center;gap:8px;"><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--warn-soft);color:var(--warn);"><span style="font-size:10.5px;">◐</span>Unvollständig</span><span style="flex:1;"></span><span style="font-size:12.5px;color:var(--fg3);">04.10.2026</span></div>
+        <h3 style="margin:0;font-size:15.5px;line-height:1.42;font-weight:600;text-wrap:pretty;">Wie reagieren die freiberuflichen Hebammen im Südkreis, wenn die Kliniken Hollerau ihnen ein Kooperationsmodell für Brenkhausen anbieten?</h3>
+        <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;color:var(--fg3);">seed-3-geburtshilfe-hollerau.md</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="display:flex;gap:5px;">
+            <sc-for list="{{ tileDots }}" as="d" hint-placeholder-count="5"><span style="width:11px;height:11px;box-sizing:border-box;background:{{ d.bg }};border:{{ d.bd }};border-right-color:{{ d.brc }};border-radius:{{ d.rad }};transform:{{ d.tf }};"></span></sc-for>
+          </div>
+          <span style="font-size:12.5px;color:var(--fg2);">Bericht unvollständig</span>
+        </div>
+        <p style="margin:0;display:flex;gap:8px;font-size:13px;color:var(--fg2);"><span style="color:var(--warn);font-weight:700;">◐</span>Bericht lesbar, aber 2 von 7 Abschnitten fehlen. 4 Personas stammen aus der Ersatzvorlage.</p>
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--fg3);"><span>Profil Ausgewogen</span><span style="color:var(--fg2);">3,48 €</span></div>
+      </article>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Listenzeile, Komfort und Kompakt</h2>
+      <div style="background:var(--s2);border-radius:12px;overflow:hidden;">
+        <div style="display:grid;grid-template-columns:110px minmax(0,1fr) 90px 70px;gap:14px;align-items:center;padding:14px 18px;font-size:14px;">
+          <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg);justify-self:start;"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:agspin .9s linear infinite;"></span>Läuft</span>
+          <span style="font-weight:600;">Risiken für Schwangere, Beschäftigte und Versorgung im Südkreis</span>
+          <span style="color:var(--fg2);">05.10.2026</span><span style="color:var(--fg2);text-align:right;">2,15 €</span>
+        </div>
+        <div style="display:grid;grid-template-columns:110px minmax(0,1fr) 90px 70px;gap:14px;align-items:center;padding:7px 18px;font-size:13px;border-top:1px solid var(--line);">
+          <span style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 7px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--ok-soft);color:var(--ok);justify-self:start;"><span style="font-size:10px;">✓</span>Fertig</span>
+          <span style="font-weight:600;">Anfahrtswege und Notfallversorgung aus Moorhagen</span>
+          <span style="color:var(--fg2);">30.09.2026</span><span style="color:var(--fg2);text-align:right;">2,61 €</span>
+        </div>
+      </div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);">Komfort: Zeile 14 px Innenabstand, Text 14. Kompakt: 7 px, Text 13. Linien nur zwischen Zeilen.</p>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:12px;">
+    <h2 style="margin:0;font-size:17px;font-weight:600;">Hinweisband</h2>
+    <div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-radius:12px;background:var(--warn-soft);">
+      <span style="color:var(--warn);font-weight:700;margin-top:1px;">◐</span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;color:var(--fg);">Dieser Bericht ist unvollständig. 2 von 7 Abschnitten fehlen.</span>
+        <span style="color:var(--fg2);font-size:13px;">„Versorgung im Südkreis“: Zeitüberschreitung beim Modell. „Finanzierung“: keine Belege im Graph gefunden.</span>
+      </div>
+      <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;">Neu erzeugen mit …</button>
+    </div>
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-radius:12px;background:var(--err-soft);">
+      <span style="color:var(--err);font-weight:700;margin-top:1px;">✕</span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+        <span style="font-weight:600;">Lauf fehlgeschlagen in Stufe Graph.</span>
+        <span style="color:var(--fg2);font-size:13px;">Die Graph-Datenbank war nicht erreichbar. Prüfe unter System, ob Neo4j läuft, und versuche es dann erneut.</span>
+      </div>
+      <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;">Erneut versuchen</button>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center;padding:12px 16px;border-radius:12px;background:var(--s2);">
+      <span style="color:var(--fg2);font-weight:700;">i</span>
+      <span style="flex:1;color:var(--fg2);font-size:13px;">Neutral: Alles, was Personas äußern, ist synthetische Modellausgabe und keine Vorhersage.</span>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Leerzustand</h2>
+      <div style="background:var(--s1);border-radius:12px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;">
+        <span style="width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--s3);color:var(--fg2);">◉</span>
+        <span style="font-weight:600;font-size:16px;">Noch kein Personasatz</span>
+        <span style="color:var(--fg2);font-size:13px;max-width:320px;">Ein Personasatz entsteht aus einem Graphen oder von Hand.</span>
+        <button style="margin-top:6px;height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;">Personasatz anlegen</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:17px;font-weight:600;">Dialog</h2>
+      <div style="background:var(--scrim);border-radius:12px;padding:32px;display:flex;justify-content:center;">
+        <div role="dialog" aria-label="Lauf anhalten" style="width:400px;background:var(--s2);border-radius:16px;box-shadow:var(--shadow-dlg);overflow:hidden;">
+          <div style="padding:20px 22px 16px;display:flex;flex-direction:column;gap:8px;">
+            <span style="font-weight:650;font-size:16px;">Lauf anhalten?</span>
+            <span style="color:var(--fg2);font-size:13.5px;">Die Simulation stoppt nach Runde 11. Du kannst sie später fortsetzen.</span>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;padding:12px 16px;background:var(--s1);">
+            <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--s3);color:var(--fg);font:inherit;font-size:13px;font-weight:600;">Weiterlaufen lassen</button>
+            <button style="height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--acc);color:var(--on-acc);font:inherit;font-size:13px;font-weight:600;">Anhalten</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div style="display:flex;flex-direction:column;gap:6px;padding-top:24px;border-top:1px solid var(--line);">
+    <h1 style="margin:0;font-size:22px;font-weight:650;">Neu in Durchgang 2</h1>
+    <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Bausteine für Simulation, Bericht, Interviews, Graph und Personas. Jede synthetische Äußerung trägt SIM; Fallback, manuell und unvollständig haben je eine eigene Form.</p>
+  </div>
+  <section style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div style="display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Beitragskarte Twitter</h2>
+      <article style="display:flex;gap:12px;background:var(--s2);border-radius:12px;padding:14px 16px;"><span style="width:40px;height:40px;border-radius:50%;background:oklch(0.5 0.08 20);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;">AW</span>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="font-weight:650;">Anke Wübbena</span><span style="color:var(--fg3);">· Runde 2 · Tag 1, 10:00</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div>
+        <span style="font-size:12.5px;color:var(--fg3);">Antwort an <span style="color:var(--acc-text);">Geschäftsführung</span></span>
+        <p style="margin:2px 0 4px;font-size:14.5px;line-height:1.5;">Die 23 Tage Kreißsaal-Schließung sind eine direkte Folge unbesetzter Stellen.</p>
+        <div style="display:flex;gap:22px;font-size:12.5px;color:var(--fg3);"><span>↩ 3</span><span>⇄ 19</span><span>♡ 64</span></div></div></article>
+      <article style="display:flex;gap:12px;background:var(--s2);border-radius:12px;padding:14px 16px;"><span style="width:40px;height:40px;border-radius:9px;background:oklch(0.5 0.08 45);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;">HV</span>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:13px;"><span style="font-weight:650;">Hebammenverband</span><span style="color:var(--fg3);">· Runde 2</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11px;font-weight:600;">↺ Fallback</span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div>
+        <p style="margin:2px 0 0;font-size:14.5px;line-height:1.5;">Kollektiv: Avatar mit Ecken statt Kreis. Fallback steht am Beitrag selbst.</p></div></article>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Faden: Antworten unter dem Beitrag, verbunden durch eine 2-px-Linie zwischen den Avataren. Beleg im Bericht: Hintergrund Akzent hell und Marke „Beleg im Bericht“.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Beitragskarte Reddit und Kommentar im Baum</h2>
+      <article style="display:flex;gap:14px;background:var(--s2);border-radius:12px;padding:12px 16px 12px 10px;">
+        <div style="width:44px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--fg3);font-size:11px;"><span>▲</span><span style="font-size:14px;font-weight:700;color:var(--fg);">48</span><span>▼</span></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--fg3);"><span style="width:20px;height:20px;border-radius:50%;background:oklch(0.5 0.08 110);color:#fff;display:grid;place-items:center;font-size:6px;font-weight:700;flex:none;">OJ</span><span style="color:var(--fg2);font-weight:600;">Okko Janssen</span><span>· Runde 2</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div>
+        <h3 style="margin:0;font-size:15.5px;font-weight:600;">Beschlussvorlage Brenkhausen: Was heißt das für Moorhagen?</h3><span style="font-size:12.5px;color:var(--fg3);">8 Kommentare</span></div></article>
+      <div style="background:var(--s2);border-radius:12px;padding:8px 12px;">
+        <div style="display:flex;"><div style="flex:1;padding:6px 0;display:flex;flex-direction:column;gap:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:20px;height:20px;border-radius:5px;border:1px solid var(--line);display:grid;place-items:center;color:var(--fg2);">−</span><span style="width:22px;height:22px;border-radius:7px;background:oklch(0.5 0.08 200);color:#fff;display:grid;place-items:center;font-size:7px;font-weight:700;flex:none;">RD</span><span style="font-weight:650;font-size:13px;">Rettungsdienst</span><span style="color:var(--fg3);">41 Punkte</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div><p style="margin:0 0 0 26px;font-size:14px;">Die Fahrzeit liegt bei 52 Minuten.</p></div></div>
+        <div style="display:flex;"><span style="width:24px;display:flex;justify-content:center;"><span style="width:2px;background:var(--line);"></span></span><div style="flex:1;padding:6px 0;display:flex;flex-direction:column;gap:4px;"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:20px;height:20px;border-radius:5px;border:1px solid var(--line);display:grid;place-items:center;color:var(--fg2);">+</span><span style="width:22px;height:22px;border-radius:50%;background:oklch(0.5 0.08 170);color:#fff;display:grid;place-items:center;font-size:7px;font-weight:700;flex:none;">BS</span><span style="font-weight:650;font-size:13px;">Dr. Birgit Sander</span><span style="color:var(--fg3);">18 Punkte</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div><span style="margin-left:26px;font-size:12.5px;color:var(--fg3);">2 Antworten ausgeblendet</span></div></div>
+      </div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Jede Ebene rückt 24 px ein. Die senkrechte Linie ist zugleich der Knopf zum Einklappen ihres Zweigs.</p>
+    </div>
+  </section>
+  <section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;">
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Persona-Karte</h2>
+      <article style="display:flex;flex-direction:column;gap:10px;background:var(--s3);border-radius:12px;padding:14px 16px;">
+        <div style="display:flex;gap:12px;align-items:center;"><span style="width:44px;height:44px;border-radius:50%;background:oklch(0.5 0.08 355);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none;">MT</span><div style="display:flex;flex-direction:column;"><span style="font-weight:650;">Maren Tjaden</span><span style="font-size:12.5px;color:var(--fg2);">Werdende Mutter aus Moorhagen</span></div></div>
+        <p style="margin:0;font-size:13px;color:var(--fg2);line-height:1.5;">Fürchtet den langen Weg nach Hollerau-Nord, besonders im Winter.</p>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:999px;background:var(--s4);color:var(--fg2);font-size:11.5px;font-weight:600;">Einzelperson</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;border:1px dotted var(--fg2);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">KI-Entwurf</span><span style="flex:1;"></span><span style="font-size:11.5px;font-weight:600;color:var(--fg2);">○ Entwurf</span></div>
+      </article>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:999px;background:var(--s3);color:var(--fg2);font-size:11.5px;font-weight:600;">◇ aus Graph</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">✎ von Hand</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;border:1px dotted var(--fg2);color:var(--fg2);font-size:11.5px;font-weight:600;box-sizing:border-box;">KI-Entwurf</span><span style="display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;background:var(--warn-soft);color:var(--warn);font-size:11px;font-weight:600;">↺ Fallback</span></div>
+      <div style="display:flex;gap:14px;font-size:11.5px;font-weight:600;"><span style="color:var(--ok);">✓ freigegeben</span><span style="color:var(--fg2);">○ Entwurf</span><span style="color:var(--warn);">▲ prüfen</span></div></div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Claim, Hypothese, Datenlücke</h2>
+      <p style="margin:0;font-family:'Source Serif 4',Georgia,serif;font-size:16px;line-height:1.7;"><span style="border-bottom:1.5px solid var(--acc-line);">Der Rettungsdienst nennt 52 Minuten.</span><span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;background:var(--s3);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:10.5px;font-weight:600;color:var(--fg2);"><span style="display:inline-flex;gap:1.5px;align-items:flex-end;"><span style="width:3px;height:6px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:8px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:10px;border-radius:1px;background:var(--fg);"></span></span>hoch</span></p>
+      <div style="display:flex;gap:6px;"><span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;background:var(--s3);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:10.5px;font-weight:600;color:var(--fg2);"><span style="display:inline-flex;gap:1.5px;align-items:flex-end;"><span style="width:3px;height:6px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:8px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:10px;border-radius:1px;background:var(--fg);"></span></span>hoch</span><span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;background:var(--s3);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:10.5px;font-weight:600;color:var(--fg2);"><span style="display:inline-flex;gap:1.5px;align-items:flex-end;"><span style="width:3px;height:6px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:8px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:10px;border-radius:1px;background:var(--fg3);"></span></span>mittel</span><span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;background:var(--s3);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:10.5px;font-weight:600;color:var(--fg2);"><span style="display:inline-flex;gap:1.5px;align-items:flex-end;"><span style="width:3px;height:6px;border-radius:1px;background:var(--fg);"></span><span style="width:3px;height:8px;border-radius:1px;background:var(--fg3);"></span><span style="width:3px;height:10px;border-radius:1px;background:var(--fg3);"></span></span>niedrig</span></div>
+      <p style="margin:0;font-family:'Source Serif 4',Georgia,serif;font-size:16px;line-height:1.7;font-style:italic;color:var(--fg2);"><span style="border-bottom:1.5px dashed var(--fg3);">Eine Einigung erscheint möglich.</span><span style="display:inline-flex;align-items:center;margin-left:6px;vertical-align:2px;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);box-sizing:border-box;font-family:-apple-system,sans-serif;font-style:normal;font-size:10.5px;font-weight:600;">H Hypothese</span></p>
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1.5px dotted var(--fg3);"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--s4);font-size:11px;font-weight:700;white-space:nowrap;">∅ Datenlücke</span><span style="font-size:13px;color:var(--fg2);">Zur Zahl der Hebammen enthalten die Quellen nichts.</span></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Drei Formen, drei Wörter: durchgezogen und Balken, gestrichelt und kursiv, gepunkteter Kasten. Belastbarkeit bleibt neutral, damit sie nicht mit Laufzuständen verwechselt wird.</p></div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Beleg-Eintrag</h2>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;background:var(--s1);"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:20px;height:20px;border-radius:6px;background:oklch(0.5 0.08 200);color:#fff;display:grid;place-items:center;font-size:6px;font-weight:700;flex:none;">RD</span><span style="font-weight:600;font-size:13px;">Rettungsdienst</span><span style="color:var(--fg3);">· Runde 3 · Twitter</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div><p style="margin:0;font-size:13px;color:var(--fg2);">Die Fahrzeit liegt bei 52 Minuten …</p><span style="font-size:12.5px;font-weight:600;color:var(--acc-text);">Im Feed zeigen →</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;background:var(--s1);border:1px dashed var(--fg3);"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="font-weight:600;font-size:13px;">Kliniken Hollerau → Anke Wübbena</span><span style="flex:1;"></span><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px dashed var(--fg3);color:var(--fg2);font-size:11px;font-weight:600;box-sizing:border-box;">✎ manuell</span></div><p style="margin:0;font-size:13px;color:var(--fg2);">bietet Kooperation an</p><span style="font-size:12.5px;font-weight:600;color:var(--acc-text);">Kante im Graph zeigen →</span></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Gruppiert nach Dokument, Graph, Simulation, Interview. Jeder Eintrag endet mit genau einem Sprung an den Ursprung.</p></div>
+  </section>
+  <section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;">
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Gesprächsblase Interview</h2>
+      <p style="margin:0;align-self:flex-end;padding:10px 14px;border-radius:14px 14px 4px 14px;background:var(--s3);font-size:14px;">Was wäre ein annehmbares Angebot?</p>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:4px 14px 14px 14px;border:1px solid var(--fg3);"><div style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.5 0.08 20);color:#fff;display:grid;place-items:center;font-size:7px;font-weight:700;flex:none;">AW</span><span style="font-weight:650;font-size:13px;">Anke Wübbena</span><span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:5px;border:1px solid var(--fg3);color:var(--fg);font-size:11px;font-weight:600;box-sizing:border-box;">❝ Interview</span><span style="display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:var(--s4);color:var(--fg);font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:0.06em;">SIM</span></div><p style="margin:0;font-size:14.5px;line-height:1.55;">Feste Belegschichten und ein Zuschuss zur Haftpflicht.</p></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Umrandet statt gefüllt, mit Sprechblasen-Ecke und Marke „Interview“. Ein Feed-Beitrag ist gefüllt, ohne Ecke und mit Zählern.</p></div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Graph-Knoten und Kanten</h2>
+      <svg viewBox="0 0 300 120" style="width:100%;height:120px;">
+        <line x1="40" y1="60" x2="140" y2="30" style="stroke:var(--fg2);stroke-width:1.6;"></line>
+        <line x1="40" y1="60" x2="140" y2="95" style="stroke:var(--fg2);stroke-width:1.6;stroke-dasharray:6 5;"></line>
+        <line x1="140" y1="30" x2="260" y2="60" style="stroke:var(--acc-text);stroke-width:2.8;"></line>
+        <circle cx="40" cy="60" r="13" style="fill:var(--acc);stroke:var(--acc-text);stroke-width:2;"></circle>
+        <circle cx="140" cy="30" r="10" style="fill:var(--s4);stroke:var(--fg2);stroke-width:1.3;"></circle>
+        <circle cx="140" cy="95" r="9" style="fill:var(--s4);stroke:var(--fg2);stroke-width:1.3;stroke-dasharray:3 2.5;"></circle>
+        <circle cx="260" cy="60" r="10" style="fill:var(--s4);stroke:var(--fg3);stroke-width:1.3;"></circle>
+      </svg>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--fg2);"><span>Violett gefüllt: gewählter Knoten. Größe nach Zahl der Beziehungen.</span><span>Linie: aus der Quelle belegt · gestrichelt: manuell · violett, dick: Kante aus dem Bericht.</span><span>Gestrichelter Rand: manuell geänderte Entität.</span></div></div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Rundenregler</h2>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--s1);border-radius:10px;padding:8px 10px;">
+        <span style="width:24px;height:24px;border-radius:6px;background:var(--s3);display:grid;place-items:center;">‹</span>
+        <div style="flex:1;display:flex;gap:2px;align-items:flex-end;height:26px;"><span style="flex:1;height:16.4px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:20.6px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:24.799999999999997px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:22px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:19.2px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:20.6px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:23.4px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:22px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:19.2px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:24.799999999999997px;border-radius:2px;box-sizing:border-box;background:var(--fg3);border:none;"></span><span style="flex:1;height:20.6px;border-radius:2px;box-sizing:border-box;background:var(--acc);border:none;"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span><span style="flex:1;height:6px;border-radius:2px;box-sizing:border-box;background:transparent;border:1px dashed var(--fg3);"></span></div>
+        <span style="width:24px;height:24px;border-radius:6px;background:var(--s3);display:grid;place-items:center;">›</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;font-size:12.5px;"><span style="display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:7px;background:var(--s3);font-weight:600;"><span style="width:7px;height:7px;border-radius:50%;background:var(--ok);"></span>Live</span><span style="color:var(--fg2);">Runde 11 von 24 · Tag 2, 12:00 simuliert</span></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Ein Balken je Runde, Höhe nach Zahl der Beiträge. Gewählte Runde violett, noch nicht simulierte Runden gestrichelt. Klick auf einen Balken springt zurück.</p></div>
+  </section>
+  <section style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;">
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">KI-Vorschlag</h2>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;border:1.5px dashed var(--acc-line);background:var(--acc-soft);"><div style="display:flex;gap:8px;align-items:center;"><span style="display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:5px;border:1px solid var(--acc-line);color:var(--acc-text);font-size:11px;font-weight:700;box-sizing:border-box;">Entwurf</span><span style="font-family:ui-monospace,monospace;font-size:11.5px;color:var(--fg3);">claude-haiku-4.5</span></div><p style="margin:0;font-size:13.5px;">Will in Brenkhausen entbinden, weil der Weg im Winter zu lang ist.</p><div style="display:flex;gap:8px;"><span style="height:28px;display:flex;align-items:center;padding:0 12px;border-radius:7px;background:var(--s3);font-size:12.5px;font-weight:600;">Annehmen</span><span style="height:28px;display:flex;align-items:center;padding:0 10px;font-size:12.5px;color:var(--fg2);">Verwerfen</span></div></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Gestrichelter Akzentrahmen, bis angenommen oder verworfen. Am auslösenden Knopf stehen immer Modell und Kostenhinweis.</p></div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Neue Zustände</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg2);">○ Angelegt</span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg2);">— Ohne Graph</span><span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--s3);color:var(--fg2);">⊘ Gesperrt</span></div>
+      <span style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg2);"><span style="width:11px;height:11px;background:var(--fg3);border-radius:2px;transform:scaleY(0.28);"></span>Stufenpunkt übersprungen</span>
+      <div style="display:flex;gap:12px;font-size:11.5px;font-weight:600;"><span style="color:var(--ok);">✓ fertig</span><span style="color:var(--warn);">◐ mit Mängeln</span><span style="color:var(--err);">✕ fehlt</span></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Zustand je Berichtsabschnitt in der Gliederung. Gesperrt ist neutral: eine Regel, kein Fehler.</p></div>
+    <div style="background:var(--s2);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;"><h2 style="margin:0;font-size:17px;font-weight:600;">Plaketten der Einstellungen</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;"><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.55 0.01 265);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">⚙︎</span>Allgemein</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.6 0.14 340);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">Aa</span>Aussehen</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.58 0.13 230);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">◎</span>Anbieter</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.58 0.11 190);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">≡</span>Profile</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.56 0.14 270);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">∷</span>Embedding</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.62 0.13 55);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">→</span>Pipeline</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.58 0.12 125);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">€</span>Budgets</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.56 0.13 310);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">⊡</span>Zugang</span><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;"><span style="width:24px;height:24px;border-radius:50%;background:oklch(0.45 0.01 265);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700;">▤</span>System</span></div>
+      <p style="margin:0;font-size:12.5px;color:var(--fg2);line-height:1.5;text-wrap:pretty;">Farbige Plaketten nur im Einstellungsfenster. Die Farbtöne meiden Grün, Gelb und Rot der Zustände.</p></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:4300},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  dot(st) {
+    const M = {
+      done: { bg: 'var(--ok)', bd: 'none', rad: '50%', l: 'abgeschlossen' },
+      run: { bg: 'transparent', bd: '2px solid var(--fg)', brc: 'transparent', rad: '50%', anim: 'agspin 0.9s linear infinite', l: 'läuft' },
+      partial: { bg: 'linear-gradient(90deg,var(--warn) 50%,transparent 50%)', bd: '2px solid var(--warn)', rad: '50%', l: 'unvollständig / Fallback' },
+      failed: { bg: 'var(--err)', bd: 'none', rad: '2px', tf: 'rotate(45deg) scale(0.82)', l: 'fehlgeschlagen' },
+      stopped: { bg: 'var(--fg3)', bd: 'none', rad: '2px', tf: 'scale(0.85)', l: 'angehalten' },
+      pending: { bg: 'transparent', bd: '1.5px solid var(--fg3)', rad: '50%', l: 'ausstehend' },
+    };
+    const m = M[st];
+    return { bg: m.bg, bd: m.bd, brc: m.brc || (m.bd === 'none' ? 'transparent' : m.bd.split(' ').slice(2).join(' ')), rad: m.rad, tf: m.tf || 'none', anim: m.anim || 'none', l: m.l };
+  }
+  renderVals() {
+    const theme = this.props.theme || 'dark';
+    const D = {
+      '--s0': ['Fläche Inhalt', 'oklch(0.185 0.004 265)', 'oklch(0.972 0.002 265)'],
+      '--s1': ['Fläche Seitenleiste', 'oklch(0.215 0.004 265)', 'oklch(0.945 0.003 265)'],
+      '--s2': ['Fläche Karte', 'oklch(0.248 0.005 265)', 'oklch(1 0 0)'],
+      '--s3': ['Erhöht, Hover', 'oklch(0.29 0.006 265)', 'oklch(0.935 0.004 265)'],
+      '--s4': ['Gedrückt, Spur', 'oklch(0.335 0.006 265)', 'oklch(0.9 0.005 265)'],
+      '--field': ['Eingabefeld', 'oklch(0.205 0.004 265)', 'oklch(0.972 0.002 265)'],
+      '--line': ['Linie in Tabellen', 'oklch(0.31 0.005 265)', 'oklch(0.9 0.004 265)'],
+      '--fg': ['Text', 'oklch(0.96 0.003 265)', 'oklch(0.21 0.006 265)'],
+      '--fg2': ['Text sekundär', 'oklch(0.8 0.006 265)', 'oklch(0.4 0.008 265)'],
+      '--fg3': ['Text tertiär', 'oklch(0.7 0.008 265)', 'oklch(0.46 0.01 265)'],
+      '--acc': ['Akzent, Hauptknopf', 'oklch(0.55 0.2 293)', 'oklch(0.5 0.2 293)'],
+      '--acc-text': ['Akzent, Verknüpfung', 'oklch(0.78 0.13 293)', 'oklch(0.47 0.2 293)'],
+      '--acc-soft': ['Akzent, Auswahl', 'oklch(0.55 0.2 293 / 0.24)', 'oklch(0.5 0.2 293 / 0.12)'],
+      '--ok': ['Zustand Erfolg', 'oklch(0.8 0.15 152)', 'oklch(0.5 0.13 152)'],
+      '--warn': ['Zustand Warnung', 'oklch(0.86 0.15 88)', 'oklch(0.52 0.11 70)'],
+      '--err': ['Zustand Fehler', 'oklch(0.74 0.17 25)', 'oklch(0.52 0.19 25)'],
+    };
+    const rows = (i) => Object.entries(D).map(([name, v]) => ({ name, role: v[0], value: v[i] }));
+    const btn = {
+      'Primär': ['Starten', [['var(--acc)', 'var(--on-acc)'], ['var(--acc-hover)', 'var(--on-acc)'], ['var(--acc)', 'var(--on-acc)', true], ['var(--acc-press)', 'var(--on-acc)'], ['var(--s3)', 'var(--fg3)']]],
+      'Sekundär': ['Ansehen', [['var(--s3)', 'var(--fg)'], ['var(--s4)', 'var(--fg)'], ['var(--s3)', 'var(--fg)', true], ['var(--s1)', 'var(--fg)'], ['var(--s3)', 'var(--fg3)']]],
+      'Schlicht': ['Abbrechen', [['transparent', 'var(--fg2)'], ['var(--s3)', 'var(--fg)'], ['transparent', 'var(--fg2)', true], ['var(--s4)', 'var(--fg)'], ['transparent', 'var(--fg3)']]],
+    };
+    const B = (t, l) => {
+      const T = { run: ['var(--s3)', 'var(--fg)', '', 'Läuft', true], done: ['var(--ok-soft)', 'var(--ok)', '✓', 'Fertig'], partial: ['var(--warn-soft)', 'var(--warn)', '◐', 'Unvollständig'], stopped: ['var(--s3)', 'var(--fg2)', '■', 'Gestoppt'], budget: ['var(--warn-soft)', 'var(--warn)', '€', 'Budget erschöpft'], failed: ['var(--err-soft)', 'var(--err)', '✕', 'Fehlgeschlagen'], pending: ['var(--s3)', 'var(--fg2)', '○', 'Wartet'] }[t];
+      return { bg: T[0], fg: T[1], glyph: T[2], hasGlyph: !!T[2], label: T[3], spin: !!T[4] };
+    };
+    return {
+      theme,
+      palettes: [{ theme: 'dark', title: 'Dunkel', rows: rows(1) }, { theme: 'light', title: 'Hell', rows: rows(2) }],
+      typeScale: [
+        { label: 'Seitentitel', size: '22px', weight: 650, family: 'inherit', spec: '22 / 30 · 650' },
+        { label: 'Dialogtitel', size: '17px', weight: 650, family: 'inherit', spec: '17 / 24 · 650' },
+        { label: 'Kacheltitel', size: '15.5px', weight: 600, family: 'inherit', spec: '15.5 / 22 · 600' },
+        { label: 'Text', size: '14px', weight: 400, family: 'inherit', spec: '14 / 20 · 400' },
+        { label: 'Klein, Meta', size: '12.5px', weight: 400, family: 'inherit', spec: '12.5 / 18 · 400' },
+        { label: 'Marke', size: '12px', weight: 600, family: 'inherit', spec: '12 / 16 · 600' },
+        { label: 'lauf_7f3a2c', size: '12px', weight: 400, family: "ui-monospace,'SF Mono',Menlo,monospace", spec: 'Mono 12 / 18' },
+      ],
+      spaces: [[4, 'Symbol zu Text'], [8, 'in Knöpfen'], [12, 'in Karten'], [16, 'zwischen Karten'], [20, 'Karteninnen'], [24, 'Gruppen'], [28, 'Seitenrand'], [40, 'Abschnitte']].map(([n, use]) => ({ name: n + ' px', px: (n * 3) + 'px', use })),
+      radii: [['5px', 'Marke 5'], ['8px', 'Feld, Knopf 8'], ['12px', 'Karte 12'], ['16px', 'Dialog 16'], ['999px', 'Pille']].map(([r, label]) => ({ r, label })),
+      btnCols: ['Normal', 'Hover', 'Fokus', 'Gedrückt', 'Deaktiviert'],
+      btnRows: Object.entries(btn).map(([name, [label, cells]]) => ({ name, label, cells: cells.map(c => ({ bg: c[0], fg: c[1], outline: c[2] ? '2px solid var(--acc-text)' : 'none' })) })),
+      switches: [{ label: 'Der Systemeinstellung folgen', on: true }, { label: 'Kompakte Darstellung', on: false }, { label: 'Interviews erlauben (deaktiviert)', on: false, dis: true }].map(s => ({ ...s, track: s.on ? 'var(--acc)' : 'var(--s4)', knob: s.on ? '18px' : '2px', op: s.dis ? 0.5 : 1 })),
+      badges: ['run', 'done', 'partial', 'stopped', 'budget', 'failed', 'pending'].map(t => B(t)),
+      dots: ['done', 'run', 'partial', 'stopped', 'failed', 'pending'].map(s => this.dot(s)),
+      tileDots: ['done', 'partial', 'done', 'partial', 'pending'].map(s => this.dot(s)),
+    };
+  }
+}
+</script>
+</body>
+</html>
