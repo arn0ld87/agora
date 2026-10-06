@@ -217,6 +217,7 @@ export interface RunStatusResponse {
   simulation_id: string
   status: string
   current_round?: number
+  total_rounds?: number
   max_rounds?: number
   paused?: boolean
   /**
