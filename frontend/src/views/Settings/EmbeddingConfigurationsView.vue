@@ -31,6 +31,7 @@ import type {
   EmbeddingProviderKind,
 } from '@/contracts/embeddingContract'
 
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const { t } = useI18n()
 
 const store = useEmbeddingConfigurationsStore()
@@ -362,7 +363,25 @@ function errorMessage(err: unknown): string {
 <template>
   <div>
     <SettingsOverlay>
-    <PageHeader :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
+    <div v-if="embedded" class="embedding-config__actions">
+      <button
+        type="button"
+        class="btn btn--primary"
+        data-testid="open-create-config"
+        @click="openCreateConfigModal"
+      >
+        {{ $t('embedding.create.open', 'Neue Konfiguration') }}
+      </button>
+      <button
+        type="button"
+        class="btn btn--secondary"
+        data-testid="open-ollama-pull"
+        @click="openOllamaModal"
+      >
+        {{ $t('embedding.ollama.download', 'Ollama-Modell herunterladen') }}
+      </button>
+    </div>
+    <PageHeader v-else :title="$t('settings.v4.embedding.title', 'Embedding-Konfiguration')">
       <!-- PageHeader rendert ausschliesslich den benannten Slot "right";
            Default-Slot-Inhalt wird verworfen. -->
       <template #right>
@@ -764,6 +783,13 @@ function errorMessage(err: unknown): string {
 </template>
 
 <style scoped>
+.embedding-config__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .config-row {
   display: flex;
   align-items: center;

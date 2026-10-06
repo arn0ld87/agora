@@ -2034,6 +2034,16 @@
       "operatorOnly": "Dieser Abschnitt gehört dem Betreiber. Hier ist er nur als Vorschau sichtbar, Änderungen sind nicht möglich.",
       "placeholderTitle": "In Vorbereitung",
       "placeholder": "Dieser Abschnitt kommt in dieser Etappe.",
+      "access": {
+        "apiKeys": "API-Schlüssel",
+        "audit": "Audit-Protokoll",
+        "account": "Konto",
+        "security": "Sicherheit",
+        "needsAuth": "Dafür ist ein Zugangstoken oder eine Anmeldung nötig."
+      },
+      "embedding": {
+        "notice": "Hinweis: Einzelne Verbraucher lesen noch die Umgebungsvariablen. Die hier angezeigte Konfiguration ist nicht in jedem Fall die wirksame. Stand:"
+      },
       "sections": {
         "general": "Allgemein",
         "appearance": "Aussehen",

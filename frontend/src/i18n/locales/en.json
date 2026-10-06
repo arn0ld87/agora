@@ -2034,6 +2034,16 @@
       "operatorOnly": "This section belongs to the operator. It is shown here as a preview only, changes are not possible.",
       "placeholderTitle": "In preparation",
       "placeholder": "This section arrives in this stage.",
+      "access": {
+        "apiKeys": "API keys",
+        "audit": "Audit log",
+        "account": "Account",
+        "security": "Security",
+        "needsAuth": "This requires an access token or a sign-in."
+      },
+      "embedding": {
+        "notice": "Note: some consumers still read the environment variables. The configuration shown here is not necessarily the one in effect. Status:"
+      },
       "sections": {
         "general": "General",
         "appearance": "Appearance",

@@ -9,6 +9,7 @@ import Input from '@/components/v4/forms/Input.vue'
 import { useApiKeysStore } from '@/store/apiKeys'
 import type { ApiKeyModel, ApiKeyScope } from '@/contracts/apiKeysContract'
 
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const { t, locale } = useI18n()
 const store = useApiKeysStore()
 
@@ -123,6 +124,7 @@ onMounted(() => {
   <div>
     <SettingsOverlay>
     <PageHeader
+      v-if="!embedded"
       :title="t('settings.v4.apiKeys.title')"
       :subtitle="t('settings.v4.apiKeys.subtitle')"
     />
@@ -158,7 +160,13 @@ onMounted(() => {
         <p class="api-keys__empty-desc">{{ t('settings.v4.apiKeys.empty.description') }}</p>
       </div>
 
-      <div v-else class="api-keys__table-wrap">
+      <div
+        v-else
+        class="api-keys__table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="t('settings.v4.apiKeys.title')"
+      >
         <table class="api-keys__table">
           <thead>
             <tr>

@@ -1,22 +1,13 @@
 <script setup lang="ts">
-/** Pipeline — Platzhalter; Inhalt folgt in dieser Etappe (Bauplan §5). */
-import { useI18n } from 'vue-i18n'
-import SettingsGroup from '../SettingsGroup.vue'
-
-const { t } = useI18n()
+/**
+ * Pipeline — Ontologie, Hybridsuche, Agentenwerkzeuge, Web-Werkzeuge, OASIS:
+ * der Inhalt von `/settings/integrations` ohne `budget` (eigener Abschnitt).
+ * Der Abschnittsname steht im Fensterkopf, hier folgt kein eigenes `<h1>`.
+ */
+import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
+import { PIPELINE_SETTINGS_SECTIONS } from '../pipeline/pipelineSections'
 </script>
 
 <template>
-  <SettingsGroup :title="t('views.settingsWindow.placeholderTitle')">
-    <p class="section-placeholder">{{ t('views.settingsWindow.placeholder') }}</p>
-  </SettingsGroup>
+  <SettingsSectionPanel :allowed-sections="PIPELINE_SETTINGS_SECTIONS" />
 </template>
-
-<style scoped>
-.section-placeholder {
-  margin: 0;
-  padding: 12px 0;
-  font-size: 13.5px;
-  color: var(--fg2);
-}
-</style>

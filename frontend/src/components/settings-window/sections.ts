@@ -14,7 +14,9 @@
  *  - profiles     ← settings/llm-routing    (operatorOnly + requiresAuth)
  *  - embedding    ← settings/embedding      (operatorOnly + requiresAuth)
  *  - pipeline     ← settings/integrations   (operatorOnly)
- *  - access       ← settings/api-keys, audit-logs, profile (operatorOnly + requiresAuth)
+ *  - access       ← settings/api-keys, audit-logs, profile (operatorOnly). `requiresAuth`
+ *                   bewusst aus: `settings/profile` war ohne Token erreichbar; die
+ *                   Gruppen Schlüssel und Audit-Protokoll prüfen Token/Sitzung selbst.
  *  - appearance, system: bisher nirgends als Einstellung geführt, nur lokale
  *    Darstellung bzw. Lesezugriff auf den Systemzustand — offen.
  *  - budgets: neu, schreibt Standardgrenzen des Betreibers — operatorOnly.
@@ -120,7 +122,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     glyph: '⊡',
     component: lazy(() => import('./sections/SectionAccess.vue')),
     operatorOnly: true,
-    requiresAuth: true,
+    requiresAuth: false,
   },
   {
     id: 'system',

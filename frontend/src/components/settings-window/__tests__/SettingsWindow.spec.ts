@@ -229,7 +229,7 @@ describe('SettingsWindow', () => {
         embedding: [true, true],
         pipeline: [true, false],
         budgets: [true, false],
-        access: [true, true],
+        access: [true, false],
         system: [false, false],
       })
     })
