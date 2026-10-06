@@ -39,6 +39,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
+import { useShellStore } from '@/stores/shell'
 
 // --- Composable-Mock (Kanon-First). Die View beruehrt Store/Adapter/llmRouting
 //     NICHT direkt — alles geht durch useEffectiveModelSelection. Daher mocken
@@ -77,15 +78,6 @@ const aiPickerStub = {
   template: '<div data-testid="ai-model-picker-stub" :data-mode="mode" :data-allow-ws="allowWorkspaceDefault" :data-id="id" @click="$emit(\'update:modelValue\', { provider_connection_id: \'conn-openai-1\', model_id: \'gpt-4o-mini\', source: \'workspace-default\' })">picker</div>',
 }
 
-const appShellStub = {
-  name: 'AppShell',
-  // `breadcrumbs` bleibt hier deklariert (nicht entfernt), damit ein
-  // versehentliches Zurueckbringen der Pro-Seite-Breadcrumbs (Redesign
-  // PR 9 hat sie durch SettingsOverlay ersetzt) als gesetzte Prop sichtbar
-  // waere und der Regressionstest unten greift.
-  props: ['breadcrumbs'],
-  template: '<div data-testid="app-shell"><slot /></div>',
-}
 const settingsOverlayStub = {
   name: 'SettingsOverlay',
   template: '<div data-testid="settings-overlay"><slot /></div>',
@@ -158,7 +150,6 @@ async function mountSettingsGeneral(initial: { effectiveRef?: AiModelRef | null 
       plugins: [i18n],
       stubs: {
         AiModelPicker: aiPickerStub,
-        AppShell: appShellStub,
         SettingsOverlay: settingsOverlayStub,
         PageHeader: pageHeaderStub,
         LlmProfileManager: llmProfileManagerStub,
@@ -196,10 +187,9 @@ describe('SettingsGeneralView (Phase-1, Kanon-First via useEffectiveModelSelecti
     expect(w.find('[data-testid="settings-overlay"]').exists()).toBe(true)
   })
 
-  it('setzt keine breadcrumbs-Prop mehr auf AppShell (Regressionsschutz, CodeRabbit PR #1439)', async () => {
-    const w = await mountSettingsGeneral()
-    const shell = w.findComponent(appShellStub)
-    expect(shell.props('breadcrumbs')).toBeUndefined()
+  it('setzt keine Brotkrumen in die Huelle (Regressionsschutz, CodeRabbit PR #1439)', async () => {
+    await mountSettingsGeneral()
+    expect(useShellStore().breadcrumbs).toEqual([])
   })
 
   it('zeigt PageHeader mit title + subtitle', async () => {

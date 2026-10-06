@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 const routerPush = vi.hoisted(() => vi.fn())
 const routerReplace = vi.hoisted(() => vi.fn())
@@ -49,9 +50,9 @@ vi.mock('@/composables/useSimClock', () => ({
 }))
 
 import SimulationLayout from '../SimulationLayout.vue'
+import { useShellStore } from '@/stores/shell'
 
 const STUBS = {
-  AppShell: { name: 'AppShell', props: ['breadcrumbs'], template: '<main><slot /></main>' },
   PageHeader: { name: 'PageHeader', props: ['title', 'subtitle'], template: '<header><slot name="right" /></header>' },
   PipelineStepper: { name: 'PipelineStepper', props: ['currentStep'], template: '<div />' },
   StepModelOverrideChip: true,
@@ -72,6 +73,7 @@ function mountLayout() {
 
 describe('SimulationLayout', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     routerPush.mockClear()
     routerReplace.mockClear()
     getSimulationMock.mockReset()
@@ -85,8 +87,7 @@ describe('SimulationLayout', () => {
     const w = mountLayout()
     const stepper = w.getComponent({ name: 'PipelineStepper' })
     expect(stepper.props('currentStep')).toBe(3)
-    const shell = w.getComponent({ name: 'AppShell' })
-    const breadcrumbs = shell.props('breadcrumbs') as Array<{ label: string }>
+    const breadcrumbs = useShellStore().breadcrumbs
     expect(breadcrumbs.some((c) => c.label === 'sim_x')).toBe(true)
   })
 

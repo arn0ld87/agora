@@ -4,7 +4,7 @@
   ist ein eigener Folge-Slice.
 -->
 <template>
-  <AppShell :breadcrumbs="crumbs">
+  <div>
     <PageHeader
       :title="$t('views.stepGraphBuild.title')"
       :subtitle="$t('views.stepGraphBuild.subtitle')"
@@ -45,14 +45,13 @@
         @next-step="handleNextStep"
       />
     </div>
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step1GraphBuild from '@/components/Step1GraphBuild.vue'
@@ -62,6 +61,7 @@ import DegradationNotice from '@/components/v4/DegradationNotice.vue'
 import { useGraphBuildPipeline } from '@/composables/useGraphBuildPipeline'
 import { hasBlockingDegradation } from '@/contracts/pipelineDegradationContract'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   projectId: string
@@ -135,6 +135,8 @@ watch(
     }
   },
 )
+
+useShellBreadcrumbs(crumbs)
 </script>
 
 <style scoped>

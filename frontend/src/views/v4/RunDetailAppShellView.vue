@@ -7,8 +7,8 @@
  */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import RunDetailView from '../RunDetailView.vue'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const route = useRoute()
 const runId = computed(() => String(route.params['id'] ?? ''))
@@ -17,10 +17,10 @@ const breadcrumbs = computed(() => [
   { label: 'Runs', to: { name: 'Runs' } },
   { label: runId.value || 'Detail' },
 ])
+
+useShellBreadcrumbs(breadcrumbs)
 </script>
 
 <template>
-  <AppShell :breadcrumbs="breadcrumbs">
-    <RunDetailView />
-  </AppShell>
+  <RunDetailView />
 </template>

@@ -27,7 +27,6 @@
  */
 import { computed, onMounted, reactive, ref, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import Card from '@/components/v4/forms/Card.vue'
@@ -259,185 +258,183 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppShell>
-    <SettingsOverlay>
-      <PageHeader
-        :title="t('settings.v4.llmProviders.title', 'LLM-Provider')"
-        :subtitle="t('settings.v4.llmProviders.subtitle', 'Hinterlege API-Schlüssel, ziehe Modelle und wähle pro Schritt das passende Modell aus.')"
-      />
+  <SettingsOverlay>
+    <PageHeader
+      :title="t('settings.v4.llmProviders.title', 'LLM-Provider')"
+      :subtitle="t('settings.v4.llmProviders.subtitle', 'Hinterlege API-Schlüssel, ziehe Modelle und wähle pro Schritt das passende Modell aus.')"
+    />
 
-      <Card
-        :title="t('settings.v4.llmProviders.defaults.title', 'Workspace-Default')"
-        :subtitle="t('settings.v4.llmProviders.defaults.subtitle', 'Wird automatisch beim Start eines neuen Runs für alle Schritte übernommen.')"
+    <Card
+      :title="t('settings.v4.llmProviders.defaults.title', 'Workspace-Default')"
+      :subtitle="t('settings.v4.llmProviders.defaults.subtitle', 'Wird automatisch beim Start eines neuen Runs für alle Schritte übernommen.')"
+    >
+      <div class="llm-default-row">
+        <AiModelPicker
+          :model-value="defaultAiRef"
+          :placeholder="t('settings.v4.llmProviders.defaults.placeholder', 'Standardmodell wählen …')"
+          @update:model-value="setDefault"
+        />
+        <span v-if="defaultRoute" class="llm-default-current">
+          {{ defaultRoute.provider_id }} · {{ defaultRoute.model }}
+        </span>
+      </div>
+    </Card>
+
+    <div class="llm-providers-layout">
+      <ul
+        class="llm-provider-list"
+        role="list"
+        :aria-label="t('settings.v4.llmProviders.list.ariaLabel', 'Provider')"
+        :data-testid="LlmProviderListTestId.list"
       >
-        <div class="llm-default-row">
-          <AiModelPicker
-            :model-value="defaultAiRef"
-            :placeholder="t('settings.v4.llmProviders.defaults.placeholder', 'Standardmodell wählen …')"
-            @update:model-value="setDefault"
-          />
-          <span v-if="defaultRoute" class="llm-default-current">
-            {{ defaultRoute.provider_id }} · {{ defaultRoute.model }}
-          </span>
+        <li v-for="provider in providersStore.providers" :key="provider.id">
+          <button
+            type="button"
+            class="llm-provider-list__row"
+            :class="{ 'is-selected': selectedProvider?.id === provider.id }"
+            :aria-current="selectedProvider?.id === provider.id ? 'true' : undefined"
+            :data-testid="LlmProviderListTestId.row"
+            :data-provider-id="provider.id"
+            @click="selectProvider(provider.id)"
+          >
+            <span class="llm-provider-list__label">{{ provider.label }}</span>
+            <span class="llm-provider-list__type">{{ provider.type }}</span>
+            <Badge :tone="statusTone(provider)" data-testid="provider-status-badge">
+              {{ statusLabel(provider) }}
+            </Badge>
+          </button>
+        </li>
+      </ul>
+
+      <div
+        v-if="selectedProvider"
+        class="llm-provider-detail"
+        :data-testid="LlmProviderListTestId.detail"
+        :data-provider-id="selectedProvider.id"
+      >
+        <div class="llm-provider-detail__head">
+          <h3 class="llm-provider-detail__title">{{ selectedProvider.label }}</h3>
+          <p v-if="selectedProvider.base_url" class="llm-provider-detail__subtitle">{{ selectedProvider.base_url }}</p>
         </div>
-      </Card>
 
-      <div class="llm-providers-layout">
-        <ul
-          class="llm-provider-list"
-          role="list"
-          :aria-label="t('settings.v4.llmProviders.list.ariaLabel', 'Provider')"
-          :data-testid="LlmProviderListTestId.list"
+        <p
+          v-if="isUnsupported(selectedProvider)"
+          class="llm-unsupported-notice"
+          data-testid="provider-unsupported-notice"
         >
-          <li v-for="provider in providersStore.providers" :key="provider.id">
-            <button
-              type="button"
-              class="llm-provider-list__row"
-              :class="{ 'is-selected': selectedProvider?.id === provider.id }"
-              :aria-current="selectedProvider?.id === provider.id ? 'true' : undefined"
-              :data-testid="LlmProviderListTestId.row"
-              :data-provider-id="provider.id"
-              @click="selectProvider(provider.id)"
+          {{ t('settings.v4.llmProviders.unsupportedNotice', 'Dieser Anbieter ist eine Subscription-/CLI-Bridge und wird für Provider-Verbindungen nicht unterstützt.') }}
+        </p>
+
+        <template v-else>
+          <div class="llm-key-form">
+            <Input
+              v-if="!isOllama(selectedProvider) && !isSessionAuth(selectedProvider)"
+              v-model="ensureDraft(selectedProvider).apiKey"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              :placeholder="t('settings.v4.llmProviders.keyPlaceholder', 'Neuen API-Key einfügen …')"
+            />
+            <p
+              v-if="isSessionAuth(selectedProvider)"
+              class="llm-session-notice"
+              :data-testid="LlmProviderListTestId.sessionNotice"
             >
-              <span class="llm-provider-list__label">{{ provider.label }}</span>
-              <span class="llm-provider-list__type">{{ provider.type }}</span>
-              <Badge :tone="statusTone(provider)" data-testid="provider-status-badge">
-                {{ statusLabel(provider) }}
-              </Badge>
-            </button>
-          </li>
-        </ul>
-
-        <div
-          v-if="selectedProvider"
-          class="llm-provider-detail"
-          :data-testid="LlmProviderListTestId.detail"
-          :data-provider-id="selectedProvider.id"
-        >
-          <div class="llm-provider-detail__head">
-            <h3 class="llm-provider-detail__title">{{ selectedProvider.label }}</h3>
-            <p v-if="selectedProvider.base_url" class="llm-provider-detail__subtitle">{{ selectedProvider.base_url }}</p>
+              {{ t('settings.v4.llmProviders.session.notice', 'Die Anmeldung erfolgt über die lokale CLI-Session:') }}
+              <code>{{ t('settings.v4.llmProviders.session.loginCommand', 'codex login') }}</code>
+            </p>
+            <p
+              v-else-if="isCliTransport(selectedProvider)"
+              class="llm-cli-key-hint"
+              :data-testid="LlmProviderListTestId.cliKeyHint"
+            >
+              {{ t('settings.v4.llmProviders.session.tokenHint', 'Langzeit-Token aus:') }}
+              <code>{{ t('settings.v4.llmProviders.session.tokenCommand', 'claude setup-token') }}</code>
+            </p>
+            <Input
+              v-if="!isCliTransport(selectedProvider)"
+              v-model="ensureDraft(selectedProvider).baseUrl"
+              :placeholder="isOllama(selectedProvider)
+                ? t('settings.v4.llmProviders.localBaseUrlPlaceholder', 'http://localhost:11434')
+                : t('settings.v4.llmProviders.baseUrlPlaceholder', 'https://api.example.com/v1')"
+            />
           </div>
 
-          <p
-            v-if="isUnsupported(selectedProvider)"
-            class="llm-unsupported-notice"
-            data-testid="provider-unsupported-notice"
+          <div class="llm-actions">
+            <Button
+              variant="primary"
+              :disabled="providersStore.connectionBusy[selectedProvider.id]"
+              :loading="busyAction[selectedProvider.id] === 'save'"
+              :data-testid="LlmProviderListTestId.saveButton"
+              @click="save(selectedProvider)"
+            >
+              {{ t('settings.v4.llmProviders.actions.save', 'Verbindung speichern') }}
+            </Button>
+            <Button
+              variant="secondary"
+              :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
+              :loading="busyAction[selectedProvider.id] === 'test'"
+              :data-testid="LlmProviderListTestId.testButton"
+              @click="runTest(selectedProvider)"
+            >
+              {{ t('settings.v4.llmProviders.actions.test', 'Verbindung testen') }}
+            </Button>
+            <Button
+              variant="secondary"
+              :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
+              :loading="busyAction[selectedProvider.id] === 'models'"
+              :data-testid="LlmProviderListTestId.refreshModelsButton"
+              @click="loadModels(selectedProvider)"
+            >
+              {{ t('settings.v4.llmProviders.actions.refreshModels', 'Modelle laden') }}
+            </Button>
+            <Button
+              v-if="isConfigured(selectedProvider)"
+              variant="danger"
+              :disabled="providersStore.connectionBusy[selectedProvider.id]"
+              :loading="busyAction[selectedProvider.id] === 'disconnect'"
+              :data-testid="LlmProviderListTestId.disconnectButton"
+              @click="disconnect(selectedProvider)"
+            >
+              {{ t('settings.v4.llmProviders.actions.disconnect', 'Verbindung trennen') }}
+            </Button>
+          </div>
+
+          <div
+            v-if="providersStore.connectionError[selectedProvider.id]"
+            class="llm-test-result llm-test-result--fail"
+            data-testid="provider-error"
           >
-            {{ t('settings.v4.llmProviders.unsupportedNotice', 'Dieser Anbieter ist eine Subscription-/CLI-Bridge und wird für Provider-Verbindungen nicht unterstützt.') }}
-          </p>
+            {{ providersStore.connectionError[selectedProvider.id] }}
+          </div>
 
-          <template v-else>
-            <div class="llm-key-form">
-              <Input
-                v-if="!isOllama(selectedProvider) && !isSessionAuth(selectedProvider)"
-                v-model="ensureDraft(selectedProvider).apiKey"
-                type="password"
-                autocomplete="off"
-                spellcheck="false"
-                :placeholder="t('settings.v4.llmProviders.keyPlaceholder', 'Neuen API-Key einfügen …')"
-              />
-              <p
-                v-if="isSessionAuth(selectedProvider)"
-                class="llm-session-notice"
-                :data-testid="LlmProviderListTestId.sessionNotice"
-              >
-                {{ t('settings.v4.llmProviders.session.notice', 'Die Anmeldung erfolgt über die lokale CLI-Session:') }}
-                <code>{{ t('settings.v4.llmProviders.session.loginCommand', 'codex login') }}</code>
-              </p>
-              <p
-                v-else-if="isCliTransport(selectedProvider)"
-                class="llm-cli-key-hint"
-                :data-testid="LlmProviderListTestId.cliKeyHint"
-              >
-                {{ t('settings.v4.llmProviders.session.tokenHint', 'Langzeit-Token aus:') }}
-                <code>{{ t('settings.v4.llmProviders.session.tokenCommand', 'claude setup-token') }}</code>
-              </p>
-              <Input
-                v-if="!isCliTransport(selectedProvider)"
-                v-model="ensureDraft(selectedProvider).baseUrl"
-                :placeholder="isOllama(selectedProvider)
-                  ? t('settings.v4.llmProviders.localBaseUrlPlaceholder', 'http://localhost:11434')
-                  : t('settings.v4.llmProviders.baseUrlPlaceholder', 'https://api.example.com/v1')"
-              />
-            </div>
+          <div
+            v-else-if="providersStore.connectionTestResults[selectedProvider.id]"
+            class="llm-test-result"
+            :class="{ 'llm-test-result--ok': providersStore.connectionTestResults[selectedProvider.id].status === 'available' }"
+            data-testid="provider-test-result"
+          >
+            {{ testStatusLabel(
+              providersStore.connectionTestResults[selectedProvider.id].status,
+              providersStore.connectionTestResults[selectedProvider.id].models_found,
+            ) }}
+          </div>
 
-            <div class="llm-actions">
-              <Button
-                variant="primary"
-                :disabled="providersStore.connectionBusy[selectedProvider.id]"
-                :loading="busyAction[selectedProvider.id] === 'save'"
-                :data-testid="LlmProviderListTestId.saveButton"
-                @click="save(selectedProvider)"
-              >
-                {{ t('settings.v4.llmProviders.actions.save', 'Verbindung speichern') }}
-              </Button>
-              <Button
-                variant="secondary"
-                :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
-                :loading="busyAction[selectedProvider.id] === 'test'"
-                :data-testid="LlmProviderListTestId.testButton"
-                @click="runTest(selectedProvider)"
-              >
-                {{ t('settings.v4.llmProviders.actions.test', 'Verbindung testen') }}
-              </Button>
-              <Button
-                variant="secondary"
-                :disabled="!isConfigured(selectedProvider) || providersStore.connectionBusy[selectedProvider.id]"
-                :loading="busyAction[selectedProvider.id] === 'models'"
-                :data-testid="LlmProviderListTestId.refreshModelsButton"
-                @click="loadModels(selectedProvider)"
-              >
-                {{ t('settings.v4.llmProviders.actions.refreshModels', 'Modelle laden') }}
-              </Button>
-              <Button
-                v-if="isConfigured(selectedProvider)"
-                variant="danger"
-                :disabled="providersStore.connectionBusy[selectedProvider.id]"
-                :loading="busyAction[selectedProvider.id] === 'disconnect'"
-                :data-testid="LlmProviderListTestId.disconnectButton"
-                @click="disconnect(selectedProvider)"
-              >
-                {{ t('settings.v4.llmProviders.actions.disconnect', 'Verbindung trennen') }}
-              </Button>
-            </div>
-
-            <div
-              v-if="providersStore.connectionError[selectedProvider.id]"
-              class="llm-test-result llm-test-result--fail"
-              data-testid="provider-error"
-            >
-              {{ providersStore.connectionError[selectedProvider.id] }}
-            </div>
-
-            <div
-              v-else-if="providersStore.connectionTestResults[selectedProvider.id]"
-              class="llm-test-result"
-              :class="{ 'llm-test-result--ok': providersStore.connectionTestResults[selectedProvider.id].status === 'available' }"
-              data-testid="provider-test-result"
-            >
-              {{ testStatusLabel(
-                providersStore.connectionTestResults[selectedProvider.id].status,
-                providersStore.connectionTestResults[selectedProvider.id].models_found,
-              ) }}
-            </div>
-
-            <div v-if="(providersStore.connectionModels[selectedProvider.id]?.length ?? 0) > 0" class="llm-model-list">
-              <span class="llm-model-list__title">
-                {{ t('settings.v4.llmProviders.models.title', 'Entdeckte Modelle') }}
-                <small>({{ providersStore.connectionModels[selectedProvider.id][0].source }})</small>
-              </span>
-              <ul>
-                <li v-for="model in providersStore.connectionModels[selectedProvider.id]" :key="model.model_id">
-                  {{ model.model_id }}
-                </li>
-              </ul>
-            </div>
-          </template>
-        </div>
+          <div v-if="(providersStore.connectionModels[selectedProvider.id]?.length ?? 0) > 0" class="llm-model-list">
+            <span class="llm-model-list__title">
+              {{ t('settings.v4.llmProviders.models.title', 'Entdeckte Modelle') }}
+              <small>({{ providersStore.connectionModels[selectedProvider.id][0].source }})</small>
+            </span>
+            <ul>
+              <li v-for="model in providersStore.connectionModels[selectedProvider.id]" :key="model.model_id">
+                {{ model.model_id }}
+              </li>
+            </ul>
+          </div>
+        </template>
       </div>
-    </SettingsOverlay>
-  </AppShell>
+    </div>
+  </SettingsOverlay>
 </template>
 
 <style scoped>

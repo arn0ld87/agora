@@ -1,7 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
+import type { FunctionalComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import LogDrawer from './components/LogDrawer.vue'
+import AppShell from './components/v4/shell/AppShell.vue'
 import DemoPreviewStaticView from './components/v4/shell/DemoPreviewStaticView.vue'
 import { useDemoPreview } from './composables/useDemoPreview'
 import { useLogDrawer } from './composables/useLogDrawer'
@@ -18,9 +20,8 @@ onMounted(() => window.addEventListener('keydown', handleHotkey))
 onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 
 // Demo-Vorschau (#1697): DemoPreviewFrame darf NICHT mehr aussen um
-// RouterView liegen — jede Settings-View rendert ihr eigenes AppShell, ein
-// Wrapper hier sperrte also Sidebar/Topbar mit oder liess sie fuer statische
-// Seiten ganz verschwinden. Betreiber-Sperre + Vorschau-Banner leben jetzt
+// RouterView liegen — ein Wrapper dort sperrte Sidebar/Topbar mit oder liess
+// sie fuer statische Seiten ganz verschwinden. Betreiber-Sperre + Vorschau-Banner leben jetzt
 // im Hauptbereich von AppShell.vue selbst. Nur fuer statische Vorschau-
 // Routen (meta.demoPreview:'static') wird hier die echte Route-Komponente
 // durch DemoPreviewStaticView ersetzt — sie mountet nie (kein Betreiber-Fetch).
@@ -29,20 +30,35 @@ const demoPreview = useDemoPreview()
 const showStaticPreview = computed(
   () => route.meta?.demoPreview === 'static' && demoPreview.value,
 )
+
+// Zentrale Huelle (#1795): jede Route bekommt sie, ausser meta.layout === 'bare'.
+// Passthrough reicht den Inhalt unveraendert durch (kein zusaetzliches DOM).
+const withShell = computed(() => route.meta?.layout !== 'bare')
+const Passthrough: FunctionalComponent = (_props, { slots }) => slots.default?.()
+// Die statische Vorschau bringt Banner + Inhalt selbst mit — ein zweiter
+// DemoPreviewFrame in der Huelle machte sie grau/inert (#1697).
+const shellProps = computed(() => (withShell.value ? { demoFrame: !showStaticPreview.value } : {}))
 </script>
 
 <template>
-  <router-view v-slot="{ Component }">
-    <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
-         bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
-         laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
-         aus und die leave-Phase endet nie: die URL wechselt, der alte View
-         bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
-    <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
-      <DemoPreviewStaticView v-if="showStaticPreview" />
-      <component :is="Component" v-else />
-    </transition>
-  </router-view>
+  <!-- #1795 Ticket 4: die Huelle sitzt genau hier, einmal um alle Ansichten.
+       Sie bleibt beim Wechsel zwischen Ansichten stehen (Seitenleiste und
+       Kopf werden nicht neu aufgebaut); nur der Inhalt blendet ueber.
+       Ansichten ohne Huelle (Anmeldung, Nicht-gefunden ...) tragen
+       meta.layout === 'bare' — das ist der einzige Opt-out. -->
+  <component :is="withShell ? AppShell : Passthrough" v-bind="shellProps">
+    <router-view v-slot="{ Component }">
+      <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
+           bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
+           laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
+           aus und die leave-Phase endet nie: die URL wechselt, der alte View
+           bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
+      <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
+        <DemoPreviewStaticView v-if="showStaticPreview" />
+        <component :is="Component" v-else />
+      </transition>
+    </router-view>
+  </component>
 
   <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L oder
        das Kopfzeilen-Icon "Protokoll" (Topbar.vue/ShellRoot.vue). Die frueher

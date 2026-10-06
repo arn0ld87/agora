@@ -1,9 +1,9 @@
 <template>
-  <!-- demo-frame=false: die Karte hier ist bereits der komplette Ersatz
-       fuer die gesperrte Ansicht (Banner + Erklaerung) — AppShells eigener
-       DemoPreviewFrame-Wrapper wuerde sie zusaetzlich grau/inert machen. -->
-  <AppShell :demo-frame="false">
-    <div class="demo-preview-static">
+  <!-- Die Huelle sitzt zentral in App.vue und bekommt dort demo-frame=false:
+       die Karte hier ist bereits der komplette Ersatz fuer die gesperrte
+       Ansicht (Banner + Erklaerung) — AppShells DemoPreviewFrame-Wrapper
+       wuerde sie zusaetzlich grau/inert machen. -->
+  <div class="demo-preview-static">
       <div class="demo-preview-static__banner" role="status">
         <Icon name="settings" :size="16" :stroke="1.6" class="demo-preview-static__banner-icon" />
         <span class="demo-preview-static__banner-text">{{ t('demoPreview.banner.text') }}</span>
@@ -27,15 +27,13 @@
           <Skeleton variant="rect" height="64px" />
         </div>
       </div>
-    </div>
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, RouterLink } from 'vue-router'
-import AppShell from './AppShell.vue'
 import Icon from './Icon.vue'
 import Skeleton from '../forms/Skeleton.vue'
 

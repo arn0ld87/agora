@@ -2,9 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('@/components/v4/shell/AppShell.vue', () => ({
-  default: { name: 'AppShell', template: '<div class="app-shell-stub"><slot /></div>' },
-}))
 
 const SUPPORTED = [
   { provider_id: 'openai', display_name: 'OpenAI' },
@@ -56,11 +53,10 @@ describe('WorkspaceProviderKeysView', () => {
     expect(wrapper.text()).toContain('auth.workspaceProviderKeys.configured')
   })
 
-  it('renders every provider the backend offers inside the app shell', async () => {
+  it('renders every provider the backend offers', async () => {
     const wrapper = mount(WorkspaceProviderKeysView)
     await flushPromises()
 
-    expect(wrapper.find('.app-shell-stub').exists()).toBe(true)
     for (const provider of SUPPORTED) {
       expect(wrapper.find(`#workspace-key-${provider.provider_id}`).exists()).toBe(true)
       expect(wrapper.text()).toContain(provider.display_name)

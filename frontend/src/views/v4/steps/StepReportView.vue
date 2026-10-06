@@ -2,7 +2,7 @@
   StepReportView — AppShell-Wrapper fuer Step 4 (Report).
 -->
 <template>
-  <AppShell :breadcrumbs="crumbs">
+  <div>
     <PageHeader
       :title="$t('views.stepReport.title')"
       :subtitle="$t('views.stepReport.subtitle')"
@@ -17,13 +17,12 @@
       :run-id="runIdFromQuery ?? undefined"
       :simulation-id="simulationIdFromQuery ?? undefined"
     />
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step4Report from '@/components/v4/steps/Step4Report.vue'
@@ -31,6 +30,7 @@ import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.v
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import { PENDING_REPORT_ID, REPORT_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
 import { asRunRegistryId, asSimulationId } from '@/contracts/runIdentifiers'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   reportId: string
@@ -67,4 +67,6 @@ const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: pendingReportId.value ? (simulationIdFromQuery.value ?? props.reportId) : props.reportId },
   { label: 'Report' },
 ])
+
+useShellBreadcrumbs(crumbs)
 </script>

@@ -301,12 +301,16 @@ const routes: RouteRecordRaw[] = [
     path: '/ablage',
     name: 'Shelf',
     component: () => import('../views/shell/ShelfView.vue'),
+    // Uebergang (#1795): ShelfView bringt bis zum Umzug in die eine Huelle
+    // noch ShellRoot mit — keine zweite Huelle darum legen.
+    meta: { layout: 'bare' },
   },
   {
     path: '/ablage/:kind(lauf|bericht|personasatz|graph)/:objectId',
     name: 'ShelfObject',
     component: () => import('../views/shell/ShelfView.vue'),
     props: true,
+    meta: { layout: 'bare' },
   },
 
   // Auth-Routen (#1617, Teil B1)
@@ -340,6 +344,7 @@ const routes: RouteRecordRaw[] = [
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('../views/NotFoundView.vue'),
+    meta: { layout: 'bare' },
   },
 ]
 

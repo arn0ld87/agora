@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 const routerPush = vi.hoisted(() => vi.fn())
 
@@ -17,6 +18,7 @@ import StepEnvSetupView from '../StepEnvSetupView.vue'
 
 describe('StepEnvSetupView — Navigation', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     routerPush.mockClear()
   })
 
@@ -26,7 +28,6 @@ describe('StepEnvSetupView — Navigation', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -58,7 +59,6 @@ describe('StepEnvSetupView — Navigation', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
@@ -85,7 +85,6 @@ describe('StepEnvSetupView — Navigation', () => {
       global: {
         mocks: { $t: (key: any) => key },
         stubs: {
-          AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,

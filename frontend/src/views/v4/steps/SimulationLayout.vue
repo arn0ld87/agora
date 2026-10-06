@@ -24,7 +24,7 @@
   jetzt auf einen Namens-Prefix (SimThreads/SimThreadFocus → 'threads').
 -->
 <template>
-  <AppShell :breadcrumbs="crumbs">
+  <div>
     <PageHeader :title="headerTitle" :subtitle="headerSubtitle">
       <template v-if="activeTab === 'pipeline'" #right>
         <StepModelOverrideChip stage-id="simulation_rounds" />
@@ -37,14 +37,13 @@
     <div class="sim-view-content">
       <RouterView />
     </div>
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
@@ -54,6 +53,7 @@ import { getSimulation } from '@/api/simulation'
 import { unwrap } from '@/api/envelope'
 import { clearSimFeed } from '@/composables/useSimFeed'
 import { clearSimClock } from '@/composables/useSimClock'
+import { useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
 
 const props = defineProps<{
   simulationId: string
@@ -144,6 +144,8 @@ onBeforeUnmount(() => {
   clearSimFeed(props.simulationId)
   clearSimClock(props.simulationId)
 })
+
+useShellBreadcrumbs(crumbs)
 </script>
 
 <style scoped>

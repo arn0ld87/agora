@@ -3,7 +3,7 @@
  *
  * Prueft pro Wrapper-View:
  * 1. Mountet ohne Crash.
- * 2. AppShell ist im DOM vorhanden.
+ * 2. Brotkrumen landen im Shell-Store (die Huelle sitzt zentral in App.vue, #1795).
  * 3. PipelineStepper mit korrektem currentStep ist vorhanden.
  * 4. Korrekte Breadcrumb-Daten werden aus dem Props abgeleitet.
  *
@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { useShellStore } from '@/stores/shell'
 
 // ── localStorage-Mock ─────────────────────────────────────────────────────────
 const lsMock = (() => {
@@ -226,9 +227,10 @@ describe('StepGraphBuildView', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert AppShell', async () => {
+  it('setzt Brotkrumen in die zentrale Huelle', async () => {
     const w = await mountView(StepGraphBuildView, { projectId: 'proj-42' }, '/v4/graph-build/proj-42')
-    expect(w.find('.app-shell').exists()).toBe(true)
+    expect(w.exists()).toBe(true)
+    expect(useShellStore().breadcrumbs.length).toBeGreaterThan(0)
   })
 
   it('rendert PipelineStepper mit currentStep=1', async () => {
@@ -240,7 +242,7 @@ describe('StepGraphBuildView', () => {
 
   it('Breadcrumb enthaelt projectId', async () => {
     const w = await mountView(StepGraphBuildView, { projectId: 'proj-42' }, '/v4/graph-build/proj-42')
-    expect(w.text()).toContain('proj-42')
+    expect(JSON.stringify(useShellStore().breadcrumbs)).toContain('proj-42')
   })
 })
 
@@ -252,9 +254,10 @@ describe('StepEnvSetupView', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert AppShell', async () => {
+  it('setzt Brotkrumen in die zentrale Huelle', async () => {
     const w = await mountView(StepEnvSetupView, { projectId: 'proj-42' }, '/v4/env-setup/proj-42')
-    expect(w.find('.app-shell').exists()).toBe(true)
+    expect(w.exists()).toBe(true)
+    expect(useShellStore().breadcrumbs.length).toBeGreaterThan(0)
   })
 
   it('rendert PipelineStepper mit currentStep=2', async () => {
@@ -277,9 +280,10 @@ describe('StepReportView', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert AppShell', async () => {
+  it('setzt Brotkrumen in die zentrale Huelle', async () => {
     const w = await mountView(StepReportView, { reportId: 'rpt-7' }, '/v4/report/rpt-7')
-    expect(w.find('.app-shell').exists()).toBe(true)
+    expect(w.exists()).toBe(true)
+    expect(useShellStore().breadcrumbs.length).toBeGreaterThan(0)
   })
 
   it('rendert PipelineStepper mit currentStep=4', async () => {
@@ -321,9 +325,10 @@ describe('StepInteractionView', () => {
     expect(w.exists()).toBe(true)
   })
 
-  it('rendert AppShell', async () => {
+  it('setzt Brotkrumen in die zentrale Huelle', async () => {
     const w = await mountView(StepInteractionView, { reportId: 'rpt-7' }, '/v4/interaction/rpt-7')
-    expect(w.find('.app-shell').exists()).toBe(true)
+    expect(w.exists()).toBe(true)
+    expect(useShellStore().breadcrumbs.length).toBeGreaterThan(0)
   })
 
   it('rendert PipelineStepper mit currentStep=5', async () => {
@@ -334,7 +339,7 @@ describe('StepInteractionView', () => {
 
   it('Breadcrumb enthaelt reportId', async () => {
     const w = await mountView(StepInteractionView, { reportId: 'rpt-7' }, '/v4/interaction/rpt-7')
-    expect(w.text()).toContain('rpt-7')
+    expect(JSON.stringify(useShellStore().breadcrumbs)).toContain('rpt-7')
   })
 
   // Regression: Die Route kennt nur die reportId. Ohne Durchreichen der

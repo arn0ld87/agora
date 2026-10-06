@@ -40,7 +40,7 @@
     <!-- Topbar — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
     <div class="app-shell__topbar" :inert="shellStore.mobileNavOpen ? true : undefined">
       <slot name="topbar">
-        <Topbar :breadcrumbs="breadcrumbs" />
+        <Topbar :breadcrumbs="shellStore.breadcrumbs" />
       </slot>
     </div>
 
@@ -82,19 +82,18 @@ import { MOBILE_BREAKPOINT_PX } from '@/constants/breakpoints'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import DemoPreviewFrame from './DemoPreviewFrame.vue'
-import type { BreadcrumbItem } from './Breadcrumbs.vue'
 
 // Async-Import: CommandPalette in eigenem Chunk → kein AppShell-Bundle-Overhead
 const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue'))
 
-const props = withDefaults(
+// Brotkrumen kommen nicht per Prop: die Huelle sitzt zentral in App.vue, die
+// Ansicht setzt sie ueber useShellBreadcrumbs (shellStore.breadcrumbs, #1795).
+withDefaults(
   defineProps<{
-    breadcrumbs?: BreadcrumbItem[]
     /** false: DemoPreviewFrame um den Hauptinhalt-Slot ueberspringen (#1697). */
     demoFrame?: boolean
   }>(),
   {
-    breadcrumbs: () => [],
     demoFrame: true,
   },
 )
