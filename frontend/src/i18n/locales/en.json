@@ -2033,7 +2033,82 @@
     "library": {
       "title": "Library",
       "runs": {
-        "title": "Runs"
+        "title": "Runs",
+        "views": {
+          "label": "Filter runs",
+          "all": "All",
+          "running": "Running",
+          "attention": "Needs you",
+          "withReport": "With report"
+        },
+        "layout": {
+          "label": "Layout",
+          "tiles": "Tiles",
+          "list": "List"
+        },
+        "band": {
+          "title": "In focus",
+          "running": "Running now",
+          "attention": "Needs you"
+        },
+        "state": {
+          "running": "Running",
+          "paused": "Paused",
+          "done": "Done",
+          "incomplete": "Incomplete",
+          "stopped": "Stopped",
+          "budget": "Budget exhausted",
+          "failed": "Failed",
+          "pending": "Open",
+          "unknown": "No data"
+        },
+        "stage": {
+          "list": "Stages of the run",
+          "graph": "Graph",
+          "personas": "Personas",
+          "simulation": "Simulation",
+          "report": "Report",
+          "interviews": "Interviews"
+        },
+        "reason": {
+          "user_stop": "You stopped the run.",
+          "stopped": "The run was stopped.",
+          "process_restart": "A server restart interrupted the job.",
+          "budget": "The run's budget is exhausted.",
+          "budget_tokens": "The run's token budget is exhausted.",
+          "budget_cost": "The run's cost budget is exhausted.",
+          "budget_time": "The run's time budget is exhausted.",
+          "budget_calls": "The LLM call budget is exhausted.",
+          "failed": "The job failed.",
+          "incomplete": "The report is incomplete."
+        },
+        "tile": {
+          "select": "Select run \"{title}\"",
+          "source": "Source:",
+          "progress": "Progress {n} %"
+        },
+        "versions": {
+          "count": "{n} version | {n} versions",
+          "openLatest": "Open latest version",
+          "listLabel": "Versions of the run",
+          "row": "Version {n}",
+          "loading": "Loading versions …",
+          "error": "The versions could not be loaded.",
+          "empty": "This run has no version.",
+          "invalid": "{n} version is unreadable and not shown. | {n} versions are unreadable and not shown."
+        },
+        "selection": {
+          "count": "{n} selected",
+          "compare": "Compare",
+          "clear": "Clear selection",
+          "compareHint": "Select exactly two runs to compare them.",
+          "noSimulation": "This run has no simulation to compare yet."
+        },
+        "empty": {
+          "text": "A run is a whole undertaking from source to report: graph, personas, simulation and report.",
+          "filtered": "No run matches this filter.",
+          "action": "New run"
+        }
       },
       "graphs": {
         "title": "Graphs"

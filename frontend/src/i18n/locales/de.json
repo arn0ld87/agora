@@ -2033,7 +2033,82 @@
     "library": {
       "title": "Bibliothek",
       "runs": {
-        "title": "Läufe"
+        "title": "Läufe",
+        "views": {
+          "label": "Läufe filtern",
+          "all": "Alle",
+          "running": "Läuft",
+          "attention": "Braucht dich",
+          "withReport": "Mit Bericht"
+        },
+        "layout": {
+          "label": "Darstellung",
+          "tiles": "Kacheln",
+          "list": "Liste"
+        },
+        "band": {
+          "title": "Im Blick",
+          "running": "Läuft gerade",
+          "attention": "Braucht dich"
+        },
+        "state": {
+          "running": "Läuft",
+          "paused": "Pausiert",
+          "done": "Fertig",
+          "incomplete": "Unvollständig",
+          "stopped": "Gestoppt",
+          "budget": "Budget erschöpft",
+          "failed": "Fehlgeschlagen",
+          "pending": "Offen",
+          "unknown": "Keine Angabe"
+        },
+        "stage": {
+          "list": "Stufen des Laufs",
+          "graph": "Graph",
+          "personas": "Personas",
+          "simulation": "Simulation",
+          "report": "Bericht",
+          "interviews": "Interviews"
+        },
+        "reason": {
+          "user_stop": "Du hast den Lauf gestoppt.",
+          "stopped": "Der Lauf wurde gestoppt.",
+          "process_restart": "Ein Neustart des Servers hat den Job unterbrochen.",
+          "budget": "Das Budget des Laufs ist erschöpft.",
+          "budget_tokens": "Das Token-Budget des Laufs ist erschöpft.",
+          "budget_cost": "Das Kostenbudget des Laufs ist erschöpft.",
+          "budget_time": "Das Zeitbudget des Laufs ist erschöpft.",
+          "budget_calls": "Das Budget an LLM-Aufrufen ist erschöpft.",
+          "failed": "Der Job ist fehlgeschlagen.",
+          "incomplete": "Der Bericht ist unvollständig."
+        },
+        "tile": {
+          "select": "Lauf „{title}“ auswählen",
+          "source": "Quelle:",
+          "progress": "Fortschritt {n} %"
+        },
+        "versions": {
+          "count": "{n} Fassung | {n} Fassungen",
+          "openLatest": "Jüngste Fassung öffnen",
+          "listLabel": "Fassungen des Laufs",
+          "row": "Fassung {n}",
+          "loading": "Fassungen werden geladen …",
+          "error": "Die Fassungen konnten nicht geladen werden.",
+          "empty": "Für diesen Lauf gibt es keine Fassung.",
+          "invalid": "{n} Fassung ist nicht lesbar und wird nicht angezeigt. | {n} Fassungen sind nicht lesbar und werden nicht angezeigt."
+        },
+        "selection": {
+          "count": "{n} ausgewählt",
+          "compare": "Vergleichen",
+          "clear": "Auswahl aufheben",
+          "compareHint": "Wähle genau zwei Läufe aus, um sie zu vergleichen.",
+          "noSimulation": "Zu diesem Lauf gibt es noch keine Simulation zum Vergleichen."
+        },
+        "empty": {
+          "text": "Ein Lauf ist ein ganzes Vorhaben von der Quelle bis zum Bericht: Graph, Personas, Simulation und Bericht.",
+          "filtered": "Kein Lauf passt zu diesem Filter.",
+          "action": "Neuer Lauf"
+        }
       },
       "graphs": {
         "title": "Graphen"
