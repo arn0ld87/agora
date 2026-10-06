@@ -66,7 +66,7 @@ Die Oberfläche spricht in den Begriffen aus `CONTEXT.md`. Die Zuordnung zu den 
 | **Bericht** | `report_id`, mehrere je Simulation | `GET /api/report/list` und `…/by-simulation/<id>` existieren. Ob `by-simulation` alle Fassungen liefert oder nur die jüngste, wird in Etappe 5 geprüft. |
 | **Fassung** | weiterer Bericht bzw. Zweig derselben Simulation | `ReportBranchControls.vue` und `POST …/<simulation_id>/branch` existieren. |
 | **Job** | Eintrag der `RunRegistry` (`run_id`, `run_type`) | erscheint nur noch unter Aktivität und in der Lauf-Übersicht. |
-| **Lauf ohne Graph** | `POST /api/simulation/create-from-personas` mit leerem `graph_id` | Der Graph-Reiter zeigt dann einen Leerzustand mit Erklärung, keinen Fehler. |
+| **Lauf ohne Graph** | `POST /api/simulation/create-from-personas` mit leerem `graph_id` | Der Graph-Reiter zeigt einen Leerzustand mit Erklärung, keinen Fehler. **Ein solcher Lauf bekommt keinen Bericht:** `POST /api/report/generate` lehnt Läufe ohne Graphen ab, weil Berichte sich auf Belege aus dem Graphen stützen. Der Umbau ändert das nicht (siehe 4.6). |
 
 ---
 
@@ -149,7 +149,7 @@ Ein Dialog, fünf Gruppen, kein Assistent:
 | Gruppe | Inhalt |
 |---|---|
 | Frage | Die Simulationsfrage als Pflichtfeld, optional die Streitfrage. |
-| Graph | vorhandenen wählen, „neu aus Quelle" (Datei ablegen, Graph entsteht in der Bibliothek) oder „ohne Graph". |
+| Graph | vorhandenen wählen, „neu aus Quelle" (Datei ablegen, Graph entsteht in der Bibliothek) oder „ohne Graph". Bei „ohne Graph" steht direkt an der Auswahl: „Simulation und Interviews sind möglich, ein Bericht nicht." Die Stufe Bericht entfällt dann aus Modellwahl und Vorabschätzung. |
 | Personasatz | vorhandenen wählen oder „erzeugen lassen" (Anzahl, Obergrenze). |
 | Modelle | Profil wählen. Aufklappbar: je Stufe (Graph, Personas, Simulation, Bericht) abweichen. Je Stufe eine grobe Kostenangabe. |
 | Umfang und Budget | Tage, Runden, Aktivitätsmodus; Grenzen für Zeit, Tokens, Kosten und Aufrufe, vorbelegt aus Einstellungen → Budgets. Vorabschätzung (`PreflightEstimateCard`). |
@@ -267,6 +267,8 @@ Unterreiter **Feed · Runden · Diagnose**. Kopf: Zustand, Runde x von y, Beitr�
 - **Während der Erzeugung:** Abschnitte füllen sich, Protokoll (`ReportLiveLogPane`) als einklappbarer Bereich bzw. in der Konsole.
 - **Export und Druck:** nur die Mitte, Belege als Fußnoten.
 - **Weiter vorhanden, auf der Restliste:** Red-Team- und Provenance-Abschnitt (`ReportRedTeamSection`, `ReportProvenanceSection`).
+- **Lauf ohne Graph:** Der Reiter zeigt eine Erklärung statt eines Startknopfs („Dieser Lauf hat keinen Wissensgraphen; Berichte stützen sich auf Belege aus dem Graphen"). In der Übersicht steht die Stufe Bericht auf „nicht verfügbar", in der Kachel ist ihr Stufenpunkt „übersprungen". Das ist kein Fehlerzustand.
+- **Nachfragen an den Berichtsagenten:** Die heutige Gesprächsansicht (`Step5Interaction`) enthält zwei Funktionen: den Chat mit dem Berichtsagenten über `POST /api/report/chat` und die Persona-Interviews über `…/interview/batch`. Die Interviews ziehen in den Reiter Interviews (4.7). Der Chat mit dem Berichtsagenten bleibt erhalten und hängt am Bericht, weil er eine `report_id` braucht. **Vorschlag, vom Maintainer zu bestätigen:** Die rechte Spalte des Berichts bekommt einen Umschalter „Belege | Nachfragen". Der Entwurf aus Durchgang 2 enthält dafür noch keine Ansicht.
 
 ### 4.7 Lauf → Interviews
 
@@ -280,7 +282,7 @@ Unterreiter **Feed · Runden · Diagnose**. Kopf: Zustand, Runde x von y, Beitr�
 └──────────────────┴─────────────────────────────┴──────────────────┘
 ```
 
-- Am Lauf, nutzbar ab abgeschlossener Simulation, unabhängig vom Bericht.
+- Am Lauf, nutzbar ab abgeschlossener Simulation, unabhängig vom Bericht. Die Endpunkte hängen schon heute an der Simulation (`POST /api/simulation/interview`, `…/interview/batch`, `…/interview/all`, `…/interview/history`).
 - Einzelgespräch oder Gruppenfrage (Antworten nebeneinander).
 - Jede Antwort trägt „SIM" und „Interview" und sieht anders aus als ein Feed-Beitrag.
 - Modell und Kostenhinweis am Eingabefeld; Interviews laufen durchs Budget.
@@ -291,7 +293,7 @@ Bestehende `CompareView`/`BranchComparePanel` in der neuen Hülle. Einstieg auch
 
 ### 4.9 Werkzeuge → Aktivität und die Konsole
 
-- **Jobs:** alle Einträge der `RunRegistry` mit Art, Lauf, Zustand, Dauer, Sprung zum Lauf, Abbrechen.
+- **Jobs:** alle Einträge der `RunRegistry` mit Art, Lauf, Zustand, Dauer, Sprung zum Lauf, Abbrechen. Ein Klick öffnet die Job-Detailansicht unter `/activity/jobs/:runId`; das ist die heutige `RunDetailView` mit Ereignissen und Wiedergabe, unverändert im Aufbau (Restliste).
 - **Protokoll:** Livestrom von `/api/logs/stream` mit Filter nach Stufe, Suche, Pause, Kopieren.
 - **Konsole:** dieselbe Protokoll-Komponente als Auszug am unteren Rand, von jeder Seite erreichbar. In einem geöffneten Lauf auf diesen Lauf vorgefiltert, Schalter „alles zeigen". Höhe verstellbar und gemerkt.
 
@@ -323,7 +325,9 @@ Regeln:
 
 ## 6. Adressschema und Weiterleitungen
 
-Pfade bleiben englisch wie im Bestand, Beschriftungen deutsch. Alle alten Adressen bleiben als Weiterleitung erhalten.
+Pfade bleiben englisch wie im Bestand, Beschriftungen deutsch. Jede alte Adresse bleibt erreichbar: Sie zeigt so lange auf ihre bisherige Ansicht, bis das neue Ziel gebaut ist, und wird erst in dieser Etappe zur Weiterleitung (Spalte „ab Etappe" in 6.2).
+
+Der Lauf-Arbeitsbereich liegt unter `/simulations/…` und nicht unter `/runs/…`, weil `/runs/:id` heute die Detailansicht eines Jobs der `RunRegistry` ist (`RunDetailView`, `GET /api/runs/<run_id>`). Eine Lauf-Übersicht unter derselben Adresse würde gespeicherte Job-Links auf eine Ansicht führen, die mit der Kennung nichts anfangen kann.
 
 ### 6.1 Neue Adressen
 
@@ -332,45 +336,63 @@ Pfade bleiben englisch wie im Bestand, Beschriftungen deutsch. Alle alten Adress
 | `/library/runs` | Bibliothek → Läufe (Start). `?view=running` und `?view=attention` für „Im Blick". |
 | `/library/graphs` | Bibliothek → Graphen |
 | `/library/persona-sets` | Bibliothek → Personasätze |
-| `/runs/:simulationId` | Lauf → Übersicht |
-| `/runs/:simulationId/graph` | Lauf → Graph. `?edge=`/`?entity=` für Sprünge aus dem Bericht. |
-| `/runs/:simulationId/personas` | Lauf → Personas |
-| `/runs/:simulationId/simulation/feed/:network?` | Feed, `network` = `twitter` \| `reddit` |
-| `/runs/:simulationId/simulation/post/:postId` | Faden-Ansicht |
-| `/runs/:simulationId/simulation/rounds` | Runden |
-| `/runs/:simulationId/simulation/diagnostics` | Diagnose |
-| `/runs/:simulationId/report/:reportId?` | Bericht; ohne `reportId` die jüngste Fassung. `?claim=` für die Auswahl. |
-| `/runs/:simulationId/interviews/:conversationId?` | Interviews |
+| `/simulations/:simulationId` | Lauf → Übersicht |
+| `/simulations/:simulationId/graph` | Lauf → Graph. `?edge=`/`?entity=` für Sprünge aus dem Bericht. |
+| `/simulations/:simulationId/personas` | Lauf → Personas |
+| `/simulations/:simulationId/simulation/feed/:network?` | Feed, `network` = `twitter` \| `reddit` |
+| `/simulations/:simulationId/simulation/post/:postId` | Faden-Ansicht. `?claim=` hebt den Beitrag hervor und zeigt den Rückweg zum Bericht. |
+| `/simulations/:simulationId/simulation/rounds` | Runden |
+| `/simulations/:simulationId/simulation/diagnostics` | Diagnose |
+| `/simulations/:simulationId/report/:reportId?` | Bericht; ohne `reportId` die jüngste Fassung. `?claim=` für die Auswahl. |
+| `/simulations/:simulationId/interviews/:conversationId?` | Interviews |
 | `/graphs/:projectId` | Graph-Ansicht der Bibliothek |
 | `/persona-sets/:setId` | Personasatz |
-| `/compare` | Vergleich |
-| `/activity/jobs`, `/activity/log` | Aktivität |
+| `/compare/:simulationId?` | Vergleich; mit Kennung ist der erste Lauf vorgewählt |
+| `/activity/jobs`, `/activity/jobs/:runId`, `/activity/log` | Aktivität; `:runId` ist die Job-Detailansicht |
 | `/settings/:section` | Einstellungsfenster über der zuletzt gezeigten Ansicht |
 
 ### 6.2 Weiterleitungen
 
-| Alt | Neu |
-|---|---|
-| `/`, `/home`, `/dashboard`, `/v4/dashboard` | `/library/runs` |
-| `/runs` | `/library/runs` |
-| `/runs/:id` | `/runs/:id` (Übersicht) |
-| `/process/:projectId`, `/v4/graph-build/:projectId` | `/graphs/:projectId` |
-| `/v4/env-setup/:projectId` | `/runs/:simulationId/personas`, sobald eine Simulation existiert; sonst Startdialog mit vorgewähltem Graphen |
-| `/simulation/:id`, `/simulation/:id/start`, `/v4/simulation/:id` | `/runs/:id/simulation/feed` |
-| `/v4/simulation/:id/feed`, `…/threads` | `/runs/:id/simulation/feed` |
-| `/v4/simulation/:id/thread/:postId` | `/runs/:id/simulation/post/:postId` |
-| `/v4/simulation/:id/rounds`, `…/live`, `…/actions` | `/runs/:id/simulation/rounds` |
-| `/report/:reportId`, `/v4/report/:reportId` | `/runs/:simulationId/report/:reportId` (Simulation aus dem Bericht auflösen) |
-| `/interaction/:reportId`, `/v4/interaction/:reportId` | `/runs/:simulationId/interviews` |
-| `/settings/general` | `/settings/general` |
-| `/settings/integrations` | `/settings/pipeline` |
-| `/settings/profile`, `/settings/users-teams`, `/settings/api-keys`, `/settings/audit-logs` | `/settings/access` |
-| `/settings/llm-routing` | `/settings/profiles` |
-| `/settings/llm-providers`, `/workspace/provider-keys` | `/settings/providers` |
-| `/settings/embedding` | `/settings/embedding` |
-| `/settings-classic` | `/settings/general` |
+Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die alte Adresse mit ihrer alten Ansicht in der neuen Hülle bestehen.
 
-Die Weiterleitungen für Berichte und Interviews brauchen die Auflösung `report_id → simulation_id`; die liefert `GET /api/report/<report_id>`.
+| Alt | Neu | ab Etappe |
+|---|---|---|
+| `/`, `/home`, `/dashboard`, `/v4/dashboard` | `/library/runs` | 2 |
+| `/runs`, `/ablage`, `/ablage?filter=lauf`, `/ablage?filter=bericht` | `/library/runs` | 2 |
+| `/ablage?filter=graph` | `/library/graphs` | 2 |
+| `/ablage?filter=personasatz` | `/library/persona-sets` | 7; bis dahin `/library/runs` |
+| `/ablage?filter=jobs`, `/v4/history` | `/activity/jobs` | 2 |
+| `/ablage/lauf/:objectId` | `/simulations/:objectId` | 2 |
+| `/ablage/bericht/:objectId` | `/simulations/:simulationId/report/:objectId` (Simulation aus dem Bericht auflösen) | 5; bis dahin alte Ansicht |
+| `/ablage/graph/:objectId` | `/graphs/:projectId` (Projekt aus der Kennung auflösen) | 2 |
+| `/ablage/personasatz/:objectId` | `/persona-sets/:setId` | 7; bis dahin Personas-Reiter des zugehörigen Laufs |
+| `/runs/:id` | `/activity/jobs/:id`, Kennung unverändert | 2 |
+| `/process/:projectId`, `/v4/graph-build/:projectId` | `/graphs/:projectId` | 2 |
+| `/v4/env-setup/:projectId` | `/simulations/:simulationId/personas`, sobald eine Simulation existiert; sonst Startdialog mit vorgewähltem Graphen | 3 |
+| `/simulation/:id`, `/simulation/:id/start`, `/v4/simulation/:id` | `/simulations/:id/simulation/feed` | 4 |
+| `/v4/simulation/:id/feed`, `…/threads` | `/simulations/:id/simulation/feed` | 4 |
+| `/v4/simulation/:id/thread/:postId` | `/simulations/:id/simulation/post/:postId` | 4 |
+| `/v4/simulation/:id/rounds`, `…/live`, `…/actions` | `/simulations/:id/simulation/rounds` | 4 |
+| `/report/:reportId`, `/v4/report/:reportId` | `/simulations/:simulationId/report/:reportId` (Simulation aus dem Bericht auflösen) | 5 |
+| `/interaction/:reportId`, `/v4/interaction/:reportId` | `/simulations/:simulationId/interviews` | 6 |
+| `/v4/compare/:simulationId` | `/compare/:simulationId` | 2 |
+| `/settings/general` | `/settings/general` | 3 |
+| `/settings/integrations` | `/settings/pipeline` | 3 |
+| `/settings/profile`, `/settings/users-teams`, `/settings/api-keys`, `/settings/audit-logs` | `/settings/access` | 3 |
+| `/settings/llm-routing` | `/settings/profiles` | 3 |
+| `/settings/llm-providers`, `/workspace/provider-keys` | `/settings/providers` | 3 |
+| `/settings/embedding` | `/settings/embedding` | 3 |
+| `/settings-classic` | `/settings/general` | 3 |
+
+Zwischen Etappe 2 und der Etappe einer Zeile verlinken die Reiter des Laufs auf die noch bestehende alte Ansicht. Der Reiter „Simulation" führt also bis Etappe 4 auf `/v4/simulation/:id/feed`.
+
+Auflösungen, die eine Weiterleitung braucht:
+
+- `report_id → simulation_id` für Berichte und Interviews: liefert `GET /api/report/<report_id>`.
+- `graph_id → project_id` für `/ablage/graph/:objectId`: in Etappe 2 prüfen, welche der beiden Kennungen die Ablage dort führt.
+- `/ablage/personasatz/:objectId`: in Etappe 2 prüfen, welche Kennung die Ablage dort führt; die Ablage zeigt heute null Personasätze.
+
+Vor dem Umstellen einer Zeile wird mit CRG geprüft, wer die alte Routen-Kennung (`name:`) noch verwendet.
 
 ---
 
@@ -381,12 +403,13 @@ Die Weiterleitungen für Berichte und Interviews brauchen die Auflösung `report
 | Hülle | `components/v4/shell/` (AppShell, Sidebar, SidebarGroup, SidebarItem, Topbar, Breadcrumbs, CommandPalette); `components/shell/` (UserMenu, ActivityIndicator) | zusammenführen; ShellRoot, Shelf, Stack, Dossier entfallen |
 | Bibliothek → Läufe | `views/shell/ShelfView.vue`, `components/v4/dashboard/` (ActiveRunsCard, RecentReportsCard) | neu zeichnen, Daten bleiben |
 | Startdialog | `HeroNewRun`, `SimulationStartConfig`, `EnvSetupModelPanel`, `RunBudgetForm`, `PreflightEstimateCard`, `ContestedQuestionField` | umhängen in einen Dialog |
-| Lauf → Übersicht | `RunDetailView`, `RunDetailAppShellView`, `RunUsageBreakdown`, `RunResourceMonitor`, `DegradationNotice` | neu zeichnen |
+| Lauf → Übersicht | `components/shell/Dossier.vue`, `RunUsageBreakdown`, `RunResourceMonitor`, `DegradationNotice` | neu zeichnen |
+| Aktivität → Job-Detail | `RunDetailView`, `RunDetailAppShellView`, `RunReplayDialog` | umhängen unter `/activity/jobs/:runId` |
 | Graph | `GraphPanel`, `components/graph/` (GraphCanvas, GraphDetailPanel, GraphLegend, GraphMiniMap, GraphToolbar, GraphHints), `Step1GraphBuild` | umhängen; Tabelle und Bearbeiten neu (Etappe 8) |
 | Personas | `components/step2/` (PersonaCardGrid, PersonaDetailModal, AddPersonaModal, PersonaLibraryPanel, AgentCapControl, QuotaPlanEditor) | neu zeichnen; Satz-Objekt und KI-Entwurf neu (Etappe 7) |
 | Simulation | `components/v4/sim-feed/` (TwitterPost, RedditPost, RedditThread, SimThreadTree, SimThreadTreeLevel, FeedTimeline, SimFilterBar, PersonaAvatar, SimBadge, NewItemsPill, SimRoundsList, SimActionsTable, SimulationPulseBar), `components/step3/` | neu anordnen; `FeedColumn` (Zwei-Spalten-Aufbau) und `SimTabsBar` entfallen |
 | Bericht | `components/step4/` (ReportReader, ReportEvidenceRail, ReportOutline, ReportOutlinePanel, ReportBranchControls, ReportModelControls, ReportModeControls, ReportLiveLogPane) | neu zeichnen; Sprünge neu |
-| Interviews | `Step5Interaction`, `StepInteractionView` | neu zeichnen, an den Lauf hängen |
+| Interviews | `Step5Interaction`, `StepInteractionView` (nur der Interview-Teil; der Berichtsagenten-Chat geht in den Bericht) | neu zeichnen, an den Lauf hängen |
 | Konsole, Protokoll | `LogDrawer`, `SimulationToolPanel` | ausbauen |
 | Einstellungsfenster | `SettingsOverlay`, `SettingsSectionPanel`, `LlmProviderCard`, `LlmProfileManager`, `ProfileForm`, `AiModelPicker`, Ansichten unter `views/Settings/` | umhängen in ein Fenster |
 | Modell je Stufe | `StepModelOverrideChip`, `AiModelPicker` | sichtbar am Startknopf statt als Chip in der Kopfzeile |
@@ -402,7 +425,7 @@ Contracts-first: jede Zeile beginnt mit einem Vertrag unter `backend/app/contrac
 |---|---|---|
 | 3 | Standard-Budgets als persistierte Einstellung | nur falls heute nicht vorhanden; in der Etappe prüfen |
 | 5 | Sprungziele je Beleg (Chunk, Kante, Beitrag, Interview) im Evidence-Vertrag | prüfen, was `GET /api/report/<id>/evidence` schon trägt; nur ergänzen, nichts am Gating ändern |
-| 6 | Interviews am Lauf statt am Bericht adressierbar | heute `POST /api/report/chat` |
+| 6 | keine für die Interviews selbst: die Endpunkte hängen bereits an der Simulation | Der Chat mit dem Berichtsagenten (`POST /api/report/chat`) ist eine andere Funktion und zieht in den Bericht-Reiter um (4.6). |
 | 7 | Personasatz als Objekt (anlegen, benennen, duplizieren, sperren), Lauf aus Satz starten | Metadaten in PostgreSQL, nicht in den alten JSON-Speichern |
 | 7 | KI-Entwurf einer Persona und Beispielbeitrag | über `LLMClient.chat_json` mit Pydantic-Schema, im Budget-Ledger verbucht |
 | 8 | Graph: Entitäten und Beziehungen anlegen, ändern, löschen, zusammenführen | neuer Schreibpfad nach Neo4j, retry-idempotent wie die Ingestion (#1460) |
@@ -428,18 +451,18 @@ Jede Etappe ist ein PR und für sich benutzbar. Ein Epic mit Checkliste, keine E
 | # | Etappe | Inhalt | Backend | Fertig, wenn |
 |---|---|---|---|---|
 | 0 | Gestaltung | Auftrag an Claude Design in zwei Durchgängen, Abnahme durch den Maintainer | nein | Bausteinblatt und Kernstrecke sind abgenommen |
-| 1 | Tokens und Hülle | neue Farb-, Schrift- und Formtokens für Hell und Dunkel; eine Hülle; Seitenleiste; Werkzeugleiste; Konsole; Weiterleitungen aus 6.2 | nein | jede alte Adresse landet auf einer funktionierenden Ansicht; nur noch eine Hülle im Code; Hell/Dunkel folgt dem System |
-| 2 | Bibliothek und Lauf | Läufe als Kacheln, „Im Blick", Lauf mit sechs Reitern, Übersicht, Graph im Lauf lesend, Graphen-Bibliothek lesend | nein | von jedem Lauf ist der Graph mit einem Klick erreichbar; ein zweiter Lauf lässt sich auf einem vorhandenen Graphen anlegen |
+| 1 | Tokens und Hülle | neue Farb-, Schrift- und Formtokens für Hell und Dunkel; eine Hülle; Seitenleiste; Werkzeugleiste; Konsole. Die Seitenleiste verlinkt auf die bestehenden Ansichten; **keine Adresse wird in dieser Etappe umgeleitet** | nein | jede bestehende Adresse zeigt ihre bisherige Ansicht in der neuen Hülle; nur noch eine Hülle im Code; Hell/Dunkel folgt dem System |
+| 2 | Bibliothek und Lauf | Läufe als Kacheln, „Im Blick", Lauf mit sechs Reitern, Übersicht, Graph im Lauf lesend, Graphen-Bibliothek lesend, Aktivität mit Job-Detail; Weiterleitungen der Zeilen „ab Etappe 2" aus 6.2 | nein | von jedem Lauf ist der Graph mit einem Klick erreichbar; ein zweiter Lauf lässt sich auf einem vorhandenen Graphen anlegen; ein gespeicherter Link `/runs/<run_id>` öffnet weiterhin den Job |
 | 3 | Einstellungen, Profile, Startdialog | Einstellungsfenster mit neun Abschnitten, Profil im Startdialog, Modell am Startknopf jeder Stufe, „Neu erzeugen mit …" | klein | die Übersicht zeigt je Stufe das gelaufene Modell; kein Modell-Bedienelement mehr außerhalb von Startdialog, Stufe und Einstellungen |
 | 4 | Simulation | Dreispalter, Twitter- und Reddit-Faden, Rundenregler, Unterreiter, Diagnose | nein | ein Beitrag mit Antworten ist in beiden Netzwerken als Faden lesbar; kein Rohprotokoll mehr unter dem Feed |
-| 5 | Bericht | Lesedokument, Belegspalte, Sprünge, Fassungswähler, Hinweisband, Export | klein | von einem Claim sind es höchstens zwei Klicks bis zum Beitrag bzw. zur Kante; „Unvollständig" ist ohne Scrollen sichtbar |
-| 6 | Interviews | Gesprächsansicht am Lauf, Gruppenfrage, „Befragen" an jeder Persona-Karte | klein | Interviews sind ohne Bericht erreichbar; Interview-Antworten sind von Feed-Beiträgen unterscheidbar |
+| 5 | Bericht | Lesedokument, Belegspalte, Sprünge, Fassungswähler, Hinweisband, Export, Nachfragen an den Berichtsagenten, Zustand „nicht verfügbar" für Läufe ohne Graph | klein | von einem Claim sind es höchstens zwei Klicks bis zum Beitrag bzw. zur Kante; „Unvollständig" ist ohne Scrollen sichtbar; der Chat mit dem Berichtsagenten ist weiter erreichbar |
+| 6 | Interviews | Gesprächsansicht am Lauf, Gruppenfrage, „Befragen" an jeder Persona-Karte. `Step5Interaction` wird erst entfernt, wenn Etappe 5 den Berichtsagenten-Chat übernommen hat | nein | Interviews sind ohne Bericht erreichbar; Interview-Antworten sind von Feed-Beiträgen unterscheidbar |
 | 7 | Personasätze | Bibliothek, Karten, Editor-Fenster, KI-Entwurf, Beispielbeitrag, Sperre und Duplizieren | ja | ein Satz lässt sich von Hand anlegen und in zwei Läufen verwenden |
 | 8 | Graphen | Bearbeiten in Netz und Tabelle, Herkunft „manuell", Sperre und Duplizieren, ADR | ja | eine Handänderung ist im Bericht als solche erkennbar und stützt keine hohe Confidence |
 
 Etappe 4 wird an vorhandenen Läufen geprüft (etwa am exportierten DeepSeek-Lauf `sim_44fee3d638cf`), nicht an einem neuen Lauf.
 
-Abhängigkeiten: 1 → 2 → 3; 4, 5 und 6 setzen 2 voraus und sind untereinander unabhängig; 7 und 8 setzen 2 und 3 voraus.
+Abhängigkeiten: 1 → 2 → 3; 4, 5 und 6 setzen 2 voraus. 4 ist von 5 und 6 unabhängig. 6 kann vor 5 gebaut werden, entfernt die alte Gesprächsansicht aber erst nach 5, damit der Chat mit dem Berichtsagenten nie ohne Platz ist. 7 und 8 setzen 2 und 3 voraus.
 
 ---
 
@@ -455,7 +478,7 @@ Abhängigkeiten: 1 → 2 → 3; 4, 5 und 6 setzen 2 voraus und sind untereinande
 | Quotenplan und Agenten-Obergrenze | `QuotaPlanEditor`, `AgentCapControl` |
 | Graph nach Runden, Graph-Diff | `GraphRoundSlider`, `GraphDiffPanel` |
 | Red-Team- und Provenance-Abschnitt des Berichts | `components/report/` |
-| Wiedergabe-Dialog | `RunReplayDialog.vue` |
+| Job-Detail mit Ereignissen und Wiedergabe | `RunDetailView.vue`, `RunDetailAppShellView.vue`, `RunReplayDialog.vue` |
 | Nicht gefunden | `views/NotFoundView.vue` |
 
 ---
@@ -617,6 +640,8 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 |---|---|---|
 | Neunter Einstellungsabschnitt „Pipeline" (1.1) | Maintainer | vor Etappe 0 |
 | Zuordnung Lauf = Simulation, Graph = Projekt (Abschnitt 2) | Maintainer, dann Lead | vor Etappe 2 |
+| Platz für die Nachfragen an den Berichtsagenten (Vorschlag in 4.6) | Maintainer | vor Etappe 5 |
+| Welche Kennung führt die Ablage für Graph- und Personasatz-Objekte? (6.2) | Lead | Etappe 2 |
 | Liefert `by-simulation` alle Berichtsfassungen? | Lead | Etappe 5 |
 | Trägt der Evidence-Vertrag schon Sprungziele je Beleg? | Lead | Etappe 5 |
 | Gibt es persistierte Standard-Budgets? | Lead | Etappe 3 |
