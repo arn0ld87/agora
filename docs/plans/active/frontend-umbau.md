@@ -165,7 +165,7 @@ Ein Dialog, fünf Gruppen, kein Assistent:
 - **Band „Im Blick"** über den Kacheln, nur sichtbar, wenn etwas läuft oder Aufmerksamkeit braucht.
 - **Lauf-Kachel:** Frage als Titel (zweizeilig, nicht abgeschnitten), Quelle bzw. Graph, fünf Stufenpunkte mit Zustand (Graph, Personas, Simulation, Bericht, Interviews), Datum, Kosten. Laufend: Runde und Fortschritt. Fehlgeschlagen oder gestoppt: der Grund in einem Satz.
 - **Listenansicht** als Alternative mit denselben Angaben in Spalten.
-- **Filter „Mit Bericht":** zeigt nur Läufe mit mindestens einem Bericht; die Kachel nennt dann die Zahl der Fassungen und führt mit einem zweiten Knopf direkt zur jüngsten. Er ersetzt den heutigen Ablage-Filter „Berichte" und steht in der Sortier- und Filterleiste, nicht in der Seitenleiste.
+- **Filter „Mit Bericht":** zeigt nur Läufe mit mindestens einem Bericht; die Kachel nennt dann die Zahl der Fassungen und führt mit einem zweiten Knopf direkt zur jüngsten. Ein Klick auf die Zahl klappt die Liste aller Fassungen des Laufs auf (Datum, Modell, Zustand), jede Zeile öffnet genau diese Fassung. Die Liste kommt aus `GET /api/report/list?simulation_id=…`. Bis Etappe 5 führt eine Zeile auf die alte Berichtsansicht `/v4/report/:reportId`, danach auf den Bericht-Reiter mit vorgewählter Fassung. So bleibt jede ältere Fassung erreichbar, auch bevor es den Fassungswähler gibt. Er ersetzt den heutigen Ablage-Filter „Berichte" und steht in der Sortier- und Filterleiste, nicht in der Seitenleiste.
 - **Mehrfachauswahl:** zwei Läufe markieren → „Vergleichen"; löschen mit Rückfrage.
 - **Leerzustand:** ein Satz, was ein Lauf ist, und der Knopf „Neuer Lauf".
 
@@ -360,7 +360,7 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 |---|---|---|
 | `/`, `/home`, `/dashboard`, `/v4/dashboard` | `/library/runs` | 2 |
 | `/runs`, `/ablage`, `/ablage?filter=lauf` | `/library/runs` | 2 |
-| `/ablage?filter=bericht` | `/library/runs?view=with-report`: die Läufe, die mindestens einen Bericht haben, mit Zahl der Fassungen und Sprung zur jüngsten | 2 |
+| `/ablage?filter=bericht` | `/library/runs?view=with-report`: die Läufe, die mindestens einen Bericht haben, mit Zahl der Fassungen, Sprung zur jüngsten und aufklappbarer Liste aller Fassungen (4.1). Die alte Ablage zeigt jede Fassung als eigene Zeile; die Liste hält sie einzeln erreichbar, bis Etappe 5 den Fassungswähler bringt | 2 |
 | `/ablage?filter=graph` | `/library/graphs` | 2 |
 | `/ablage?filter=personasatz` | `/library/persona-sets` | 7; bis dahin `/library/runs` |
 | `/ablage?filter=jobs`, `/v4/history` | `/activity/jobs` | 2 |
@@ -387,7 +387,9 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 | `/settings/embedding` | `/settings/embedding` | 3 |
 | `/settings-classic` | `/settings/general` | 3 |
 
-Zwischen Etappe 2 und der Etappe einer Zeile verlinken die Reiter des Laufs auf die noch bestehende alte Ansicht. Der Reiter „Simulation" führt also bis Etappe 4 auf `/v4/simulation/:id/feed`. Der Reiter „Bericht" führt bis Etappe 5 auf `/v4/report/:reportId`, der Reiter „Interviews" bis Etappe 6 auf `/v4/interaction/:reportId`.
+Zwischen Etappe 2 und der Etappe einer Zeile verlinken die Reiter des Laufs auf die noch bestehende alte Ansicht. Der Reiter „Simulation" führt also bis Etappe 4 auf `/v4/simulation/:id/feed`. Der Reiter „Bericht" führt bis Etappe 5 auf `/v4/report/:reportId`, der Reiter „Interviews" bis Etappe 6 auf die alte Gesprächsansicht.
+
+Die alte Gesprächsansicht ist heute nur über `/v4/interaction/:reportId` geroutet. Ein Lauf ohne Bericht, also auch jeder Lauf ohne Graph, käme so bis Etappe 6 nicht an seine Interviews. Etappe 2 legt deshalb die Übergangsadresse `/v4/simulation/:simulationId/interviews` an, die dieselbe Ansicht nur mit der Simulationskennung öffnet. `Step5Interaction` nimmt `reportId` und `simulationId` schon heute als getrennte, optionale Props und lädt ohne `reportId` keinen Bericht. Der Reiter „Interviews" führt bis Etappe 6 immer auf diese Übergangsadresse, mit oder ohne Bericht; `/v4/interaction/:reportId` bleibt für gespeicherte Links bestehen. In Etappe 2 zu prüfen: Ohne `reportId` öffnet die Ansicht im Interview-Teil und blendet den Chat mit dem Berichtsagenten aus. Etappe 6 leitet die Übergangsadresse auf `/simulations/:simulationId/interviews` um.
 
 Auflösungen, die eine Weiterleitung braucht:
 
@@ -455,7 +457,7 @@ Jede Etappe ist ein PR und für sich benutzbar. Ein Epic mit Checkliste, keine E
 |---|---|---|---|---|
 | 0 | Gestaltung | Auftrag an Claude Design in zwei Durchgängen, Abnahme durch den Maintainer | nein | Bausteinblatt und Kernstrecke sind abgenommen |
 | 1 | Tokens und Hülle | neue Farb-, Schrift- und Formtokens für Hell und Dunkel; eine Hülle; Seitenleiste; Werkzeugleiste; Konsole. Die Seitenleiste verlinkt auf die bestehenden Ansichten; **keine Adresse wird in dieser Etappe umgeleitet** | nein | jede bestehende Adresse zeigt ihre bisherige Ansicht in der neuen Hülle; nur noch eine Hülle im Code; Hell/Dunkel folgt dem System |
-| 2 | Bibliothek und Lauf | Läufe als Kacheln, „Im Blick", Lauf mit sechs Reitern, Übersicht, Graph im Lauf lesend, Graphen-Bibliothek lesend, Aktivität mit Job-Detail, Filter „Mit Bericht"; der Knopf „Neuer Lauf" öffnet bis Etappe 3 den bestehenden Start (`HeroNewRun` → `/process/new`); Weiterleitungen der Zeilen „ab Etappe 2" aus 6.2 | nein | von jedem Lauf ist der Graph mit einem Klick erreichbar; ein zweiter Lauf lässt sich auf einem vorhandenen Graphen anlegen; ein gespeicherter Link `/runs/<run_id>` öffnet weiterhin den Job; ein Lauf aus einer neuen Quelle lässt sich weiterhin starten |
+| 2 | Bibliothek und Lauf | Läufe als Kacheln, „Im Blick", Lauf mit sechs Reitern, Übersicht, Graph im Lauf lesend, Graphen-Bibliothek lesend, Aktivität mit Job-Detail, Filter „Mit Bericht" mit Liste aller Fassungen; Übergangsadresse `/v4/simulation/:simulationId/interviews` für den Reiter „Interviews"; der Knopf „Neuer Lauf" öffnet bis Etappe 3 den bestehenden Start (`HeroNewRun` → `/process/new`); Weiterleitungen der Zeilen „ab Etappe 2" aus 6.2 | nein | von jedem Lauf ist der Graph mit einem Klick erreichbar; jede Berichtsfassung eines Laufs lässt sich einzeln öffnen; die Interviews eines Laufs ohne Bericht lassen sich öffnen; ein zweiter Lauf lässt sich auf einem vorhandenen Graphen anlegen; ein gespeicherter Link `/runs/<run_id>` öffnet weiterhin den Job; ein Lauf aus einer neuen Quelle lässt sich weiterhin starten |
 | 3 | Einstellungen, Profile, Startdialog | Einstellungsfenster mit neun Abschnitten, Profil im Startdialog, Modell am Startknopf jeder Stufe, „Neu erzeugen mit …" | klein | die Übersicht zeigt je Stufe das gelaufene Modell; kein Modell-Bedienelement mehr außerhalb von Startdialog, Stufe und Einstellungen |
 | 4 | Simulation | Dreispalter, Twitter- und Reddit-Faden, Rundenregler, Unterreiter, Diagnose | nein | ein Beitrag mit Antworten ist in beiden Netzwerken als Faden lesbar; kein Rohprotokoll mehr unter dem Feed |
 | 5 | Bericht | Lesedokument, Belegspalte, Sprünge, Fassungswähler, Hinweisband, Export, Nachfragen an den Berichtsagenten, Zustand „nicht verfügbar" für Läufe ohne Graph | klein | von einem Claim sind es höchstens zwei Klicks bis zum Beitrag bzw. zur Kante; „Unvollständig" ist ohne Scrollen sichtbar; der Chat mit dem Berichtsagenten ist weiter erreichbar |
