@@ -1,10 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteRecordRaw } from 'vue-router'
+import type { RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
 import { useAuthStore } from '../store/auth'
 import { safeNext } from '../auth/safeNext'
 import { shelfObjectGuard, shelfRedirect } from './legacyRedirects'
+import {
+  DEFAULT_SETTINGS_SECTION,
+  getSettingsSection,
+  isSettingsSectionId,
+  normalizeSettingsSection,
+  settingsSectionPath,
+} from '../components/settings-window/sections'
+import { useSettingsWindowStore } from '../stores/settingsWindow'
 
 const AUTH_ONLY_ROUTES = { Login: 1, Register: 1, PasswordReset: 1, EmailConfirm: 1 } as const
 
@@ -69,12 +77,25 @@ const routes: RouteRecordRaw[] = [
     name: 'Settings',
     redirect: { name: 'SettingsGeneral' },
   },
+  // Etappe 3 (#1799): `/settings/general` und `/settings/embedding` zeigen das
+  // Einstellungsfenster auf ihrem Abschnitt; die Ansicht darunter rendert
+  // App.vue (meta.settingsWindow). Die Namen bleiben fuer bestehende Aufrufer.
   {
     path: '/settings/general',
     name: 'SettingsGeneral',
-    component: () => import('../views/Settings/SettingsGeneralView.vue'),
+    component: () => import('../components/settings-window/SettingsWindow.vue'),
     // Prozessweiter Betreiber-Zustand (operator_only im Backend, #1617)
-    meta: { operatorOnly: true },
+    meta: { operatorOnly: true, settingsWindow: true, settingsSection: 'general' },
+  },
+  // Alle uebrigen Abschnitte des Fensters (`/settings/appearance` …). Statische
+  // Adressen darunter (integrations, profile, api-keys …) gewinnen gegen den
+  // Parameter und bleiben bis Ticket 7 auf ihrer alten Ansicht. Unbekannter
+  // Abschnitt → general.
+  {
+    path: '/settings/:section',
+    name: 'SettingsWindow',
+    component: () => import('../components/settings-window/SettingsWindow.vue'),
+    meta: { settingsWindow: true },
   },
   {
     path: '/settings/integrations',
@@ -135,8 +156,8 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/settings/embedding',
     name: 'SettingsEmbedding',
-    component: () => import('../views/Settings/EmbeddingConfigurationsView.vue'),
-    meta: { operatorOnly: true, requiresAuth: true },
+    component: () => import('../components/settings-window/SettingsWindow.vue'),
+    meta: { operatorOnly: true, requiresAuth: true, settingsWindow: true, settingsSection: 'embedding' },
   },
   // Legacy-Deep-Link bleibt fuer einen Release-Zyklus als Redirect erhalten.
   {
@@ -424,6 +445,30 @@ const router = createRouter({
   routes,
 })
 
+/**
+ * Zugangsregeln einer Route. Das Einstellungsfenster liest sie je Abschnitt
+ * aus `sections.ts` (eine Route, neun Regeln); alle anderen aus `meta`.
+ */
+function routeAccess(to: RouteLocationNormalized): { operatorOnly: boolean; requiresAuth: boolean } {
+  if (to.meta?.settingsWindow === true) {
+    const section = getSettingsSection(
+      normalizeSettingsSection(to.meta.settingsSection ?? to.params.section),
+    )
+    return { operatorOnly: section.operatorOnly, requiresAuth: section.requiresAuth }
+  }
+  return { operatorOnly: !!to.meta?.operatorOnly, requiresAuth: !!to.meta?.requiresAuth }
+}
+
+// Unbekannter Abschnitt des Einstellungsfensters → general. Globaler Guard
+// statt `beforeEnter`: der feuert bei Parameterwechsel innerhalb derselben
+// Route nicht.
+router.beforeEach((to) => {
+  if (to.name === 'SettingsWindow' && !isSettingsSectionId(to.params.section)) {
+    return { path: settingsSectionPath(DEFAULT_SETTINGS_SECTION), replace: true }
+  }
+  return true
+})
+
 router.beforeEach(async (to) => {
   let auth: ReturnType<typeof useAuthStore> | null = null
   try {
@@ -452,7 +497,7 @@ router.beforeEach(async (to) => {
     // stattdessen eine nicht-editierbare Vorschau (DemoPreviewFrame) statt
     // eines Redirects — kein separater Zustand fuer "kein Zugang und keine
     // Vorschau" existiert, solange eine Session vorliegt.
-    if (to.meta?.operatorOnly && !auth.operatorAccess && !auth.demoPreview) return '/'
+    if (routeAccess(to).operatorOnly && !auth.operatorAccess && !auth.demoPreview) return '/'
     return true
   }
 
@@ -465,12 +510,31 @@ router.beforeEach(async (to) => {
   if (to.meta?.public && String(to.name ?? '') in AUTH_ONLY_ROUTES) return '/'
 
   // Legacy-Guard: requiresAuth-Routen ohne Token auf die Startseite (Bibliothek).
-  if (!to.meta?.requiresAuth) return true
+  if (!routeAccess(to).requiresAuth) return true
   if (getAgoraToken()) return true
   return { name: 'LibraryRuns', query: { authRequired: '1', next: to.fullPath } }
 })
 
 // Onboarding-Redirect — läuft NACH dem Auth-Guard (Onboarding Slice 2).
 router.beforeEach(onboardingGuard)
+
+// Einstellungsfenster (#1799): beim Öffnen aus der App die Ansicht darunter
+// merken, beim Verlassen vergessen. Ein Direktaufruf (`from` ohne Treffer)
+// merkt nichts — das Fenster liegt dann über der Bibliothek der Läufe.
+router.afterEach((to, from, failure) => {
+  if (failure) return
+  let store: ReturnType<typeof useSettingsWindowStore> | null = null
+  try {
+    store = useSettingsWindowStore()
+  } catch {
+    // Pinia noch nicht aktiv (z.B. Unit-Tests ohne Store).
+    return
+  }
+  if (to.meta?.settingsWindow !== true) {
+    store.reset()
+  } else if (from.meta?.settingsWindow !== true) {
+    store.open(from.matched.length > 0 ? from.fullPath : null)
+  }
+})
 
 export default router

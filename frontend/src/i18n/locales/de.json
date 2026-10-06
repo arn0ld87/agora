@@ -2026,6 +2026,26 @@
     }
   },
   "views": {
+    "settingsWindow": {
+      "title": "Einstellungen",
+      "close": "Einstellungen schließen",
+      "navLabel": "Abschnitte",
+      "sectionSelect": "Abschnitt wählen",
+      "operatorOnly": "Dieser Abschnitt gehört dem Betreiber. Hier ist er nur als Vorschau sichtbar, Änderungen sind nicht möglich.",
+      "placeholderTitle": "In Vorbereitung",
+      "placeholder": "Dieser Abschnitt kommt in dieser Etappe.",
+      "sections": {
+        "general": "Allgemein",
+        "appearance": "Aussehen",
+        "providers": "Anbieter",
+        "profiles": "Profile",
+        "embedding": "Embedding",
+        "pipeline": "Pipeline",
+        "budgets": "Budgets",
+        "access": "Zugang",
+        "system": "System"
+      }
+    },
     "history": {
       "title": "Verlauf",
       "subtitle": "Run- und Branch-Historie"

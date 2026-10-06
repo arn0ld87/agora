@@ -37,6 +37,8 @@ const BASE_ROUTES: RouteRecordRaw[] = [
   { path: '/settings/llm-providers', name: 'SettingsLlmProviders',component: stub },
   { path: '/settings/llm-routing',   name: 'SettingsLlmRouting',  component: stub },
   { path: '/settings/embedding',     name: 'SettingsEmbedding',   component: stub },
+  // Etappe 3 (#1799): Einstellungsfenster, alle uebrigen Abschnitte.
+  { path: '/settings/:section',      name: 'SettingsWindow',      component: stub, meta: { settingsWindow: true } },
   { path: '/onboarding',             name: 'Onboarding',          component: stub },
   { path: '/workspace/provider-keys', name: 'WorkspaceProviderKeys', component: stub },
 ]

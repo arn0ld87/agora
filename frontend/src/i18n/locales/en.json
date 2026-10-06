@@ -2026,6 +2026,26 @@
     }
   },
   "views": {
+    "settingsWindow": {
+      "title": "Settings",
+      "close": "Close settings",
+      "navLabel": "Sections",
+      "sectionSelect": "Choose a section",
+      "operatorOnly": "This section belongs to the operator. It is shown here as a preview only, changes are not possible.",
+      "placeholderTitle": "In preparation",
+      "placeholder": "This section arrives in this stage.",
+      "sections": {
+        "general": "General",
+        "appearance": "Appearance",
+        "providers": "Providers",
+        "profiles": "Profiles",
+        "embedding": "Embedding",
+        "pipeline": "Pipeline",
+        "budgets": "Budgets",
+        "access": "Access",
+        "system": "System"
+      }
+    },
     "history": {
       "title": "History",
       "subtitle": "Run and Branch History"

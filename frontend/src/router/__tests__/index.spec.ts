@@ -8,6 +8,8 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { useSettingsWindowStore } from '../../stores/settingsWindow'
 
 vi.mock('vue-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-router')>()
@@ -89,6 +91,9 @@ vi.mock('../../views/run/RunGraphView.vue', () => VIEW_STUB)
 vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityLogView.vue', () => VIEW_STUB)
+// Etappe 3 (#1799), Ticket „Einstellungsfenster": das Fenster ersetzt die
+// Ansichten hinter /settings/general und /settings/embedding.
+vi.mock('../../components/settings-window/SettingsWindow.vue', () => VIEW_STUB)
 
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
@@ -445,6 +450,8 @@ describe('Router – Struktur-Integrität', () => {
       'SettingsLlmRouting',
       'SettingsLlmProviders',
       'SettingsEmbedding',
+      // Etappe 3 (#1799): alle uebrigen Abschnitte des Einstellungsfensters.
+      'SettingsWindow',
       'StepGraphBuild',
       'StepEnvSetup',
       'StepSimulation',
@@ -683,5 +690,75 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     expect(router.currentRoute.value.name).toBe('StepSimulation')
     await pushAndSettle('/process/project_42')
     expect(router.currentRoute.value.name).toBe('StepGraphBuild')
+  })
+})
+
+describe('Router – Etappe 3 Einstellungsfenster (#1799)', () => {
+  beforeEach(() => {
+    vi.mocked(getAgoraToken).mockReturnValue('tkn')
+    setActivePinia(createPinia())
+  })
+
+  it.each([
+    ['/settings/general', 'SettingsGeneral'],
+    ['/settings/embedding', 'SettingsEmbedding'],
+    ['/settings/appearance', 'SettingsWindow'],
+    ['/settings/providers', 'SettingsWindow'],
+    ['/settings/profiles', 'SettingsWindow'],
+    ['/settings/pipeline', 'SettingsWindow'],
+    ['/settings/budgets', 'SettingsWindow'],
+    ['/settings/access', 'SettingsWindow'],
+    ['/settings/system', 'SettingsWindow'],
+  ])('löst %s → %s auf und markiert es als Fenster', async (path, name) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe(name)
+    expect(router.currentRoute.value.meta.settingsWindow).toBe(true)
+  })
+
+  it('unbekannter Abschnitt → general', async () => {
+    await pushAndSettle('/settings/gibt-es-nicht')
+    expect(router.currentRoute.value.path).toBe('/settings/general')
+    expect(router.currentRoute.value.name).toBe('SettingsGeneral')
+  })
+
+  it('die übrigen alten Einstellungsadressen bleiben bis Ticket 7 auf ihrer alten Ansicht', async () => {
+    for (const [path, name] of [
+      ['/settings/integrations', 'SettingsIntegrations'],
+      ['/settings/profile', 'SettingsProfile'],
+      ['/settings/api-keys', 'SettingsApiKeys'],
+      ['/settings/audit-logs', 'SettingsAuditLogs'],
+      ['/settings/llm-routing', 'SettingsLlmRouting'],
+      ['/settings/llm-providers', 'SettingsLlmProviders'],
+      ['/workspace/provider-keys', 'WorkspaceProviderKeys'],
+    ] as const) {
+      await pushAndSettle(path)
+      expect(router.currentRoute.value.name).toBe(name)
+      expect(router.currentRoute.value.meta.settingsWindow).toBeUndefined()
+    }
+  })
+
+  it('Zugangsregel je Abschnitt: Abschnitte mit requiresAuth schicken ohne Token auf die Bibliothek', async () => {
+    vi.mocked(getAgoraToken).mockReturnValue('')
+    for (const section of ['providers', 'profiles', 'embedding', 'access']) {
+      await pushAndSettle(`/settings/${section}`)
+      expect(router.currentRoute.value.name, section).toBe('LibraryRuns')
+    }
+    for (const section of ['general', 'appearance', 'pipeline', 'budgets', 'system']) {
+      await pushAndSettle(`/settings/${section}`)
+      expect(router.currentRoute.value.meta.settingsWindow, section).toBe(true)
+    }
+  })
+
+  it('merkt sich beim Öffnen aus der App die Ansicht darunter, beim Abschnittswechsel unverändert', async () => {
+    const store = useSettingsWindowStore()
+    await pushAndSettle('/library/graphs')
+    await pushAndSettle('/settings/budgets')
+    expect(store.returnTo).toBe('/library/graphs')
+    await pushAndSettle('/settings/system')
+    expect(store.returnTo).toBe('/library/graphs')
+    await pushAndSettle('/library/runs?view=running')
+    expect(store.returnTo).toBeNull()
+    await pushAndSettle('/settings/general')
+    expect(store.returnTo).toBe('/library/runs?view=running')
   })
 })

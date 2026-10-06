@@ -3,9 +3,9 @@
  *
  * Prueft:
  * 1. Keine disabled Stub-Items mehr (Projekte/Datensätze/Vorlagen/Monitoring).
- * 2. Audit-Logs/LLM-Routing sind Teil der Einstellungen-Sub-Items, sobald
- *    die Gruppe geoeffnet ist — SettingsOverlay hatte dafuer vorher eine
- *    zweite, parallele Navigation (Doppelnavigation, jetzt aufgeloest).
+ * 2. Keine Einstellungen-Sub-Items mehr (Etappe 3, #1799): eine Zeile
+ *    „Einstellungen“ oeffnet das Einstellungsfenster, dessen Liste die
+ *    Abschnitte traegt.
  * 3. Sidebar rendert weiterhin nur wire-Ziele laut Matrix.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -66,15 +66,17 @@ describe('Sidebar IA matrix (slice 7.3)', () => {
     for (const id of HIDDEN_NAV_IDS) expect(text).not.toContain(id)
   })
 
-  // Fix #1713 (Befund 7): Audit-Logs/LLM-Routing sind jetzt Teil der einen
-  // Einstellungen-Navigationsebene — sichtbar, sobald die Gruppe offen ist.
-  it('zeigt Audit-Logs und LLM-Routing als Settings-Sub-Items, wenn die Gruppe offen ist', async () => {
+  // Etappe 3 (#1799): die Gruppe „Einstellungen“ mit Unterpunkten ist eine
+  // Zeile; Audit-Logs/LLM-Routing stehen als Abschnitte im Einstellungsfenster
+  // (Zugang bzw. Profile), nicht mehr in der Seitenleiste.
+  it('zeigt keine Settings-Sub-Items mehr, auch wenn die Gruppe gespeichert offen war', async () => {
     lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
     useSidebarState._resetForTesting()
     const wrapper = await mountSidebar()
     const text = wrapper.text()
-    expect(text).toContain('Audit-Logs')
-    expect(text).toContain('LLM-Routing')
+    expect(text).not.toContain('Audit-Logs')
+    expect(text).not.toContain('LLM-Routing')
+    expect(wrapper.findAll('.sidebar-sub-item')).toHaveLength(0)
   })
 
   it('behaelt wire-Ziele: Läufe, Graphen, Personasätze, Aktivität sichtbar (#1795)', async () => {

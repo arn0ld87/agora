@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import type { FunctionalComponent } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import type { RouteLocationNormalized } from 'vue-router'
 import LogDrawer from './components/LogDrawer.vue'
+import { SETTINGS_FALLBACK_PATH } from './components/settings-window/sections'
+import { useSettingsWindowStore } from './stores/settingsWindow'
 import AppShell from './components/v4/shell/AppShell.vue'
 import DemoPreviewStaticView from './components/v4/shell/DemoPreviewStaticView.vue'
 import { useDemoPreview } from './composables/useDemoPreview'
@@ -26,14 +29,32 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 // Routen (meta.demoPreview:'static') wird hier die echte Route-Komponente
 // durch DemoPreviewStaticView ersetzt — sie mountet nie (kein Betreiber-Fetch).
 const route = useRoute()
+const router = useRouter()
 const demoPreview = useDemoPreview()
+
+// Einstellungsfenster (#1799, Etappe 3): `/settings/:section` liegt als Dialog
+// ueber der zuletzt gezeigten Ansicht. Dazu rendert der Haupt-router-view eine
+// Hintergrundroute (`:route`) statt der aktuellen: die gemerkte vorherige
+// Adresse, bei Direktaufruf die Bibliothek der Laeufe. Das Fenster selbst
+// rendert ein zweiter router-view (Komponente der aktuellen Route).
+const settingsWindowStore = useSettingsWindowStore()
+const isSettingsWindow = computed(() => route.meta?.settingsWindow === true)
+const shownRoute = computed<RouteLocationNormalized>(() => {
+  if (!isSettingsWindow.value) return route as RouteLocationNormalized
+  const behind = router.resolve(settingsWindowStore.returnTo ?? SETTINGS_FALLBACK_PATH)
+  // Nie ein Fenster unter dem Fenster.
+  const target = behind.meta?.settingsWindow === true ? router.resolve(SETTINGS_FALLBACK_PATH) : behind
+  // resolve() liefert dieselbe Form wie die aktuelle Route, nur `name` ist `null` statt `undefined`-fähig.
+  return target as RouteLocationNormalized
+})
+
 const showStaticPreview = computed(
-  () => route.meta?.demoPreview === 'static' && demoPreview.value,
+  () => shownRoute.value.meta?.demoPreview === 'static' && demoPreview.value,
 )
 
 // Zentrale Huelle (#1795): jede Route bekommt sie, ausser meta.layout === 'bare'.
 // Passthrough reicht den Inhalt unveraendert durch (kein zusaetzliches DOM).
-const withShell = computed(() => route.meta?.layout !== 'bare')
+const withShell = computed(() => shownRoute.value.meta?.layout !== 'bare')
 const Passthrough: FunctionalComponent = (_props, { slots }) => slots.default?.()
 // Die statische Vorschau bringt Banner + Inhalt selbst mit — ein zweiter
 // DemoPreviewFrame in der Huelle machte sie grau/inert (#1697).
@@ -47,7 +68,7 @@ const shellProps = computed(() => (withShell.value ? { demoFrame: !showStaticPre
        Ansichten ohne Huelle (Anmeldung, Nicht-gefunden ...) tragen
        meta.layout === 'bare' — das ist der einzige Opt-out. -->
   <component :is="withShell ? AppShell : Passthrough" v-bind="shellProps">
-    <router-view v-slot="{ Component }">
+    <router-view v-slot="{ Component }" :route="shownRoute">
       <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
            bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
            laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
@@ -59,6 +80,9 @@ const shellProps = computed(() => (withShell.value ? { demoFrame: !showStaticPre
       </transition>
     </router-view>
   </component>
+
+  <!-- Einstellungsfenster: Komponente der aktuellen Route, ueber der Huelle. -->
+  <router-view v-if="isSettingsWindow" />
 
   <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L oder
        das Kopfzeilen-Icon "Protokoll" (Topbar.vue). Die frueher
