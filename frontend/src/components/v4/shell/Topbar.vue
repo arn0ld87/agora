@@ -21,6 +21,9 @@
     <!-- Actions (right) -->
     <div class="topbar__actions">
       <slot name="actions">
+        <!-- Aktivitaets-Indikator der Ablage (#1795, ex ShellRoot) -->
+        <ShelfActivity />
+
         <!-- Protokoll → oeffnet den Log-Drawer (Redesign PR 2: ex-FAB in App.vue) -->
         <button
           v-if="logsAvailable"
@@ -34,7 +37,7 @@
           <Icon name="logs" :size="20" :stroke="1.6" />
         </button>
 
-        <!-- Search → oeffnet Command-Palette; ⌘K-Chip einheitlich mit ShellRoot.vue -->
+        <!-- Search → oeffnet Command-Palette; ⌘K-Chip -->
         <button
           class="topbar__icon-btn topbar__cmdk"
           type="button"
@@ -73,6 +76,7 @@ import type { BreadcrumbItem } from './Breadcrumbs.vue'
 import Icon from './Icon.vue'
 import DensityToggle from './DensityToggle.vue'
 import UserMenu from '@/components/shell/UserMenu.vue'
+import ShelfActivity from '@/components/shell/ShelfActivity.vue'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 import { useLogDrawer } from '@/composables/useLogDrawer'
 import { useShellStore } from '@/stores/shell'
@@ -143,7 +147,7 @@ withDefaults(
 }
 
 /* ⌘K-Chip: Variante von .topbar__icon-btn mit Text+Kbd statt fixem
-   Icon-Quadrat — Markup/Styling einheitlich mit ShellRoot.vue. */
+   Icon-Quadrat. */
 .topbar__cmdk {
   width: auto;
   padding: 0 var(--sp-3, 10px);

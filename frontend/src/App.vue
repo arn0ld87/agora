@@ -13,7 +13,7 @@ const TRANSITION_DURATION = { enter: 400, leave: 160 }
 
 // Issue #132 / Redesign PR 2 — Zustand + Hotkey-Handler leben jetzt in
 // useLogDrawer.ts (single source of truth). Die frueher hier gerenderte
-// FAB ist raus; die Kopfzeilen-Icons in Topbar.vue/ShellRoot.vue toggeln
+// FAB ist raus; die Kopfzeilen-Icons in Topbar.vue toggeln
 // denselben Composable-State.
 const { visible: logDrawerOpen, close: closeLogDrawer, handleHotkey } = useLogDrawer()
 onMounted(() => window.addEventListener('keydown', handleHotkey))
@@ -61,7 +61,7 @@ const shellProps = computed(() => (withShell.value ? { demoFrame: !showStaticPre
   </component>
 
   <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L oder
-       das Kopfzeilen-Icon "Protokoll" (Topbar.vue/ShellRoot.vue). Die frueher
+       das Kopfzeilen-Icon "Protokoll" (Topbar.vue). Die frueher
        hier gerenderte FAB (Redesign-Audit §14 "Chrome-Rauschen") ist raus. -->
   <LogDrawer :open="logDrawerOpen" @close="closeLogDrawer" />
 </template>

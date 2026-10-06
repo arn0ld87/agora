@@ -1,19 +1,20 @@
 <template>
-  <ShellRoot :current="selected" :active-objects="shelf.activeObjects.value" @select="onSelectTarget">
+  <ShelfLayout :current="selected" @select="onSelectTarget">
     <template #shelf>
       <Shelf :shelf="shelf" :selected="selected" @select="onSelectObject" @filter-change="onFilterChange" />
     </template>
     <template #dossier>
       <Dossier :object="selected" :shelf="shelf" />
     </template>
-  </ShellRoot>
+  </ShelfLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import ShellRoot from '../../components/shell/ShellRoot.vue'
+import { useShellStore } from '../../stores/shell'
+import ShelfLayout from '../../components/shell/ShelfLayout.vue'
 import Shelf from '../../components/shell/Shelf.vue'
 import Dossier from '../../components/shell/Dossier.vue'
 import { useShelf } from '../../composables/useShelf'
@@ -90,6 +91,12 @@ function onFilterChange(filter: ShelfFilter): void {
   shelf.filter.value = filter
   void router.replace({ name: route.name ?? 'Shelf', params: route.params, query: { ...route.query, filter } })
 }
+
+// Laufende Objekte in die Kopfleiste der Huelle melden (Aktivitaets-Indikator,
+// #1795). Beim Verlassen der Ablage wieder leeren, damit er nicht stehenbleibt.
+const shellStore = useShellStore()
+watch(shelf.activeObjects, (list) => (shellStore.activeObjects = list), { immediate: true })
+onBeforeUnmount(() => (shellStore.activeObjects = []))
 
 const polling = usePolling(() => shelf.reload(), 10000, { immediate: false })
 

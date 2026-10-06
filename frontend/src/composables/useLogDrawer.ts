@@ -3,7 +3,7 @@
  * (Issue #132, Redesign PR 2 — Slice "Chrome bereinigen").
  *
  * Singleton-Ref (module-scope) sorgt dafuer, dass App.vue (LogDrawer-Mount +
- * Hotkey-Listener) und die Kopfzeilen-Icons in Topbar.vue/ShellRoot.vue
+ * Hotkey-Listener) und die Kopfzeilen-Icons in Topbar.vue
  * denselben reaktiven Zustand teilen, ohne Pinia-Overhead — analog
  * useCommandPalette.ts.
  *

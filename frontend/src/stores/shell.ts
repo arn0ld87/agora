@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
+import type { ShelfObject } from '@/types/shelf'
 
 const KEYS = {
   sidebarCollapsed: 'agora.v4.shell.sidebarCollapsed',
@@ -37,6 +38,10 @@ export const useShellStore = defineStore('shell', () => {
   // Brotkrumen der aktuellen Ansicht (#1795): gesetzt ueber
   // useShellBreadcrumbs, gelesen von AppShell. Fluechtig, nie persistiert.
   const breadcrumbs = ref<BreadcrumbItem[]>([])
+
+  // Laufende Ablage-Objekte fuer den Aktivitaets-Indikator in der Kopfleiste
+  // (#1795): ShelfView meldet sie, ShelfActivity liest sie. Fluechtig.
+  const activeObjects = ref<ShelfObject[]>([])
 
   watch(sidebarCollapsed, (v) => writeBool(KEYS.sidebarCollapsed, v))
   watch(settingsGroupOpen, (v) => writeBool(KEYS.settingsGroupOpen, v))
@@ -80,6 +85,7 @@ export const useShellStore = defineStore('shell', () => {
     inspectorOpen,
     mobileNavOpen,
     breadcrumbs,
+    activeObjects,
     toggleSidebar,
     toggleSettingsGroup,
     toggleInspector,

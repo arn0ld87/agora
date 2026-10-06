@@ -12,7 +12,7 @@
  * direkt pauseSimulation()/resumeSimulation() aus src/api/simulation.ts.
  *
  * Singleton-State (Modul-Scope, analog useCommandPalette): der Undo-
- * Toast ist EIN globales Element (in ShellRoot.vue gerendert), egal ob
+ * Toast ist EIN globales Element (UndoToast.vue, in AppShell gerendert), egal ob
  * "Abbrechen" aus einer Ablage-Zeile, dem Dossier-Kopf oder dem
  * Aktivitaets-Indikator ausgeloest wurde.
  */

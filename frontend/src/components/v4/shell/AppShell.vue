@@ -53,7 +53,11 @@
          die statische Erklaerkarte bringt Banner + Inhalt schon selbst mit,
          ein zweiter Banner + grauer/inert-Slot waere doppelt und falsch
          (die Karte ist keine gesperrte Ansicht, sondern der Ersatz dafuer). -->
-    <main class="app-shell__main" :inert="shellStore.mobileNavOpen ? true : undefined">
+    <main
+      class="app-shell__main"
+      :class="{ 'app-shell__main--flush': route.meta?.layout === 'flush' }"
+      :inert="shellStore.mobileNavOpen ? true : undefined"
+    >
       <DemoPreviewFrame v-if="demoFrame">
         <slot />
       </DemoPreviewFrame>
@@ -67,6 +71,9 @@
 
     <!-- Command-Palette (global, rendered einmalig in Shell) -->
     <CommandPalette v-if="wasPaletteOpened" />
+
+    <!-- Undo-Toast fuer „Abbrechen“ (global, einmalig in der Huelle) -->
+    <UndoToast />
   </div>
 </template>
 
@@ -82,6 +89,7 @@ import { MOBILE_BREAKPOINT_PX } from '@/constants/breakpoints'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import DemoPreviewFrame from './DemoPreviewFrame.vue'
+import UndoToast from '@/components/shell/UndoToast.vue'
 
 // Async-Import: CommandPalette in eigenem Chunk → kein AppShell-Bundle-Overhead
 const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue'))
@@ -279,6 +287,14 @@ const activeSubRoute = computed<string>(() => {
 /* Backdrop: nur auf Mobile sichtbar */
 .app-shell__backdrop {
   display: none;
+}
+
+/* Randlose Flaeche (meta.layout 'flush', Ablage): die Ansicht liefert ihr
+   eigenes Raster und scrollt in den Spalten, nicht im Hauptbereich. Steht
+   nach dem Mobile-Block, damit er dessen Innenabstand ueberschreibt. */
+.app-shell__main--flush {
+  padding: 0;
+  overflow: hidden;
 }
 
 /* ── Mobile (< 768 px) ──────────────────────────────────────── */
