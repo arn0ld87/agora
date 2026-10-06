@@ -241,15 +241,33 @@ describe('Anmeldeseiten nutzen Themen-Tokens statt fester Dunkelwerte', () => {
   })
 })
 
-// Die Hülle füllt genau den Viewport: scrollt das Dokument (Hülle wächst mit
-// der Seitenleiste), springt der Fokus beim Tabben und die Tab-Reihenfolge-
-// Prüfung der e2e-Smokes meldet einen Sprung nach oben.
-describe('Hülle: feste Viewport-Höhe', () => {
+// Das Dokument scrollt, nicht der Hauptbereich: ein eigener Scrollbereich im
+// <main> lässt jeden Fokussprung beim Tabben als Sprung nach oben erscheinen
+// (Tab-Reihenfolge-Prüfung der e2e-Smokes). Seitenleiste und Kopfzeile bleiben
+// per sticky im Bild; die Seitenleiste füllt genau den Viewport.
+describe('Hülle: Dokument scrollt, Seitenleiste und Kopfzeile bleiben stehen', () => {
   const shell = readFileSync(resolve(here, '../../../components/v4/shell/AppShell.vue'), 'utf8')
-  const rule = shell.slice(shell.indexOf('.app-shell {'), shell.indexOf('}', shell.indexOf('.app-shell {')))
+  const rule = (selector: string): string => {
+    const start = shell.indexOf(`\n${selector} {`)
+    return shell.slice(start, shell.indexOf('}', start))
+  }
 
-  it('.app-shell ist so hoch wie der Viewport und lässt den Inhalt die Zeile nicht dehnen', () => {
-    expect(rule).toMatch(/height:\s*100dvh/)
-    expect(rule).toMatch(/grid-template-rows:[^;]*minmax\(0,\s*1fr\)/)
+  it('.app-shell wächst mit dem Inhalt (min-height) und ist kein Scroll-Container', () => {
+    const r = rule('.app-shell')
+    expect(r).toMatch(/min-height:\s*100dvh/)
+    expect(r).not.toMatch(/(^|[\s;])height:/)
+    expect(r).toMatch(/overflow:\s*clip/)
+  })
+
+  it('der Hauptbereich hat keinen eigenen Scrollbereich', () => {
+    expect(rule('.app-shell__main')).not.toMatch(/overflow:\s*(auto|scroll)/)
+  })
+
+  it('Seitenleiste und Kopfzeile sind sticky am oberen Rand', () => {
+    for (const sel of ['.app-shell__sidebar', '.app-shell__topbar']) {
+      expect(rule(sel), sel).toMatch(/position:\s*sticky/)
+      expect(rule(sel), sel).toMatch(/top:\s*0/)
+    }
+    expect(rule('.app-shell__sidebar')).toMatch(/height:\s*100dvh/)
   })
 })

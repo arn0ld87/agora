@@ -231,24 +231,25 @@ const activeSubRoute = computed<string>(() => {
 <style scoped>
 .app-shell {
   width: 100%;
-  /* Feste Viewport-Hoehe: Seitenleiste und Hauptbereich scrollen je fuer sich,
-     nie das Dokument. `height: 100%` lief ins Leere (#app hat nur min-height),
-     die Huelle wuchs mit der Seitenleiste und das Dokument scrollte; ein
-     Fokussprung scrollte dann die ganze Seite mit. */
-  height: 100vh;
-  height: 100dvh;
+  /* Das Dokument scrollt, nicht der Hauptbereich (wie vor dem Umbau): Die
+     Seitenleiste und die Kopfzeile bleiben per sticky im Bild. Ein eigener
+     Scrollbereich im Hauptbereich liesse jeden Fokussprung (Browser scrollt
+     zwischen zwei Tab-Stops) als Rueckwaertssprung in der Tab-Reihenfolge-
+     Pruefung erscheinen. `clip` statt `hidden`: kein Scroll-Container,
+     sticky bleibt wirksam. */
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   /* An --topbar-h gekoppelt: der Token schrumpft unter `pointer: coarse`
-     auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen.
-     minmax(0, 1fr): der Inhalt darf die Zeile nicht ueber den Viewport dehnen. */
-  grid-template-rows: var(--topbar-h, 64px) minmax(0, 1fr);
+     auf 56px. Eine feste Zeile liesse dort einen leeren Streifen stehen. */
+  grid-template-rows: var(--topbar-h, 64px) 1fr;
   background: var(--surface-canvas);
-  overflow: hidden;
+  overflow: clip;
 }
 
 .app-shell--inspector-open {
-  grid-template-columns: auto 1fr 360px;
+  grid-template-columns: auto minmax(0, 1fr) 360px;
 }
 
 .app-shell__sidebar {
@@ -257,12 +258,22 @@ const activeSubRoute = computed<string>(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Bleibt beim Scrollen der Seite stehen und fuellt genau den Viewport. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .app-shell__topbar {
   grid-row: 1;
   grid-column: 2;
   min-width: 0;
+  /* Werkzeugleiste bleibt oben stehen, auch wenn die Seite scrollt. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .app-shell--inspector-open .app-shell__topbar {
@@ -272,7 +283,6 @@ const activeSubRoute = computed<string>(() => {
 .app-shell__main {
   grid-row: 2;
   grid-column: 2;
-  overflow: auto;
   padding: 28px 36px;
   min-width: 0;
 }
@@ -284,6 +294,11 @@ const activeSubRoute = computed<string>(() => {
 .app-shell__inspector {
   grid-row: 1 / 3;
   grid-column: 3;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
   width: 360px;
   border-left: 1px solid var(--hairline);
   background: var(--surface-base);
@@ -301,6 +316,9 @@ const activeSubRoute = computed<string>(() => {
 .app-shell__main--flush {
   padding: 0;
   overflow: hidden;
+  /* Das Raster der Ansicht rechnet mit height: 100% und braucht eine feste Hoehe. */
+  height: calc(100vh - var(--topbar-h, 64px));
+  height: calc(100dvh - var(--topbar-h, 64px));
 }
 
 /* ── Mobile (< 768 px) ──────────────────────────────────────── */
@@ -308,8 +326,8 @@ const activeSubRoute = computed<string>(() => {
    max-width: 767px bildet "< 768" ab (Slice 7.3.2, Breakpoint-Vereinheitlichung). */
 @media (max-width: 767px) {
   .app-shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: 56px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 56px 1fr;
   }
 
   /* Inspector als Full-Screen-Overlay auf Mobile */
@@ -325,6 +343,8 @@ const activeSubRoute = computed<string>(() => {
     z-index: 50;
     grid-row: unset;
     grid-column: unset;
+    height: auto;
+    align-self: stretch;
     transform: translateX(-100%);
     transition: transform var(--v4-state-motion-duration-base) var(--v4-state-motion-ease);
     /* Erzwingt volle Sidebar-Breite im Mobile-Drawer, auch wenn Desktop-Collapsed-State
@@ -357,6 +377,11 @@ const activeSubRoute = computed<string>(() => {
     padding: 16px;
   }
 
+  .app-shell__main--flush {
+    padding: 0;
+    height: calc(100dvh - 56px);
+  }
+
   .app-shell--inspector-open .app-shell__main {
     grid-column: 1;
   }
@@ -367,6 +392,8 @@ const activeSubRoute = computed<string>(() => {
     inset: 0;
     z-index: 60;
     width: 100%;
+    height: auto;
+    align-self: stretch;
     border-left: none;
     grid-row: unset;
     grid-column: unset;
