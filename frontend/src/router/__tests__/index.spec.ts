@@ -739,11 +739,13 @@ describe('Router – Etappe 3 Einstellungsfenster (#1799)', () => {
 
   it('Zugangsregel je Abschnitt: Abschnitte mit requiresAuth schicken ohne Token auf die Bibliothek', async () => {
     vi.mocked(getAgoraToken).mockReturnValue('')
-    for (const section of ['providers', 'profiles', 'embedding', 'access']) {
+    for (const section of ['providers', 'profiles', 'embedding']) {
       await pushAndSettle(`/settings/${section}`)
       expect(router.currentRoute.value.name, section).toBe('LibraryRuns')
     }
-    for (const section of ['general', 'appearance', 'pipeline', 'budgets', 'system']) {
+    // „Zugang" verlangt kein Token mehr: „Konto" war schon vorher ohne Token
+    // erreichbar, Schlüssel und Audit-Protokoll sperrt der Abschnitt selbst.
+    for (const section of ['general', 'appearance', 'pipeline', 'budgets', 'system', 'access']) {
       await pushAndSettle(`/settings/${section}`)
       expect(router.currentRoute.value.meta.settingsWindow, section).toBe(true)
     }

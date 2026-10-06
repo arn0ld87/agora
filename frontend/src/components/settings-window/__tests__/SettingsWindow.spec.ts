@@ -126,7 +126,10 @@ describe('SettingsWindow', () => {
 
   it('Budgets zeigt den eigenen Inhalt statt des Platzhalters', async () => {
     await mountWindow('/settings/budgets')
-    expect(q('.sw__content')?.textContent).toContain('Diese Standardgrenzen gelten nur für neue Läufe')
+    // Der Abschnitt wird nachgeladen; flushPromises reicht dafür nicht sicher.
+    await vi.waitFor(() =>
+      expect(q('.sw__content')?.textContent).toContain('Diese Standardgrenzen gelten nur für neue Läufe'),
+    )
     expect(q('.sw__content')?.textContent).not.toContain('kommt in dieser Etappe')
   })
 
