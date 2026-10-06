@@ -43,6 +43,11 @@ import type { LlmRoute } from '@/contracts/llmRoute'
 import type { ProviderProbeStatus } from '@/contracts/aiProviderContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 
+const props = withDefaults(defineProps<{
+  /** Im Einstellungsfenster eingebettet: kein eigener Seitenkopf (der Fensterkopf nennt den Abschnitt). */
+  embedded?: boolean
+}>(), { embedded: false })
+
 const { t } = useI18n()
 
 const providersStore = useLlmProvidersStore()
@@ -100,6 +105,24 @@ function isSessionAuth(p: ProviderDescriptor): boolean {
   return (connection?.auth_mode ?? p.auth_mode) === 'session'
 }
 
+function transportLabel(p: ProviderDescriptor): string {
+  const connection = providersStore.connections[p.id]
+  const transport = connection?.transport ?? p.transport ?? 'http'
+  return t(`views.settingsWindow.providers.transports.${transport}`)
+}
+
+/**
+ * Schlüsselzustand ohne Schlüsselmaterial: der Vertrag liefert nie einen
+ * Schlüssel zurück, nur den Verbindungszustand — angezeigt wird er nie.
+ */
+function keyStateLabel(p: ProviderDescriptor): string {
+  if (isOllama(p)) return t('views.settingsWindow.providers.keyNone')
+  if (isSessionAuth(p)) return t('views.settingsWindow.providers.keySession')
+  return isConfigured(p)
+    ? t('views.settingsWindow.providers.keyStored')
+    : t('views.settingsWindow.providers.keyMissing')
+}
+
 function statusTone(p: ProviderDescriptor): 'gray' | 'green' | 'orange' | 'red' {
   if (isUnsupported(p)) return 'gray'
   const connection = providersStore.connections[p.id]
@@ -155,7 +178,8 @@ const busyAction = reactive<Record<string, BusyAction | undefined>>({})
 async function save(p: ProviderDescriptor): Promise<void> {
   if (isUnsupported(p)) return
   const draft = ensureDraft(p)
-  const baseUrl = draft.baseUrl.trim()
+  // #1418/#1422: eine CLI-Route kennt keinen HTTP-Endpunkt; nie eine URL mitschicken.
+  const baseUrl = isCliTransport(p) ? '' : draft.baseUrl.trim()
   const apiKey = draft.apiKey.trim()
   busyAction[p.id] = 'save'
   try {
@@ -260,6 +284,7 @@ onBeforeUnmount(() => {
 <template>
   <SettingsOverlay>
     <PageHeader
+      v-if="!props.embedded"
       :title="t('settings.v4.llmProviders.title', 'LLM-Provider')"
       :subtitle="t('settings.v4.llmProviders.subtitle', 'Hinterlege API-Schlüssel, ziehe Modelle und wähle pro Schritt das passende Modell aus.')"
     />
@@ -316,6 +341,17 @@ onBeforeUnmount(() => {
           <h3 class="llm-provider-detail__title">{{ selectedProvider.label }}</h3>
           <p v-if="selectedProvider.base_url" class="llm-provider-detail__subtitle">{{ selectedProvider.base_url }}</p>
         </div>
+
+        <dl class="llm-provider-facts" data-testid="provider-facts">
+          <div>
+            <dt>{{ t('views.settingsWindow.providers.transport') }}</dt>
+            <dd data-testid="provider-transport">{{ transportLabel(selectedProvider) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('views.settingsWindow.providers.key') }}</dt>
+            <dd data-testid="provider-key-state">{{ keyStateLabel(selectedProvider) }}</dd>
+          </div>
+        </dl>
 
         <p
           v-if="isUnsupported(selectedProvider)"
@@ -531,6 +567,22 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: var(--fs-mono);
   color: var(--text-tertiary);
+}
+
+.llm-provider-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+  margin: 0;
+  font-size: var(--fs-small);
+}
+.llm-provider-facts dt {
+  font-size: var(--fs-label);
+  color: var(--text-secondary);
+}
+.llm-provider-facts dd {
+  margin: 2px 0 0;
+  color: var(--text-primary);
 }
 
 .llm-unsupported-notice,

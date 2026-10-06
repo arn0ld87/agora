@@ -2054,6 +2054,31 @@
         "budgets": "Budgets",
         "access": "Zugang",
         "system": "System"
+      },
+      "providers": {
+        "managementTitle": "Anbieterverwaltung",
+        "managementDescription": "Verbindung, Transportart, Zustand und verfügbare Modelle je Anbieter.",
+        "managementLocked": "Die Anbieterverwaltung gehört dem Betreiber und ist für diese Anmeldung gesperrt. Eigene Schlüssel kannst du unten hinterlegen.",
+        "keysTitle": "Eigene Schlüssel",
+        "keysDescription": "Gelten nur für den aktiven Workspace. Gespeicherte Schlüssel werden nie erneut angezeigt.",
+        "transport": "Transportart",
+        "key": "Schlüssel",
+        "keyStored": "Hinterlegt (wird nicht angezeigt)",
+        "keyMissing": "Nicht hinterlegt",
+        "keyNone": "Nicht nötig (lokaler Dienst)",
+        "keySession": "Anmeldung über die lokale CLI-Session",
+        "transports": {
+          "http": "HTTP",
+          "local": "Lokaler Dienst",
+          "cli": "CLI"
+        }
+      },
+      "profiles": {
+        "modelsTitle": "Modell-Profile",
+        "modelsDescription": "Ein Profil ist ein gespeichertes Modell; eines davon ist der Standard.",
+        "stagesTitle": "Standardmodell je Stufe",
+        "stagesDescription": "Welches Modell Graph, Personas, Simulation und Bericht standardmäßig nutzen.",
+        "valuesTitle": "Technische Werte (LLM)"
       }
     },
     "history": {

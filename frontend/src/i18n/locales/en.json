@@ -2054,6 +2054,31 @@
         "budgets": "Budgets",
         "access": "Access",
         "system": "System"
+      },
+      "providers": {
+        "managementTitle": "Provider management",
+        "managementDescription": "Connection, transport, state and available models per provider.",
+        "managementLocked": "Provider management belongs to the operator and is locked for this sign-in. You can store your own keys below.",
+        "keysTitle": "Own keys",
+        "keysDescription": "They apply to the active workspace only. Stored keys are never shown again.",
+        "transport": "Transport",
+        "key": "Key",
+        "keyStored": "Stored (not displayed)",
+        "keyMissing": "Not stored",
+        "keyNone": "Not needed (local service)",
+        "keySession": "Sign-in via the local CLI session",
+        "transports": {
+          "http": "HTTP",
+          "local": "Local service",
+          "cli": "CLI"
+        }
+      },
+      "profiles": {
+        "modelsTitle": "Model profiles",
+        "modelsDescription": "A profile is one saved model; one of them is the default.",
+        "stagesTitle": "Default model per stage",
+        "stagesDescription": "Which model graph, personas, simulation and report use by default.",
+        "valuesTitle": "Technical values (LLM)"
       }
     },
     "history": {

@@ -18,10 +18,14 @@ import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
-import LlmProfileManager from '@/components/v4/forms/LlmProfileManager.vue'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 import { GENERAL_SETTINGS_SECTIONS } from './settingsSections'
+
+const props = withDefaults(defineProps<{
+  /** Im Einstellungsfenster eingebettet: kein eigener Seitenkopf. */
+  embedded?: boolean
+}>(), { embedded: false })
 
 const { t } = useI18n()
 
@@ -49,11 +53,11 @@ async function setWorkspaceDefault(aiRef: AiModelRef | null): Promise<void> {
 <template>
   <SettingsOverlay>
     <PageHeader
+      v-if="!props.embedded"
       :title="t('settings.v4.general.title')"
       :subtitle="t('settings.v4.general.subtitle')"
     />
 
-    <LlmProfileManager style="margin-bottom: 16px;" />
     <section class="settings-general__model-picker">
       <label for="settings-general-model-picker">{{ t('settings.v4.general.workspaceDefaultModel') }}</label>
       <AiModelPicker
