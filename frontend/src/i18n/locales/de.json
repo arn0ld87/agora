@@ -2229,7 +2229,140 @@
       }
     },
     "graphLibrary": {
-      "title": "Graph"
+      "title": "Graph",
+      "errors": {
+        "unknown": "Unbekannter Fehler beim Laden.",
+        "schema": "Die Antwort des Servers hat nicht das erwartete Format.",
+        "graphData": "Die Graphdaten konnten nicht geladen werden.",
+        "project": "Der Graph konnte nicht geladen werden.",
+        "run": "Der Lauf konnte nicht geladen werden.",
+        "runs": "Die Läufe dieses Graphen konnten nicht geladen werden.",
+        "runsPartial": "{n} Läufe in der Antwort waren unlesbar und werden nicht angezeigt."
+      },
+      "runStatus": {
+        "created": "Angelegt",
+        "preparing": "Wird vorbereitet",
+        "ready": "Bereit",
+        "idle": "Wartet",
+        "starting": "Startet",
+        "running": "Läuft",
+        "paused": "Pausiert",
+        "stopping": "Wird gestoppt",
+        "stopped": "Abgebrochen",
+        "completed": "Fertig",
+        "failed": "Gescheitert"
+      },
+      "state": {
+        "loading": "Graph wird geladen …",
+        "errorTitle": "Der Graph konnte nicht geladen werden",
+        "retry": "Erneut versuchen",
+        "noGraphTitle": "Es liegt kein Graph vor",
+        "notBuilt": "Der Graph wurde noch nicht gebaut oder der Lauf wurde ohne Graph angelegt.",
+        "failed": "Der Aufbau des Graphen ist fehlgeschlagen.",
+        "openBuild": "Build-Ansicht öffnen",
+        "buildingTitle": "Der Graph wird gerade gebaut",
+        "buildingNoProgress": "Ein Fortschritt liegt noch nicht vor.",
+        "incomplete": "Der Aufbau wurde abgebrochen. Dies ist ein Teilgraph und keine Grundlage für weitere Läufe."
+      },
+      "run": {
+        "title": "Graph",
+        "openInLibrary": "In Bibliothek öffnen"
+      },
+      "detail": {
+        "newRun": "Neuer Lauf auf diesem Graphen",
+        "newRunUnavailable": "Ein neuer Lauf ist erst möglich, wenn der Graph vollständig gebaut ist.",
+        "runsTitle": "Läufe auf diesem Graphen",
+        "runsLoading": "Läufe werden geladen …",
+        "runsEmpty": "Auf diesem Graphen läuft noch kein Lauf."
+      },
+      "library": {
+        "loading": "Graphen werden geladen …",
+        "errorTitle": "Die Graphen konnten nicht geladen werden",
+        "empty": "Noch kein Graph vorhanden. Ein Graph entsteht, sobald ein Lauf aus einer Quelle angelegt wird.",
+        "rejected": "{n} Graphen in der Antwort waren unlesbar und werden nicht angezeigt.",
+        "runsUnavailable": "Die Zahl der Läufe konnte nicht geladen werden.",
+        "runsUnknown": "Läufe unbekannt",
+        "runs": "{n} Läufe",
+        "runsOne": "1 Lauf",
+        "moreSources": "+ {n} weitere"
+      },
+      "reader": {
+        "label": "Graph lesen",
+        "counts": "{entities} Entitäten · {relations} Beziehungen",
+        "targetMissing": "Das angefragte Ziel ist in diesem Graphen nicht enthalten.",
+        "export": {
+          "graphml": "Als GraphML exportieren",
+          "running": "Export läuft …",
+          "failed": "Der Export ist fehlgeschlagen."
+        },
+        "search": {
+          "label": "Entität suchen",
+          "placeholder": "Name oder Alias"
+        },
+        "types": {
+          "label": "Typfilter",
+          "title": "Typen",
+          "clear": "Alle Typen"
+        },
+        "list": {
+          "title": "Entitäten",
+          "empty": "Keine Entität passt zu Suche und Filter.",
+          "capped": "Die ersten {shown} von {total} Entitäten. Suche oder Filter eingrenzen."
+        },
+        "view": {
+          "label": "Darstellung",
+          "net": "Netz",
+          "table": "Tabelle"
+        },
+        "net": {
+          "hint": "Klick auf einen Knoten oder eine Beziehung zeigt Einzelheiten rechts."
+        },
+        "tabs": {
+          "label": "Tabelle",
+          "entities": "Entitäten",
+          "relations": "Beziehungen"
+        },
+        "table": {
+          "captionEntities": "Entitäten des Graphen",
+          "captionRelations": "Beziehungen des Graphen",
+          "emptyEntities": "Keine Entität passt zu Suche und Filter.",
+          "emptyRelations": "Keine Beziehung passt zu Suche und Filter.",
+          "capped": "Die ersten {shown} von {total} Zeilen. Suche oder Filter eingrenzen.",
+          "entity": {
+            "name": "Name",
+            "type": "Typ",
+            "degree": "Beziehungen",
+            "createdAt": "Angelegt"
+          },
+          "relation": {
+            "from": "Von",
+            "label": "Beziehung",
+            "to": "Zu",
+            "episodes": "Quellenfragmente"
+          }
+        },
+        "detail": {
+          "label": "Details",
+          "none": "Wähle eine Entität oder eine Beziehung, um Einzelheiten zu sehen.",
+          "aliases": "Aliase",
+          "description": "Beschreibung",
+          "attributes": "Attribute",
+          "relations": "Beziehungen ({n})",
+          "noRelations": "Diese Entität hat keine Beziehungen.",
+          "outgoing": "ausgehend",
+          "incoming": "eingehend",
+          "origin": "Herkunft",
+          "episodes": "Belegt durch {n} Quellenfragmente",
+          "created": "Angelegt: {date}",
+          "noDocument": "Dokument und Abschnitt sind in den Graphdaten nicht hinterlegt.",
+          "unnamedRelation": "Beziehung ohne Namen",
+          "relationKind": "Beziehung",
+          "between": "Zwischen",
+          "from": "Von",
+          "to": "Zu",
+          "fact": "Aussage"
+        }
+      }
     },
     "activity": {
       "title": "Aktivität",
