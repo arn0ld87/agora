@@ -138,10 +138,20 @@ describe('alte Token-Namen → neue Tokens (#1795, Ticket 2)', () => {
       '../../../components/v4/shell/SidebarItem.vue',
       '../../../components/v4/shell/Topbar.vue',
     ]
+    // Kommentare im Template zählen nicht. Abschnittsweise statt per Regex,
+    // damit kein halb entfernter Kommentar stehen bleiben kann.
+    const withoutHtmlComments = (text: string): string =>
+      text
+        .split('<!--')
+        .map((part, i) => {
+          if (i === 0) return part
+          const end = part.indexOf('-->')
+          return end === -1 ? '' : part.slice(end + 3)
+        })
+        .join('')
     for (const f of files) {
-      const src = readFileSync(resolve(here, f), 'utf8')
+      const src = withoutHtmlComments(readFileSync(resolve(here, f), 'utf8'))
         .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/^\s*\/\/.*$/gm, '')
       expect(src, f).not.toMatch(/#[0-9a-fA-F]{6}\b|#(?:[0-9a-fA-F]{3})\b(?!\d)|\brgba?\(|\bhsla?\(/)
     }
