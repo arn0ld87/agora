@@ -1,0 +1,3 @@
+### Added
+
+- Standardbudget als Einstellung: Neben dem Standard-Tokendeckel lassen sich im neuen Abschnitt „Budgets“ der Einstellungen Standardgrenzen für Kosten (Mikro-USD), Laufzeit (Sekunden) und Modellaufrufe sowie die Durchsetzung `soft`/`hard` festlegen (`AGORA_SIM_DEFAULT_MAX_COST_MICROS`, `AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS`, `AGORA_SIM_DEFAULT_MAX_LLM_CALLS`, `AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT`; `0` = kein Limit). Sie greifen bei jedem Simulationsstart ohne eigenes Budget; mit den Defaults bleibt es beim harten Tokendeckel von 20 Mio. `AGORA_SIM_DEFAULT_MAX_TOKENS` ist vom Abschnitt „OASIS“ in „Budgets“ umgezogen.

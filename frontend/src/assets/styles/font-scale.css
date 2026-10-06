@@ -1,0 +1,22 @@
+/* Schriftgröße der Oberfläche (#1799, Etappe 3). Gesetzt von
+   composables/settings-window/useFontSize.ts über data-font-size am
+   Wurzelelement. 'normal' ändert nichts (Werte aus tokens-v3.css). */
+[data-font-size="small"] {
+  --fs-title:   18.5px;
+  --fs-heading: 15px;
+  --fs-body:    13px;
+  --fs-small:   11.5px;
+  --fs-label:   10.5px;
+  --fs-prose:   16px;
+  --fs-mono:    11px;
+}
+
+[data-font-size="large"] {
+  --fs-title:   23px;
+  --fs-heading: 18px;
+  --fs-body:    16px;
+  --fs-small:   14.5px;
+  --fs-label:   13px;
+  --fs-prose:   19.5px;
+  --fs-mono:    13.5px;
+}

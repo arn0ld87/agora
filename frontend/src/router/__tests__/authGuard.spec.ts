@@ -41,7 +41,8 @@ vi.mock('../../views/library/LibraryGraphsView.vue', () => VIEW_STUB)
 vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsApiKeysView.vue', () => VIEW_STUB)
-vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
+// /settings/general zeigt seit Etappe 3 (#1799) das Einstellungsfenster.
+vi.mock('../../components/settings-window/SettingsWindow.vue', () => VIEW_STUB)
 vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
 vi.mock('../../views/auth/LoginView.vue', () => VIEW_STUB)
 vi.mock('../../views/auth/RegisterView.vue', () => VIEW_STUB)
@@ -75,7 +76,7 @@ describe('Legacy-Modus (JWT aus)', () => {
   })
 
   it('leitet requiresAuth-Routen ohne Token wie bisher auf die Startseite (Bibliothek)', async () => {
-    await go('/settings/api-keys')
+    await go('/settings/providers')
     expect(router.currentRoute.value.name).toBe('LibraryRuns')
     expect(router.currentRoute.value.query.authRequired).toBe('1')
   })
@@ -127,7 +128,7 @@ describe('Betreiber-Routen im JWT-Modus', () => {
     fakeAuth.isAuthenticated = true
   })
 
-  it.each(['/settings/general', '/settings/api-keys', '/onboarding'])(
+  it.each(['/settings/general', '/settings/access', '/onboarding'])(
     'laesst Besucher mit Session auf %s (Demo-Vorschau statt Redirect)',
     async (path) => {
       // Im echten Store impliziert operatorAccess=false immer eine Session

@@ -19,16 +19,44 @@ const api = vi.hoisted(() => ({
   getRun: vi.fn(),
   listReports: vi.fn(),
   getReportEvidence: vi.fn(),
+  getRunLlmRouting: vi.fn(),
+  getRoutingDefaults: vi.fn(),
+  generateReport: vi.fn(),
 }))
 vi.mock('@/api/simulation', () => ({ getSimulation: api.getSimulation }))
 vi.mock('@/api/graph', () => ({ getProject: api.getProject }))
 vi.mock('@/api/runs', () => ({ listRuns: api.listRuns, getRun: api.getRun }))
-vi.mock('@/api/report', () => ({ listReports: api.listReports, getReportEvidence: api.getReportEvidence }))
+vi.mock('@/api/report', () => ({
+  listReports: api.listReports,
+  getReportEvidence: api.getReportEvidence,
+  generateReport: api.generateReport,
+}))
+vi.mock('@/api/llmRouting', async (orig) => ({
+  ...(await orig<typeof import('@/api/llmRouting')>()),
+  getRunLlmRouting: api.getRunLlmRouting,
+}))
+vi.mock('@/api/llmRoutingDefaults', async (orig) => ({
+  ...(await orig<typeof import('@/api/llmRoutingDefaults')>()),
+  getRoutingDefaults: api.getRoutingDefaults,
+}))
 
+import { PENDING_RUN_PARAMS_PREFIX, writePendingRunParams } from '@/composables/new-run/pendingRunParams'
 import RunWorkspaceView from '../RunWorkspaceView.vue'
 import RunOverviewView from '../RunOverviewView.vue'
 
 const Stub = defineComponent({ render: () => h('div') })
+const PickerStub = defineComponent({
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  setup(_p, { emit }) {
+    return () =>
+      h('button', {
+        type: 'button',
+        'data-testid': 'picker-stub',
+        onClick: () => emit('update:modelValue', { provider_connection_id: 'conn-x', model_id: 'neu-modell', source: 'explicit' }),
+      }, 'pick')
+  },
+})
 const MonitorStub = defineComponent({ props: ['runId', 'status', 'terminationReason'], render: () => h('div', { 'data-testid': 'monitor-stub' }) })
 
 function makeRouter() {
@@ -93,6 +121,19 @@ function arrange({ projectId = 'proj_1', jobs = [], reports = [] }: Setup = {}) 
   })
   api.listReports.mockResolvedValue({ success: true, data: reports })
   api.getReportEvidence.mockResolvedValue({ success: true, data: {} })
+  const stageOf: Record<string, string> = {
+    graph_build: 'graph_build', simulation_prepare: 'persona_generation',
+    simulation_run: 'simulation_rounds', report_generate: 'report_generation',
+  }
+  api.getRunLlmRouting.mockImplementation(async (id: string) => {
+    const j = jobs.find((x) => x.run_id === id)
+    const stage = stageOf[j?.run_type ?? ''] ?? 'x'
+    return { snapshots: { [stage]: { stage, provider_id: 'prov-1', model: `snap-${j?.run_type}`, routing_version: 1 } } }
+  })
+  api.getRoutingDefaults.mockResolvedValue({
+    global_default: { provider_id: 'prov-d', model: 'std-global', reasoning_effort: 'none', provider_options: {} },
+    stage_overrides: {}, routing_version: 1, updated_at: 'x',
+  })
 }
 
 async function mountAt(path = '/simulations/sim_1') {
@@ -100,7 +141,7 @@ async function mountAt(path = '/simulations/sim_1') {
   await router.push(path)
   const wrapper = mount(
     defineComponent({ render: () => h(RouterView) }),
-    { global: { plugins: [createPinia(), i18n, router], stubs: { RunResourceMonitor: MonitorStub } } },
+    { global: { plugins: [createPinia(), i18n, router], stubs: { RunResourceMonitor: MonitorStub, AiModelPicker: PickerStub } } },
   )
   await flushPromises()
   await flushPromises()
@@ -164,7 +205,34 @@ describe('RunOverviewView: Stufen', () => {
     }
     expect(wrapper.get('[data-testid="stage-next-graph"]').attributes('href')).toBe('/simulations/sim_1/graph')
     expect(wrapper.get('[data-testid="stage-next-report"]').attributes('href')).toBe('/v4/report/report_1')
-    expect(wrapper.get('[data-testid="stage-model-graph"]').text()).toBe('gpt-5.1')
+    expect(wrapper.get('[data-testid="stage-model-graph"]').text()).toContain('snap-graph_build')
+  })
+
+  describe('Startparameter aus dem Startdialog (#1799)', () => {
+    beforeEach(() => window.sessionStorage.clear())
+
+    it('mit vorgemerktem Eintrag trägt der Startlink Runden und Tage', async () => {
+      writePendingRunParams('sim_1', { maxRounds: 10, simulationDays: 2, budget: null })
+      arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
+      const { wrapper } = await mountAt()
+      const href = wrapper.get('[data-testid="stage-next-simulation"]').attributes('href') ?? ''
+      expect(href.startsWith('/v4/simulation/sim_1?')).toBe(true)
+      expect(href).toContain('maxRounds=10')
+      expect(href).toContain('simulationDays=2')
+    })
+
+    it('ohne Eintrag bleibt der Startlink ohne Query', async () => {
+      arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
+      const { wrapper } = await mountAt()
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/v4/simulation/sim_1')
+    })
+
+    it('ein beschädigter Eintrag wird ignoriert', async () => {
+      window.sessionStorage.setItem(`${PENDING_RUN_PARAMS_PREFIX}sim_1`, '{"maxRounds":"viele"')
+      arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
+      const { wrapper } = await mountAt()
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/v4/simulation/sim_1')
+    })
   })
 
   it('Verbrauch kommt aus dem Ledger, Fehlendes steht als "nicht erfasst"', async () => {
@@ -253,5 +321,111 @@ describe('RunWorkspaceView: Laden und Fehler', () => {
     api.listReports.mockResolvedValue({ success: true, data: [{ report_id: 'x' }] })
     const { wrapper } = await mountAt()
     expect(wrapper.get('[data-testid="run-error"]').text()).toContain('Vertragsbruch')
+  })
+})
+
+describe('RunOverviewView: Modell je Stufe (#1799)', () => {
+  const model = (w: { get: (s: string) => { text: () => string } }, k: string) => w.get(`[data-testid="stage-model-${k}"]`).text()
+
+  it('Snapshot gewinnt vor summary.model; Berichtszeile zeigt das Berichtsmodell', async () => {
+    arrange({
+      jobs: [runDetail('simulation_run'), runDetail('report_generate')],
+      reports: [report()],
+    })
+    const { wrapper } = await mountAt()
+    expect(model(wrapper, 'simulation')).toContain('snap-simulation_run')
+    expect(model(wrapper, 'simulation')).toContain('prov-1')
+    expect(model(wrapper, 'report')).toContain('snap-report_generate')
+    expect(model(wrapper, 'report')).not.toContain('gpt-5.1')
+  })
+
+  it('fällt ohne Snapshot auf usage.by_model zurück und zeigt alle Modelle', async () => {
+    arrange({ jobs: [runDetail('simulation_run')] })
+    api.getRunLlmRouting.mockResolvedValue({ snapshots: {} })
+    api.getRun.mockResolvedValue({
+      success: true,
+      data: { ...runDetail('simulation_run'), usage: { totals: { total_tokens: 1, cost_micros: 1, duration_ms: 1 }, by_model: { 'm-a': {}, 'm-b': {} } } },
+    })
+    const { wrapper } = await mountAt()
+    const text = model(wrapper, 'simulation')
+    expect(text).toContain('m-a')
+    expect(text).toContain('m-b')
+    expect(text).not.toContain('gpt-5.1')
+  })
+
+  it('Ladefehler des Snapshots fällt sichtbar auf den Rückfall und wird geloggt', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    arrange({ jobs: [runDetail('simulation_run')] })
+    api.getRunLlmRouting.mockRejectedValue(new Error('boom'))
+    const { wrapper } = await mountAt()
+    expect(model(wrapper, 'simulation')).toContain('nicht erfasst')
+    expect(wrapper.get('[data-testid="stage-model-error-simulation"]').text()).toContain('konnte nicht geladen werden')
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('Interviews bleiben "nicht erfasst"', async () => {
+    arrange({ jobs: [runDetail('simulation_run')] })
+    const { wrapper } = await mountAt()
+    expect(model(wrapper, 'interviews')).toBe('nicht erfasst')
+  })
+
+  it('Stufe ohne Job zeigt "Standard: <Modell>" mit Hilfetext und nennt es am Startknopf', async () => {
+    arrange({ jobs: [] })
+    const { wrapper } = await mountAt()
+    const cell = wrapper.get('[data-testid="stage-model-personas"]')
+    expect(cell.text()).toContain('Standard: std-global')
+    expect(cell.find('[data-testid="stage-model-default-personas"]').attributes('title')).toContain('gilt, wenn beim Start nichts anderes gewählt wird')
+    const start = wrapper.get('[data-testid="stage-next-personas"]')
+    expect(start.text()).toContain('mit std-global')
+    expect(start.attributes('aria-label')).toContain('mit std-global')
+  })
+})
+
+describe('RunOverviewView: Bericht neu erzeugen', () => {
+  it('erscheint nur in der Berichtszeile und sendet ai_model_ref + force_regenerate', async () => {
+    arrange({ jobs: [runDetail('simulation_run')], reports: [report()] })
+    api.generateReport.mockResolvedValue({ success: true, data: {} })
+    const { wrapper } = await mountAt()
+    expect(wrapper.findAll('[data-testid^="stage-regenerate-"]').map((e) => e.attributes('data-testid'))).toEqual(['stage-regenerate-report'])
+    await wrapper.get('[data-testid="stage-regenerate-report"]').trigger('click')
+    await flushPromises()
+    const body = document.body
+    expect(body.textContent).toContain('Legt eine weitere Fassung an. Bestehende Fassungen bleiben erhalten.')
+    ;(body.querySelector('[data-testid="picker-stub"]') as HTMLElement).click()
+    await flushPromises()
+    ;(body.querySelector('[data-testid="regenerate-confirm"]') as HTMLElement).click()
+    await flushPromises()
+    expect(api.generateReport).toHaveBeenCalledWith({
+      simulation_id: 'sim_1',
+      force_regenerate: true,
+      ai_model_ref: { provider_connection_id: 'conn-x', model_id: 'neu-modell', source: 'explicit' },
+    })
+    wrapper.unmount()
+  })
+
+  it('zeigt Fehler sichtbar und lässt den Dialog offen', async () => {
+    arrange({ jobs: [runDetail('simulation_run')], reports: [report()] })
+    api.generateReport.mockResolvedValue({ success: false, error: 'Rate-Limit erreicht' })
+    const { wrapper } = await mountAt()
+    await wrapper.get('[data-testid="stage-regenerate-report"]').trigger('click')
+    await flushPromises()
+    ;(document.body.querySelector('[data-testid="picker-stub"]') as HTMLElement).click()
+    await flushPromises()
+    ;(document.body.querySelector('[data-testid="regenerate-confirm"]') as HTMLElement).click()
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="regenerate-error"]')?.textContent).toContain('Rate-Limit erreicht')
+    wrapper.unmount()
+  })
+
+  it('fehlt ohne Bericht und bei laufendem Berichtsjob', async () => {
+    arrange({ jobs: [runDetail('simulation_run')] })
+    let { wrapper } = await mountAt()
+    expect(wrapper.find('[data-testid="stage-regenerate-report"]').exists()).toBe(false)
+    wrapper.unmount()
+    arrange({ jobs: [runDetail('simulation_run'), runDetail('report_generate', { status: 'processing', completed_at: null })], reports: [report()] })
+    ;({ wrapper } = await mountAt())
+    expect(wrapper.find('[data-testid="stage-regenerate-report"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

@@ -235,9 +235,29 @@ describe('Sidebar', () => {
     expect(byLabel['!Braucht dich']).toBe('/library/runs?view=attention')
     expect(byLabel['≡Aktivität']).toBe('/activity/jobs')
     expect(byLabel['⇄Vergleich']).toBe('/compare')
-    // System: bis zum Einstellungsfenster (Etappe 3) die Allgemein-Einstellungen
-    // (das Dashboard mit der Systemzustands-Karte entfaellt).
-    expect(byLabel['System' + 'Alle Dienste erreichbar']).toBe('/settings/general')
+    // System und Einstellungen oeffnen das Einstellungsfenster (Etappe 3, #1799).
+    expect(byLabel['System' + 'Alle Dienste erreichbar']).toBe('/settings/system')
+    expect(byLabel['Einstellungen']).toBe('/settings/general')
+  })
+
+  it('hat genau eine Zeile "Einstellungen" ohne Unterpunkte und Gruppe (#1799)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const rows = wrapper.findAll('a.sidebar-item').filter((a) => a.text() === 'Einstellungen')
+    expect(rows).toHaveLength(1)
+    expect(wrapper.find('.sidebar-group').exists()).toBe(false)
+    expect(wrapper.findAll('.sidebar-sub-item')).toHaveLength(0)
+  })
+
+  it('die Zeile "Einstellungen" ist auf einer Fenster-Adresse aktiv und traegt aria-current (#1799)', async () => {
+    await router.push('/settings/appearance')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const row = wrapper.findAll('a.sidebar-item').find((a) => a.text() === 'Einstellungen')
+    expect(row?.attributes('aria-current')).toBe('page')
   })
 
   it('DOM-Reihenfolge der Seitenleiste entspricht der Sichtreihenfolge (Bauplan 3.1)', async () => {
@@ -248,8 +268,12 @@ describe('Sidebar', () => {
     const labels = wrapper
       .findAll('a.sidebar-item')
       .map((a) => a.text().replace(/\d+$/, '').replace(/^[^\p{L}]+/u, '').trim())
-      .slice(0, 7)
-    expect(labels).toEqual(['Läufe', 'Graphen', 'Personasätze', 'Läuft gerade', 'Braucht dich', 'Vergleich', 'Aktivität'])
+      .slice(0, 9)
+    // Danach (unten, mit Abstand): System, dann Einstellungen.
+    expect(labels).toEqual([
+      'Läufe', 'Graphen', 'Personasätze', 'Läuft gerade', 'Braucht dich', 'Vergleich', 'Aktivität',
+      'SystemAlle Dienste erreichbar', 'Einstellungen',
+    ])
   })
 
   it('zeigt die Zaehler neutral neben den Eintraegen und haengt sie in den zugaenglichen Namen', async () => {
@@ -335,11 +359,9 @@ describe('Sidebar', () => {
     expect(wrapper.emitted('collapse-toggle')).toBeTruthy()
   })
 
-  it('Settings-Sub-Items sichtbar wenn Settings-Group via localStorage offen', async () => {
-    // Hydrate localStorage: settings-Group ist offen
+  it('zeigt auch mit gespeichertem "Gruppe offen" keine Einstellungs-Unterpunkte mehr (#1799)', async () => {
+    // Alter localStorage-Stand der Gruppe darf nichts wieder aufklappen.
     lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
-    // _resetForTesting nach dem localStorage-Setzen aufrufen, damit der
-    // Singleton-State aus dem Mock-localStorage hydriert wird.
     useSidebarState._resetForTesting()
     await router.push('/')
     const wrapper = mount(Sidebar, {
@@ -347,13 +369,10 @@ describe('Sidebar', () => {
     })
     await wrapper.vm.$nextTick()
     const text = wrapper.text()
-    // DE-Locale: general="Allgemein" — wire-Ziel laut IA-Matrix
-    expect(text).toContain('Allgemein')
-    // Fix #1713 (Befund 7): LLM-Routing und Audit-Logs sind jetzt Teil der
-    // einen Einstellungen-Navigationsebene (vorher nur in SettingsOverlay,
-    // eine zweite, parallele Navigation).
-    expect(text).toContain('Audit-Logs')
-    expect(text).toContain('LLM-Routing')
+    // Die Abschnitte stehen in der Liste des Fensters, nicht in der Seitenleiste.
+    expect(text).not.toContain('Allgemein')
+    expect(text).not.toContain('Audit-Logs')
+    expect(text).not.toContain('LLM-Routing')
   })
 
   // Slice 7.3.2: Breakpoint-Vereinheitlichung — Mobile = "< 768px" (SSoT:
@@ -436,9 +455,7 @@ describe('Sidebar', () => {
   })
 
   describe('Besucher ohne Betreiber-Zugang auf der Demo-Instanz (demo_mode:true, #1697)', () => {
-    it('zeigt die Einstellungen-Gruppe weiterhin, mit Provider-Keys vorne und Vorschau-Badges auf Betreiber-Punkten', async () => {
-      lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
-      useSidebarState._resetForTesting()
+    it('zeigt die Zeile "Einstellungen" weiterhin, ohne Unterpunkte und ohne Vorschau-Badges', async () => {
       const pinia = createPinia()
       setActivePinia(pinia)
       const auth = useAuthStore()
@@ -451,38 +468,29 @@ describe('Sidebar', () => {
       })
       await wrapper.vm.$nextTick()
 
-      const text = wrapper.text()
-      // Gruppe bleibt sichtbar — nur die eigenen Provider-Keys sind editierbar.
-      expect(text).toContain('Einstellungen')
-      expect(text).toContain('Provider-Keys')
-      expect(text).toContain('Vorschau')
-
-      const subItems = wrapper.findAll('.sidebar-sub-item')
-      expect(subItems.length).toBeGreaterThan(0)
-      expect(subItems[0]?.text()).toContain('Provider-Keys')
-      // Provider-Keys selbst traegt kein Vorschau-Badge.
-      expect(subItems[0]?.text()).not.toContain('Vorschau')
+      // Zeile bleibt sichtbar; Vorschau/Sperre der Betreiber-Abschnitte zeigt das Fenster.
+      expect(wrapper.text()).toContain('Einstellungen')
+      expect(wrapper.findAll('.sidebar-sub-item')).toHaveLength(0)
+      expect(wrapper.text()).not.toContain('Vorschau')
     })
   })
 
-  describe('Deep-Link auf /workspace/provider-keys (#1688)', () => {
-    it('oeffnet die geschlossene Einstellungen-Gruppe und zeigt Provider-Keys als aktives Ziel', async () => {
-      // Kein localStorage-State: Gruppe waere ohne Route-Match geschlossen.
+  describe('Deep-Link aus dem Demo-Vorschau-Banner auf /settings/providers (#1688)', () => {
+    it('markiert die Zeile "Einstellungen" als aktiv (Fenster-Abschnitt Anbieter)', async () => {
       const pinia = createPinia()
       setActivePinia(pinia)
       const auth = useAuthStore()
       auth.config = DEMO_CONFIG
       auth.session = { access_token: 'tok', user: { id: 'u1' } } as never
 
-      await router.push({ name: 'WorkspaceProviderKeys' })
+      await router.push({ name: 'SettingsWindow', params: { section: 'providers' } })
       const wrapper = mount(Sidebar, {
         global: { plugins: [router, pinia, i18n] },
       })
       await wrapper.vm.$nextTick()
 
-      const subItems = wrapper.findAll('.sidebar-sub-item')
-      expect(subItems.length).toBeGreaterThan(0)
-      expect(subItems[0]?.text()).toContain('Provider-Keys')
+      const row = wrapper.findAll('a.sidebar-item').find((a) => a.text() === 'Einstellungen')
+      expect(row?.attributes('aria-current')).toBe('page')
     })
   })
 

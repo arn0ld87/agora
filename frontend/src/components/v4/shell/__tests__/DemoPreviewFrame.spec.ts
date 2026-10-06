@@ -40,7 +40,7 @@ function makeRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/dashboard', name: 'Dashboard', component: ViewStub },
-      { path: '/workspace/provider-keys', name: 'WorkspaceProviderKeys', component: ViewStub },
+      { path: '/settings/:section', name: 'SettingsWindow', component: ViewStub },
       {
         path: '/settings/general',
         name: 'SettingsGeneral',
@@ -104,6 +104,6 @@ describe('DemoPreviewFrame', () => {
     const wrapper = await mountFrame('/settings/general', true)
     const link = wrapper.find('.demo-preview__banner-link')
     expect(link.exists()).toBe(true)
-    expect(link.attributes('href')).toBe('/workspace/provider-keys')
+    expect(link.attributes('href')).toBe('/settings/providers')
   })
 })

@@ -108,7 +108,7 @@ function makeRouter() {
     history: createWebHistory(),
     routes: [
       { path: '/', name: 'SettingsGeneral', component: { template: '<div />' } },
-      { path: '/llm-providers', name: 'SettingsLlmProviders', component: { template: '<div />' } },
+      { path: '/settings/:section', name: 'SettingsWindow', component: { template: '<div />' } },
     ],
   })
   return router

@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { getSimulation } from '@/api/simulation'
 import { getProject } from '@/api/graph'
 import { getRun, listRuns } from '@/api/runs'
+import { getRunLlmRouting } from '@/api/llmRouting'
 import { getReportEvidence, listReports } from '@/api/report'
 import { RunDetailSchema, RunsListResponseSchema } from '@/contracts/runsContract'
 import { RunUsageSchema, TerminationReasonSchema, type RunUsage } from '@/contracts/runBudgetContract'
@@ -21,10 +22,12 @@ import {
   deriveHeadline,
   deriveStages,
   type JobInfo,
+  type JobRoute,
   type ReportInfo,
   type RunWorkspaceData,
   type StageRow,
 } from './runStageState'
+import { pendingRunParamsQuery } from '@/composables/new-run/pendingRunParams'
 import { deriveRunTabs, type RunTab } from './runTabs'
 
 const SimulationLookupSchema = z
@@ -89,9 +92,43 @@ function usageOf(usage: RunUsage | null | undefined): JobInfo['usage'] {
   }
 }
 
-function modelsOf(summaryModel: string | null | undefined, usage: RunUsage | null | undefined): string[] {
-  if (summaryModel) return [summaryModel]
+/**
+ * Rückfall ohne Routen-Snapshot. `summary.model` zählt bewusst nicht: es ist das
+ * Modell der Simulationskonfiguration und stünde bei Prepare, Simulation und
+ * Bericht gleich da.
+ */
+function modelsOf(usage: RunUsage | null | undefined): string[] {
   return usage ? Object.keys(usage.by_model) : []
+}
+
+/** Stufenschlüssel des `llm-routing`-Snapshots je Jobtyp. */
+const SNAPSHOT_STAGE: Record<string, string> = {
+  graph_build: 'graph_build',
+  simulation_prepare: 'persona_generation',
+  simulation_run: 'simulation_rounds',
+  report_generate: 'report_generation',
+}
+
+const SnapshotRouteSchema = z.object({ provider_id: z.string(), model: z.string() }).passthrough()
+const RunRoutingSchema = z.object({ snapshots: z.record(z.string(), z.unknown()) }).passthrough()
+
+/** Route der Stufe aus dem Snapshot; `failed` nur bei Lade-/Vertragsfehler, nicht bei fehlendem Eintrag. */
+async function loadRoute(job: JobInfo): Promise<Pick<JobInfo, 'route' | 'routeLoadFailed'>> {
+  const stage = SNAPSHOT_STAGE[job.runType]
+  if (!stage) return { route: null, routeLoadFailed: false }
+  try {
+    const res = RunRoutingSchema.safeParse(await getRunLlmRouting(job.runId))
+    if (!res.success) throw new Error(`Vertragsbruch GET /api/runs/${job.runId}/llm-routing: ${res.error.message}`)
+    const entry = res.data.snapshots[stage]
+    if (entry === undefined || entry === null) return { route: null, routeLoadFailed: false }
+    const route = SnapshotRouteSchema.safeParse(entry)
+    if (!route.success) throw new Error(`Vertragsbruch Snapshot ${stage}: ${route.error.message}`)
+    const value: JobRoute = { providerId: route.data.provider_id, model: route.data.model }
+    return { route: value, routeLoadFailed: false }
+  } catch (err) {
+    console.warn('[run-workspace] llm-routing-Snapshot nicht ladbar', { runId: job.runId, stage, error: describe(err) })
+    return { route: null, routeLoadFailed: true }
+  }
 }
 
 function terminationOf(run: z.infer<typeof RunJobDetailSchema>): string | null {
@@ -109,7 +146,7 @@ function toJob(run: z.infer<typeof RunJobDetailSchema>): JobInfo {
     startedAt: run.started_at,
     completedAt: run.completed_at ?? null,
     updatedAt: run.updated_at,
-    models: modelsOf(run.summary?.model, run.usage),
+    models: modelsOf(run.usage),
     usage: usageOf(run.usage),
     error: run.error ?? null,
     personaCount: run.summary?.persona_count ?? null,
@@ -141,7 +178,8 @@ async function loadJobs(simulationId: string): Promise<JobInfo[]> {
     // Ohne lesbares Detail zeigt die Zeile den Job ohne Verbrauch ("nicht erfasst").
     jobs.push(toJob(detail ?? { ...run, usage: null, termination_reason: null }))
   }
-  return jobs
+  // Je Stufe parallel und fehlertolerant: ein Ausfall betrifft nur diese Zeile.
+  return Promise.all(jobs.map(async (job) => ({ ...job, ...(await loadRoute(job)) })))
 }
 
 async function loadReports(simulationId: string): Promise<ReportInfo[]> {
@@ -241,7 +279,9 @@ export function useRunWorkspace(simulationId: () => string): RunWorkspace {
     }
   }
 
-  const stages = computed(() => (data.value ? deriveStages(data.value) : []))
+  const stages = computed(() =>
+    data.value ? deriveStages(data.value, pendingRunParamsQuery(data.value.simulationId)) : [],
+  )
   const headline = computed(() => deriveHeadline(stages.value))
   const tabs = computed(() =>
     deriveRunTabs({

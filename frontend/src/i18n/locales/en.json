@@ -269,7 +269,7 @@
     "model": {
       "label": "LLM model",
       "placeholder": "Select model …",
-      "workspaceDefaultHint": "No selection: workspace default from /settings/llm-providers will be used.",
+      "workspaceDefaultHint": "No selection: workspace default from Settings → Providers will be used.",
       "presetGroup": "Recommended",
       "ollamaGroup": "Locally available",
       "customGroup": "Custom",
@@ -277,7 +277,7 @@
       "customPlaceholder": "e.g. qwen3-coder-next:cloud",
       "refresh": "Refresh list",
       "loadingModels": "Loading available models…",
-      "noOllama": "No connection to Ollama. Configure a provider in /settings/llm-providers or start Ollama.",
+      "noOllama": "No connection to Ollama. Configure a provider in Settings → Providers or start Ollama.",
       "openAiDefault": "OpenAI default model active.",
       "default": "Default from .env",
       "ollamaOption": "{model} (Ollama)"
@@ -925,18 +925,7 @@
     },
     "countsError": "Counts could not be loaded completely.",
     "settings": {
-      "label": "Settings",
-      "general": "General",
-      "integrations": "Integrations",
-      "usersTeams": "Users & Teams",
-      "apiKeys": "API Keys",
-      "llmProviders": "LLM Providers",
-      "embedding": "Embedding configuration",
-      "llmRouting": "LLM Routing",
-      "auditLogs": "Audit logs",
-      "profile": "Profile",
-      "providerKeys": "Provider keys",
-      "previewBadge": "Preview"
+      "label": "Settings"
     },
     "footer": {
       "collapse": "Collapse",
@@ -1120,6 +1109,7 @@
       "ui": "UI",
       "webtools": "Webtools",
       "oasis": "OASIS",
+      "budget": "Budgets",
       "security": "Secrets"
     },
     "llmActive": {
@@ -2025,6 +2015,177 @@
     }
   },
   "views": {
+    "newRun": {
+      "title": "New run",
+      "close": "Close dialog",
+      "question": {
+        "legend": "Question",
+        "label": "Simulation question",
+        "belongsToGraph": "The question belongs to the graph. To ask a different question, build a new graph from the source.",
+        "noneStored": "No question is stored for this graph.",
+        "contestedLater": "You set the contested question during preparation, after the graph is built."
+      },
+      "graph": {
+        "legend": "Graph",
+        "existing": "Choose an existing one",
+        "selectLabel": "Existing graph",
+        "fromSource": "New from source",
+        "none": "Without a graph",
+        "noneWhy": "Not available yet. Simulation and interviews would be possible, a report would not.",
+        "noneYet": "There is no finished graph yet.",
+        "loading": "Loading graphs …",
+        "loadError": "The graphs could not be loaded.",
+        "rejected": "{n} graphs were unreadable and are not offered."
+      },
+      "source": {
+        "dropHint": "Drop files here or choose them",
+        "fileList": "Chosen files"
+      },
+      "personas": {
+        "legend": "Persona set",
+        "generate": "Generate",
+        "existing": "Choose an existing one",
+        "existingWhy": "Arrives with persona sets in the library.",
+        "laterWithSource": "With a new source you set the upper limit during preparation."
+      },
+      "models": {
+        "legend": "Models",
+        "scope": "Applies to all stages of this run. Per-stage deviations are chosen at the stage's start button."
+      },
+      "scope": {
+        "legend": "Scope and budget",
+        "days": "Days (1–365)",
+        "rounds": "Rounds (3–30)",
+        "activityLater": "With a new source you set the activity mode during preparation.",
+        "budgetUnavailable": "The instance's default limits apply.",
+        "budgetReplaces": "A custom budget replaces the default limits entirely.",
+        "estimateNeedsCap": "Without an upper limit on personas no estimate is possible.",
+        "estimateBasis": "The estimate assumes at most {agents} personas and {rounds} rounds."
+      },
+      "blockers": {
+        "graph": "Choose an existing graph.",
+        "files": "Add at least one source file.",
+        "question": "The simulation question is missing.",
+        "contested": "The contested question needs 10 to 300 characters or stays empty.",
+        "agents": "The persona upper limit is at least 10.",
+        "days": "The number of days is between 1 and 365.",
+        "rounds": "The number of rounds is between 3 and 30."
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "start": "Start",
+        "buildGraph": "Build graph",
+        "createOnly": "Create only",
+        "createOnlyWhy": "A run is created as soon as the graph is built."
+      },
+      "progress": {
+        "create": "Creating the run …",
+        "prepare": "Preparing the personas …"
+      },
+      "errors": {
+        "create": "The run could not be created.",
+        "createShape": "The response when creating the run was incomplete.",
+        "prepare": "Preparation could not be started.",
+        "prepareAfterCreate": "Run {id} was created, but preparation failed: {message}",
+        "openCreated": "Go to the created run"
+      }
+    },
+    "settingsWindow": {
+      "title": "Settings",
+      "close": "Close settings",
+      "navLabel": "Sections",
+      "sectionSelect": "Choose a section",
+      "operatorOnly": "This section belongs to the operator. It is shown here as a preview only, changes are not possible.",
+      "access": {
+        "apiKeys": "API keys",
+        "audit": "Audit log",
+        "account": "Account",
+        "security": "Security",
+        "needsAuth": "This requires an access token or a sign-in."
+      },
+      "embedding": {
+        "notice": "Note: some consumers still read the environment variables. The configuration shown here is not necessarily the one in effect. Status:"
+      },
+      "appearance": {
+        "groupTheme": "Color scheme",
+        "groupText": "Density and type",
+        "theme": { "label": "Appearance", "hint": "System follows your device setting.", "system": "System", "light": "Light", "dark": "Dark" },
+        "density": { "label": "Density", "hint": "Compact tightens the sidebar and the top bar.", "comfortable": "Comfortable", "compact": "Compact" },
+        "fontSize": { "label": "Font size", "hint": "Affects body text, headings and hint text of the interface.", "small": "Small", "normal": "Normal", "large": "Large" },
+        "local": "This choice applies to this browser only."
+      },
+      "system": {
+        "groupServices": "Services",
+        "groupApp": "Application",
+        "loading": "Checking status…",
+        "loadError": "The system status could not be retrieved.",
+        "retry": "Check again",
+        "state": { "ok": "OK", "down": "Unreachable", "unknown": "Unknown", "skipped": "Not checked" },
+        "backend": { "label": "Backend", "hint": "Application server of this instance." },
+        "neo4j": { "label": "Neo4j", "hint": "Graph database for sources and entities." },
+        "ollama": { "label": "Ollama", "hint": "Local model service.", "skipped": "The active provider is {provider}; Ollama is not checked." },
+        "disk": { "label": "Upload storage", "free": "{free} free", "used": "{pct} % used" },
+        "version": { "label": "Version", "unknown": "unknown" },
+        "unreported": "The backend does not currently report Redis and PostgreSQL; their state is not visible here.",
+        "console": { "label": "Console", "hint": "Shows the backend log.", "open": "Open console", "unavailable": "Operator only." }
+      },
+      "budgets": {
+        "intro": "These default limits apply only to new runs without a budget of their own. A budget set in the start dialog replaces the default limits entirely.",
+        "noLimit": "0 = no limit.",
+        "groupLimits": "Default limits",
+        "groupEnforcement": "Enforcement",
+        "loading": "Loading budgets…",
+        "loadError": "The budgets could not be loaded.",
+        "tokens": { "label": "Tokens", "hint": "Maximum number of tokens per run." },
+        "cost": { "label": "Cost in US dollars", "hint": "Maximum cost per run, e.g. 12.50." },
+        "duration": { "label": "Duration", "hint": "Maximum duration per run.", "unit": "Unit", "minutes": "Minutes", "hours": "Hours" },
+        "calls": { "label": "Model calls", "hint": "Maximum number of calls to the language model per run." },
+        "enforcement": { "label": "Enforcement", "hint": "Hard ends the run when exceeded, soft only warns.", "hard": "Hard (run ends)", "soft": "Soft (warning only)" },
+        "invalidNumber": "Enter a number greater than or equal to 0.",
+        "invalidInteger": "Enter a whole number greater than or equal to 0.",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "Saved.",
+        "discard": "Discard",
+        "saveError": "Saving failed: {message}"
+      },
+      "sections": {
+        "general": "General",
+        "appearance": "Appearance",
+        "providers": "Providers",
+        "profiles": "Profiles",
+        "embedding": "Embedding",
+        "pipeline": "Pipeline",
+        "budgets": "Budgets",
+        "access": "Access",
+        "system": "System"
+      },
+      "providers": {
+        "managementTitle": "Provider management",
+        "managementDescription": "Connection, transport, state and available models per provider.",
+        "managementLocked": "Provider management belongs to the operator and is locked for this sign-in. You can store your own keys below.",
+        "keysTitle": "Own keys",
+        "keysDescription": "They apply to the active workspace only. Stored keys are never shown again.",
+        "transport": "Transport",
+        "key": "Key",
+        "keyStored": "Stored (not displayed)",
+        "keyMissing": "Not stored",
+        "keyNone": "Not needed (local service)",
+        "keySession": "Sign-in via the local CLI session",
+        "transports": {
+          "http": "HTTP",
+          "local": "Local service",
+          "cli": "CLI"
+        }
+      },
+      "profiles": {
+        "modelsTitle": "Model profiles",
+        "modelsDescription": "A profile is one saved model; one of them is the default.",
+        "stagesTitle": "Default model per stage",
+        "stagesDescription": "Which model graph, personas, simulation and report use by default.",
+        "valuesTitle": "Technical values (LLM)"
+      }
+    },
     "history": {
       "title": "History",
       "subtitle": "Run and Branch History"
@@ -2135,7 +2296,23 @@
           "next": "Next step"
         },
         "notRecorded": "not recorded",
-        "modelPlannedHint": "The model planned before the start is not recorded in this view yet.",
+        "modelDefault": "Default: {model}",
+        "modelDefaultHint": "applies if nothing else is chosen at the start",
+        "modelNone": "no default recorded",
+        "modelLoadFailed": "The model that ran could not be loaded.",
+        "withModel": "with {model}",
+        "stepWithModel": "{step}, with {model}",
+        "regenerate": {
+          "button": "Regenerate with …",
+          "title": "Regenerate report",
+          "description": "Creates another version. Existing versions are kept.",
+          "pickLabel": "Model for the new version",
+          "pickPlaceholder": "Choose a model",
+          "confirm": "Regenerate",
+          "cancel": "Cancel",
+          "pending": "Creating …",
+          "failed": "The report could not be regenerated: {reason}"
+        },
         "budgetTitle": "Budget status",
         "budgetNone": "No job with recorded usage for this run yet.",
         "cardsLabel": "Parts of the run",

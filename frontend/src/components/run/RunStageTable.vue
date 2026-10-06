@@ -6,11 +6,56 @@
  */
 import { useI18n } from 'vue-i18n'
 import RunStateMark from './RunStateMark.vue'
-import { wallClockSeconds, type StageRow } from '@/composables/run/runStageState'
+import RunReportRegenerate from './RunReportRegenerate.vue'
+import { wallClockSeconds, type StageKey, type StageRow } from '@/composables/run/runStageState'
 import { formatCostMicros, formatDuration, formatTokens } from '@/utils/format'
 
-const props = defineProps<{ rows: StageRow[]; hasReport: boolean }>()
+const props = defineProps<{
+  rows: StageRow[]
+  hasReport: boolean
+  /** Workspace-Standardmodell je Stufe (nur Anzeige, keine Zusage für diesen Lauf). */
+  defaultModels?: Partial<Record<StageKey, string | null>>
+  simulationId?: string
+}>()
+const emit = defineEmits<{ reload: [] }>()
 const { t, te, locale } = useI18n()
+
+const ACTIVE = new Set(['running', 'queued', 'paused'])
+
+/** Nur mit vorhandenem Bericht und ohne aktiven Berichtsjob; nie für Graph, Personas, Simulation. */
+function canRegenerate(row: StageRow): boolean {
+  return row.key === 'report' && !!row.reportId && !!props.simulationId && !ACTIVE.has(row.state)
+}
+
+type ModelCell =
+  | { kind: 'run'; route: { model: string; providerId: string } }
+  | { kind: 'ledger'; models: string[] }
+  | { kind: 'default'; model: string | null }
+  | { kind: 'missing' }
+
+function modelCell(row: StageRow): ModelCell {
+  if (row.key === 'interviews') return { kind: 'missing' }
+  const job = row.job
+  if (job) {
+    if (job.route) return { kind: 'run', route: job.route }
+    return job.models.length ? { kind: 'ledger', models: job.models } : { kind: 'missing' }
+  }
+  if (row.state === 'notStarted') return { kind: 'default', model: props.defaultModels?.[row.key] ?? null }
+  return { kind: 'missing' }
+}
+
+/** Modell am Startknopf: Standard vor dem Start, bei Fortsetzung die gelaufene Route. */
+function stepModel(row: StageRow): string | null {
+  if (!row.next.to) return null
+  if (row.next.kind === 'start') return props.defaultModels?.[row.key] ?? null
+  if (row.next.kind === 'resume') return row.job?.route?.model ?? null
+  return null
+}
+function stepLabel(row: StageRow): string {
+  const step = t(`views.run.step.${row.next.kind}`)
+  const m = stepModel(row)
+  return m ? t('views.run.overview.stepWithModel', { step, model: m }) : step
+}
 
 function notes(row: StageRow): string[] {
   const out: string[] = []
@@ -72,8 +117,30 @@ function cost(row: StageRow): string | null {
         </th>
         <td><RunStateMark :state="row.state" /></td>
         <td class="stage-table__model" :data-testid="`stage-model-${row.key}`">
-          <template v-if="row.job && row.job.models.length">{{ row.job.models.join(', ') }}</template>
-          <span v-else class="stage-table__missing">{{ t('views.run.overview.notRecorded') }}</span>
+          <template v-for="cell in [modelCell(row)]" :key="cell.kind">
+            <template v-if="cell.kind === 'run'">
+              <span>{{ cell.route.model }}</span>
+              <span class="stage-table__provider">{{ cell.route.providerId }}</span>
+            </template>
+            <template v-else-if="cell.kind === 'ledger'">{{ cell.models.join(', ') }}</template>
+            <span
+              v-else-if="cell.kind === 'default'"
+              class="stage-table__default"
+              :data-testid="`stage-model-default-${row.key}`"
+              :title="t('views.run.overview.modelDefaultHint')"
+            >
+              <template v-if="cell.model">{{ t('views.run.overview.modelDefault', { model: cell.model }) }}</template>
+              <template v-else>{{ t('views.run.overview.modelNone') }}</template>
+              <span class="sr-only"> ({{ t('views.run.overview.modelDefaultHint') }})</span>
+            </span>
+            <span v-else class="stage-table__missing">{{ t('views.run.overview.notRecorded') }}</span>
+          </template>
+          <span
+            v-if="row.job?.routeLoadFailed"
+            class="stage-table__model-error"
+            role="status"
+            :data-testid="`stage-model-error-${row.key}`"
+          >{{ t('views.run.overview.modelLoadFailed') }}</span>
         </td>
         <td class="stage-table__num">
           <template v-if="duration(row)">{{ duration(row) }}</template>
@@ -93,10 +160,14 @@ function cost(row: StageRow): string | null {
             :to="row.next.to"
             class="stage-table__step"
             :class="{ 'stage-table__step--primary': row.next.kind !== 'view' }"
+            :aria-label="stepLabel(row)"
             :data-testid="`stage-next-${row.key}`"
             :data-step="row.next.kind"
           >
             {{ t(`views.run.step.${row.next.kind}`) }}
+            <span v-if="stepModel(row)" class="stage-table__with" aria-hidden="true">
+              {{ t('views.run.overview.withModel', { model: stepModel(row) }) }}
+            </span>
           </router-link>
           <template v-else>
             <button
@@ -113,6 +184,11 @@ function cost(row: StageRow): string | null {
               {{ t(`views.run.disabled.${row.next.disabledReason}`) }}
             </span>
           </template>
+          <RunReportRegenerate
+            v-if="canRegenerate(row) && simulationId"
+            :simulation-id="simulationId"
+            @done="emit('reload')"
+          />
         </td>
       </tr>
     </tbody>
@@ -182,6 +258,24 @@ function cost(row: StageRow): string | null {
   color: var(--fg2);
   overflow-wrap: anywhere;
 }
+.stage-table__provider,
+.stage-table__model-error {
+  display: block;
+  font-family: var(--ag-font-sans);
+  font-size: 12px;
+  color: var(--fg3);
+}
+.stage-table__default {
+  font-family: var(--ag-font-sans);
+  font-size: 12.5px;
+  color: var(--fg3);
+  font-style: italic;
+}
+.stage-table__with {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 400;
+}
 .stage-table__missing {
   font-family: var(--ag-font-sans);
   font-size: 12.5px;
@@ -189,8 +283,9 @@ function cost(row: StageRow): string | null {
 }
 .stage-table__step {
   display: inline-flex;
-  align-items: center;
-  height: 32px;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 32px;
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--ag-r-8);

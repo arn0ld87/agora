@@ -8,6 +8,9 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { useSettingsWindowStore } from '../../stores/settingsWindow'
+import { getSettingsSection } from '../../components/settings-window/sections'
 
 vi.mock('vue-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-router')>()
@@ -89,6 +92,9 @@ vi.mock('../../views/run/RunGraphView.vue', () => VIEW_STUB)
 vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityLogView.vue', () => VIEW_STUB)
+// Etappe 3 (#1799), Ticket „Einstellungsfenster": das Fenster ersetzt die
+// Ansichten hinter /settings/general und /settings/embedding.
+vi.mock('../../components/settings-window/SettingsWindow.vue', () => VIEW_STUB)
 
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
@@ -113,12 +119,7 @@ describe('Router – Routen-Resolution', () => {
     // `/dashboard` ist seit Etappe 2 eine Weiterleitung (siehe Redirects).
     ['/library/runs/new', 'NewRun'],
     ['/settings/general', 'SettingsGeneral'],
-    ['/settings/integrations', 'SettingsIntegrations'],
     ['/onboarding', 'Onboarding'],
-    ['/settings/profile', 'SettingsProfile'],
-    ['/settings/audit-logs', 'SettingsAuditLogs'],
-    ['/settings/llm-routing', 'SettingsLlmRouting'],
-    ['/settings/llm-providers', 'SettingsLlmProviders'],
     ['/settings/embedding', 'SettingsEmbedding'],
   ])('löst %s → %s auf', async (path, name) => {
     await pushAndSettle(path)
@@ -210,7 +211,6 @@ describe('Router – Redirects', () => {
     ['/dashboard', 'LibraryRuns'],
     ['/settings', 'SettingsGeneral'],
     ['/settings-classic', 'SettingsGeneral'],
-    ['/settings/users-teams', 'SettingsProfile'],
     // Legacy-Registry und History gehen in Bibliothek bzw. Aktivitaet auf.
     ['/runs', 'LibraryRuns'],
     ['/v4/history', 'ActivityJobs'],
@@ -438,13 +438,11 @@ describe('Router – Struktur-Integrität', () => {
       'NewRun',
       'Onboarding',
       'SettingsGeneral',
-      'SettingsIntegrations',
-      'SettingsProfile',
-      'SettingsApiKeys',
-      'SettingsAuditLogs',
-      'SettingsLlmRouting',
-      'SettingsLlmProviders',
+      // Etappe 3 (#1799): die alten Einstellungsadressen sind Weiterleitungen
+      // (Redirects-Suite unten) und zaehlen nicht mehr als produktive Routen.
       'SettingsEmbedding',
+      // Etappe 3 (#1799): alle uebrigen Abschnitte des Einstellungsfensters.
+      'SettingsWindow',
       'StepGraphBuild',
       'StepEnvSetup',
       'StepSimulation',
@@ -466,7 +464,6 @@ describe('Router – Struktur-Integrität', () => {
       'Register',
       'PasswordReset',
       'EmailConfirm',
-      'WorkspaceProviderKeys',
       'NotFound',
       // Etappe 2 (#1797), Ticket „Adressen".
       'LibraryRuns',
@@ -512,7 +509,7 @@ describe('Router – Deep-Links (Legacy-Pfade)', () => {
     expect(router.currentRoute.value.name).not.toBe('NotFound')
   })
 
-  it.each(['/settings-classic', '/settings/users-teams'])(
+  it.each(['/settings-classic', '/settings/users-teams', '/settings/integrations'])(
     '%s landet nicht auf NotFound',
     async (path) => {
       await pushAndSettle(path)
@@ -568,25 +565,33 @@ describe('Router – Auth-Guard', () => {
     vi.mocked(getAgoraToken).mockReset()
   })
 
-  it('ohne Token: /settings/api-keys → Startseite (Bibliothek) mit authRequired + next', async () => {
+  // Etappe 3 (#1799): die Zugangsregel gilt am Ziel der Weiterleitung. „Zugang“
+  // verlangt kein Token (Konto war schon vorher offen); Schlüssel und Audit-
+  // Protokoll sperrt der Abschnitt selbst.
+  it.each(['/settings/api-keys', '/settings/audit-logs'])(
+    'ohne Token: %s → Fenster „Zugang“ (kein Zwang zur Anmeldung)',
+    async (path) => {
+      vi.mocked(getAgoraToken).mockReturnValue('')
+      await pushAndSettle(path)
+      const route = router.currentRoute.value
+      expect(route.name).toBe('SettingsWindow')
+      expect(route.path).toBe('/settings/access')
+    },
+  )
+
+  it('ohne Token: /settings/llm-providers → Startseite (Bibliothek) mit authRequired + next am Ziel', async () => {
     vi.mocked(getAgoraToken).mockReturnValue('')
-    await pushAndSettle('/settings/api-keys')
+    await pushAndSettle('/settings/llm-providers')
     const route = router.currentRoute.value
     expect(route.name).toBe('LibraryRuns')
     expect(route.query.authRequired).toBe('1')
-    expect(route.query.next).toBe('/settings/api-keys')
-  })
-
-  it('mit Token: /settings/api-keys → SettingsApiKeys', async () => {
-    vi.mocked(getAgoraToken).mockReturnValue('tkn')
-    await pushAndSettle('/settings/api-keys')
-    expect(router.currentRoute.value.name).toBe('SettingsApiKeys')
+    expect(route.query.next).toBe('/settings/providers')
   })
 
   it.each([
-    '/settings/audit-logs',
     '/settings/llm-routing',
     '/settings/llm-providers',
+    '/workspace/provider-keys',
   ])('ohne Token: %s → Startseite (Bibliothek)', async (path) => {
     vi.mocked(getAgoraToken).mockReturnValue('')
     await pushAndSettle(path)
@@ -602,28 +607,17 @@ describe('Router – Auth-Guard', () => {
 })
 
 describe('Router – meta.requiresAuth Flag-Integrität', () => {
-  it('alle 4 protected Settings-Routen tragen meta.requiresAuth=true', () => {
-    const protectedPaths = [
-      '/settings/api-keys',
-      '/settings/audit-logs',
-      '/settings/llm-routing',
-      '/settings/llm-providers',
-    ]
-    for (const path of protectedPaths) {
-      const resolved = router.resolve(path)
-      expect(resolved.meta.requiresAuth, `${path} soll requiresAuth=true`).toBe(true)
+  // Etappe 3 (#1799): die Flags stehen je Abschnitt in sections.ts; die alten
+  // Adressen sind Weiterleitungen und tragen kein eigenes Meta mehr.
+  it('Abschnitte mit Token-Pflicht: providers, profiles, embedding', () => {
+    for (const id of ['providers', 'profiles', 'embedding'] as const) {
+      expect(getSettingsSection(id).requiresAuth, id).toBe(true)
     }
   })
 
-  it('öffentliche Settings-Routen tragen KEIN requiresAuth', () => {
-    const publicPaths = [
-      '/settings/general',
-      '/settings/integrations',
-      '/settings/users-teams',
-    ]
-    for (const path of publicPaths) {
-      const resolved = router.resolve(path)
-      expect(resolved.meta.requiresAuth, `${path} soll KEIN requiresAuth`).toBeFalsy()
+  it('übrige Abschnitte verlangen kein Token', () => {
+    for (const id of ['general', 'appearance', 'pipeline', 'budgets', 'access', 'system'] as const) {
+      expect(getSettingsSection(id).requiresAuth, id).toBe(false)
     }
   })
 })
@@ -683,5 +677,104 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     expect(router.currentRoute.value.name).toBe('StepSimulation')
     await pushAndSettle('/process/project_42')
     expect(router.currentRoute.value.name).toBe('StepGraphBuild')
+  })
+})
+
+describe('Router – Etappe 3 Einstellungsfenster (#1799)', () => {
+  beforeEach(() => {
+    vi.mocked(getAgoraToken).mockReturnValue('tkn')
+    setActivePinia(createPinia())
+  })
+
+  it.each([
+    ['/settings/general', 'SettingsGeneral'],
+    ['/settings/embedding', 'SettingsEmbedding'],
+    ['/settings/appearance', 'SettingsWindow'],
+    ['/settings/providers', 'SettingsWindow'],
+    ['/settings/profiles', 'SettingsWindow'],
+    ['/settings/pipeline', 'SettingsWindow'],
+    ['/settings/budgets', 'SettingsWindow'],
+    ['/settings/access', 'SettingsWindow'],
+    ['/settings/system', 'SettingsWindow'],
+  ])('löst %s → %s auf und markiert es als Fenster', async (path, name) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe(name)
+    expect(router.currentRoute.value.meta.settingsWindow).toBe(true)
+  })
+
+  it('unbekannter Abschnitt → general', async () => {
+    await pushAndSettle('/settings/gibt-es-nicht')
+    expect(router.currentRoute.value.path).toBe('/settings/general')
+    expect(router.currentRoute.value.name).toBe('SettingsGeneral')
+  })
+
+  it.each([
+    ['/settings/integrations', '/settings/pipeline'],
+    ['/settings/profile', '/settings/access'],
+    ['/settings/users-teams', '/settings/access'],
+    ['/settings/api-keys', '/settings/access'],
+    ['/settings/audit-logs', '/settings/access'],
+    ['/settings/llm-routing', '/settings/profiles'],
+    ['/settings/llm-providers', '/settings/providers'],
+    ['/workspace/provider-keys', '/settings/providers'],
+    ['/settings-classic', '/settings/general'],
+  ])('alte Adresse %s leitet auf %s und öffnet das Fenster', async (from, to) => {
+    await pushAndSettle(from)
+    const route = router.currentRoute.value
+    expect(route.path).toBe(to)
+    expect(route.meta.settingsWindow).toBe(true)
+  })
+
+  it('Query und Hash der alten Adresse bleiben erhalten', async () => {
+    await pushAndSettle('/settings/llm-routing?profile=p1#liste')
+    const route = router.currentRoute.value
+    expect(route.path).toBe('/settings/profiles')
+    expect(route.query.profile).toBe('p1')
+    expect(route.hash).toBe('#liste')
+  })
+
+  it('die alten Routen-Namen bleiben als Weiterleitungs-Einträge bestehen', () => {
+    for (const name of [
+      'SettingsIntegrations', 'SettingsProfile', 'SettingsUsersTeams', 'SettingsApiKeys',
+      'SettingsAuditLogs', 'SettingsLlmRouting', 'SettingsLlmProviders', 'WorkspaceProviderKeys',
+    ]) {
+      const record = router.getRoutes().find((r) => r.name === name)
+      expect(record?.redirect, name).toBeDefined()
+      expect(record?.components, name).toBeUndefined()
+      expect(router.resolve({ name }).meta.settingsWindow).toBeUndefined()
+    }
+  })
+
+  it('Start aus neuer Quelle: /process/new bleibt auf dem Upload-Weg, keine Schleife in den Startdialog', async () => {
+    await pushAndSettle('/process/new')
+    expect(router.currentRoute.value.name).toBe('StepGraphBuild')
+    expect(router.currentRoute.value.params.projectId).toBe('new')
+  })
+
+  it('Zugangsregel je Abschnitt: Abschnitte mit requiresAuth schicken ohne Token auf die Bibliothek', async () => {
+    vi.mocked(getAgoraToken).mockReturnValue('')
+    for (const section of ['providers', 'profiles', 'embedding']) {
+      await pushAndSettle(`/settings/${section}`)
+      expect(router.currentRoute.value.name, section).toBe('LibraryRuns')
+    }
+    // „Zugang" verlangt kein Token mehr: „Konto" war schon vorher ohne Token
+    // erreichbar, Schlüssel und Audit-Protokoll sperrt der Abschnitt selbst.
+    for (const section of ['general', 'appearance', 'pipeline', 'budgets', 'system', 'access']) {
+      await pushAndSettle(`/settings/${section}`)
+      expect(router.currentRoute.value.meta.settingsWindow, section).toBe(true)
+    }
+  })
+
+  it('merkt sich beim Öffnen aus der App die Ansicht darunter, beim Abschnittswechsel unverändert', async () => {
+    const store = useSettingsWindowStore()
+    await pushAndSettle('/library/graphs')
+    await pushAndSettle('/settings/budgets')
+    expect(store.returnTo).toBe('/library/graphs')
+    await pushAndSettle('/settings/system')
+    expect(store.returnTo).toBe('/library/graphs')
+    await pushAndSettle('/library/runs?view=running')
+    expect(store.returnTo).toBeNull()
+    await pushAndSettle('/settings/general')
+    expect(store.returnTo).toBe('/library/runs?view=running')
   })
 })

@@ -17,6 +17,7 @@ import ProfileForm from '@/components/v4/forms/ProfileForm.vue'
 import { useUserProfileStore } from '@/store/userProfile'
 import type { UserProfileUpdateRequest } from '@/contracts/userProfileContract'
 
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const { t } = useI18n()
 const router = useRouter()
 const store = useUserProfileStore()
@@ -78,7 +79,16 @@ onMounted(() => {
 
 <template>
   <SettingsOverlay>
-    <PageHeader :title="t('profileSettings.title')" :subtitle="t('profileSettings.subtitle')">
+    <div v-if="embedded" class="settings-profile__actions">
+      <Button variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
+        {{ t('profileSettings.reopenOnboardingBtn') }}
+      </Button>
+    </div>
+    <PageHeader
+      v-else
+      :title="t('profileSettings.title')"
+      :subtitle="t('profileSettings.subtitle')"
+    >
       <template #right>
         <Button variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
           {{ t('profileSettings.reopenOnboardingBtn') }}
@@ -111,6 +121,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.settings-profile__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .settings-profile__banner {
   font-family: var(--font-sans);
   font-size: 13px;

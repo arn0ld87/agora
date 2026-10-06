@@ -81,6 +81,69 @@ def test_get_settings_returns_all_sections(client):
     assert total == len(SETTINGS_FIELDS)
 
 
+BUDGET_KEYS = [
+    'AGORA_SIM_DEFAULT_MAX_TOKENS',
+    'AGORA_SIM_DEFAULT_MAX_COST_MICROS',
+    'AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS',
+    'AGORA_SIM_DEFAULT_MAX_LLM_CALLS',
+    'AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT',
+]
+
+
+def test_get_settings_budget_section_holds_default_limits(client, monkeypatch):
+    # Issue #1799: der Standard-Tokendeckel zog von ``oasis`` nach ``budget``.
+    for key in BUDGET_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    data = client.get('/api/settings').get_json()['data']
+    assert 'budget' in data['sections']
+    budget = {item['key']: item for item in data['fields']['budget']}
+    assert list(budget) == BUDGET_KEYS
+    assert budget['AGORA_SIM_DEFAULT_MAX_TOKENS']['value'] == 20_000_000
+    assert budget['AGORA_SIM_DEFAULT_MAX_COST_MICROS']['value'] == 0
+    assert budget['AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS']['value'] == 0
+    assert budget['AGORA_SIM_DEFAULT_MAX_LLM_CALLS']['value'] == 0
+    enforcement = budget['AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT']
+    assert enforcement['value'] == 'hard'
+    assert enforcement['type'] == 'enum'
+    assert enforcement['enum_values'] == ['soft', 'hard']
+    oasis_keys = {item['key'] for item in data['fields']['oasis']}
+    assert not oasis_keys & set(BUDGET_KEYS)
+
+
+def test_put_settings_persists_default_budget_fields(client, app, monkeypatch):
+    for key in BUDGET_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    payload = {
+        'AGORA_SIM_DEFAULT_MAX_COST_MICROS': 5_000_000,
+        'AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS': 3600,
+        'AGORA_SIM_DEFAULT_MAX_LLM_CALLS': 500,
+        'AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT': 'soft',
+    }
+    res = client.put('/api/settings', json=payload)
+    assert res.status_code == 200
+    assert sorted(res.get_json()['data']['updated_keys']) == sorted(payload)
+    stored = json.loads(app.config['service'].instance_path.read_text(encoding='utf-8'))
+    assert stored == payload
+    budget = {
+        item['key']: item
+        for item in res.get_json()['data']['fields']['budget']
+    }
+    assert budget['AGORA_SIM_DEFAULT_MAX_LLM_CALLS']['value'] == 500
+    assert budget['AGORA_SIM_DEFAULT_MAX_LLM_CALLS']['source'] == 'file'
+    assert budget['AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT']['value'] == 'soft'
+
+
+@pytest.mark.parametrize('payload', [
+    {'AGORA_SIM_DEFAULT_MAX_COST_MICROS': -1},
+    {'AGORA_SIM_DEFAULT_MAX_LLM_CALLS': 'viele'},
+    {'AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT': 'strict'},
+])
+def test_put_settings_rejects_invalid_default_budget_values(client, app, payload):
+    res = client.put('/api/settings', json=payload)
+    assert res.status_code == 400
+    assert not app.config['service'].instance_path.exists()
+
+
 def test_get_settings_field_payload_shape(client):
     res = client.get('/api/settings')
     fields = res.get_json()['data']['fields']

@@ -651,6 +651,34 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 
 ---
 
+## 11b. Stand Etappe 3
+
+**Umgesetzt (Epic #1799)** nach 8: Einstellungsfenster als modaler Dialog über der zuletzt gezeigten Ansicht mit neun Abschnitten unter `/settings/:section` (Allgemein, Aussehen, Anbieter, Profile, Embedding, Pipeline, Budgets, Zugang, System; Zugangsregeln je Abschnitt in `components/settings-window/sections.ts`); Startdialog „Neuer Lauf“ unter `/library/runs/new` mit den fünf Gruppen aus 3.4; Standard-Budgets als Settings-Abschnitt `budget`, im Dialog vorbelegt; geplantes bzw. gelaufenes Modell je Stufe in der Übersicht; „Neu erzeugen mit …“ in der Berichtszeile; Startparameter des Dialogs (Tage, Runden, Budget) wandern über `pendingRunParams` (sessionStorage, je `simulationId`) an die Startlinks der Lauf-Übersicht. Weiterleitungen der Zeilen „ab Etappe 3“ aus 6.2 für `/settings/*`, `/workspace/provider-keys` und `/settings-classic` (`router/index.ts`, Query und Hash bleiben, alte Routen-Namen bleiben als Weiterleitungs-Einträge). Seitenleiste, Profilmenü, Befehlspalette, Onboarding, Embedding-Ansicht und Demo-Banner zeigen direkt auf die Abschnitte. Entfernt: `SidebarGroup.vue` (unbenutzt), die i18n-Schlüssel `sidebar.settings.*` außer `label`, `views.settingsWindow.placeholderTitle` und `placeholder`, `views.run.overview.modelPlannedHint`.
+
+**Geklärt:** „Gibt es persistierte Standard-Budgets?“ Ja, seit #1799 als Settings-Abschnitt `budget` (siehe Tabelle der offenen Punkte).
+
+**Bewusst nicht umgeleitet** (Abweichung von der Spalte „ab Etappe 3“ in 6.2): `/process/new` und `/process/:projectId`, weil der Startdialog bei „neu aus Quelle“ per `setPendingUpload` und `router.push({ name: 'Process', params: { projectId: 'new' } })` an genau diese Route weiterreicht; eine Umleitung auf den Startdialog wäre eine Schleife und bräche den Upload-Fluss. `/v4/graph-build/:projectId`, weil die Graph-Ansicht der Bibliothek (`GraphLibraryDetailView`, `GraphProjectReader`) selbst auf diese Ansicht verweist und sie den Aufbau mit Fortschritt trägt. `/v4/env-setup/:projectId`, weil der Parameter von `StepEnvSetup` in Wahrheit eine `simulation_id` ist und `/simulations/:simulationId/personas` noch nicht existiert (kommt mit der Personas-Ansicht des Laufs). Alle drei bleiben auf ihrer alten Ansicht.
+
+**Bewusst nicht gebaut / offen:**
+
+- Frage bei vorhandenem Graphen: schreibgeschützt, der Dialog nennt sie als zum Graphen gehörig.
+- „Ohne Graph“ und „Personasatz wählen“ sind sichtbar, aber deaktiviert. Der Personasatz als Objekt kommt erst mit Etappe 7 („Kommt mit den Personasätzen in der Bibliothek“); „Ohne Graph“ steht als „Noch nicht verfügbar“ im Dialog.
+- Abschnitt Profile = Profile mit je einem Modell (`LlmProfile`) plus „Standardmodell je Stufe“ (Routing-Standards). Ein Vier-Stufen-Profil, wie 5 es nennt, trägt der Bestand nicht.
+- Im Dialog gilt ein Modell bzw. Profil je Lauf; die Abweichung je Stufe im Dialog (3.4) fehlt.
+- „Neu erzeugen mit …“ gibt es nur für den Bericht und ohne Fortschrittsanzeige: Der Dialog meldet Fehler (auch Budget und Rate-Limit) und löst bei Erfolg `done` aus, mehr nicht.
+- „Neu aus Quelle“ reicht an den bestehenden Upload-Weg weiter: Streitfrage, Personas-Obergrenze und Aktivitätsmodus kommen dort nicht an; der Dialog sagt das an den Feldern.
+- Der Systemstatus zeigt Backend, Neo4j und Ollama, aber weder Redis noch PostgreSQL; der Statusvertrag (`useSystemStatus`) liefert sie nicht. Backend-Arbeit, nicht Teil dieser Etappe.
+- Die Schriftgröße skaliert nur die semantischen `--fs-*`-Token (`assets/styles/font-scale.css`); feste Pixelwerte in älteren Ansichten bleiben.
+- Die Standardwerte für Tage und Runden aus 5 („Allgemein“) haben keinen Settings-Schlüssel (`settings_schema.py` kennt keinen); der Dialog schlägt sie weiter aus der Auto-Schätzung vor.
+- „Zugang“ ist ohne Token erreichbar (Konto war es schon vorher); Schlüssel und Audit-Protokoll sind im Abschnitt gesperrt, solange kein Token vorliegt.
+- Das Fertig-Kriterium „kein Modell-Bedienelement mehr außerhalb von Startdialog, Stufe und Einstellungen“ ist erst mit den Etappen 4 bis 6 voll erreichbar: Die alten Schritt-Ansichten tragen ihre eigenen Modellwahl-Chips (`StepModelOverrideChip` in `StepGraphBuildView`, `StepEnvSetupView` und `SimulationLayout`) bis dahin.
+- Die Budget-Standards sind nur für Betreiber änderbar; Besucher der Demo-Instanz sehen den Abschnitt als gesperrte Vorschau.
+- Die statischen Erklärkarten der Demo-Vorschau (`DemoPreviewStaticView`) sind nach den Weiterleitungen nicht mehr erreichbar und können mit der nächsten Aufräumrunde entfallen.
+- Kein Abschnitt rendert mehr einen Platzhaltertext; mehrere (Zugang, Anbieter, Profile) betten die bisherigen Ansichten im Modus `embedded` ein, ihr Umbau auf Zeilen mit Schaltern ist nicht Teil dieser Etappe.
+- Die e2e-Smokes (`golden-gate-accessibility`: Fenster als modale Dialoge, Weiterleitungen) laufen nur in der CI gegen den Docker-Stack; lokal wurden sie typgeprüft, nicht ausgeführt.
+
+---
+
 ## 12. Offene Punkte
 
 | Punkt | Wer klärt | Wann |
@@ -662,6 +690,6 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 | Welche Kennung führt die Ablage für Graph- und Personasatz-Objekte? (6.2) | Lead | Etappe 2; geklärt, siehe 11a (Graph: `project_id`; Personasätze führt die Ablage nicht) |
 | Liefert `by-simulation` alle Berichtsfassungen? | Lead | Etappe 5 |
 | Trägt der Evidence-Vertrag schon Sprungziele je Beleg? | Lead | Etappe 5 |
-| Gibt es persistierte Standard-Budgets? | Lead | Etappe 3 |
+| Gibt es persistierte Standard-Budgets? | Lead | Etappe 3; geklärt: ja, seit #1799 als Settings-Abschnitt `budget` (siehe 11b) |
 | Roadmap-Eintrag für Etappen 7 und 8, ADR für „manuell" | Maintainer | vor Etappe 7 |
 | Ist gns3 bereits auf PostgreSQL umgestellt? | Lead | vor Etappe 7 |

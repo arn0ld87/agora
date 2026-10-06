@@ -35,6 +35,7 @@ SECTIONS: tuple[str, ...] = (
     'ui',
     'webtools',
     'oasis',
+    'budget',
     'security',
 )
 
@@ -195,16 +196,30 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
     # ``DEFAULT_TOTAL_SIMULATION_HOURS`` in ``simulation_config_models.py``.
     FieldSpec('AGORA_SIM_MAX_HOURS', 'oasis', 'int',
               default=24, min_value=1, max_value=168),
-    # #1772: harter Standard-Tokendeckel fuer Simulationen ohne Nutzerbudget
-    # (0 = abgeschaltet). Default = ``DEFAULT_SIM_MAX_TOKENS`` in run_budget.py.
-    FieldSpec('AGORA_SIM_DEFAULT_MAX_TOKENS', 'oasis', 'int',
-              default=20_000_000, min_value=0, max_value=1_000_000_000_000),
     # #1778: Mindestanteil der Stimmen, die in der Simulation Stellung zur
     # Streitfrage beziehen. Darunter weist der Bericht die Degradation
     # ``simulation_positioning`` aus. Default =
     # ``Config.REPORT_POSITIONING_RATIO_MIN``.
     FieldSpec('AGORA_REPORT_POSITIONING_RATIO_MIN', 'oasis', 'float',
               default=0.5, min_value=0.0, max_value=1.0),
+
+    # ===== Budgets (Standardgrenzen fuer Simulationen ohne Nutzerbudget) =====
+    # #1772/#1799: greifen nur beim frischen Start ohne uebergebenes Budget
+    # (``resolve_default_run_budget`` in run_budget.py); ``0`` = kein Limit.
+    # Default Tokens = ``DEFAULT_SIM_MAX_TOKENS``; die uebrigen Grenzen sind
+    # standardmaessig aus, die Durchsetzung ist ``hard`` (bisheriges Verhalten
+    # des Standard-Tokendeckels).
+    FieldSpec('AGORA_SIM_DEFAULT_MAX_TOKENS', 'budget', 'int',
+              default=20_000_000, min_value=0, max_value=1_000_000_000_000),
+    # Kostengrenze in Mikro-USD (1_000_000 = 1 USD).
+    FieldSpec('AGORA_SIM_DEFAULT_MAX_COST_MICROS', 'budget', 'int',
+              default=0, min_value=0, max_value=1_000_000_000_000),
+    FieldSpec('AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS', 'budget', 'int',
+              default=0, min_value=0, max_value=31_536_000),
+    FieldSpec('AGORA_SIM_DEFAULT_MAX_LLM_CALLS', 'budget', 'int',
+              default=0, min_value=0, max_value=1_000_000_000),
+    FieldSpec('AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT', 'budget', 'enum',
+              default='hard', enum_values=('soft', 'hard')),
 
     # ===== Security / Secrets =====
     FieldSpec('SECRET_KEY', 'security', 'string', default='',

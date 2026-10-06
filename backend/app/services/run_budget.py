@@ -146,15 +146,52 @@ def set_run_budget_config(run_id: str, config: RunBudgetConfig) -> None:
     )
 
 
-# Standard-Tokendeckel fuer Simulationen (Issue #1772). Der Lauf
+# Standardgrenzen fuer Simulationen (Issue #1772, #1799). Der Lauf
 # ``sim_cc6067a70603`` (24 Runden, 52 Agenten, Twitter+Reddit) verbrauchte ohne
 # Gedaechtnisbegrenzung rund 36 Mio. Eingabe-Tokens bei ~1.000 Agentenschritten.
-# Ohne Nutzerbudget bekommt eine Simulation deshalb einen HARTEN Deckel;
-# ``0`` in ``AGORA_SIM_DEFAULT_MAX_TOKENS`` schaltet ihn ab. Der Zaehler
+# Ohne Nutzerbudget bekommt eine Simulation deshalb einen Standardbudget-Deckel
+# (Tokens standardmaessig 20 Mio., HART); Kosten, Laufzeit und Aufrufe sind
+# standardmaessig ohne Limit. ``0`` schaltet jede Grenze ab. Der Zaehler
 # (``budget_guard``) zaehlt nur erfolgreiche Aufrufe und prueft nur an
 # Rundengrenzen -- eine einzelne Runde kann den Deckel ueberschreiten.
 ENV_DEFAULT_SIM_MAX_TOKENS = "AGORA_SIM_DEFAULT_MAX_TOKENS"
+ENV_DEFAULT_SIM_MAX_COST_MICROS = "AGORA_SIM_DEFAULT_MAX_COST_MICROS"
+ENV_DEFAULT_SIM_MAX_DURATION_SECONDS = "AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS"
+ENV_DEFAULT_SIM_MAX_LLM_CALLS = "AGORA_SIM_DEFAULT_MAX_LLM_CALLS"
+ENV_DEFAULT_SIM_BUDGET_ENFORCEMENT = "AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT"
 DEFAULT_SIM_MAX_TOKENS = 20_000_000
+DEFAULT_SIM_BUDGET_ENFORCEMENT = "hard"
+_ENFORCEMENT_MODES = ("soft", "hard")
+
+
+def _default_settings_reader(read: Any = None) -> Any:
+    if read is not None:
+        return read
+    from app.services.settings_layer import get_default_service
+
+    return get_default_service().effective_value
+
+
+def _read_default_limit(read: Any, key: str, fallback: Optional[int]) -> Optional[int]:
+    """Eine Standardgrenze lesen; ``None`` = kein Limit.
+
+    ``0`` bedeutet kein Limit; ein fehlender Wert ergibt ``fallback``. Ein
+    negativer oder nicht ganzzahliger Wert faellt mit Warnung auf ``fallback``.
+    """
+    raw = read(key)
+    if raw is None:
+        return fallback
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = -1
+    if value < 0 or isinstance(raw, bool):
+        logger.warning(
+            "run_budget: %s=%r ist ungültig (erwartet ganze Zahl >= 0); Standard %s",
+            key, raw, fallback,
+        )
+        return fallback
+    return value or None
 
 
 def resolve_default_simulation_token_cap(read: Any = None) -> Optional[int]:
@@ -164,39 +201,65 @@ def resolve_default_simulation_token_cap(read: Any = None) -> Optional[int]:
     ``instance/settings.json``, Override). ``0`` schaltet den Deckel ab; ein
     negativer oder nicht ganzzahliger Wert faellt mit Warnung auf den Standard.
     """
-    if read is None:
-        from app.services.settings_layer import get_default_service
+    return _read_default_limit(
+        _default_settings_reader(read), ENV_DEFAULT_SIM_MAX_TOKENS, DEFAULT_SIM_MAX_TOKENS
+    )
 
-        read = get_default_service().effective_value
-    raw = read(ENV_DEFAULT_SIM_MAX_TOKENS)
+
+def _read_default_enforcement(read: Any) -> str:
+    raw = read(ENV_DEFAULT_SIM_BUDGET_ENFORCEMENT)
     if raw is None:
-        return DEFAULT_SIM_MAX_TOKENS
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        value = -1
-    if value < 0 or isinstance(raw, bool):
+        return DEFAULT_SIM_BUDGET_ENFORCEMENT
+    if raw not in _ENFORCEMENT_MODES:
         logger.warning(
-            "run_budget: %s=%r ist ungültig (erwartet ganze Zahl >= 0); Standard %d",
-            ENV_DEFAULT_SIM_MAX_TOKENS, raw, DEFAULT_SIM_MAX_TOKENS,
+            "run_budget: %s=%r ist ungültig (erwartet soft oder hard); Standard %s",
+            ENV_DEFAULT_SIM_BUDGET_ENFORCEMENT, raw, DEFAULT_SIM_BUDGET_ENFORCEMENT,
         )
-        return DEFAULT_SIM_MAX_TOKENS
-    return value or None
+        return DEFAULT_SIM_BUDGET_ENFORCEMENT
+    return str(raw)
+
+
+def resolve_default_run_budget(read: Any = None) -> Optional[RunBudgetConfig]:
+    """Standardbudget einer Simulation ohne Nutzerbudget; ``None`` = kein Limit.
+
+    Liest Tokens, Kosten (Mikro-USD), Laufzeit, Aufrufe und die Durchsetzung
+    (``soft``/``hard``) ueber die Settings-Schicht. ``0`` heisst je Grenze kein
+    Limit; sind alle Grenzen aus, ist das Ergebnis ``None``. Ein Ueberschreiten
+    einer harten Grenze endet den Lauf mit dem passenden ``budget_*``-
+    Termination-Reason (``DIMENSION_TO_REASON``) -- nie als freundliche
+    Fallback-Antwort.
+    """
+    reader = _default_settings_reader(read)
+    limits = {
+        "max_tokens": _read_default_limit(
+            reader, ENV_DEFAULT_SIM_MAX_TOKENS, DEFAULT_SIM_MAX_TOKENS
+        ),
+        "max_cost_micros": _read_default_limit(
+            reader, ENV_DEFAULT_SIM_MAX_COST_MICROS, None
+        ),
+        "max_duration_seconds": _read_default_limit(
+            reader, ENV_DEFAULT_SIM_MAX_DURATION_SECONDS, None
+        ),
+        "max_llm_calls": _read_default_limit(
+            reader, ENV_DEFAULT_SIM_MAX_LLM_CALLS, None
+        ),
+    }
+    payload: dict[str, Any] = {k: v for k, v in limits.items() if v is not None}
+    if not payload:
+        return None
+    payload["enforcement"] = _read_default_enforcement(reader)
+    return RunBudgetConfig.model_validate(payload)
 
 
 def default_simulation_budget(read: Any = None) -> Optional[RunBudgetConfig]:
-    """Harter Standard-Tokendeckel fuer eine Simulation ohne Nutzerbudget.
+    """Standardbudget fuer eine Simulation ohne Nutzerbudget (Issue #1772/#1799).
 
-    ``None``, wenn der Deckel per ``AGORA_SIM_DEFAULT_MAX_TOKENS=0`` abgeschaltet
-    ist. Das Ergebnis traegt NUR ``max_tokens`` (hart); Kosten-, Zeit- und
-    Aufruflimits setzt der Standard nie. Ein Ueberschreiten endet den Lauf wie
-    jedes harte Tokenbudget mit ``termination_reason="budget_tokens"``
-    (``DIMENSION_TO_REASON``) -- nie als freundliche Fallback-Antwort.
+    Duenner Alias auf :func:`resolve_default_run_budget`: serverseitiger Standard
+    und Vorbelegung im Startdialog lesen dieselbe Quelle. Mit den Defaults ergibt
+    das einen harten Tokendeckel von 20 Mio.; ``None``, wenn alle Grenzen auf 0
+    stehen.
     """
-    cap = resolve_default_simulation_token_cap(read)
-    if cap is None:
-        return None
-    return RunBudgetConfig.model_validate({"max_tokens": cap, "enforcement": "hard"})
+    return resolve_default_run_budget(read)
 
 
 def set_termination_reason(run_id: str, reason: TerminationReason) -> None:

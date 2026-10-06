@@ -12,7 +12,7 @@
  * Stack: Playwright + axe-core (siehe global-setup.ts + scripts/e2e-up.sh).
  * Auth: Single-User-Token-Mode via localStorage (siehe helpers/auth.ts).
  */
-import { test, expect, request } from '@playwright/test';
+import { test, expect, request, type Page } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
 import { ensureOnboardingDismissed } from './helpers/onboarding';
 import {
@@ -116,25 +116,100 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, '/settings/general');
     });
 
-    test('Settings Integrations passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/settings/integrations');
+    // Etappe 3 (#1799): die alten Einstellungsadressen sind Weiterleitungen auf
+    // die Abschnitte des Einstellungsfensters; die Gates laufen an den Zielen.
+    test('Settings Pipeline (ehemals Integrations) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/settings/pipeline');
     });
 
-    test('Settings Profile passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/settings/profile');
+    test('Settings Zugang (ehemals Profile, API Keys, Audit Logs) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/settings/access');
     });
 
-    test('Settings API Keys passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/settings/api-keys');
-    });
-
-    test('Settings LLM Providers passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/settings/llm-providers');
+    test('Settings Anbieter (ehemals LLM Providers) passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, '/settings/providers');
     });
 
     test('Settings Embedding passes accessibility gates', async ({ page }) => {
       await checkAccessibilityGate(page, '/settings/embedding');
     });
+  });
+
+  // Etappe 3 (#1799): gespeicherte Links auf die alten Einstellungs- und
+  // Startadressen funktionieren weiter. Geprüft wird die Weiterleitung (URL).
+  test.describe('Alte Einstellungsadressen leiten um (Etappe 3, #1799)', () => {
+    const redirects: Array<[string, RegExp]> = [
+      ['/settings/integrations', /\/settings\/pipeline$/],
+      ['/settings/profile', /\/settings\/access$/],
+      ['/settings/users-teams', /\/settings\/access$/],
+      ['/settings/api-keys', /\/settings\/access$/],
+      ['/settings/audit-logs', /\/settings\/access$/],
+      ['/settings/llm-routing', /\/settings\/profiles$/],
+      ['/settings/llm-providers', /\/settings\/providers$/],
+      ['/workspace/provider-keys', /\/settings\/providers$/],
+      ['/settings-classic', /\/settings\/general$/],
+    ];
+    for (const [from, target] of redirects) {
+      test(`${from} leitet um`, async ({ page }) => {
+        await page.goto(from, { waitUntil: 'domcontentloaded' });
+        await expect(page).toHaveURL(target);
+      });
+    }
+  });
+
+  // Etappe 3 (#1799): Einstellungsfenster und Startdialog sind modale Dialoge
+  // über der zuletzt gezeigten Ansicht. Geprüft: axe ohne Verstöße, Fokus im
+  // Dialog, Esc schließt und kehrt zur Ansicht darunter zurück.
+  test.describe('Fenster über der Ansicht (Etappe 3, #1799)', () => {
+    const windows: Array<{ name: string; opener: (page: Page) => Promise<void>; testId: string; url: RegExp }> = [
+      {
+        name: 'Einstellungsfenster',
+        opener: async (page) => {
+          await page.getByRole('link', { name: 'Einstellungen', exact: true }).click();
+        },
+        testId: 'settings-window',
+        url: /\/settings\/general$/,
+      },
+      {
+        name: 'Startdialog Neuer Lauf',
+        opener: async (page) => {
+          await page.getByTestId('topbar-new-run').click();
+        },
+        testId: 'new-run-dialog',
+        url: /\/library\/runs\/new$/,
+      },
+    ];
+
+    for (const w of windows) {
+      test(`${w.name}: modaler Dialog mit Fokus, ohne axe-Verstöße, Esc kehrt zurück`, async ({ page }) => {
+        // Ansicht darunter: die Graphen-Bibliothek, erreicht ohne Fenster.
+        await page.goto('/library/graphs', { waitUntil: 'domcontentloaded' });
+        await w.opener(page);
+        await expect(page).toHaveURL(w.url);
+
+        const dialog = page.getByTestId(w.testId);
+        await expect(dialog).toBeVisible();
+        await expect(page.getByRole('dialog')).toHaveCount(1);
+
+        // Fokus liegt im Dialog.
+        await expect.poll(() => dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+
+        // axe: keine schweren oder kritischen Verstöße (Seite inklusive Dialog).
+        const axeResults = await runAxe(page);
+        assertNoCriticalViolations(axeResults);
+
+        // Tab bleibt im Dialog (Fokusfalle).
+        for (let i = 0; i < 6; i += 1) {
+          await page.keyboard.press('Tab');
+        }
+        await expect.poll(() => dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+
+        // Esc schließt und führt zur Ansicht darunter.
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+        await expect(page).toHaveURL(/\/library\/graphs$/);
+      });
+    }
   });
 
   test.describe('Onboarding', () => {
@@ -146,7 +221,7 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   test.describe('Picker', () => {
     test('AiModelPicker in LLM Routing passes accessibility gates', async ({ page }) => {
       // Picker benötigt Run-ID für RunLlmRoutingPanel
-      await page.goto('/settings/llm-routing', { waitUntil: 'domcontentloaded' });
+      await page.goto('/settings/profiles', { waitUntil: 'domcontentloaded' });
       await page.getByTestId(LlmRoutingTestId.runId).fill('run_e2e_accessibility');
 
       // Warte bis Picker gerendert ist
@@ -184,10 +259,6 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
     // die kanonische Route /dashboard (siehe describe-Block oben) ab, die
     // weiterhin gegatet ist. Issue #920 (320px-Mangel in Home.vue) wird
     // gegenstandslos, da Home.vue nicht mehr produktiv geroutet wird.
-
-    test('Settings Audit Logs passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, '/settings/audit-logs');
-    });
 
     // /v4/history leitet seit Etappe 2 auf die Aktivität um; das Gate prüft
     // die Jobliste der Aktivität (vorher: die Ablage).

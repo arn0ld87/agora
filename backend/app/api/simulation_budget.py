@@ -178,13 +178,22 @@ def preflight_estimate():
             message="platform muss parallel, twitter oder reddit sein",
         )
 
-    from ..services.run_budget import resolve_default_simulation_token_cap
+    from ..services.run_budget import resolve_default_run_budget
+
+    # Nur ein HARTER Standard-Tokendeckel bricht den Lauf ab; bei ``soft``
+    # warnt der Lauf nur, also keine Abbruch-Warnung in der Schaetzung.
+    default_budget = resolve_default_run_budget()
+    default_token_cap = (
+        default_budget.max_tokens
+        if default_budget is not None and default_budget.enforcement == "hard"
+        else None
+    )
 
     estimate = estimate_run(
         num_agents=num_agents,
         max_rounds=max_rounds,
         models=models,
         platforms=_PLATFORM_COUNTS[platform],
-        default_token_cap=resolve_default_simulation_token_cap(),
+        default_token_cap=default_token_cap,
     )
     return json_success(estimate.model_dump(mode="json"))

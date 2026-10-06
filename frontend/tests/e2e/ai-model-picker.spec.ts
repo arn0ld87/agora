@@ -15,7 +15,7 @@
  *     'unknown' als geeignet und filtert nur explizit 'unsupported' aus
  *     (siehe AiModelPicker.vue filteredOptions, Slice 5.6).
  *
- * Ziel-View: /settings/llm-routing (RunLlmRoutingPanel mountet pro Stage
+ * Ziel-View: /settings/profiles (RunLlmRoutingPanel mountet pro Stage
  * einen AiModelPicker). Run-ID wird ins Run-ID-Feld eingetragen; das
  * Backend synthetisiert fuer unbekannte run_ids einen Default-Config
  * (RuntimeRunConfig.load_config braucht keinen RunRegistry-Eintrag),
@@ -52,10 +52,10 @@ test.describe('Slice 5.6 · AiModelPicker E2E', () => {
     // Single-User-Token-Mode: Token-Inject in localStorage.
     await login(context)
     // Onboarding-Guard wegräumen (router/onboardingGuard.ts:32 redirected sonst
-    // jede Route auf /onboarding, sodass /settings/llm-routing nie rendert).
+    // jede Route auf /onboarding, sodass /settings/profiles nie rendert).
     // Gleicher Bypass wie upload-graph/minimal-report/golden-gate (Issue #739).
     await ensureOnboardingDismissed(page)
-    await page.goto('/settings/llm-routing', { waitUntil: 'domcontentloaded' })
+    await page.goto('/settings/profiles', { waitUntil: 'domcontentloaded' })
     // Run-ID eintragen → RunLlmRoutingPanel mountet (v-if selectedRunIdTrimmed).
     await page.getByTestId(LlmRoutingTestId.runId).fill(E2E_RUN_ID)
     // Warten bis der Stage-Picker fuer document_ingest gerendert ist.

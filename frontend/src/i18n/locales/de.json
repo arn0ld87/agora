@@ -269,7 +269,7 @@
     "model": {
       "label": "LLM-Modell",
       "placeholder": "Modell wählen …",
-      "workspaceDefaultHint": "Keine Auswahl: Workspace-Default aus /settings/llm-providers wird verwendet.",
+      "workspaceDefaultHint": "Keine Auswahl: Workspace-Default aus Einstellungen → Anbieter wird verwendet.",
       "presetGroup": "Empfohlen",
       "ollamaGroup": "Lokal verfügbar",
       "customGroup": "Eigene Eingabe",
@@ -277,7 +277,7 @@
       "customPlaceholder": "z. B. qwen3-coder-next:cloud",
       "refresh": "Liste aktualisieren",
       "loadingModels": "Lade verfügbare Modelle…",
-      "noOllama": "Keine Verbindung zu Ollama. Provider unter /settings/llm-providers konfigurieren oder Ollama starten.",
+      "noOllama": "Keine Verbindung zu Ollama. Provider unter Einstellungen → Anbieter konfigurieren oder Ollama starten.",
       "openAiDefault": "OpenAI-Standardmodell aktiv.",
       "default": "Standard aus .env",
       "ollamaOption": "{model} (Ollama)"
@@ -925,18 +925,7 @@
     },
     "countsError": "Zähler konnten nicht vollständig geladen werden.",
     "settings": {
-      "label": "Einstellungen",
-      "general": "Allgemein",
-      "integrations": "Integrationen",
-      "usersTeams": "Nutzer & Teams",
-      "apiKeys": "API-Schlüssel",
-      "llmProviders": "LLM-Anbieter",
-      "embedding": "Embedding-Konfiguration",
-      "llmRouting": "LLM-Routing",
-      "auditLogs": "Audit-Logs",
-      "profile": "Profil",
-      "providerKeys": "Provider-Keys",
-      "previewBadge": "Vorschau"
+      "label": "Einstellungen"
     },
     "footer": {
       "collapse": "Einklappen",
@@ -1120,6 +1109,7 @@
       "ui": "UI",
       "webtools": "Webtools",
       "oasis": "OASIS",
+      "budget": "Budgets",
       "security": "Secrets"
     },
     "llmActive": {
@@ -2025,6 +2015,177 @@
     }
   },
   "views": {
+    "newRun": {
+      "title": "Neuer Lauf",
+      "close": "Dialog schließen",
+      "question": {
+        "legend": "Frage",
+        "label": "Simulationsfrage",
+        "belongsToGraph": "Die Frage gehört zum Graphen. Für eine andere Frage einen neuen Graphen aus der Quelle bauen.",
+        "noneStored": "Zu diesem Graphen ist keine Frage gespeichert.",
+        "contestedLater": "Die Streitfrage legst du nach dem Graphenbau bei der Vorbereitung fest."
+      },
+      "graph": {
+        "legend": "Graph",
+        "existing": "Vorhandenen wählen",
+        "selectLabel": "Vorhandener Graph",
+        "fromSource": "Neu aus Quelle",
+        "none": "Ohne Graph",
+        "noneWhy": "Noch nicht verfügbar. Simulation und Interviews wären möglich, ein Bericht nicht.",
+        "noneYet": "Es gibt noch keinen fertigen Graphen.",
+        "loading": "Graphen werden geladen …",
+        "loadError": "Die Graphen konnten nicht geladen werden.",
+        "rejected": "{n} Graphen waren unlesbar und werden nicht angeboten."
+      },
+      "source": {
+        "dropHint": "Dateien hierher ziehen oder auswählen",
+        "fileList": "Gewählte Dateien"
+      },
+      "personas": {
+        "legend": "Personasatz",
+        "generate": "Erzeugen lassen",
+        "existing": "Vorhandenen wählen",
+        "existingWhy": "Kommt mit den Personasätzen in der Bibliothek.",
+        "laterWithSource": "Bei einer neuen Quelle stellst du die Obergrenze bei der Vorbereitung ein."
+      },
+      "models": {
+        "legend": "Modelle",
+        "scope": "Gilt für alle Stufen dieses Laufs. Abweichungen je Stufe wählst du am Startknopf der Stufe."
+      },
+      "scope": {
+        "legend": "Umfang und Budget",
+        "days": "Tage (1–365)",
+        "rounds": "Runden (3–30)",
+        "activityLater": "Bei einer neuen Quelle stellst du den Aktivitätsmodus bei der Vorbereitung ein.",
+        "budgetUnavailable": "Es gelten die Standardgrenzen der Instanz.",
+        "budgetReplaces": "Ein eigenes Budget ersetzt die Standardgrenzen vollständig.",
+        "estimateNeedsCap": "Ohne Obergrenze der Personas ist keine Schätzung möglich.",
+        "estimateBasis": "Die Schätzung rechnet mit höchstens {agents} Personas und {rounds} Runden."
+      },
+      "blockers": {
+        "graph": "Wähle einen vorhandenen Graphen.",
+        "files": "Lege mindestens eine Quelldatei ab.",
+        "question": "Die Simulationsfrage fehlt.",
+        "contested": "Die Streitfrage braucht 10 bis 300 Zeichen oder bleibt leer.",
+        "agents": "Die Obergrenze der Personas beträgt mindestens 10.",
+        "days": "Die Zahl der Tage liegt zwischen 1 und 365.",
+        "rounds": "Die Zahl der Runden liegt zwischen 3 und 30."
+      },
+      "actions": {
+        "cancel": "Abbrechen",
+        "start": "Starten",
+        "buildGraph": "Graph bauen",
+        "createOnly": "Nur anlegen",
+        "createOnlyWhy": "Ein Lauf entsteht, sobald der Graph gebaut ist."
+      },
+      "progress": {
+        "create": "Der Lauf wird angelegt …",
+        "prepare": "Die Personas werden vorbereitet …"
+      },
+      "errors": {
+        "create": "Der Lauf konnte nicht angelegt werden.",
+        "createShape": "Die Antwort beim Anlegen des Laufs war unvollständig.",
+        "prepare": "Die Vorbereitung konnte nicht gestartet werden.",
+        "prepareAfterCreate": "Der Lauf {id} wurde angelegt, die Vorbereitung ist aber fehlgeschlagen: {message}",
+        "openCreated": "Zum angelegten Lauf"
+      }
+    },
+    "settingsWindow": {
+      "title": "Einstellungen",
+      "close": "Einstellungen schließen",
+      "navLabel": "Abschnitte",
+      "sectionSelect": "Abschnitt wählen",
+      "operatorOnly": "Dieser Abschnitt gehört dem Betreiber. Hier ist er nur als Vorschau sichtbar, Änderungen sind nicht möglich.",
+      "access": {
+        "apiKeys": "API-Schlüssel",
+        "audit": "Audit-Protokoll",
+        "account": "Konto",
+        "security": "Sicherheit",
+        "needsAuth": "Dafür ist ein Zugangstoken oder eine Anmeldung nötig."
+      },
+      "embedding": {
+        "notice": "Hinweis: Einzelne Verbraucher lesen noch die Umgebungsvariablen. Die hier angezeigte Konfiguration ist nicht in jedem Fall die wirksame. Stand:"
+      },
+      "appearance": {
+        "groupTheme": "Farbschema",
+        "groupText": "Dichte und Schrift",
+        "theme": { "label": "Darstellung", "hint": "System folgt der Einstellung deines Geräts.", "system": "System", "light": "Hell", "dark": "Dunkel" },
+        "density": { "label": "Dichte", "hint": "Kompakt rückt Seitenleiste und Kopfzeile enger zusammen.", "comfortable": "Komfort", "compact": "Kompakt" },
+        "fontSize": { "label": "Schriftgröße", "hint": "Wirkt auf Fließtext, Überschriften und Hilfetexte der Oberfläche.", "small": "Klein", "normal": "Normal", "large": "Groß" },
+        "local": "Diese Auswahl gilt nur für diesen Browser."
+      },
+      "system": {
+        "groupServices": "Dienste",
+        "groupApp": "Anwendung",
+        "loading": "Zustand wird geprüft…",
+        "loadError": "Der Systemzustand konnte nicht abgerufen werden.",
+        "retry": "Erneut prüfen",
+        "state": { "ok": "In Ordnung", "down": "Nicht erreichbar", "unknown": "Unbekannt", "skipped": "Nicht geprüft" },
+        "backend": { "label": "Backend", "hint": "Anwendungsserver dieser Instanz." },
+        "neo4j": { "label": "Neo4j", "hint": "Graphdatenbank für Quellen und Entitäten." },
+        "ollama": { "label": "Ollama", "hint": "Lokaler Modelldienst.", "skipped": "Der aktive Anbieter ist {provider}; Ollama wird nicht geprüft." },
+        "disk": { "label": "Speicher für Uploads", "free": "{free} frei", "used": "{pct} % belegt" },
+        "version": { "label": "Version", "unknown": "unbekannt" },
+        "unreported": "Redis und PostgreSQL meldet das Backend derzeit nicht; ihr Zustand ist hier nicht sichtbar.",
+        "console": { "label": "Konsole", "hint": "Zeigt das Protokoll des Backends.", "open": "Konsole öffnen", "unavailable": "Nur für Betreiber." }
+      },
+      "budgets": {
+        "intro": "Diese Standardgrenzen gelten nur für neue Läufe ohne eigenes Budget. Ein im Startdialog gesetztes Budget ersetzt die Standardgrenzen vollständig.",
+        "noLimit": "0 = kein Limit.",
+        "groupLimits": "Standardgrenzen",
+        "groupEnforcement": "Durchsetzung",
+        "loading": "Budgets werden geladen…",
+        "loadError": "Die Budgets konnten nicht geladen werden.",
+        "tokens": { "label": "Tokens", "hint": "Höchstzahl der Tokens je Lauf." },
+        "cost": { "label": "Kosten in US-Dollar", "hint": "Höchstkosten je Lauf, z. B. 12,50." },
+        "duration": { "label": "Laufzeit", "hint": "Höchstdauer je Lauf.", "unit": "Einheit", "minutes": "Minuten", "hours": "Stunden" },
+        "calls": { "label": "Modellaufrufe", "hint": "Höchstzahl der Aufrufe an das Sprachmodell je Lauf." },
+        "enforcement": { "label": "Durchsetzung", "hint": "Hart beendet den Lauf bei Überschreitung, weich warnt nur.", "hard": "Hart (Lauf endet)", "soft": "Weich (nur Warnung)" },
+        "invalidNumber": "Bitte eine Zahl größer oder gleich 0 eingeben.",
+        "invalidInteger": "Bitte eine ganze Zahl größer oder gleich 0 eingeben.",
+        "save": "Speichern",
+        "saving": "Wird gespeichert…",
+        "saved": "Gespeichert.",
+        "discard": "Verwerfen",
+        "saveError": "Speichern fehlgeschlagen: {message}"
+      },
+      "sections": {
+        "general": "Allgemein",
+        "appearance": "Aussehen",
+        "providers": "Anbieter",
+        "profiles": "Profile",
+        "embedding": "Embedding",
+        "pipeline": "Pipeline",
+        "budgets": "Budgets",
+        "access": "Zugang",
+        "system": "System"
+      },
+      "providers": {
+        "managementTitle": "Anbieterverwaltung",
+        "managementDescription": "Verbindung, Transportart, Zustand und verfügbare Modelle je Anbieter.",
+        "managementLocked": "Die Anbieterverwaltung gehört dem Betreiber und ist für diese Anmeldung gesperrt. Eigene Schlüssel kannst du unten hinterlegen.",
+        "keysTitle": "Eigene Schlüssel",
+        "keysDescription": "Gelten nur für den aktiven Workspace. Gespeicherte Schlüssel werden nie erneut angezeigt.",
+        "transport": "Transportart",
+        "key": "Schlüssel",
+        "keyStored": "Hinterlegt (wird nicht angezeigt)",
+        "keyMissing": "Nicht hinterlegt",
+        "keyNone": "Nicht nötig (lokaler Dienst)",
+        "keySession": "Anmeldung über die lokale CLI-Session",
+        "transports": {
+          "http": "HTTP",
+          "local": "Lokaler Dienst",
+          "cli": "CLI"
+        }
+      },
+      "profiles": {
+        "modelsTitle": "Modell-Profile",
+        "modelsDescription": "Ein Profil ist ein gespeichertes Modell; eines davon ist der Standard.",
+        "stagesTitle": "Standardmodell je Stufe",
+        "stagesDescription": "Welches Modell Graph, Personas, Simulation und Bericht standardmäßig nutzen.",
+        "valuesTitle": "Technische Werte (LLM)"
+      }
+    },
     "history": {
       "title": "Verlauf",
       "subtitle": "Run- und Branch-Historie"
@@ -2135,7 +2296,23 @@
           "next": "Nächster Schritt"
         },
         "notRecorded": "nicht erfasst",
-        "modelPlannedHint": "Das geplante Modell vor dem Start ist in dieser Ansicht noch nicht erfasst.",
+        "modelDefault": "Standard: {model}",
+        "modelDefaultHint": "gilt, wenn beim Start nichts anderes gewählt wird",
+        "modelNone": "kein Standard erfasst",
+        "modelLoadFailed": "Das gelaufene Modell konnte nicht geladen werden.",
+        "withModel": "mit {model}",
+        "stepWithModel": "{step}, mit {model}",
+        "regenerate": {
+          "button": "Neu erzeugen mit …",
+          "title": "Bericht neu erzeugen",
+          "description": "Legt eine weitere Fassung an. Bestehende Fassungen bleiben erhalten.",
+          "pickLabel": "Modell für die neue Fassung",
+          "pickPlaceholder": "Modell wählen",
+          "confirm": "Neu erzeugen",
+          "cancel": "Abbrechen",
+          "pending": "Wird angelegt …",
+          "failed": "Der Bericht konnte nicht neu angelegt werden: {reason}"
+        },
         "budgetTitle": "Budgetstand",
         "budgetNone": "Für diesen Lauf ist noch kein Job mit Verbrauch erfasst.",
         "cardsLabel": "Bestandteile des Laufs",

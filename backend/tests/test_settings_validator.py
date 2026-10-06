@@ -38,6 +38,30 @@ def test_validate_accepts_native_int():
     assert validated == {'ONTOLOGY_MIN_ENTITY_TYPES': 5}
 
 
+@pytest.mark.parametrize('key', [
+    'AGORA_SIM_DEFAULT_MAX_TOKENS',
+    'AGORA_SIM_DEFAULT_MAX_COST_MICROS',
+    'AGORA_SIM_DEFAULT_MAX_DURATION_SECONDS',
+    'AGORA_SIM_DEFAULT_MAX_LLM_CALLS',
+])
+def test_validate_default_budget_limits_accept_zero_and_reject_negative(key):
+    # Issue #1799: 0 = kein Limit, negativ ist ungueltig.
+    validated, errors = validate_payload({key: '0'})
+    assert errors == []
+    assert validated == {key: 0}
+    validated, errors = validate_payload({key: -1})
+    assert validated == {}
+    assert [e.key for e in errors] == [key]
+
+
+def test_validate_default_budget_enforcement_enum():
+    validated, errors = validate_payload({'AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT': 'soft'})
+    assert errors == []
+    assert validated == {'AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT': 'soft'}
+    _, errors = validate_payload({'AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT': 'strict'})
+    assert [e.key for e in errors] == ['AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT']
+
+
 def test_validate_accepts_float_from_string():
     validated, errors = validate_payload({'HYBRID_SEARCH_VECTOR_WEIGHT': '0.55'})
     assert errors == []

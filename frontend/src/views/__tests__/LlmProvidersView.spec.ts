@@ -216,6 +216,7 @@ async function mountView(initial: {
   globalDefault?: unknown
   connections?: Record<string, unknown>
   extraProviders?: unknown[]
+  embedded?: boolean
 } = {}) {
   providersArr.length = 0
   providersArr.push(
@@ -252,6 +253,7 @@ async function mountView(initial: {
   const pinia = createPinia()
   setActivePinia(pinia)
   const wrapper = mount(LlmProvidersView, {
+    props: { embedded: initial.embedded ?? false },
     global: {
       plugins: [i18n],
       stubs: {
@@ -503,5 +505,37 @@ describe('LlmProvidersView (Redesign PR 9, Liste + Detail)', () => {
     await selectRow(w, 'opencode_go')
     expect(w.find(`[data-testid="provider-unsupported-notice"]`).exists()).toBe(true)
     expect(w.findAllComponents(inputStub).length).toBe(0)
+  })
+
+  it('cli-Route schickt beim Speichern nie eine Basisadresse (#1418/#1422)', async () => {
+    const w = await mountView({ extraProviders: cliProviders })
+    await selectRow(w, 'claude_cli')
+    await w.find(`[data-testid="${LlmProviderListTestId.saveButton}"]`).trigger('click')
+    await flushPromises()
+    const body = providersStoreMock.upsertConnection.mock.calls[0]?.[1] as { base_url: string | null }
+    expect(body.base_url).toBeNull()
+  })
+
+  it('zeigt Transportart und Schlüsselzustand, nie Schlüsselmaterial', async () => {
+    const w = await mountView({
+      extraProviders: cliProviders,
+      connections: { openai: { id: 'openai', transport: 'http', auth_mode: 'api_key', status: 'connected', base_url: null, secret_ref: 'secret://sk-live-123456' } },
+    })
+    await selectRow(w, 'openai')
+    expect(w.find('[data-testid="provider-transport"]').exists()).toBe(true)
+    expect(w.find('[data-testid="provider-key-state"]').exists()).toBe(true)
+    expect(w.text()).not.toContain('sk-live')
+    for (const input of w.findAll('input')) {
+      expect((input.element as HTMLInputElement).value).not.toContain('sk-live')
+    }
+    expect(w.html()).not.toContain('sk-live')
+  })
+
+  it('eingebettet: kein eigener Seitenkopf (kein h1)', async () => {
+    const w = await mountView({ embedded: true })
+    expect(w.find('[data-testid="page-header"]').exists()).toBe(false)
+    expect(w.find('h1').exists()).toBe(false)
+    const standalone = await mountView()
+    expect(standalone.find('[data-testid="page-header"]').exists()).toBe(true)
   })
 })
