@@ -36,7 +36,7 @@ Mixin-Voraussetzungen am konkreten Storage: ``_get_session`` und
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, Dict, Iterable, List, Optional, Tuple
 
 from .neo4j_mappings import sanitize_label
 
@@ -60,6 +60,14 @@ def _label_clause(labels: Iterable[str]) -> str:
 
 class Neo4jDuplicateMixin:
     """Kopierpfad für Graphen. Siehe Modul-Docstring."""
+
+    if TYPE_CHECKING:
+        # Voraussetzungen am konkreten Storage (Modul-Docstring). Nur für den
+        # Typprüfer deklariert: zur Laufzeit gibt es sie hier nicht und
+        # verdecken daher nichts in der MRO.
+        def _get_session(self, **kwargs: Any) -> ContextManager[Any]: ...
+
+        def _call_with_retry(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any: ...
 
     # ── Lesen ───────────────────────────────────────────────────────
 
