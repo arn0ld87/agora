@@ -23,8 +23,8 @@
 import type { RouteLocationRaw } from 'vue-router'
 import type { EvidenceRecord } from '@/contracts/reportContract'
 
-/** Routenname des Interviews-Reiters; einzige Stelle, die ihn kennt (Umstellung in der Interviews-Etappe). */
-export const INTERVIEWS_ROUTE_NAME = 'RunInterviewsLegacy'
+/** Routenname des Interviews-Reiters (seit Etappe 6 eine Kind-Route des Laufs). */
+export const INTERVIEWS_ROUTE_NAME = 'RunInterviews'
 
 /** Warum es keinen Sprung gibt; die Oberfläche übersetzt den Schlüssel. */
 export type NoJumpReason =
@@ -133,7 +133,7 @@ export function graphRoute(nodeUuid: string, ctx: Pick<JumpRouteContext, 'simula
   return { name: 'RunGraph', params: { simulationId: ctx.simulationId }, query: { entity: nodeUuid } }
 }
 
-/** Interviews-Reiter des Laufs (Ziel aus `runTabs.ts`, bis die Interviews-Etappe eine eigene Route bringt). */
+/** Interviews-Reiter des Laufs. */
 export function interviewRoute(ctx: Pick<JumpRouteContext, 'simulationId'>): RouteLocationRaw {
   return { name: INTERVIEWS_ROUTE_NAME, params: { simulationId: ctx.simulationId } }
 }

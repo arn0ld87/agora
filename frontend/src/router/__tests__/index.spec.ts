@@ -89,6 +89,7 @@ vi.mock('../../views/run/simulation/RunSimulationDiagnosticsView.vue', () => VIE
 // Etappe 5 (#1804): Bericht als Reiter am Lauf; die alte Berichtsadresse ist eine Aufloese-Ansicht.
 vi.mock('../../views/run/report/RunReportView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/report/ReportRedirectView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/interviews/RunInterviewsView.vue', () => VIEW_STUB)
 vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityLogView.vue', () => VIEW_STUB)
@@ -433,12 +434,37 @@ describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
     }
   })
 
-  it('die Interviews-Übergangsadresse wird von keiner Weiterleitung verschluckt', async () => {
-    await pushAndSettle('/v4/simulation/sim_1/interviews?x=1')
+  it('die Interviews-Übergangsadresse leitet auf den Interviews-Reiter um (Query und Hash bleiben)', async () => {
+    await pushAndSettle('/v4/simulation/sim_1/interviews?x=1#h')
     const route = router.currentRoute.value
-    expect(route.name).toBe('RunInterviewsLegacy')
+    expect(route.name).toBe('RunInterviews')
     expect(route.params.simulationId).toBe('sim_1')
-    expect(route.fullPath).toBe('/v4/simulation/sim_1/interviews?x=1')
+    expect(route.fullPath).toBe('/simulations/sim_1/interviews?x=1#h')
+  })
+
+  it('/v4/interaction/:reportId bleibt unberührt (Etappe 5 übernimmt den Berichtschat)', async () => {
+    await pushAndSettle('/v4/interaction/report_1')
+    expect(router.currentRoute.value.name).toBe('StepInteraction')
+    expect(router.currentRoute.value.params.reportId).toBe('report_1')
+  })
+
+  it('Interviews-Adresse: conversationId nur in den Formaten persona-<n> und group-<kennung>', async () => {
+    const cases: [string, string | undefined][] = [
+      ['/simulations/sim_1/interviews', undefined],
+      ['/simulations/sim_1/interviews/persona-4', 'persona-4'],
+      ['/simulations/sim_1/interviews/group-ab_1', 'group-ab_1'],
+      ['/simulations/sim_1/interviews/quatsch', undefined],
+      ['/simulations/sim_1/interviews/persona-x', undefined],
+    ]
+    for (const [path, expected] of cases) {
+      await pushAndSettle(path)
+      const route = router.currentRoute.value
+      expect(route.name, path).toBe('RunInterviews')
+      expect(route.matched.map((m) => m.name), path).toEqual(['RunWorkspace', 'RunInterviews'])
+      const props = route.matched[1].props.default
+      const resolved = typeof props === 'function' ? props(route) : props
+      expect(resolved, path).toEqual({ simulationId: 'sim_1', conversationId: expected })
+    }
   })
 
   it('/v4/report/:id bleibt eine eigene Route (Aufloese-Ansicht, kein Redirect-Eintrag)', async () => {
@@ -469,11 +495,11 @@ describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
     expect(record?.props.default).toBe(true)
   })
 
-  it('/interaction/:reportId und /v4/interaction/:reportId bleiben unberührt (Etappe 6)', async () => {
+  it('/v4/interaction/:reportId bleibt unberührt; die alte Interviews-Adresse leitet seit Etappe 6 um', async () => {
     await pushAndSettle('/v4/interaction/report_1')
     expect(router.currentRoute.value.name).toBe('StepInteraction')
     await pushAndSettle('/v4/simulation/sim_1/interviews')
-    expect(router.currentRoute.value.name).toBe('RunInterviewsLegacy')
+    expect(router.currentRoute.value.name).toBe('RunInterviews')
   })
 })
 
@@ -595,7 +621,9 @@ describe('Router – Struktur-Integrität', () => {
       'ActivityJobs',
       'ActivityJobDetail',
       'ActivityLog',
-      'RunInterviewsLegacy',
+      // Etappe 6 (#1805): Interviews-Reiter; RunInterviewsLegacy ist jetzt eine
+      // Weiterleitung und faellt heraus.
+      'RunInterviews',
     ].sort()
 
     const istProduktiveRouten = router
@@ -749,7 +777,9 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     ['/activity/jobs', 'ActivityJobs'],
     ['/activity/jobs/run_abc', 'ActivityJobDetail'],
     ['/activity/log', 'ActivityLog'],
-    ['/v4/simulation/sim_abc/interviews', 'RunInterviewsLegacy'],
+    ['/v4/simulation/sim_abc/interviews', 'RunInterviews'],
+    ['/simulations/sim_abc/interviews', 'RunInterviews'],
+    ['/simulations/sim_abc/interviews/persona-2', 'RunInterviews'],
   ])('löst %s → %s auf', async (path, name) => {
     await pushAndSettle(path)
     expect(router.currentRoute.value.name).toBe(name)
@@ -773,7 +803,7 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     expect(router.currentRoute.value.params.simulationId).toBeFalsy()
   })
 
-  it('Übergangsadresse trägt nur die simulationId, keine reportId', async () => {
+  it('Interviews-Reiter trägt nur die simulationId, keine reportId', async () => {
     await pushAndSettle('/v4/simulation/sim_abc/interviews')
     const route = router.currentRoute.value
     expect(route.params.simulationId).toBe('sim_abc')

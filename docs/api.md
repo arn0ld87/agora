@@ -91,6 +91,30 @@ Wichtige Konfliktcodes:
 - aktive Simulation → `simulation_already_running`
 - ausstehendes Persona-Review → `persona_review_required`
 - aktive Report-Generierung → `409 report_generate_in_progress`
+- Interview bei erreichtem hartem Run-Budget → `409 budget_exceeded` (siehe unten)
+
+#### Interviews und Run-Budget (#1805)
+
+`POST /api/simulation/interview`, `/interview/batch` und `/interview/all` laufen durch das Run-Budget des `simulation_run`-Jobs der Simulation: der Endpunkt löst die `run_id` über `linked_ids.simulation_id` auf und reicht sie bis zum LLM-Aufruf durch, sodass Budget-Guard, Ledger und Aufruf-Protokoll des Laufs greifen. Gibt es für die Simulation keinen `simulation_run`-Job (Altbestand), bleibt das Interview unbudgetiert wie bisher und wird mit der Warnung `interview_unbudgeted` protokolliert.
+
+Der Job wird nicht vom Simulationsende entkoppelt: Token-, Kosten- und Aufruflimit des Simulationslaufs gelten auch für Interviews nach dem Lauf, ein Interview nach einem Budgetabbruch wird daher dauerhaft abgelehnt. Das Zeitlimit misst bei einem beendeten Job die Laufdauer (Start bis Ende), nicht die seither vergangene Wanduhrzeit: ein im Zeitlimit beendeter Lauf nimmt weiter Interviews an, ein wegen des Zeitlimits beendeter Lauf lehnt sie ab. Eine Ablehnung schreibt zudem eine harte Warnung in das Manifest der bereits beendeten Simulation, deren Budgetstatus danach `exceeded` meldet. Hat die Simulation mehrere `simulation_run`-Jobs (Neustart), zählt der jüngste nach Anlagezeit; das wird als `interview_budget_multiple_runs` protokolliert. Hat der Job keine Budget-Konfiguration, läuft das Interview unbudgetiert und wird als `interview_unbudgeted … reason=no_budget_config` protokolliert.
+
+Ein erreichtes hartes Budget ist ein harter Fehler für den ganzen Request, nie `success: true` und nie ein Fallback-Text; bei `/interview/batch` und `/interview/all` enthält die Antwort keine Teilantworten. Bereits gespeicherte Antworten bleiben im Verlauf (`/interview/history`) und sind im Ledger verbucht; `persisted_count` nennt ihre Zahl für diesen Aufruf (Direktpfad; im IPC-Pfad immer `0`). Antwort: HTTP `409` mit
+
+```json
+{
+  "success": false,
+  "code": "budget_exceeded",
+  "error": "Tokenbudget überschritten: 21000000 >= 20000000",
+  "termination_reason": "budget_tokens",
+  "dimension": "tokens",
+  "observed": 21000000,
+  "threshold": 20000000,
+  "persisted_count": 1
+}
+```
+
+`termination_reason` ist `budget_tokens`, `budget_cost`, `budget_time` oder `budget_calls`; `dimension` ist `tokens`, `cost`, `time` oder `calls`. Vertrag: `backend/app/contracts/interview_budget_exceeded_contract.py::InterviewBudgetExceededResponse` (`schemas/interview-budget-exceeded.schema.json`).
 
 Nutzer-Stop und Infrastrukturabbruch sind unterschiedliche Zustände: ein expliziter Stop wird als `stopped` mit `termination_reason="user_stop"` geführt; stale Prozesse nach Worker-/Container-Restart können durch Startup-Reconciliation als `failed/process_restart` markiert werden.
 

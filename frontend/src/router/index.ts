@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationAsRelativeGeneric, RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
+import { parseConversationId } from '../composables/run/interviews/conversations'
 import { useAuthStore } from '../store/auth'
 import { safeNext } from '../auth/safeNext'
 import {
@@ -349,6 +350,21 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/run/report/RunReportView.vue'),
         props: true,
       },
+      // Etappe 6 (#1805): Interviews am Lauf. `conversationId` ist `persona-<n>`
+      // oder `group-<kennung>`; alles andere erreicht die View als fehlender Param.
+      {
+        path: 'interviews/:conversationId?',
+        name: 'RunInterviews',
+        component: () => import('../views/run/interviews/RunInterviewsView.vue'),
+        props: (route) => {
+          const raw = route.params.conversationId
+          const id = Array.isArray(raw) ? raw[0] : raw
+          return {
+            simulationId: String(route.params.simulationId),
+            conversationId: parseConversationId(id) ? id : undefined,
+          }
+        },
+      },
     ],
   },
   {
@@ -381,14 +397,17 @@ const routes: RouteRecordRaw[] = [
     name: 'ActivityLog',
     component: () => import('../views/activity/ActivityLogView.vue'),
   },
-  // Uebergangsadresse bis Etappe 6: Gespraechsansicht nur mit simulationId,
-  // auch fuer Laeufe ohne Bericht. Etappe 6 leitet sie auf
-  // /simulations/:simulationId/interviews um.
+  // Alte Uebergangsadresse (Etappe 2): seit Etappe 6 (#1805) eine Weiterleitung
+  // auf den Interviews-Reiter. Query und Hash bleiben erhalten.
   {
     path: '/v4/simulation/:simulationId/interviews',
     name: 'RunInterviewsLegacy',
-    component: () => import('../views/v4/steps/StepInteractionView.vue'),
-    props: true,
+    redirect: (to) => ({
+      name: 'RunInterviews',
+      params: { simulationId: String(to.params.simulationId) },
+      query: to.query,
+      hash: to.hash,
+    }),
   },
 
   // Auth-Routen (#1617, Teil B1)
