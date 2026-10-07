@@ -26,6 +26,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0019](0019-multi-user-after-1-0.md) | Multi-User erst nach 1.0; gemergter Code bleibt inaktiv | Accepted (2026-09-25) | #1610 |
 | [0020](0020-isolated-public-demo-before-1-0.md) | Isolierte öffentliche Bewerbungsdemo vor 1.0 | Accepted (2026-09-26) | — |
 | [0021](0021-kompatibilitaet-ab-1-0.md) | Kompatibilitäts- und Deprecation-Policy ab 1.0 | Accepted (2026-10-02, Entscheidung #1657) | #1664 |
+| [0022](0022-manuelle-herkunft-im-graphen.md) | Manuelle Herkunft im Wissensgraphen | Vorgeschlagen (2026-10-07) | #1808 |
 
 ## Geplante ADRs
 
