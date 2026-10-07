@@ -199,19 +199,27 @@ class GraphEditService:
         self._log(graph_id, "entity", "create" if created else "create-replay", entity_uuid)
         return GraphNodeView.model_validate(node), created
 
-    def update_entity(self, graph_id: str, entity_uuid: str, request: EntityUpdate) -> GraphNodeView:
-        self._guard(graph_id)
-        current = self._storage.edit_get_entity(graph_id, entity_uuid)
-        if current is None:
-            raise GraphEditNotFound(entity_uuid)
+    @staticmethod
+    def _current_type(current: Dict[str, Any]) -> Optional[str]:
+        """Gemeldeten Entitäts-Typ aus dem Knoten extrahieren (Attribute oder Labels)."""
+        return current.get("entity_type") or next(iter(current.get("labels") or []), None)
 
-        cur_name = current["name"]
-        cur_type = current.get("entity_type") or next(iter(current.get("labels") or []), None)
-        cur_summary = current.get("summary", "")
+    @staticmethod
+    def _current_aliases(current: Dict[str, Any]) -> List[Any]:
+        """Alias-Property in kanonische Liste überführen (rückwärtskompatibel)."""
         attrs = current.get("attributes") or {}
-        raw_aliases = attrs.get(ALIASES_KEY) or attrs.get("aliases") or attrs.get("alias") or []
-        cur_aliases = [raw_aliases] if isinstance(raw_aliases, str) else list(raw_aliases)
+        raw = attrs.get(ALIASES_KEY) or attrs.get("aliases") or attrs.get("alias") or []
+        return [raw] if isinstance(raw, str) else list(raw)
 
+    @staticmethod
+    def _changed_fields(
+        request: EntityUpdate,
+        cur_name: str,
+        cur_type: Optional[str],
+        cur_summary: str,
+        cur_aliases: List[Any],
+    ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[List[str]]]:
+        """Liefert die gewünschten Felder; unveränderte Werte als ``None``."""
         name = request.name if request.name is not None and request.name != cur_name else None
         entity_type = (
             request.entity_type
@@ -228,23 +236,53 @@ class GraphEditService:
             if request.aliases is not None and request.aliases != cur_aliases
             else None
         )
+        return name, entity_type, summary, aliases
+
+    def _embed_entity_update(
+        self,
+        name: Optional[str],
+        entity_type: Optional[str],
+        summary: Optional[str],
+        cur_name: str,
+        cur_type: Optional[str],
+        cur_summary: str,
+    ) -> Tuple[Optional[List[float]], Optional[str], Optional[str]]:
+        """Berechnet die Einbettung bei Namens-/Typwechsel und folgt der Auto-Zusammenfassung."""
+        if name is None and entity_type is None:
+            return None, None, summary
+        new_name = name if name is not None else cur_name
+        new_type = entity_type if entity_type is not None else cur_type
+        embedding_text = entity_embedding_text(new_name, new_type)
+        embedding = self._embed(embedding_text)
+        # Hatte die Entität noch die automatische Zusammenfassung, folgt sie
+        # dem neuen Namen/Typ; eine von Hand gepflegte bleibt unberührt.
+        if summary is None and cur_summary == default_entity_summary(cur_name, cur_type):
+            summary = default_entity_summary(new_name, new_type)
+        return embedding, embedding_text, summary
+
+    def update_entity(self, graph_id: str, entity_uuid: str, request: EntityUpdate) -> GraphNodeView:
+        self._guard(graph_id)
+        current = self._storage.edit_get_entity(graph_id, entity_uuid)
+        if current is None:
+            raise GraphEditNotFound(entity_uuid)
+
+        cur_name = current["name"]
+        cur_summary = current.get("summary", "")
+        cur_type = self._current_type(current)
+        cur_aliases = self._current_aliases(current)
+
+        name, entity_type, summary, aliases = self._changed_fields(
+            request, cur_name, cur_type, cur_summary, cur_aliases
+        )
         if name is None and entity_type is None and summary is None and aliases is None:
             return GraphNodeView.model_validate(current)  # nichts zu ändern
 
         if entity_type is not None:
             self._require_ontology_type(graph_id, entity_type)
 
-        embedding: Optional[List[float]] = None
-        embedding_text: Optional[str] = None
-        if name is not None or entity_type is not None:
-            new_name = name if name is not None else cur_name
-            new_type = entity_type if entity_type is not None else cur_type
-            embedding_text = entity_embedding_text(new_name, new_type)
-            embedding = self._embed(embedding_text)
-            # Hatte die Entität noch die automatische Zusammenfassung, folgt sie
-            # dem neuen Namen/Typ; eine von Hand gepflegte bleibt unberührt.
-            if summary is None and cur_summary == default_entity_summary(cur_name, cur_type):
-                summary = default_entity_summary(new_name, new_type)
+        embedding, embedding_text, summary = self._embed_entity_update(
+            name, entity_type, summary, cur_name, cur_type, cur_summary
+        )
 
         entity_key, _fact_key = self._storage.edit_property_keys()
         node = self._storage.edit_update_entity(
