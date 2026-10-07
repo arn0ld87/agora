@@ -2807,6 +2807,26 @@
         }
       }
     },
+    "personaSets": {
+      "title": "Persona sets",
+      "loading": "Loading persona sets …",
+      "errorTitle": "Persona sets could not be loaded",
+      "retry": "Try again",
+      "library": {
+        "empty": "No persona sets yet.",
+        "count": "{n} persona sets"
+      },
+      "detail": {
+        "title": "Persona set",
+        "empty": "This persona set has no personas yet.",
+        "locked": "Locked: a run was created from this persona set. Duplicate it to make changes.",
+        "notFound": "Persona set not found."
+      },
+      "run": {
+        "title": "Personas",
+        "empty": "No persona set view is available for this run yet."
+      }
+    },
     "graphLibrary": {
       "title": "Graph",
       "errors": {

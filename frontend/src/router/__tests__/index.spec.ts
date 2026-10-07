@@ -89,6 +89,9 @@ vi.mock('../../views/run/simulation/RunSimulationDiagnosticsView.vue', () => VIE
 vi.mock('../../views/run/report/RunReportView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/report/ReportRedirectView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/interviews/RunInterviewsView.vue', () => VIEW_STUB)
+vi.mock('../../views/library/LibraryPersonaSetsView.vue', () => VIEW_STUB)
+vi.mock('../../views/persona-sets/PersonaSetView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/personas/RunPersonasView.vue', () => VIEW_STUB)
 vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityLogView.vue', () => VIEW_STUB)
@@ -628,6 +631,10 @@ describe('Router – Struktur-Integrität', () => {
       // Etappe 6 (#1805): Interviews-Reiter; RunInterviewsLegacy ist jetzt eine
       // Weiterleitung und faellt heraus.
       'RunInterviews',
+      // Etappe 7 (#1807, Skelett): Personasaetze.
+      'LibraryPersonaSets',
+      'PersonaSet',
+      'RunPersonas',
     ].sort()
 
     const istProduktiveRouten = router
@@ -784,9 +791,21 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     ['/v4/simulation/sim_abc/interviews', 'RunInterviews'],
     ['/simulations/sim_abc/interviews', 'RunInterviews'],
     ['/simulations/sim_abc/interviews/persona-2', 'RunInterviews'],
+    // Etappe 7 (#1807, Skelett).
+    ['/library/persona-sets', 'LibraryPersonaSets'],
+    ['/persona-sets/set_abc', 'PersonaSet'],
+    ['/simulations/sim_abc/personas', 'RunPersonas'],
   ])('löst %s → %s auf', async (path, name) => {
     await pushAndSettle(path)
     expect(router.currentRoute.value.name).toBe(name)
+  })
+
+  it('Personasatz-Routen reichen :setId und :simulationId durch', async () => {
+    await pushAndSettle('/persona-sets/set_abc')
+    expect(router.currentRoute.value.params.setId).toBe('set_abc')
+    await pushAndSettle('/simulations/sim_abc/personas')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+    expect(router.currentRoute.value.matched.map((m) => m.name)).toEqual(['RunWorkspace', 'RunPersonas'])
   })
 
   it('Lauf-Kinder hängen unter RunWorkspace und tragen simulationId', async () => {

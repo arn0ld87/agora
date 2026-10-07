@@ -2807,6 +2807,26 @@
         }
       }
     },
+    "personaSets": {
+      "title": "Personasätze",
+      "loading": "Personasätze werden geladen …",
+      "errorTitle": "Personasätze konnten nicht geladen werden",
+      "retry": "Erneut versuchen",
+      "library": {
+        "empty": "Noch keine Personasätze vorhanden.",
+        "count": "{n} Personasätze"
+      },
+      "detail": {
+        "title": "Personasatz",
+        "empty": "Dieser Personasatz enthält noch keine Personas.",
+        "locked": "Gesperrt: Aus diesem Personasatz ist ein Lauf entstanden. Zum Ändern bitte duplizieren.",
+        "notFound": "Personasatz nicht gefunden."
+      },
+      "run": {
+        "title": "Personas",
+        "empty": "Für diesen Lauf ist noch keine Personasatz-Ansicht verfügbar."
+      }
+    },
     "graphLibrary": {
       "title": "Graph",
       "errors": {

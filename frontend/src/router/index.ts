@@ -281,6 +281,20 @@ const routes: RouteRecordRaw[] = [
     name: 'LibraryGraphs',
     component: () => import('../views/library/LibraryGraphsView.vue'),
   },
+  // Etappe 7 (#1807, Skelett): Personasaetze als Bibliotheksobjekt. Reiter und
+  // Seitenleiste zeigen noch nicht hierher; Weiterleitungen folgen mit den
+  // Folgetickets (§6.2).
+  {
+    path: '/library/persona-sets',
+    name: 'LibraryPersonaSets',
+    component: () => import('../views/library/LibraryPersonaSetsView.vue'),
+  },
+  {
+    path: '/persona-sets/:setId',
+    name: 'PersonaSet',
+    component: () => import('../views/persona-sets/PersonaSetView.vue'),
+    props: true,
+  },
   // Lauf-Arbeitsbereich unter /simulations/…, nicht /runs/…: `/runs/:id` ist
   // die Job-Detailansicht der RunRegistry (§6). Reiter Personas, Simulation,
   // Bericht, Interviews bekommen ihre Kind-Routen mit den spaeteren Etappen.
@@ -352,6 +366,13 @@ const routes: RouteRecordRaw[] = [
         path: 'report/:reportId?',
         name: 'RunReport',
         component: () => import('../views/run/report/RunReportView.vue'),
+        props: true,
+      },
+      // Etappe 7 (#1807, Skelett): Personas am Lauf.
+      {
+        path: 'personas',
+        name: 'RunPersonas',
+        component: () => import('../views/run/personas/RunPersonasView.vue'),
         props: true,
       },
       // Etappe 6 (#1805): Interviews am Lauf. `conversationId` ist `persona-<n>`
