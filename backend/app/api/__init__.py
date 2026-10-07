@@ -22,6 +22,7 @@ from . import graph           # noqa: E402, F401
 from . import graph_projects  # noqa: E402, F401
 from . import graph_build     # noqa: E402, F401
 from . import graph_data      # noqa: E402, F401
+from . import graph_edit      # noqa: E402, F401 -- Issue #1808: Graph bearbeiten, Sperre
 from . import simulation_common  # noqa: E402, F401
 from . import simulation_lifecycle  # noqa: E402, F401
 from . import simulation_entities  # noqa: E402, F401

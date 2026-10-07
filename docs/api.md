@@ -63,8 +63,26 @@ Module:
 - `graph_projects.py` — Projekt-/Graph-Metadaten und Reset/Delete
 - `graph_build.py` — Graph-Build und Ontologie-Generierung
 - `graph_data.py` — Graphdaten, Snapshots, Diff, Export und Task-Sichten
+- `graph_edit.py` — Handänderungen am Graphen und Sperrzustand ([#1808](https://github.com/arn0ld87/agora/issues/1808), [ADR-0022](decisions/0022-manuelle-herkunft-im-graphen.md))
 
 Langlaufende Graph-Jobs werden über die Run-/Task-Infrastruktur sichtbar gemacht. Restart-/SIGTERM-Semantik für daemonisierte Graph-Build-Threads ist als Teil von #1472 noch nicht vollständig gelöst. `GET /api/graph/task/<task_id>` und `GET /api/graph/tasks` serialisieren seit #1466 über den Pydantic-Vertrag `TaskStatusResponse` (Spiegel von `Task.to_dict()`, inklusive `message_key`).
+
+**Graph bearbeiten und Sperre (#1808).** Entitäten und Beziehungen eines Graphen lassen sich von Hand ändern. Verträge: `backend/app/contracts/graph_edit_contract.py`, Schemas `schemas/graph-*.schema.json`.
+
+| Methode und Pfad | Scope | Zweck |
+|---|---|---|
+| `GET /api/graph/<graph_id>/lock` | `graph:read` | Sperrzustand `{graph_id, locked, used_by[]}` (`GraphLockState`) |
+| `POST /api/graph/<graph_id>/entities` | `graph:write` | Entität anlegen (`EntityCreate`), `201`; Wiederholung mit gleicher `client_request_id` liefert dieselbe Entität mit `200` |
+| `PATCH /api/graph/<graph_id>/entities/<uuid>` | `graph:write` | Name, Typ, Zusammenfassung, Aliase ändern (`EntityUpdate`, Teilmenge) |
+| `DELETE /api/graph/<graph_id>/entities/<uuid>` | `graph:write` | Entität hart samt ihrer Beziehungen löschen (`EntityDeleteResult`) |
+| `POST /api/graph/<graph_id>/entities/merge` | `graph:write` | Quell-Entitäten in ein Ziel zusammenführen (`EntityMerge` → `EntityMergeResult`) |
+| `POST /api/graph/<graph_id>/relations` | `graph:write` | Beziehung anlegen (`RelationCreate`), `201`/`200` wie bei Entitäten |
+| `PATCH /api/graph/<graph_id>/relations/<uuid>` | `graph:write` | Name und/oder Fakt ändern (`RelationUpdate`); `episode_ids` bleiben erhalten |
+| `DELETE /api/graph/<graph_id>/relations/<uuid>` | `graph:write` | Beziehung hart löschen (`RelationDeleteResult`) |
+
+Antworten stehen im üblichen Envelope unter `data` (`GraphNodeView`, `GraphEdgeView`). Herkunft: Knoten und Kanten tragen `provenance {origin, changed_at, episode_count}`; `origin` ist `manual` (von Hand angelegt), `edited` (extrahiert, danach geändert) oder `null` (extrahiert, Bestand). `GET /api/graph/data/<graph_id>` liefert additiv `entity_type` und `provenance` je Knoten und `provenance` je Kante; einen Pydantic-Vollvertrag hat diese Leseantwort weiterhin nicht (offen).
+
+**Sperre (ADR-0022 §6).** Ein Graph ist gesperrt, sobald eine Simulation sein Projekt oder seine `graph_id` verwendet; der Zustand wird bei jeder Abfrage aus dem Bestand abgeleitet (Scan der Projekte und der Simulationsdatensätze). Jeder Schreibzugriff prüft ihn zuerst, auch `DELETE /api/graph/delete/<graph_id>`, `DELETE /api/graph/project/<project_id>` und `POST /api/graph/project/<project_id>/reset`: gesperrt → `409 graph_locked` mit `used_by` (Liste aus `simulation_id`, `status`, `project_id`, `branch_name`). Während einer Embedding-Migration (pending, running, validating) lehnen die Schreibrouten mit `409 embedding_migration_running` ab. Eine Kollision mit einer bestehenden Entität (gleicher Name und Typ, ohne Beachtung der Groß-/Kleinschreibung) ergibt `409 graph_edit_conflict`; zusammengeführt wird nur über `entities/merge`. Manuelle Entitäten verwenden nur Typen aus der Ontologie des Graphen (sonst `400 validation_failed`). Kann die Einbettung nicht berechnet werden, antwortet die Route `503 service_unavailable` und ändert nichts.
 
 ### Simulation — `/api/simulation`
 

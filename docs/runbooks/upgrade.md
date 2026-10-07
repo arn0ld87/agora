@@ -49,6 +49,12 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Upgrade:** Es ist kein Schritt nötig. Altbestand ohne das Feld bleibt lesbar und liefert `null`, nie 0; das Feld erscheint erst in neu geschriebenen Events und Summaries.
 - **Rollback-Implikation:** Ältere Versionen lehnen ein `usage_summary.json` **mit** dem Feld ab (`UsageMetrics` ist dort `extra="forbid"`) und behandeln die Zusammenfassung als nicht vorhanden; Zeilen in `llm_call_events.jsonl` liest die Leseseite tolerant. Abhilfe ist, `cached_input_tokens` aus `usage_summary.json` zu entfernen oder die Datei neu aggregieren zu lassen. Das Frontend vor diesem Stand (strikter Zod-Spiegel) lehnt Run-Antworten mit dem Feld ab, solange Backend und Frontend nicht gemeinsam zurückgerollt werden.
 
+**Herkunftsmerkmal an Knoten und Kanten im Graphen** ([#1808](https://github.com/arn0ld87/agora/issues/1808), [ADR-0022](../decisions/0022-manuelle-herkunft-im-graphen.md)). Neo4j-Knoten (`Entity`) und -Kanten (`RELATION`) bekommen die optionalen Eigenschaften `origin` (`manual` oder `edited`) und `origin_changed_at` (ISO-8601). Sie entstehen nur, wenn ein Graph von Hand bearbeitet wird; es gibt keine neuen Constraints oder Indizes.
+
+- **Upgrade:** Es ist kein Schritt nötig und keine Migration des Bestands. Ein Element ohne `origin` gilt als extrahiert; Altgraphen werden nicht nachgerüstet.
+- **Verhaltenswechsel ohne Zutun:** `DELETE /api/graph/delete/<graph_id>`, `DELETE /api/graph/project/<project_id>` und `POST /api/graph/project/<project_id>/reset` antworten für einen Graphen, den eine Simulation verwendet (Projekt oder `graph_id`), mit `409 graph_locked` statt zu löschen bzw. zurückzusetzen. Wer einen benutzten Graphen bewusst entfernen will, löscht zuerst die Simulationen. Die Sperre ist kein gespeichertes Feld, sondern wird aus den Simulationsdatensätzen abgeleitet; es gibt nichts zu entsperren.
+- **Rollback-Implikation:** Ältere Versionen ignorieren die Eigenschaften `origin` und `origin_changed_at` (Neo4j-Eigenschaften ohne Schema). Von Hand angelegte Elemente erscheinen dort als gewöhnliche Graph-Elemente, ohne Herkunftsmerkmal; manuelle Beziehungen haben leere `episode_ids`. Die Sperre entfällt, die alten Lösch- und Reset-Endpunkte arbeiten wieder ohne Prüfung.
+
 ## Env-Default-Änderungen außerhalb des Versionssprungs
 
 Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).
