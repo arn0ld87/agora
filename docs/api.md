@@ -172,6 +172,10 @@ Bei einem **persistierten Altartefakt**, das die heutige Evidence-Semantik nicht
 
 Belege aus Interview und Simulationsaktion tragen seit #1778 das optionale Feld `voice_key` (`agent:<agent_id>`), die Stimme, von der der Beleg stammt. `run_degradations` kennt seit #1778 die Komponente `simulation_positioning` (`warning`): zu wenige Stimmen beziehen in der Simulation Stellung zur Streitfrage.
 
+#### Erzeugungsherkunft einer Berichtsfassung (#1804)
+
+`GET /api/report/<id>`, `GET /api/report/by-simulation/<simulation_id>` und `GET /api/report/list` tragen die optionalen Felder `llm_model`, `llm_provider_id` und `generation_run_id` (`ReportModel`, jeweils `null`, wenn nicht belegt). Quelle ist der jüngste Berichts-Job (`run_type=report_generate`, `entity_id=<report_id>`) der RunRegistry: `metadata.llm_model` und `metadata.llm_provider.provider_id` stammen dort aus der gelockten Route der Stufe `report_generation`, also aus dem Modell, das tatsächlich lief. `generation_run_id` ist die `run_id` dieses Jobs und der Schlüssel für `GET /api/runs/<run_id>/llm-routing`. Berichte ohne Job (Altbestand, gelöschter Lauf) und Jobs ohne Modellangabe lassen die Felder `null`; nichts wird aus Workspace-Defaults geraten, die Basis-URL des Anbieters wird nicht ausgeliefert. Die Berichts-Metadatei (`meta.json`) speichert sie nicht, und im Export (`report` im Envelope) bleiben sie `null`. `/list` liest die Registry einmal für alle Fassungen.
+
 #### Belegdichte und Positionierungsquote (#1804)
 
 `GET /api/report/<id>/evidence-density` liefert die je Bericht gespeicherte `evidence_density.json` (#1779), `GET /api/report/<id>/stance-analysis` die `stance_analysis.json` mit Positionierungsquote und Lagerverteilung (#1778). Beide sind rein lesend, ohne eigene Scope-Regel (wie `/evidence`), und antworten mit genau einer von drei Formen:

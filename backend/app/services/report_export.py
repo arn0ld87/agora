@@ -23,6 +23,7 @@ from ..services.evidence_migrations import (
 )
 from ..services.report_agent import ReportManager, ReportStatus
 from ..services.report_agent.csv_export import claims_to_csv, personas_to_csv, segments_to_csv
+from ..services.report_provenance import ReportGenerationInfo
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -99,8 +100,20 @@ class ReportExportService:
         }
 
     @classmethod
-    def build_report_contract_model(cls, report_obj) -> ReportModel:
+    def build_report_contract_model(
+        cls,
+        report_obj,
+        generation: Optional[ReportGenerationInfo] = None,
+    ) -> ReportModel:
+        """Baut das ``ReportModel`` aus dem Domain-Objekt.
+
+        ``generation`` (Issue #1804) trägt Modell, Anbieter und Job der
+        Erzeugung. Nur die Lese-Endpunkte übergeben es; der Export ruft ohne,
+        sein Inhalt bleibt unverändert und die Felder bleiben ``None``.
+        """
         report_dict = report_obj.to_dict()
+        if generation is not None:
+            report_dict.update(generation.as_report_fields())
         report_dict["schema_version"] = EXPORT_CONTRACT_SCHEMA_VERSION
         report_dict["missing_sections"] = list(report_dict.get("missing_sections") or [])
         if report_dict.get("status") == ReportStatus.INCOMPLETE.value:

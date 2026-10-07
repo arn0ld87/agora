@@ -978,6 +978,17 @@ class ReportModel(BaseModel):
     #: Qualitätsmängel des Laufs, auf dem dieser Bericht beruht. Additiv mit
     #: Default leer — Bestandsreports bleiben gültig.
     run_degradations: list[RunDegradationModel] = Field(default_factory=list)
+    #: Erzeugungsherkunft dieser Fassung (Issue #1804, Etappe 5). Additiv mit
+    #: Default ``None``. Belegt aus dem Berichts-Job der RunRegistry
+    #: (``metadata.llm_model``, ``metadata.llm_provider.provider_id``), also aus
+    #: der gelockten Route, die tatsächlich lief — nie aus Workspace-Defaults.
+    #: Leer bei Berichten ohne Job oder ohne Angabe im Job; ``GET /api/report/<id>``
+    #: und ``/list`` füllen sie, der Export und die Metadatei tragen sie nicht.
+    llm_model: Optional[str] = Field(default=None, max_length=200)
+    llm_provider_id: Optional[str] = Field(default=None, max_length=100)
+    #: ``run_id`` des jüngsten Berichts-Jobs; Schlüssel für
+    #: ``GET /api/runs/<run_id>/llm-routing`` (Stufe ``report_generation``).
+    generation_run_id: Optional[str] = Field(default=None, max_length=100)
 
     @property
     def degraded(self) -> bool:

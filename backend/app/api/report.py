@@ -22,6 +22,7 @@ from ..contracts.report_artifact_contract import ReportArtifactKind
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.report_agent.artifact_read import ArtifactContractViolation
 from ..services.report_agent.sections import strip_raw_html_markers
+from ..services.report_provenance import ReportGenerationInfo, load_generation_info
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..services.graph_tools import GraphToolsService
@@ -223,6 +224,17 @@ def get_generate_status():
 
 # ============== Report Retrieval Interface ==============
 
+def _report_payload(report, generation: dict[str, ReportGenerationInfo]) -> dict:
+    """``ReportModel`` einer Fassung inkl. Erzeugungsherkunft (Issue #1804).
+
+    Modell, Anbieter und Job stammen aus dem Berichts-Job der RunRegistry; ohne
+    Job bleiben die Felder ``None``.
+    """
+    return ReportExportService.build_report_contract_model(
+        report, generation.get(report.report_id)
+    ).model_dump(mode="json")
+
+
 @report_bp.route('/<report_id>', methods=['GET'])
 @handle_api_errors(log_prefix="Failed to get report")
 def get_report(report_id: str):
@@ -232,7 +244,7 @@ def get_report(report_id: str):
     report = ReportManager.get_report(report_id)
     if not report:
         return json_error(f"Report does not exist: {report_id}", status=404)
-    return json_success(ReportExportService.build_report_contract_model(report).model_dump(mode="json"))
+    return json_success(_report_payload(report, load_generation_info([report.report_id])))
 
 
 @report_bp.route('/by-simulation/<simulation_id>', methods=['GET'])
@@ -248,7 +260,7 @@ def get_report_by_simulation(simulation_id: str):
             status=404,
             extra={"has_report": False},
         )
-    return json_success(ReportExportService.build_report_contract_model(report).model_dump(mode="json"))
+    return json_success(_report_payload(report, load_generation_info([report.report_id])))
 
 
 @report_bp.route('/list', methods=['GET'])
@@ -259,8 +271,10 @@ def list_reports():
         return json_error("Invalid simulation_id format", status=400)
     limit = request.args.get('limit', 50, type=int)
     reports = ReportManager.list_reports(simulation_id=simulation_id, limit=limit)
+    # Ein Registerscan für alle Fassungen, nicht einer je Bericht (Issue #1804).
+    generation = load_generation_info([r.report_id for r in reports])
     return json_success(
-        [ReportExportService.build_report_contract_model(r).model_dump(mode="json") for r in reports],
+        [_report_payload(r, generation) for r in reports],
         count=len(reports),
     )
 

@@ -392,6 +392,14 @@ export const ReportSchema = z.object({
   // Qualitätsmängel des Laufs, auf dem der Bericht beruht. Additiv mit
   // Default — Bestandsreports bleiben gültig.
   run_degradations: z.array(RunDegradationSchema).default([]),
+  // Issue #1804 (Etappe 5): Erzeugungsherkunft dieser Fassung, belegt aus dem
+  // Berichts-Job der RunRegistry (gelockte Route der Stufe report_generation).
+  // Additiv, Default null — null bei Berichten ohne Job oder ohne Angabe im
+  // Job. Nie aus Workspace-Defaults geraten. Pendant zu ReportModel.llm_model,
+  // llm_provider_id und generation_run_id.
+  llm_model: z.string().max(200).optional().nullable(),
+  llm_provider_id: z.string().max(100).optional().nullable(),
+  generation_run_id: z.string().max(100).optional().nullable(),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 

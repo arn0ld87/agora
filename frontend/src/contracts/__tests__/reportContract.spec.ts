@@ -184,6 +184,28 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
     expect(result.success).toBe(true);
   });
 
+  it('akzeptiert die optionale Erzeugungsherkunft einer Fassung und ihr Fehlen (#1804)', () => {
+    const base = {
+      schema_version: 2,
+      report_id: 'report_0123456789ab',
+      simulation_id: 'sim_1',
+      graph_id: 'graph_1',
+      simulation_requirement: 'Frage',
+      status: 'completed',
+    };
+    const without = ReportSchema.safeParse(base);
+    expect(without.success).toBe(true);
+    const withModel = ReportSchema.parse({
+      ...base,
+      llm_model: 'MiniMax-M3',
+      llm_provider_id: 'minimax',
+      generation_run_id: 'run_0123456789ab',
+    });
+    expect(withModel.llm_model).toBe('MiniMax-M3');
+    expect(ReportSchema.safeParse({ ...base, llm_model: null }).success).toBe(true);
+    expect(ReportSchema.safeParse({ ...base, llm_model: 'x'.repeat(201) }).success).toBe(false);
+  });
+
   it('rejects claim_id that does not match the Pydantic regex', () => {
     const bad = {
       claim_id: 'c1',
