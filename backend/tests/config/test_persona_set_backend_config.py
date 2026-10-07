@@ -89,6 +89,16 @@ def test_config_validate_rejects_unknown_value(config_without_unrelated_errors, 
     assert "unknown value 'sqlite'" in errors[0]
 
 
+def test_factory_postgres_returns_adapter_without_connecting(monkeypatch):
+    """Der Adapter löst die Datenbank erst beim ersten Zugriff auf."""
+    from app.infrastructure.postgres.repositories import PostgresPersonaSetRepository
+    from app.repositories.persona_set_repository import get_persona_set_repository
+
+    monkeypatch.setattr(Config, 'PERSONA_SET_BACKEND', 'postgres')
+
+    assert isinstance(get_persona_set_repository(), PostgresPersonaSetRepository)
+
+
 def test_the_backend_counts_for_the_postgres_start_gates(monkeypatch):
     """Readiness, Schema-Gate und Backup erkennen `*_BACKEND`-Attribute von selbst."""
     monkeypatch.setattr(Config, 'PERSONA_SET_BACKEND', 'postgres')

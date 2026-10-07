@@ -1,6 +1,7 @@
 """SQLAlchemy-Modelle des privaten Agora-Fachschemas."""
 from .base import AGORA_SCHEMA, Base
 from .llm_profile import LlmProfileModel
+from .persona_set import PersonaSetModel
 from .project import PROJECT_STATUS_VALUES, ProjectModel
 from .report import ReportModel
 from .run import RunModel
@@ -19,6 +20,7 @@ __all__ = [
     'WORKSPACE_ROLE_VALUES',
     'Base',
     'LlmProfileModel',
+    'PersonaSetModel',
     'ProjectModel',
     'ReportModel',
     'RunModel',

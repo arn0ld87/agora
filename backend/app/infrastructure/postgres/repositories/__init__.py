@@ -6,6 +6,7 @@ des Ports.
 """
 
 from .llm_profile_repository import PostgresLlmProfileRepository
+from .persona_set_repository import PostgresPersonaSetRepository
 from .project_repository import PostgresProjectRepository, ProjectNotStored
 from .report_repository import PostgresReportRepository, ReportSimulationMissing
 from .run_repository import PostgresRunRepository, RunSimulationMissing
@@ -17,6 +18,7 @@ from .workspace_repository import PostgresWorkspaceRepository, WorkspaceSlugTake
 
 __all__ = [
     "PostgresLlmProfileRepository",
+    "PostgresPersonaSetRepository",
     "PostgresProjectRepository",
     "PostgresReportRepository",
     "PostgresRunRepository",
