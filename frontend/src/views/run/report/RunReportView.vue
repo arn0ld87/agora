@@ -5,7 +5,8 @@
  * Fassung, `new` (Sentinel) bzw. kein Bericht: Start anbieten.
  *
  * Query: `?claim=<claim_id>` (gewählter Claim), `?section=<n>` (Abschnitt),
- * `?panel=evidence|questions` (rechte Spalte). Die Ansicht hält die Adresse und
+ * `?panel=evidence|questions` (rechte Spalte). Sprünge aus den Belegen an Feed,
+ * Graph und Interview: `ReportEvidenceJump`, Regeln in `evidenceJumps.ts`. Die Ansicht hält die Adresse und
  * den Zustand in `useRunReport` gleich; die drei Bereiche (Gliederung, Lesetext,
  * Seitenspalte) lesen den Zustand aus `useRunReportContext()`.
  *
@@ -18,6 +19,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ReportAgentChat from '@/components/run/report/ReportAgentChat.vue'
 import ReportEvidencePanel from '@/components/run/report/evidence/ReportEvidencePanel.vue'
+import ReportEvidenceJump from '@/components/run/report/evidence/ReportEvidenceJump.vue'
 import ReportExportMenu from '@/components/run/report/ReportExportMenu.vue'
 import ReportHeader from '@/components/run/report/ReportHeader.vue'
 import ReportIncompleteBanner from '@/components/run/report/ReportIncompleteBanner.vue'
@@ -26,6 +28,8 @@ import ReportReadingPane from '@/components/run/report/ReportReadingPane.vue'
 import ReportSidePane, { type SidePanel } from '@/components/run/report/ReportSidePane.vue'
 import { RUN_WORKSPACE_KEY } from '@/composables/run/useRunWorkspace'
 import { provideRunReport, useRunReport } from '@/composables/run/report/useRunReport'
+import { deriveClaimSections, findClaim } from '@/composables/run/report/reportClaims'
+import { useEvidenceFeedCheck } from '@/composables/run/report/useEvidenceFeedCheck'
 import { buildRunReportRoute } from '@/utils/reportRoute'
 
 const props = defineProps<{ simulationId: string; reportId?: string }>()
@@ -101,6 +105,21 @@ watch(ctx.selectedClaimId, (claim) => {
   if (claim !== queryString('claim')) setQuery({ claim })
 })
 
+// Feed-Sprünge: der Snapshot lädt erst, wenn der gewählte Claim einen Beleg mit
+// Beitragskandidat (`origin_post_id`) trägt.
+const selectedClaim = computed(() =>
+  ctx.evidence.value.status === 'ok'
+    ? findClaim(deriveClaimSections(ctx.evidence.value.map), ctx.selectedClaimId.value)
+    : null,
+)
+const feedCheck = useEvidenceFeedCheck(
+  () => props.simulationId,
+  () =>
+    selectedClaim.value?.evidence.some(
+      (e) => e.record.type === 'agent_action' && e.record.source_kind !== 'inferred' && !!e.record.origin_post_id,
+    ) ?? false,
+)
+
 const reportData = computed(() => (ctx.report.value.status === 'ok' ? ctx.report.value.report : null))
 const noGraph = computed(
   () =>
@@ -131,7 +150,20 @@ const noGraph = computed(
         </div>
         <div class="run-report__col run-report__col--side">
           <ReportSidePane :panel="panel" @update:panel="(value) => setQuery({ panel: value })">
-            <template #evidence><ReportEvidencePanel /></template>
+            <template #evidence>
+              <ReportEvidencePanel>
+                <template #jump="{ item }">
+                  <ReportEvidenceJump
+                    :item="item"
+                    :simulation-id="simulationId"
+                    :report-id="ctx.selectedReportId.value"
+                    :claim-id="ctx.selectedClaimId.value"
+                    :feed-state="feedCheck.state.value"
+                    :feed-posts="feedCheck.posts.value"
+                  />
+                </template>
+              </ReportEvidencePanel>
+            </template>
             <template #questions><ReportAgentChat :simulation-id="simulationId" /></template>
           </ReportSidePane>
         </div>

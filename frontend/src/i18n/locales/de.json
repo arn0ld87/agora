@@ -2395,6 +2395,7 @@
         },
         "thread": {
           "back": "Zurück zum Feed",
+          "backToReport": "Zurück zum Bericht",
           "loading": "Beitrag wird geladen …",
           "rootMissing": "Der Ausgangsbeitrag liegt außerhalb des geladenen Ausschnitts.",
           "broken": "Die Antwortkette dieses Beitrags ist fehlerhaft (Zyklus oder zu tief) und wird nicht dargestellt.",
@@ -2626,7 +2627,28 @@
           },
           "copy": "Auszug kopieren",
           "copied": "Auszug kopiert.",
-          "copyFailed": "Der Auszug ließ sich nicht kopieren."
+          "copyFailed": "Der Auszug ließ sich nicht kopieren.",
+          "jump": {
+            "feed": "Im Feed zeigen",
+            "feedLabel": "Im Feed zeigen: {source}",
+            "graph": "Im Graph zeigen",
+            "graphLabel": "Im Graph zeigen: {source}, Knoten {n} von {total}",
+            "graphNth": "Im Graph zeigen ({n}/{total})",
+            "interview": "Interview öffnen",
+            "interviewLabel": "Interview öffnen: {source}",
+            "note": {
+              "checking": "Beitrag wird im Feed geprüft …",
+              "feedFailed": "Feed nicht ladbar, Sprung nicht prüfbar.",
+              "postMissing": "Kein Sprung: Beitrag im Feed nicht gefunden.",
+              "textMismatch": "Kein Sprung: Beitragstext passt nicht zum Beleg.",
+              "noPostId": "Kein Sprung: der Beleg nennt keinen eigenen Beitrag.",
+              "noNodeId": "Kein Sprung: der Beleg nennt keinen Knoten.",
+              "noEdgeId": "Kein Sprung: der Beleg nennt keine Kante.",
+              "noVoice": "Kein Sprung: der Beleg nennt keine Stimme.",
+              "noTarget": "Kein Sprung: für diese Belegart gibt es keinen Ursprung in der Oberfläche.",
+              "inferred": "Kein Sprung: abgeleitet, nicht belegt."
+            }
+          }
         },
         "metrics": {
           "title": "Kennzahlen",

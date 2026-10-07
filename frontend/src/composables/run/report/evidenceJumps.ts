@@ -12,9 +12,19 @@
  *   graph_fact        keine Kantenkennung im Beleg: kein Sprung
  *   agent_interview   `voice_key` (`agent:<id>`) -> Interviews-Reiter des Laufs
  *   übrige Arten      kein Sprungziel
+ *
+ * Query-Namen (Entscheidung Etappe 5): `?claim=` hat in der Faden-Ansicht schon
+ * eine Bedeutung, nämlich die `post_id`, die dort hervorgehoben wird (nicht die
+ * `claim_id` des Berichts). Der Feed-Sprung setzt deshalb `claim=<post_id>` für die
+ * Hervorhebung und trägt den Rückweg in eigenen Namen: `fromClaim=<claim_id>` und
+ * optional `report=<report_id>`. Nur beide zusammen (`fromClaim`) erzeugen den Link
+ * „Zurück zum Bericht".
  */
 import type { RouteLocationRaw } from 'vue-router'
 import type { EvidenceRecord } from '@/contracts/reportContract'
+
+/** Routenname des Interviews-Reiters; einzige Stelle, die ihn kennt (Umstellung in der Interviews-Etappe). */
+export const INTERVIEWS_ROUTE_NAME = 'RunInterviewsLegacy'
 
 /** Warum es keinen Sprung gibt; die Oberfläche übersetzt den Schlüssel. */
 export type NoJumpReason =
@@ -102,7 +112,7 @@ export function verifyFeedJump(
 
 export interface JumpRouteContext {
   simulationId: string
-  /** Gewählter Claim; reist als `?claim=` mit und ermöglicht den Rückweg. */
+  /** Gewählter Claim; reist als `?fromClaim=` mit und ermöglicht den Rückweg. */
   claimId: string | null
   /** Berichtsfassung; reist als `?report=` mit, damit der Rückweg dieselbe Fassung öffnet. */
   reportId: string | null
@@ -110,13 +120,13 @@ export interface JumpRouteContext {
 
 function carried(ctx: JumpRouteContext): Record<string, string> {
   const q: Record<string, string> = {}
-  if (ctx.claimId) q['claim'] = ctx.claimId
+  if (ctx.claimId) q['fromClaim'] = ctx.claimId
   if (ctx.reportId) q['report'] = ctx.reportId
   return q
 }
 
 export function feedRoute(postId: string, ctx: JumpRouteContext): RouteLocationRaw {
-  return { name: 'RunSimulationPost', params: { simulationId: ctx.simulationId, postId }, query: carried(ctx) }
+  return { name: 'RunSimulationPost', params: { simulationId: ctx.simulationId, postId }, query: { claim: postId, ...carried(ctx) } }
 }
 
 export function graphRoute(nodeUuid: string, ctx: Pick<JumpRouteContext, 'simulationId'>): RouteLocationRaw {
@@ -125,7 +135,7 @@ export function graphRoute(nodeUuid: string, ctx: Pick<JumpRouteContext, 'simula
 
 /** Interviews-Reiter des Laufs (Ziel aus `runTabs.ts`, bis die Interviews-Etappe eine eigene Route bringt). */
 export function interviewRoute(ctx: Pick<JumpRouteContext, 'simulationId'>): RouteLocationRaw {
-  return { name: 'RunInterviewsLegacy', params: { simulationId: ctx.simulationId } }
+  return { name: INTERVIEWS_ROUTE_NAME, params: { simulationId: ctx.simulationId } }
 }
 
 /** Rückweg aus einem Feed-Beitrag in den Bericht; ohne `report` die jüngste Fassung. */

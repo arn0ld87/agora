@@ -2395,6 +2395,7 @@
         },
         "thread": {
           "back": "Back to feed",
+          "backToReport": "Back to report",
           "loading": "Loading post …",
           "rootMissing": "The original post is outside the loaded excerpt.",
           "broken": "The reply chain of this post is broken (cycle or too deep) and is not shown.",
@@ -2626,7 +2627,28 @@
           },
           "copy": "Copy excerpt",
           "copied": "Excerpt copied.",
-          "copyFailed": "The excerpt could not be copied."
+          "copyFailed": "The excerpt could not be copied.",
+          "jump": {
+            "feed": "Show in feed",
+            "feedLabel": "Show in feed: {source}",
+            "graph": "Show in graph",
+            "graphLabel": "Show in graph: {source}, node {n} of {total}",
+            "graphNth": "Show in graph ({n}/{total})",
+            "interview": "Open interview",
+            "interviewLabel": "Open interview: {source}",
+            "note": {
+              "checking": "Checking the post in the feed …",
+              "feedFailed": "Feed could not be loaded, jump cannot be checked.",
+              "postMissing": "No jump: post not found in the feed.",
+              "textMismatch": "No jump: post text does not match the evidence.",
+              "noPostId": "No jump: the evidence names no post of its own.",
+              "noNodeId": "No jump: the evidence names no node.",
+              "noEdgeId": "No jump: the evidence names no edge.",
+              "noVoice": "No jump: the evidence names no voice.",
+              "noTarget": "No jump: this kind of evidence has no origin in the interface.",
+              "inferred": "No jump: inferred, not evidenced."
+            }
+          }
         },
         "metrics": {
           "title": "Metrics",
