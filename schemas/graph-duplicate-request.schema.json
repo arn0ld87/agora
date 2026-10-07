@@ -1,0 +1,25 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-duplicate-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Einen Graphen als unabh\u00e4ngige, nicht gesperrte Kopie anlegen.\n\n``client_request_id`` (UUID vom Aufrufer) macht den Auftrag wiederholbar:\ndieselbe Kennung ergibt denselben Auftrag, nie eine zweite Kopie.\n``name`` ist der Name der Kopie (Graph und Projekt).",
+  "properties": {
+    "client_request_id": {
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "title": "Client Request Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "client_request_id",
+    "name"
+  ],
+  "title": "GraphDuplicateRequest",
+  "type": "object"
+}

@@ -1,0 +1,73 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-duplicate-job.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Der Kopierauftrag (ein Job der ``RunRegistry`` mit ``run_type='graph_duplicate'``).\n\n``graph_id`` und ``project_id`` sind die Kennungen der Kopie. Sie stehen\nvon Anfang an fest, die Kopie ist aber erst bei ``status='completed'``\nvollst\u00e4ndig lesbar. Bei ``failed`` sind Zielgraph und Zielprojekt\nwieder entfernt. Fortschritt und Endzustand liefert\n``GET /api/runs/<run_id>``.",
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "graph_id": {
+      "minLength": 1,
+      "title": "Graph Id",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+    },
+    "progress": {
+      "default": 0,
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Progress",
+      "type": "integer"
+    },
+    "project_id": {
+      "minLength": 1,
+      "title": "Project Id",
+      "type": "string"
+    },
+    "run_id": {
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    },
+    "source_graph_id": {
+      "minLength": 1,
+      "title": "Source Graph Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "stopped",
+        "paused"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "source_graph_id",
+    "graph_id",
+    "project_id",
+    "status"
+  ],
+  "title": "GraphDuplicateJob",
+  "type": "object"
+}
