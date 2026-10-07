@@ -17,7 +17,7 @@
  *
  * Master-Prompt §6.1-6.3, ADR-0009, docs/epics/onboarding-provider-unification/slice-5-subplan.md
  */
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AiModelPickerTestId as testIds } from '@/contracts/testIds'
 import {
@@ -48,6 +48,35 @@ import { useAvailableModels } from '@/composables/useAvailableModels'
 import { useOperatorAccess } from '@/composables/useOperatorAccess'
 
 const { t } = useI18n()
+
+const anchorRef = ref<{ $el?: HTMLElement } | null>(null)
+/** Unterhalb dieser Resthöhe (px) wird das Feld beim Öffnen nach oben gescrollt. */
+const MIN_SPACE_BELOW_PX = 240
+
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const { overflowY } = window.getComputedStyle(node)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node
+  }
+  return null
+}
+
+/**
+ * Die Liste öffnet immer unter dem Feld (kein Umklappen, Tab-Reihenfolge).
+ * Reicht der Platz darunter nicht, scrollt der umgebende Bereich genau um den
+ * fehlenden Betrag, damit die Liste vollständig erreichbar bleibt.
+ */
+async function onOpenChange(open: boolean): Promise<void> {
+  if (!open) return
+  await nextTick()
+  const el = anchorRef.value?.$el
+  if (!el || typeof el.getBoundingClientRect !== 'function') return
+  const shortfall = MIN_SPACE_BELOW_PX - (window.innerHeight - el.getBoundingClientRect().bottom)
+  if (shortfall <= 0) return
+  const parent = scrollParent(el)
+  if (parent) parent.scrollTop += shortfall
+  else window.scrollBy({ top: shortfall })
+}
 
 const props = withDefaults(
   defineProps<{
@@ -315,8 +344,9 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
       :disabled="disabled"
       :open-on-focus="true"
       @update:model-value="onUpdate"
+      @update:open="onOpenChange"
     >
-      <ComboboxAnchor class="ai-model-picker__anchor">
+      <ComboboxAnchor ref="anchorRef" class="ai-model-picker__anchor">
         <ComboboxInput
           class="ai-model-picker__input"
           :placeholder="placeholderText"
@@ -336,7 +366,9 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
         <ComboboxContent
           class="ai-model-picker__content"
           position="popper"
+          side="bottom"
           align="start"
+          :avoid-collisions="false"
           :side-offset="4"
           :collision-padding="8"
         >
@@ -537,7 +569,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
 }
 
 .ai-model-picker__viewport {
-  max-block-size: min(360px, var(--reka-combobox-content-available-height, 360px));
+  max-block-size: max(160px, min(360px, var(--reka-combobox-content-available-height, 360px)));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 6px;
