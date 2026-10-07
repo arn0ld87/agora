@@ -285,8 +285,8 @@ export async function checkFocusVisible(page: Page): Promise<void> {
 
   // Issue #921 — Implizite Tab-Stops (scrollbare Container ohne tabindex)
   // erscheinen erst nach genügend Tab-Presses im Tab-Zyklus. Auf einer Route
-  // ohne echte interaktive Elemente (z. B. /v4/simulation/:id/feed mit
-  // leeren Feed-Spalten) wandert der Fokus nach dem ersten Tab in den
+  // ohne echte interaktive Elemente (z. B. /simulations/:id/simulation/feed
+  // vor dem Start der Simulation) wandert der Fokus nach dem ersten Tab in den
   // Browser-Chrome und activeElement wird wieder body. Wir probieren daher
   // bis zu MAX_TAB_ATTEMPTS Tabs, bevor wir aufgeben.
   const MAX_TAB_ATTEMPTS = 20;
