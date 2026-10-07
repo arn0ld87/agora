@@ -120,6 +120,51 @@ SIMULATION_SOURCE_KINDS: frozenset[EvidenceSourceKind] = frozenset({
 #: ``seed_doc:``-Anker auf einer Persona-Aussage darf nicht durchgehen.
 SEED_DOC_ANCHOR_PREFIX = "seed_doc:"
 
+#: Herkunftsmarke für Evidence aus von Hand angelegten (``manual``) oder
+#: bearbeiteten (``edited``) Graph-Elementen (ADR-0022 §3). Bewusst ein eigenes
+#: Feld neben ``source_kind`` und kein neuer Wert in ``EvidenceSourceKind``:
+#: Anker 3 aus ADR-0002 bleibt geschlossen. Die Werte entsprechen der
+#: Graph-Eigenschaft ``origin`` (``app.storage.neo4j_mappings.ORIGIN_*``) und
+#: ``graph_edit_contract.GraphOrigin``; fehlt das Feld, gilt die Evidence als
+#: nicht von Hand erzeugt.
+EvidenceGraphOrigin = Literal["manual", "edited"]
+
+
+def _reject_graph_origin_as_document_fact(
+    graph_origin: Optional[str],
+    source_kind: "EvidenceSourceKind",
+    source_id_anchor: Optional[str],
+) -> None:
+    """ADR-0022 §2/§3: Handarbeit ist nie ein Dokumentfakt.
+
+    Eine manuelle Beziehung hat keine Quelle im Dokument, und der geänderte
+    Text einer bearbeiteten Beziehung stand so nie darin. Beides bleibt
+    ``graph_relation`` und trägt keinen ``seed_doc:``-Anker — sonst täuschte
+    der Record genau die Prüfbarkeit vor, die ADR-0013 ausschließt.
+    """
+    if graph_origin is None:
+        return
+    if source_kind != EvidenceSourceKind.graph_relation:
+        raise ValueError(
+            f"graph_origin={graph_origin} verlangt source_kind=graph_relation, "
+            f"nicht {source_kind.value}: von Hand angelegte oder bearbeitete "
+            "Graph-Evidence ist kein Dokumentfakt und keine Stimme (ADR-0022)."
+        )
+    if source_id_anchor and source_id_anchor.startswith(SEED_DOC_ANCHOR_PREFIX):
+        raise ValueError(
+            f"graph_origin={graph_origin} darf keinen seed_doc:-Anker tragen: "
+            "für Handarbeit im Graphen gibt es keine Dokumentstelle (ADR-0022)."
+        )
+
+
+def counts_for_confidence(item: Any) -> bool:
+    """``False`` für Evidence aus Handarbeit im Graphen (ADR-0022 §4).
+
+    Solche Evidence bleibt im Bericht sichtbar, zählt aber für keine
+    Confidence-Stufe.
+    """
+    return getattr(item, "graph_origin", None) is None
+
 
 class EntailmentVerdict(str, Enum):
     """Urteil der zweiten Binding-Stufe.
@@ -251,6 +296,17 @@ class EvidenceItemModel(BaseModel):
     # Erwartungstext stuetzen keinen Claim (``classify_evidence``), bleiben
     # aber als Kontext sichtbar. ``None`` = unbekannt/Altbestand.
     document_role: Optional[DocumentRole] = None
+    # ADR-0022 (#1808): Herkunft aus Handarbeit im Graphen. ``None`` =
+    # extrahiert bzw. Altbestand. Gesetzt zählt das Item für keine
+    # Confidence-Stufe (``ReportClaimModel.graph_origin_carries_no_confidence``).
+    graph_origin: Optional[EvidenceGraphOrigin] = None
+
+    @model_validator(mode="after")
+    def graph_origin_is_never_a_document_fact(self) -> "EvidenceItemModel":
+        _reject_graph_origin_as_document_fact(
+            self.graph_origin, self.source_kind, self.source_id_anchor
+        )
+        return self
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceItemModel":
@@ -329,6 +385,15 @@ class EvidenceRecordModel(BaseModel):
     )
     # Issue #1240, siehe EvidenceItemModel.
     document_role: Optional[DocumentRole] = None
+    # ADR-0022 (#1808), siehe EvidenceItemModel.
+    graph_origin: Optional[EvidenceGraphOrigin] = None
+
+    @model_validator(mode="after")
+    def graph_origin_is_never_a_document_fact(self) -> "EvidenceRecordModel":
+        _reject_graph_origin_as_document_fact(
+            self.graph_origin, self.source_kind, self.source_id_anchor
+        )
+        return self
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceRecordModel":
@@ -619,6 +684,51 @@ class ReportClaimModel(BaseModel):
                 f"seed_corpus (ADR-0002 Stufe agent_grounded). "
                 f"Gefunden: agent_quote={has_agent_quote}, "
                 f"seed_corpus={has_seed_corpus}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def graph_origin_carries_no_confidence(self) -> "ReportClaimModel":
+        # ADR-0022 §4 (#1808): Evidence aus von Hand angelegten oder
+        # bearbeiteten Graph-Elementen zählt für keine Confidence-Stufe. Ein
+        # Claim darf sein Label behalten, wenn er die bestehenden Regeln auch
+        # OHNE diese Evidence erfüllt — er darf es nie DURCH sie erreichen.
+        #
+        # Zusätzlicher Validator neben den ADR-0002-Ankern 4 und 5, die
+        # textlich unverändert bleiben. Geprüft wird nicht mit einer zweiten,
+        # gespiegelten Regelmenge, sondern mit denselben Validatoren: der Claim
+        # wird ohne die Handarbeits-Evidence noch einmal validiert. Die
+        # Rekursion endet sofort, weil die Kopie keine solche Evidence trägt.
+        if self.confidence_label in (ConfidenceLabel.speculative, ConfidenceLabel.low):
+            return self
+        counted = [e for e in self.evidence if counts_for_confidence(e)]
+        if len(counted) == len(self.evidence):
+            return self
+        excluded = len(self.evidence) - len(counted)
+        try:
+            without_hand_made = ReportClaimModel(
+                claim_id=self.claim_id,
+                claim_text=self.claim_text,
+                confidence_label=self.confidence_label,
+                confidence_score=self.confidence_score,
+                evidence=counted,
+                claim_type=self.claim_type,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' wird nur mit manueller "
+                f"oder bearbeiteter Graph-Evidence erreicht ({excluded} Item(s) "
+                "mit graph_origin). Solche Evidence zählt für keine "
+                f"Confidence-Stufe (ADR-0022). Ohne sie: {exc}"
+            ) from exc
+        if without_hand_made.confidence_label != self.confidence_label:
+            # ``verified_needs_strong_match`` stuft Bestand ohne Entailment
+            # beim Laden auf ``high`` ab. Trägt nur die Handarbeit das
+            # SUPPORTED-Urteil, ist ``verified`` ohne sie nicht gedeckt.
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' ist ohne die manuelle "
+                "oder bearbeitete Graph-Evidence nur als "
+                f"'{without_hand_made.confidence_label.value}' gedeckt (ADR-0022)."
             )
         return self
 
@@ -1197,6 +1307,42 @@ class EvidenceMapModel(BaseModel):
                         raise ValueError(
                             f"Section {section.section_index} Claim {claim.claim_id}: "
                             "medium verlangt agent_quote und seed_corpus."
+                        )
+                # ADR-0022 §4 (#1808): Evidence aus Handarbeit im Graphen
+                # zählt für keine Stufe. Die Kompositionsregeln oben fragen
+                # ausschließlich nach ``agent_quote``/``seed_corpus`` — beides
+                # kann ein Record mit ``graph_origin`` nicht sein
+                # (``graph_origin_is_never_a_document_fact``). Offen bleiben
+                # die Binding-Regeln aus ``IndexedReportClaimModel``, die den
+                # Record nicht kennen: sie müssen auch ohne die Handarbeit
+                # halten. Zusätzliche Prüfung, die bestehenden bleiben wie sie
+                # sind; ohne ``graph_origin`` im Index greift sie nie.
+                counted = [
+                    binding for binding, record in resolved if counts_for_confidence(record)
+                ]
+                if len(counted) != len(resolved) and claim.confidence_label not in (
+                    ConfidenceLabel.speculative,
+                    ConfidenceLabel.low,
+                ):
+                    reason: Optional[str] = None
+                    if not counted:
+                        reason = "ausschliesslich solche Evidence gebunden"
+                    elif claim.confidence_label in (
+                        ConfidenceLabel.high,
+                        ConfidenceLabel.verified,
+                    ) and not any(binding.supports_claim for binding in counted):
+                        reason = "supports_claim=True nur an solcher Evidence"
+                    elif claim.confidence_label == ConfidenceLabel.verified and not any(
+                        (binding.match_score or 0.0) >= 0.85 for binding in counted
+                    ):
+                        reason = "match_score >= 0.85 nur an solcher Evidence"
+                    if reason is not None:
+                        raise ValueError(
+                            f"Section {section.section_index} Claim {claim.claim_id}: "
+                            f"Label '{claim.confidence_label.value}' wird nur mit "
+                            "manueller oder bearbeiteter Graph-Evidence erreicht "
+                            f"({reason}); sie zaehlt fuer keine Confidence-Stufe "
+                            "(ADR-0022)."
                         )
         return self
 
