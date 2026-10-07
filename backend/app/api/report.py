@@ -11,11 +11,16 @@ from pydantic import ValidationError
 from . import report_bp
 from ..contracts import (
     DEFAULT_REPORT_MODE,
+    EvidenceDensityResponseModel,
     EvidenceMapModel,
     EvidenceMapResponseModel,
+    ReportArtifactOmissionModel,
     ReportMode,
+    StanceAnalysisResponseModel,
 )
+from ..contracts.report_artifact_contract import ReportArtifactKind
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent.artifact_read import ArtifactContractViolation
 from ..services.report_agent.sections import strip_raw_html_markers
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -315,6 +320,69 @@ def get_report_evidence(report_id: str):
         return jsonify(envelope.to_payload()), 200
     envelope = EvidenceMapResponseModel.for_data(validated)
     return jsonify(envelope.to_payload()), 200
+
+
+def _artifact_omission(
+    artifact: ReportArtifactKind, exc: ArtifactContractViolation
+) -> ReportArtifactOmissionModel:
+    """Auslassungshinweis für ein vertragswidriges Berichts-Artefakt (Issue #1804)."""
+    return ReportArtifactOmissionModel(
+        artifact=artifact,
+        reason="contract_violation",
+        detail=(
+            "Das gespeicherte Artefakt dieses Berichts verletzt den Vertrag und "
+            "wurde deshalb nicht ausgeliefert. Der Bericht selbst ist unberührt."
+        ),
+        validation_errors=exc.validation_errors,
+    )
+
+
+@report_bp.route('/<report_id>/evidence-density', methods=['GET'])
+@handle_api_errors
+def get_report_evidence_density(report_id: str):
+    """Belegdichte des Berichts (``evidence_density.json``, Issue #1779/#1804)."""
+    if not validate_report_id(report_id):
+        return json_error("Invalid report_id format", status=400)
+    try:
+        density = ReportManager.get_evidence_density(report_id)
+    except ArtifactContractViolation as exc:
+        logger.warning(
+            "Evidence density for report %s violates its contract; reported as "
+            "artifact_omitted. First errors: %s",
+            report_id,
+            exc.validation_errors[:3],
+        )
+        omitted = EvidenceDensityResponseModel.for_omission(
+            _artifact_omission("evidence_density", exc)
+        )
+        return jsonify(omitted.to_payload()), 200
+    if density is None:
+        return json_error(f"No evidence density available for report: {report_id}", status=404)
+    return jsonify(EvidenceDensityResponseModel.for_data(density).to_payload()), 200
+
+
+@report_bp.route('/<report_id>/stance-analysis', methods=['GET'])
+@handle_api_errors
+def get_report_stance_analysis(report_id: str):
+    """Haltung der Stimmen und Positionierungsquote (``stance_analysis.json``, Issue #1778/#1804)."""
+    if not validate_report_id(report_id):
+        return json_error("Invalid report_id format", status=400)
+    try:
+        analysis = ReportManager.get_stance_analysis(report_id)
+    except ArtifactContractViolation as exc:
+        logger.warning(
+            "Stance analysis for report %s violates its contract; reported as "
+            "artifact_omitted. First errors: %s",
+            report_id,
+            exc.validation_errors[:3],
+        )
+        omitted = StanceAnalysisResponseModel.for_omission(
+            _artifact_omission("stance_analysis", exc)
+        )
+        return jsonify(omitted.to_payload()), 200
+    if analysis is None:
+        return json_error(f"No stance analysis available for report: {report_id}", status=404)
+    return jsonify(StanceAnalysisResponseModel.for_data(analysis).to_payload()), 200
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])
