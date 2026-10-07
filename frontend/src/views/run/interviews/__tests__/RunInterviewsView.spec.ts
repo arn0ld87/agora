@@ -55,8 +55,9 @@ import { INTERVIEW_PROMPT_PREFIX } from '@/composables/run/interviews/conversati
 
 const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'de', messages: { de } })
 
-function workspaceWith(simState: string, reportId: string | null = null) {
+function workspaceWith(simState: string, reportId: string | null = null, loadState = 'ready') {
   return {
+    state: ref(loadState),
     stages: computed(() => [{ key: 'simulation', state: simState }]),
     data: computed(() => ({ reports: reportId ? [{ reportId }] : [] })),
     tabs: computed(() => [
@@ -65,7 +66,12 @@ function workspaceWith(simState: string, reportId: string | null = null) {
   } as unknown as RunWorkspace
 }
 
-async function mountAt(path: string, simState: string | null = 'done', reportId: string | null = null) {
+async function mountAt(
+  path: string,
+  simState: string | null = 'done',
+  reportId: string | null = null,
+  loadState = 'ready',
+) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -83,7 +89,7 @@ async function mountAt(path: string, simState: string | null = 'done', reportId:
   await router.isReady()
   const Host = defineComponent({
     setup() {
-      if (simState) provide(RUN_WORKSPACE_KEY, workspaceWith(simState, reportId))
+      if (simState) provide(RUN_WORKSPACE_KEY, workspaceWith(simState, reportId, loadState))
       return () => h(RouterView)
     },
   })
@@ -206,6 +212,36 @@ describe('RunInterviewsView', () => {
     expect(w.get('[data-testid="interviews-not-run"]').text()).toContain('abgeschlossen')
     expect(w.find('[data-testid="ask-form"]').exists()).toBe(false)
     expect(w.find('[data-testid="ask-blocked"]').exists()).toBe(true)
+  })
+
+  it('ohne Arbeitsbereich oder bei ungeladenem Zustand bleibt die Eingabe gesperrt (fail-closed)', async () => {
+    const none = await mountAt('/simulations/sim_1/interviews/persona-0', null)
+    expect(none.w.find('[data-testid="ask-form"]').exists()).toBe(false)
+    expect(none.w.get('[data-testid="interviews-state-unknown"]').attributes('role')).toBe('status')
+    none.w.unmount()
+    const loading = await mountAt('/simulations/sim_1/interviews/persona-0', 'done', null, 'loading')
+    expect(loading.w.find('[data-testid="ask-form"]').exists()).toBe(false)
+    expect(loading.w.find('[data-testid="interviews-state-unknown"]').exists()).toBe(true)
+  })
+
+  it('unbekannte oder nicht mehr vorhandene Gruppe zeigt einen ruhigen Leerzustand', async () => {
+    const { w } = await mountAt('/simulations/sim_1/interviews/group-weg')
+    expect(w.get('[data-testid="pane-group-missing"]').text()).toContain('nur in der Sitzung')
+    expect(w.find('[data-testid="ask-form"]').exists()).toBe(false)
+  })
+
+  it('Antwort wird höflich angesagt und der Fokus bleibt im Eingabefeld', async () => {
+    api.askPersonas.mockResolvedValue([
+      { agentId: 0, platform: 'reddit', prompt: 'p', response: 'Antwort', timestamp: '2026-10-07T12:00:00', error: null },
+    ])
+    const { w } = await mountAt('/simulations/sim_1/interviews/persona-0')
+    await w.get('[data-testid="ask-input"]').setValue('Hallo')
+    await w.get('[data-testid="ask-form"]').trigger('submit')
+    await flushPromises()
+    const status = w.get('[data-testid="ask-status"]')
+    expect(status.attributes('aria-live')).toBe('polite')
+    expect(status.text()).toContain('Anke Wübbena')
+    expect(document.activeElement).toBe(w.get('[data-testid="ask-input"]').element)
   })
 
   it('unbekanntes conversationId-Format wird wie keine Auswahl behandelt (Router liefert es nicht durch)', async () => {

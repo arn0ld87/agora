@@ -8,7 +8,7 @@
  * Aktionen kommen aus `useRunInterviewsContext()`. Die Auswahl ändert die
  * Adresse (`RunInterviews`), die Liste hält keinen eigenen Zustand dafür.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { RunPersona } from '@/composables/run/simulation/useRunPersonas'
@@ -25,7 +25,7 @@ const { t } = useI18n()
 const router = useRouter()
 const ctx = useRunInterviewsContext()
 
-const uid = crypto.getRandomValues(new Uint32Array(1))[0].toString(36).slice(0, 6)
+const uid = useId()
 const pickId = `interviews-new-${uid}`
 const groupTextId = `interviews-group-text-${uid}`
 

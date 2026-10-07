@@ -51,7 +51,8 @@ export const GROUP_WARN_THRESHOLD = 16
 /** Wie viele Verlaufszeilen geladen werden (Backend-Standard wäre 100). */
 export const HISTORY_LIMIT = 500
 
-export type AskStatus = 'answered' | 'failed' | 'budget' | 'unavailable'
+/** `busy`: eine Frage läuft schon, nichts gesendet. `stale`: die Simulation wechselte, Ergebnis verworfen. */
+export type AskStatus = 'answered' | 'failed' | 'budget' | 'unavailable' | 'busy' | 'stale'
 
 export interface AskOutcome {
   status: AskStatus
@@ -102,9 +103,13 @@ function budgetDetailOf(err: unknown, message: string): BudgetDetail {
   }
 }
 
-/** Erkennt den Abbruch durch ein erschöpftes Budget an Code oder Meldung des Backends. */
-export function isBudgetFailure(code: string | undefined, message: string | undefined | null): boolean {
-  return /budget/i.test(code ?? '') || /budget|überschritten|exceeded/i.test(message ?? '')
+/**
+ * Ein Budgetabbruch ist ausschließlich der 409-Envelope `budget_exceeded`.
+ * Keine Freitext-Heuristik: Fehlertexte einzelner Batch-Einträge (etwa
+ * "Batch-Deadline … überschritten") sind gewöhnliche Fehler des Eintrags.
+ */
+export function isBudgetFailure(err: unknown): boolean {
+  return isApiError(err) && err.status === 409 && err.code === 'budget_exceeded'
 }
 
 function nowIso(): string {
@@ -200,14 +205,25 @@ export function useRunInterviews(
     if (!id) return
     try {
       const raw = await getSimulationConfig(id)
-      modelLabel.value = readEnvelope(raw, ConfigDataSchema, 'simulation/config').llm_model ?? null
-    } catch {
+      const model = readEnvelope(raw, ConfigDataSchema, 'simulation/config').llm_model ?? null
+      if (toValue(simulationId) === id) modelLabel.value = model
+    } catch (err) {
+      if (toValue(simulationId) !== id) return
       // Das Modell ist eine Zusatzangabe; fehlt sie, zeigt die Oberfläche "unbekannt".
+      console.warn('[run-interviews] Modell des Laufs nicht ladbar', {
+        simulationId: id,
+        error: err instanceof Error ? err.message : String(err),
+      })
       modelLabel.value = null
     }
   }
 
-  /** Eintrag zu `agentId`; bei mehreren Plattformen zählt die mit Antwort. */
+  /**
+   * Eintrag zu `agentId`; bei mehreren Plattformen (lebende Umgebung befragt
+   * beide) zählt die mit Antwort für die Zusammenfassung der Frage. Die
+   * Einzelgespräche zeigen nach dem Nachladen beide Zeilen aus dem Verlauf,
+   * je mit Plattform.
+   */
   function pick(answers: readonly InterviewAnswer[], agentId: number): InterviewAnswer | null {
     const mine = answers.filter((a) => a.agentId === agentId)
     return mine.find((a) => a.response && !a.error) ?? mine[0] ?? null
@@ -218,6 +234,8 @@ export function useRunInterviews(
     text: string,
   ): Promise<{ answers: GroupAnswer[]; status: AskStatus; message: string | null }> {
     const id = toValue(simulationId)
+    const stale = (): boolean => toValue(simulationId) !== id
+    const staleResult = { answers: [] as GroupAnswer[], status: 'stale' as AskStatus, message: null }
     sending.value = true
     sendError.value = null
     budgetExceeded.value = false
@@ -228,6 +246,7 @@ export function useRunInterviews(
         id,
         agentIds.map((agentId) => ({ agentId, prompt: text })),
       )
+      if (stale()) return staleResult
       const answers: GroupAnswer[] = agentIds.map((agentId) => {
         const e = pick(results, agentId)
         const failure = e?.error || (e && !e.response ? t('views.run.interviews.noAnswer') : null)
@@ -239,18 +258,13 @@ export function useRunInterviews(
           platform: e?.platform ?? null,
         }
       })
-      const budget = answers.find((a) => a.error && isBudgetFailure(undefined, a.error))
-      if (budget) {
-        budgetExceeded.value = true
-        sendError.value = budget.error
-        budgetDetail.value = budgetDetailOf(null, budget.error ?? '')
-      }
-      return { answers, status: budget ? 'budget' : 'answered', message: budget?.error ?? null }
+      // Fehler je Eintrag bleiben am Eintrag; ein Budgetabbruch kommt nur als 409.
+      return { answers, status: 'answered', message: null }
     } catch (err) {
+      if (stale()) return staleResult
       const unavailable = markUnavailable(err)
-      const code = isApiError(err) ? err.code : undefined
       const message = err instanceof Error ? err.message : String(err)
-      const budget = isBudgetFailure(code, message)
+      const budget = isBudgetFailure(err)
       budgetExceeded.value = budget
       budgetDetail.value = budget ? budgetDetailOf(err, message) : null
       sendError.value = budget
@@ -268,7 +282,9 @@ export function useRunInterviews(
         message: sendError.value,
       }
     } finally {
-      sending.value = false
+      // Nach einem Wechsel der Simulation hat der Watcher `sending` schon zurückgesetzt;
+      // eine neue Frage dort darf der späte Abschluss der alten nicht entsperren.
+      if (!stale()) sending.value = false
     }
   }
 
@@ -279,7 +295,9 @@ export function useRunInterviews(
   async function ask(agentId: number, text: string): Promise<AskOutcome> {
     const question = text.trim()
     if (!question) return { status: 'failed', answer: null, error: null }
+    if (sending.value) return { status: 'busy', answer: null, error: null }
     const res = await send([agentId], question)
+    if (res.status === 'stale') return { status: 'stale', answer: null, error: null }
     const a = res.answers[0]
     // Optimistisch anhängen; der Nachladen unten ersetzt beantwortete Züge durch den Verlauf.
     sessionTurns.value = [...sessionTurns.value, { agentId, turn: turnOf(question, a) }]
@@ -294,7 +312,9 @@ export function useRunInterviews(
     const question = text.trim()
     const ids = [...new Set(agentIds)]
     if (!question || ids.length === 0) return { asked: 0, answered: 0, failed: 0 }
+    if (sending.value) return { asked: 0, answered: 0, failed: 0 }
     const res = await send(ids, question)
+    if (res.status === 'stale') return { asked: 0, answered: 0, failed: 0 }
     groupSeq += 1
     groups.value = [
       ...groups.value,
@@ -315,6 +335,11 @@ export function useRunInterviews(
       history.value = []
       sessionTurns.value = []
       groups.value = []
+      sending.value = false
+      modelLabel.value = null
+      sendError.value = null
+      budgetExceeded.value = false
+      budgetDetail.value = null
       available.value = true
       unavailableReason.value = null
       void reload()

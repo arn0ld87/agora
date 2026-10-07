@@ -28,6 +28,7 @@ import { parseConversationId } from '@/composables/run/interviews/conversations'
 import { RUN_INTERVIEWS_KEY, useRunInterviews } from '@/composables/run/interviews/useRunInterviews'
 import { usePersonaReferences } from '@/composables/run/interviews/usePersonaReferences'
 import { useRunPersonas } from '@/composables/run/simulation/useRunPersonas'
+import { NOT_FINISHED_STATES } from '@/composables/run/runStageState'
 import { RUN_WORKSPACE_KEY } from '@/composables/run/useRunWorkspace'
 
 const props = defineProps<{ simulationId: string; conversationId?: string }>()
@@ -40,11 +41,16 @@ const personas = useRunPersonas(simulationId)
 
 const workspace = inject(RUN_WORKSPACE_KEY, null)
 
-// Stufen, in denen es (noch) keine abgeschlossene Simulation gibt.
-const NOT_FINISHED = new Set(['notStarted', 'queued', 'running', 'paused'])
+// Fragen nur bei bekanntem, abgeschlossenem Zustand der Simulation. Ist er
+// unbekannt (kein Arbeitsbereich, noch nicht geladen, Stufe fehlt), bleibt die
+// Eingabe gesperrt (fail-closed).
+const stageKnown = computed(
+  () => !!workspace && workspace.state.value === 'ready' && !!workspace.stages.value.find((r) => r.key === 'simulation'),
+)
 const canAsk = computed(() => {
+  if (!stageKnown.value) return false
   const row = workspace?.stages.value.find((r) => r.key === 'simulation')
-  return !row || !NOT_FINISHED.has(row.state)
+  return !!row && !NOT_FINISHED_STATES.has(row.state)
 })
 
 // Verweise der Persona: Feed-Beiträge und Belege der jüngsten Berichtsfassung.
@@ -82,7 +88,10 @@ const showInitialLoad = computed(() => interviews.loading.value && interviews.co
 
     <InterviewBudgetNotice />
 
-    <p v-if="!canAsk" class="interviews__notice" role="status" data-testid="interviews-not-run">
+    <p v-if="!stageKnown" class="interviews__notice" role="status" data-testid="interviews-state-unknown">
+      {{ t('views.run.interviews.stateUnknown') }}
+    </p>
+    <p v-else-if="!canAsk" class="interviews__notice" role="status" data-testid="interviews-not-run">
       {{ t('views.run.interviews.notRun') }}
     </p>
 

@@ -41,11 +41,17 @@ describe('askPersonas', () => {
     ])
   })
 
-  it('macht success:false bei HTTP 200 zu einem ApiError mit Code und Text', async () => {
-    post.mockResolvedValue({ success: false, code: 'budget_exceeded', error: 'Token-Budget überschritten' })
+  it('reicht den ApiError des Interceptors (success:false bei HTTP 200) unverändert durch', async () => {
+    post.mockRejectedValueOnce(
+      new ApiError({ code: 'budget_exceeded', status: 200, message: 'Token-Budget überschritten' }),
+    )
     const err = await askPersonas('sim_1', [{ agentId: 1, prompt: 'x' }]).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ApiError)
-    expect(err).toMatchObject({ code: 'budget_exceeded', status: 200, message: 'Token-Budget überschritten' })
+    expect([(err as ApiError).code, (err as ApiError).status, (err as ApiError).message]).toEqual([
+      'budget_exceeded',
+      200,
+      'Token-Budget überschritten',
+    ])
   })
 
   it('macht eine Zod-Verletzung sichtbar', async () => {
@@ -76,10 +82,10 @@ describe('getInterviewHistory', () => {
     expect(rows[0].agent_id).toBe(4)
   })
 
-  it('wirft bei Vertragsbruch und bei success:false', async () => {
+  it('wirft bei Vertragsbruch und reicht den Interceptor-Fehler durch', async () => {
     post.mockResolvedValueOnce({ success: true, data: { history: [{ agent_id: 1 }] } })
     await expect(getInterviewHistory('sim_1')).rejects.toThrow(/Vertragsbruch interview\/history/)
-    post.mockResolvedValueOnce({ success: false, error: 'kaputt' })
+    post.mockRejectedValueOnce(new ApiError({ code: 'unknown_error', status: 200, message: 'kaputt' }))
     await expect(getInterviewHistory('sim_1')).rejects.toThrow('kaputt')
   })
 })

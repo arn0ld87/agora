@@ -15,7 +15,7 @@
  * `personaById`, `canAsk` (false: Hinweis statt Eingabefeld), `personasLoading`
  * (Profile noch nicht geladen: unbekannte Persona wird dann nicht gemeldet).
  */
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunPersona } from '@/composables/run/simulation/useRunPersonas'
 import { useRunInterviewsContext } from '@/composables/run/interviews/useRunInterviews'
@@ -37,8 +37,11 @@ const props = withDefaults(
 const { t, locale } = useI18n()
 const ctx = useRunInterviewsContext()
 
-const inputId = `interviews-ask-${Math.random().toString(36).slice(2, 8)}`
+const inputId = `interviews-ask-${useId()}`
 const text = ref('')
+const inputEl = ref<HTMLTextAreaElement | null>(null)
+// Höfliche Ansage nach dem Senden (Live-Region `ask-status`).
+const announce = ref('')
 
 function nameOf(agentId: number): string {
   return props.personaById(String(agentId))?.name ?? t('views.run.interviews.agentFallback', { n: agentId })
@@ -103,7 +106,14 @@ async function send() {
   const sel = props.selection
   if (!sel || sel.kind !== 'persona' || !canSubmit.value) return
   const out = await ctx.ask(sel.agentId, text.value)
-  if (out.status === 'answered') text.value = ''
+  if (out.status === 'answered') {
+    text.value = ''
+    announce.value = t('views.run.interviews.pane.answeredStatus', { name: nameOf(sel.agentId) })
+  } else {
+    announce.value = ''
+  }
+  // Der Fokus bleibt im Eingabefeld, auch nach Klick auf "Senden".
+  inputEl.value?.focus()
 }
 </script>
 
@@ -178,6 +188,7 @@ async function send() {
               <router-link :to="personaTo(a.agentId)" class="cpane__link" data-testid="group-answer-link">{{ nameOf(a.agentId) }}</router-link>
               <span class="cpane__badge">{{ t('views.run.interviews.pane.badgeSim') }}</span>
               <span class="cpane__badge">{{ t('views.run.interviews.pane.badgeInterview') }}</span>
+              <span v-if="a.platform" class="cpane__time">{{ platformLabel(a.platform) }}</span>
               <span class="cpane__time">{{ formatTime(a.timestamp) }}</span>
             </p>
             <p class="cpane__body">{{ a.answer }}</p>
@@ -204,6 +215,7 @@ async function send() {
         <label :for="inputId" class="cpane__label">{{ t('views.run.interviews.pane.inputLabel') }}</label>
         <textarea
           :id="inputId"
+          ref="inputEl"
           v-model="text"
           rows="3"
           class="cpane__input"
@@ -225,7 +237,7 @@ async function send() {
           {{ ctx.sending.value ? t('views.run.interviews.sending') : t('views.run.interviews.pane.send') }}
         </button>
         <p class="cpane__sr" role="status" aria-live="polite" data-testid="ask-status">
-          {{ ctx.sending.value ? t('views.run.interviews.sending') : '' }}
+          {{ ctx.sending.value ? t('views.run.interviews.sending') : announce }}
         </p>
         <p
           v-if="ctx.sendError.value && !ctx.budgetExceeded.value"

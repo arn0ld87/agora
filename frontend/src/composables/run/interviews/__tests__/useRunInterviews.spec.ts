@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import { ApiError } from '@/api/envelope'
 
 const api = vi.hoisted(() => ({
@@ -111,7 +112,7 @@ describe('useRunInterviews', () => {
 
   it('Budgetabbruch wird als solcher durchgereicht', async () => {
     api.askPersonas.mockRejectedValue(
-      new ApiError({ code: 'budget_exceeded', status: 200, message: 'Token-Budget überschritten: 10 >= 10' }),
+      new ApiError({ code: 'budget_exceeded', status: 409, message: 'Token-Budget überschritten: 10 >= 10' }),
     )
     const vm = await setup()
     const out = await vm.ask(1, 'Hallo')
@@ -155,11 +156,90 @@ describe('useRunInterviews', () => {
     expect(vm.budgetDetail.value).toMatchObject({ reason: null, observed: null, threshold: null })
   })
 
-  it('Budget-Meldung im Eintrag zählt ebenfalls als Budgetabbruch', async () => {
-    api.askPersonas.mockResolvedValue([ans(1, { response: null, error: 'Budget überschritten' })])
+  it('Frist-Fehler im Eintrag ist kein Budgetabbruch, der Fehler bleibt am Eintrag', async () => {
+    const msg = 'Batch-Deadline von 120s überschritten — Interview nicht mehr gestartet'
+    api.askPersonas.mockResolvedValue([ans(1, { response: null, error: msg })])
     const vm = await setup()
-    expect((await vm.ask(1, 'x')).status).toBe('budget')
-    expect(vm.budgetExceeded.value).toBe(true)
+    const out = await vm.ask(1, 'x')
+    expect(out).toEqual({ status: 'failed', answer: null, error: msg })
+    expect(vm.budgetExceeded.value).toBe(false)
+    expect(vm.budgetDetail.value).toBeNull()
+    expect(vm.conversations.value[0].turns[0]).toMatchObject({ answer: null, error: msg })
+  })
+
+  it('Budget-Text im Eintrag oder Code ohne 409 ist kein Budgetabbruch', async () => {
+    api.askPersonas.mockResolvedValue([ans(1, { response: null, error: 'Budget exceeded' })])
+    const vm = await setup()
+    expect((await vm.ask(1, 'x')).status).toBe('failed')
+    expect(vm.budgetExceeded.value).toBe(false)
+    api.askPersonas.mockRejectedValue(new ApiError({ code: 'budget_exceeded', status: 200, message: 'Budget' }))
+    expect((await vm.ask(1, 'y')).status).toBe('failed')
+    expect(vm.budgetExceeded.value).toBe(false)
+  })
+
+  it('zweite Frage während des Sendens wird verworfen, nur ein Request', async () => {
+    let release: (v: unknown[]) => void = () => {}
+    api.askPersonas.mockReturnValue(new Promise((r) => { release = r }))
+    const vm = await setup()
+    const first = vm.ask(1, 'Eins')
+    const second = await vm.ask(2, 'Zwei')
+    const group = await vm.askGroup([1, 2], 'Drei')
+    expect(second).toEqual({ status: 'busy', answer: null, error: null })
+    expect(group).toEqual({ asked: 0, answered: 0, failed: 0 })
+    expect(api.askPersonas).toHaveBeenCalledTimes(1)
+    release([ans(1)])
+    expect((await first).status).toBe('answered')
+    expect(vm.sending.value).toBe(false)
+  })
+
+  it('Wechsel der simulationId während des Sendens: Ergebnis wird verworfen', async () => {
+    let release: (v: unknown[]) => void = () => {}
+    api.askPersonas.mockReturnValue(new Promise((r) => { release = r }))
+    const id = ref('sim_1')
+    const vm = useRunInterviews(id, { t })
+    await flushPromises()
+    const pending = vm.ask(1, 'Hallo')
+    id.value = 'sim_2'
+    await flushPromises()
+    release([ans(1)])
+    expect((await pending).status).toBe('stale')
+    await flushPromises()
+    expect(vm.conversations.value).toEqual([])
+    expect(vm.sendError.value).toBeNull()
+    expect(vm.sending.value).toBe(false)
+    // auch eine Gruppenfrage hinterlässt nichts im neuen Verlauf
+    let release2: (v: unknown[]) => void = () => {}
+    api.askPersonas.mockReturnValue(new Promise((r) => { release2 = r }))
+    const g = vm.askGroup([1, 2], 'Alle')
+    id.value = 'sim_3'
+    await flushPromises()
+    release2([ans(1), ans(2)])
+    expect(await g).toEqual({ asked: 0, answered: 0, failed: 0 })
+    expect(vm.groupResults.value).toEqual([])
+    expect(vm.conversations.value).toEqual([])
+  })
+
+  it('verspätete Modell-Antwort einer alten Simulation überschreibt das Modell nicht', async () => {
+    let release: (v: unknown) => void = () => {}
+    api.getSimulationConfig
+      .mockReturnValueOnce(new Promise((r) => { release = r }))
+      .mockResolvedValueOnce({ success: true, data: { llm_model: 'neu' } })
+    const id = ref('sim_1')
+    const vm = useRunInterviews(id, { t })
+    id.value = 'sim_2'
+    await flushPromises()
+    release({ success: true, data: { llm_model: 'alt' } })
+    await flushPromises()
+    expect(vm.modelLabel.value).toBe('neu')
+  })
+
+  it('Fehler beim Laden des Modells wird protokolliert, Anzeige bleibt "unbekannt"', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    api.getSimulationConfig.mockRejectedValue(new Error('weg'))
+    const vm = await setup()
+    expect(vm.modelLabel.value).toBeNull()
+    expect(warn).toHaveBeenCalledWith('[run-interviews] Modell des Laufs nicht ladbar', expect.objectContaining({ error: 'weg' }))
+    warn.mockRestore()
   })
 
   it('askGroup: Teilfehler je Persona, Gruppe nur für die Sitzung, Zähler stimmen', async () => {

@@ -4,15 +4,15 @@
  *
  * Fehlerbild des Backends (`backend/app/api/simulation_interviews.py`):
  * - `batch` antwortet auch bei fachlichen Fehlern mit HTTP 200 und
- *   `success:false`; das wird hier zu einem `ApiError` (Status 200, Code des
- *   Backends), den `interviewErrorMessage` richtig einordnet.
+ *   `success:false`; den `ApiError` (Status 200, Code des Backends) wirft schon
+ *   der Response-Interceptor in `api/index.ts`, `interviewErrorMessage` ordnet
+ *   ihn ein. Hier gibt es dafür keine zweite Prüfung.
  * - `success:true` heißt nur: mindestens eine Antwort kam. Fehler je Persona
  *   stehen im Eintrag und bleiben dort erhalten (`InterviewAnswer.error`).
  * - 503, wenn weder die Umgebung lebt noch persistierte Personas vorliegen.
  * `interviewAgents` in `api/simulation.ts` bleibt für die Altansicht bestehen.
  */
 import service from './index'
-import { ApiError } from './envelope'
 import { readEnvelope } from '@/composables/run/simulation/simulationEnvelope'
 import {
   InterviewBatchDataSchema,
@@ -23,7 +23,11 @@ import {
 export interface InterviewQuestion {
   agentId: number
   prompt: string
-  /** Ohne Angabe befragt das Backend nur eine Plattform (Reddit bevorzugt). */
+  /**
+   * Ohne Angabe befragt das Backend im Direktpfad (keine lebende Umgebung) nur
+   * eine Plattform (Reddit bevorzugt); bei lebender Umgebung (IPC) beide, dann
+   * kommen je Persona bis zu zwei Einträge zurück.
+   */
   platform?: 'twitter' | 'reddit'
 }
 
@@ -48,22 +52,6 @@ export interface HistoryQuery {
   limit?: number
 }
 
-/** Hebt `success:false` bei HTTP 200 zu einem sichtbaren Fehler samt Backend-Code. */
-function assertSuccess(raw: unknown): void {
-  if (typeof raw === 'object' && raw !== null && (raw as { success?: unknown }).success === false) {
-    const env = raw as { code?: unknown; error?: unknown; message?: unknown }
-    throw new ApiError({
-      code: typeof env.code === 'string' && env.code ? env.code : 'unknown_error',
-      status: 200,
-      message:
-        (typeof env.error === 'string' && env.error) ||
-        (typeof env.message === 'string' && env.message) ||
-        'Interview fehlgeschlagen',
-      originalResponse: raw,
-    })
-  }
-}
-
 export async function askPersonas(
   simulationId: string,
   questions: readonly InterviewQuestion[],
@@ -79,7 +67,6 @@ export async function askPersonas(
   }
   if (options.timeout !== undefined) body.timeout = options.timeout
   const raw: unknown = await service.post('/api/simulation/interview/batch', body)
-  assertSuccess(raw)
   const data = readEnvelope(raw, InterviewBatchDataSchema, 'interview/batch')
   return Object.values(data.result.results).map((e) => ({
     agentId: e.agent_id,
@@ -100,6 +87,5 @@ export async function getInterviewHistory(
   if (query.platform) body.platform = query.platform
   if (query.limit !== undefined) body.limit = query.limit
   const raw: unknown = await service.post('/api/simulation/interview/history', body)
-  assertSuccess(raw)
   return readEnvelope(raw, InterviewHistoryDataSchema, 'interview/history').history
 }

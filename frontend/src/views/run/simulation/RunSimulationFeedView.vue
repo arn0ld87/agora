@@ -29,6 +29,7 @@ import {
   type FeedNetwork,
   type FeedPost,
 } from '@/composables/run/simulation/threads'
+import { NOT_FINISHED_STATES } from '@/composables/run/runStageState'
 import { RUN_WORKSPACE_KEY } from '@/composables/run/useRunWorkspace'
 
 const props = defineProps<{ simulationId: string; network?: string }>()
@@ -157,9 +158,8 @@ const fallbackName = computed(() => {
 })
 
 // „Befragen": nur bei gewählter Persona und abgeschlossener Simulation (Etappe 6).
-const NOT_FINISHED = new Set(['notStarted', 'queued', 'running', 'paused'])
 const interviewTo = computed(() =>
-  selectedPersonaId.value && !NOT_FINISHED.has(runState.stateKind.value)
+  selectedPersonaId.value && !NOT_FINISHED_STATES.has(runState.stateKind.value)
     ? {
         name: 'RunInterviews',
         params: { simulationId: props.simulationId, conversationId: `persona-${selectedPersonaId.value}` },
