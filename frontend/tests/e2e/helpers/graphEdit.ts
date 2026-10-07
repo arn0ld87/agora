@@ -72,7 +72,7 @@ export function originFixture(graphId: string): OriginFixture {
         labels: ['Ort'],
         entity_type: 'Ort',
         created_at: null,
-        provenance: { origin: null, episode_count: 0 },
+        provenance: { origin: 'edited', changed_at: '2026-10-07T11:00:00', episode_count: 0 },
       },
     ],
     edges: [
