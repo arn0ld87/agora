@@ -195,12 +195,12 @@ export function nextActionFor(latest: RunDetail, t: Translate): NextAction | nul
 
   if (latest.status === 'processing' || latest.status === 'pending') {
     if (latest.run_type === 'simulation_run' && simId) {
-      return { label: t('shelf.action.watch'), to: { name: 'StepSimulationFeed', params: { simulationId: simId } }, kind: 'neutral' }
+      return { label: t('shelf.action.watch'), to: { name: 'RunSimulationFeed', params: { simulationId: simId } }, kind: 'neutral' }
     }
     return { label: t('shelf.action.watch'), to: { name: 'RunDetail', params: { id: latest.run_id } }, kind: 'neutral' }
   }
   if (latest.status === 'paused' && simId) {
-    return { label: t('shelf.action.resume'), to: { name: 'StepSimulation', params: { simulationId: simId } }, kind: 'accent' }
+    return { label: t('shelf.action.resume'), to: { name: 'RunSimulationFeed', params: { simulationId: simId } }, kind: 'accent' }
   }
   if (latest.status === 'failed') {
     return { label: t('shelf.action.inspectFailure'), to: { name: 'RunDetail', params: { id: latest.run_id } }, kind: 'warn' }
@@ -220,7 +220,7 @@ export function nextActionFor(latest: RunDetail, t: Translate): NextAction | nul
       return null
     case 'simulation_run':
       if (reportId) return { label: t('shelf.action.readReport'), to: { name: 'StepReport', params: { reportId } }, kind: 'accent' }
-      if (simId) return { label: t('shelf.action.createReport'), to: { name: 'StepSimulation', params: { simulationId: simId } }, kind: 'accent' }
+      if (simId) return { label: t('shelf.action.createReport'), to: { name: 'RunSimulationFeed', params: { simulationId: simId } }, kind: 'accent' }
       return null
     case 'report_generate':
       if (reportId) return { label: t('shelf.action.readReport'), to: { name: 'StepReport', params: { reportId } }, kind: 'accent' }

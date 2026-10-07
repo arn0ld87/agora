@@ -28,6 +28,9 @@
         <label v-if="scopeId" class="scope-toggle">
           <input v-model="showAll" type="checkbox" class="scope-all" /> {{ t('logs.drawer.showAll') }}
         </label>
+        <label v-if="kindFilter" class="scope-toggle">
+          <input v-model="showEverything" type="checkbox" class="kind-all" /> {{ kindFilter.toggleLabel }}
+        </label>
         <span
           v-if="streamReconnecting"
           class="reconnect-indicator"
@@ -94,6 +97,7 @@ import StickyScrollBanner from '../ui/StickyScrollBanner.vue'
 import { collapseProgressLines } from '../../utils/logProgress'
 import { isErrorLine } from '@/utils/errorLinePattern'
 import { filterLinesByScope, parseLogFrame, parseLogTail } from '../../composables/activity/logTail'
+import { classifyLogLine, collapseProgress, type LogKindFilter } from '../../composables/activity/logKinds'
 
 const props = withDefaults(
   defineProps<{
@@ -102,8 +106,10 @@ const props = withDefaults(
     title?: string
     /** Simulationskennung des geöffneten Laufs; filtert per Textsuche. */
     scopeId?: string | null
+    /** Optionaler Vorfilter nach Zeilenart (Diagnose); ohne ihn bleibt alles wie bisher. */
+    kindFilter?: LogKindFilter | null
   }>(),
-  { active: true, title: '', scopeId: null },
+  { active: true, title: '', scopeId: null, kindFilter: null },
 )
 
 const { t } = useI18n()
@@ -112,6 +118,7 @@ const level = ref('')
 const search = ref('')
 const paused = ref(false)
 const showAll = ref(false)
+const showEverything = ref(false)
 const streamFailed = ref(false)
 const streamReconnecting = ref(false)
 // Loading/Error/Backend-Marker an die UI durchreichen, damit der User
@@ -140,11 +147,23 @@ const RECONNECT_INDICATOR_DELAY_MS = 30000
 const scopeActive = computed(() => !!props.scopeId && !showAll.value)
 
 // Tqdm-artige Fortschrittsbalken: nur der letzte Stand je Balken.
-const displayLines = computed(() => collapseProgressLines(lines.value))
+const kindActive = computed(() => !!props.kindFilter && !showEverything.value)
+
+const displayLines = computed(() => {
+  const kf = props.kindFilter
+  if (!kf) return collapseProgressLines(lines.value)
+  // „Alles anzeigen“: ungekürzt und ungefiltert.
+  if (showEverything.value) return lines.value
+  return collapseProgress(lines.value).map((c) => (c.count > 1 ? `${c.line}  ${kf.collapsedLabel(c.count)}` : c.line))
+})
 
 const filteredLines = computed(() => {
   let out: string[] = displayLines.value
   if (scopeActive.value) out = filterLinesByScope(out, props.scopeId)
+  if (kindActive.value && props.kindFilter) {
+    const kinds = props.kindFilter.kinds
+    out = out.filter((ln) => kinds.includes(classifyLogLine(ln)))
+  }
   if (!search.value) return out
   const needle = search.value.toLowerCase()
   return out.filter((ln) => typeof ln === 'string' && ln.toLowerCase().includes(needle))

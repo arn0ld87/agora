@@ -170,14 +170,14 @@ describe('nextActionFor — Tabellen-Test ueber run_type x status', () => {
 
   const cases: Case[] = [
     {
-      name: 'processing + simulation_run + sim_id -> StepSimulationFeed (watch)',
+      name: 'processing + simulation_run + sim_id -> RunSimulationFeed (watch)',
       run: { status: 'processing', run_type: 'simulation_run', linked_ids: { simulation_id: 'sim_1' } },
-      expected: { to: 'StepSimulationFeed', labelKey: 'shelf.action.watch', kind: 'neutral', params: { simulationId: 'sim_1' } },
+      expected: { to: 'RunSimulationFeed', labelKey: 'shelf.action.watch', kind: 'neutral', params: { simulationId: 'sim_1' } },
     },
     {
       name: 'paused + sim_id -> StepSimulation (resume, accent)',
       run: { status: 'paused', linked_ids: { simulation_id: 'sim_1' } },
-      expected: { to: 'StepSimulation', labelKey: 'shelf.action.resume', kind: 'accent', params: { simulationId: 'sim_1' } },
+      expected: { to: 'RunSimulationFeed', labelKey: 'shelf.action.resume', kind: 'accent', params: { simulationId: 'sim_1' } },
     },
     {
       name: 'failed -> RunDetail (inspectFailure, warn)',
@@ -202,7 +202,7 @@ describe('nextActionFor — Tabellen-Test ueber run_type x status', () => {
     {
       name: 'completed + simulation_run ohne report_id, mit sim_id -> StepSimulation (createReport)',
       run: { status: 'completed', run_type: 'simulation_run', linked_ids: { simulation_id: 'sim_1' } },
-      expected: { to: 'StepSimulation', labelKey: 'shelf.action.createReport', kind: 'accent', params: { simulationId: 'sim_1' } },
+      expected: { to: 'RunSimulationFeed', labelKey: 'shelf.action.createReport', kind: 'accent', params: { simulationId: 'sim_1' } },
     },
     {
       name: 'completed + unbekannter run_type -> null',

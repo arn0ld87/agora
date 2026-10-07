@@ -14,7 +14,10 @@ const { t } = useI18n()
 const route = useRoute()
 
 function isActive(tab: RunTab): boolean {
-  return !!tab.to && route.name === tab.to.name
+  if (!tab.to) return false
+  // Alle Unterreiter der Simulation (Feed, Beitrag, Runden, Diagnose) gehoeren zum Reiter.
+  if (tab.key === 'simulation') return route.matched.some((r) => r.name === 'RunSimulation')
+  return route.name === tab.to.name
 }
 </script>
 

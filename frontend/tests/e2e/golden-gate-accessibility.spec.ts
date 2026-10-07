@@ -357,13 +357,46 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, `/v4/env-setup/${projectId}`);
     });
 
-    test('Step Simulation passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, `/v4/simulation/${simulationId}`);
+    // Etappe 4 (#1801): die Simulation ist ein Reiter am Lauf. Eine frische
+    // Simulation ist nicht gestartet; Feed, Runden und Diagnose zeigen dann ihre
+    // Leer- bzw. Hinweiszustände (ohne Betreiberzugang die Zugangshinweise).
+    test('Lauf Simulation Feed passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/simulation/feed`);
     });
 
-    test('Step Simulation Feed passes accessibility gates', async ({ page }) => {
-      await checkAccessibilityGate(page, `/v4/simulation/${simulationId}/feed`);
+    test('Lauf Simulation Runden passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/simulation/rounds`);
     });
+
+    test('Lauf Simulation Diagnose passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/simulation/diagnostics`);
+    });
+
+    // Gespeicherte Links auf die alten Simulationsadressen funktionieren weiter;
+    // Query und Hash bleiben, geprüft wird die Weiterleitung (URL).
+    const oldSimulationAddresses: Array<[string, (id: string) => string, (id: string) => RegExp]> = [
+      [
+        '/v4/simulation/:id',
+        (id) => `/v4/simulation/${id}?claim=c1`,
+        (id) => new RegExp(`/simulations/${id}/simulation/feed\\?claim=c1$`),
+      ],
+      [
+        '/simulation/:id/start',
+        (id) => `/simulation/${id}/start`,
+        (id) => new RegExp(`/simulations/${id}/simulation/feed$`),
+      ],
+      [
+        '/v4/simulation/:id/rounds',
+        (id) => `/v4/simulation/${id}/rounds`,
+        (id) => new RegExp(`/simulations/${id}/simulation/rounds$`),
+      ],
+    ];
+    for (const [label, from, target] of oldSimulationAddresses) {
+      test(`${label} leitet auf die Simulation am Lauf um`, async ({ page }) => {
+        await page.goto(from(simulationId), { waitUntil: 'domcontentloaded' });
+        await expect(page).toHaveURL(target(simulationId));
+      });
+    }
 
     test('Compare (v4) passes accessibility gates', async ({ page }) => {
       // CompareView.vue:12 zeigt bei fehlenden Branches einen role="alert"-

@@ -495,8 +495,6 @@
   },
   "step3": {
     "kicker": "№ 03 — SIMULATION",
-    "title": "Lass die Welt laufen.",
-    "sub": "Agenten interagieren rundenbasiert auf der gewählten Plattform. Sie halluzinieren nicht — sondern nutzen Tool-Calls, um sich online zu informieren oder den Wissensgraphen abzufragen, bevor sie reagieren. Du beobachtest die Aktionen live.",
     "config": {
       "title": "Lauf-Parameter",
       "rounds": "Anzahl Runden",
@@ -508,83 +506,22 @@
     },
     "controls": {
       "start": "Simulation starten",
-      "starting": "Startet…",
-      "pause": "Pausieren",
-      "pauseHint": "Pausiert nach Ende der aktuellen Runde.",
-      "resume": "Fortsetzen",
-      "stop": "Stoppen",
-      "stopConfirm": "Simulation wirklich abbrechen? Bisherige Daten bleiben erhalten.",
-      "stopped": "Gestoppt.",
-      "cancel": "Abbrechen",
-      "cancelConfirm": "Simulation sanft abbrechen? Bereits abgeschlossene Stages bleiben als Teil-Report erhalten.",
-      "cancelled": "Abbruch angefordert.",
       "completed": "Abgeschlossen."
     },
     "status": {
-      "ready": "Bereit",
-      "running": "Läuft — Runde {current} / {total}",
-      "paused": "Pausiert nach Runde {current} / {total}",
-      "completed": "Abgeschlossen — {total} Runden",
-      "failed": "Fehlgeschlagen",
       "elapsed": "Dauer: {time}"
     },
-    "simClock": {
-      "tooltip": "Virtuelle Sim-Uhr (Agenten-Wallclock, Europe/Berlin)"
-    },
     "feed": {
-      "title": "Live-Feed",
-      "actions": "Aktionen: {count}",
       "posts": "Posts: {count}",
       "replies": "Antworten: {count}",
       "filter": "Filter",
       "all": "Alle",
       "posts_only": "Nur Posts",
       "replies_only": "Nur Antworten",
-      "empty": "Noch keine Aktivität.",
-      "unread": "kein neuer Beitrag | ein neuer Beitrag | {count} neue Beiträge",
-      "density": {
-        "label": "Dichte",
-        "comfort": "Komfort",
-        "compact": "Kompakt"
-      }
+      "unread": "kein neuer Beitrag | ein neuer Beitrag | {count} neue Beiträge"
     },
-    "toolPanel": {
-      "toggle": "Tool-Calls & Fehler",
-      "show": "Anzeigen (Strg+L)",
-      "hide": "Ausblenden (Strg+L)",
-      "unread": "kein neuer Fehler | ein neuer Fehler | {count} neue Fehler",
-      "filter": "Filter",
-      "filterAll": "Alle",
-      "filterErrors": "Nur Fehler",
-      "copyAsJson": "Als JSON kopieren",
-      "empty": "Warte auf Ausgabe…",
-      "noErrors": "Keine Fehler im Log."
-    },
-    "next": "Weiter zum Report →",
     "live": {
-      "title": "Simulation live",
-      "round": "Runde",
-      "elapsed": "vergangen",
-      "secPerRound": "s/Runde",
-      "roundAxis": "Rundenachse",
-      "roundAxisHint": "Rundenstatus: erledigt, laufend, geplant",
-      "now": "jetzt",
-      "lanes": {
-        "actors": "Akteure",
-        "reddit": "Reddit",
-        "twitter": "Twitter",
-        "system": "System und Ereignisse"
-      },
-      "actorsActive": "{count} aktiv",
-      "usage": {
-        "llmCalls": "LLM-Calls",
-        "tokens": "Tokens gesamt"
-      },
-      "events": {
-        "title": "Ereignisse",
-        "empty": "Noch keine Ereignisse."
-      },
-      "empty": "Noch keine Aktivität."
+      "now": "jetzt"
     }
   },
   "reportMode": {
@@ -1545,7 +1482,6 @@
     "projectFailed": "Projektverarbeitung fehlgeschlagen.",
     "pendingUploadMissing": "Keine vorbereiteten Dateien zum Erstellen des Projekts gefunden.",
     "personaGenFailed": "Persona-Generierung fehlgeschlagen.",
-    "simulationFailed": "Simulation fehlgeschlagen.",
     "reportFailed": "Bericht fehlgeschlagen.",
     "unknown": "Unbekannter Fehler."
   },
@@ -1702,66 +1638,17 @@
     "simBadge": "SIM",
     "activity": "Posts/min",
     "live": "Live",
-    "empty": "Noch keine Aktivität.",
-    "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
-    "pipeline": "Pipeline",
-    "feedTab": "Live-Feed",
-    "threadsTab": "Diskurs",
-    "roundsTab": "Runden",
     "actionsTab": "Protokoll",
     "resonanceBar": "Resonanz der letzten Beiträge (Zustimmung minus Widerspruch)",
     "threadsPlaceholder": "Noch keine Diskussionsstränge in diesem Lauf.",
-    "threadFocusPlaceholder": "Dieser Strang ist noch nicht verfügbar.",
     "roundsPlaceholder": "Noch keine Runden gestartet.",
     "actionsPlaceholder": "Noch keine Aktionen protokolliert.",
-    "noPosts": "Noch keine Beiträge in diesem Lauf.",
-    "noPostsHint": "Ein Blick in die Runden-Ansicht zeigt, ob die Simulation bereits läuft.",
-    "replyTo": "Antwort an @{name}",
-    "replyToUnknown": "Antwort auf früheren Beitrag",
-    "quoteMissing": "Zitat nicht mehr auffindbar",
-    "repostedBy": "@{name} hat geteilt",
-    "repostSourceMissing": "Bezug nicht erfasst",
     "parentThreadMissing": "Übergeordneter Beitrag nicht erfasst",
-    "newItems": "{count} neue Beiträge",
-    "streamLost": "Verbindung verloren — versuche Reconnect",
     "errors": {
       "snapshotFailed": "Snapshot-Ladefehler"
     },
-    "degradation": {
-      "snapshot_missing": "Anfangsbestand konnte nicht geladen werden.",
-      "stream_lost": "Live-Verbindung verloren.",
-      "legacy_run": "Älterer Lauf ohne vollständige Diskurs-Daten."
-    },
-    "scope": {
-      "platform": "Plattform",
-      "platformAll": "Alle",
-      "round": "Runde",
-      "roundAll": "Alle Runden",
-      "persona": "Persona",
-      "personaAll": "Alle Personas",
-      "search": "Suche",
-      "searchPlaceholder": "Beiträge durchsuchen…",
-      "noPersonas": "Noch keine Personen im Feed"
-    },
-    "threadList": {
-      "replies": "{count} Antworten",
-      "reposts": "{count} Reposts",
-      "quotes": "{count} Zitate",
-      "empty": "Noch keine Diskussionsstränge.",
-      "emptyFiltered": "Kein Strang passt zu den aktuellen Filtern."
-    },
-    "threadTree": {
-      "orphan": "Übergeordneter Beitrag nicht erfasst",
-      "loading": "Strang wird geladen…"
-    },
     "rounds": {
-      "empty": "Noch keine Runden gestartet",
-      "error": "Runden konnten nicht geladen werden.",
-      "retry": "Erneut versuchen"
-    },
-    "roundsList": {
-      "roundLabel": "Runde {round}",
-      "noActions": "Keine Aktionen in dieser Runde."
+      "error": "Runden konnten nicht geladen werden."
     },
     "actionType": {
       "CREATE_POST": "Beiträge",
@@ -1797,20 +1684,7 @@
       "noTarget": "—",
       "noPayload": "—",
       "loadError": "Protokoll konnte nicht geladen werden."
-    },
-    "header": {
-      "round": "Runde {current}/{total}",
-      "roundUnknown": "Runde —",
-      "posts": "{count} Beiträge",
-      "streamConnecting": "Verbinde…",
-      "streamOpen": "Live",
-      "streamReconnecting": "Verbindung wird wiederhergestellt…",
-      "streamClosed": "Verbindung geschlossen",
-      "streamEnded": "Lauf beendet"
     }
-  },
-  "observability": {
-    "viewTrace": "Trace anzeigen ({id}…)"
   },
   "modelPicker": {
     "loading": "Lade Modelle…",
@@ -2285,6 +2159,56 @@
       }
     },
     "run": {
+      "simulation": {
+        "tabsLabel": "Ansichten der Simulation",
+        "tab": {
+          "feed": "Feed",
+          "rounds": "Runden",
+          "diagnostics": "Diagnose"
+        },
+        "headerSlotLabel": "Kopf der Simulation",
+        "diagnostics": {
+          "title": "Diagnose"
+        }
+      },
+      "simRounds": {
+        "title": "Runden der Simulation",
+        "viewLabel": "Darstellung",
+        "viewRounds": "Runden",
+        "viewActions": "Aktionen",
+        "loading": "Runden werden geladen …",
+        "error": "Die Runden konnten nicht geladen werden: {reason}",
+        "retry": "Erneut laden",
+        "empty": "Noch keine Runden",
+        "round": "Runde {round}",
+        "roundOf": "Runde {round} von {total}",
+        "startRound": "Startbeiträge",
+        "running": "läuft",
+        "noActions": "Keine Aktionen",
+        "twitter": "Twitter",
+        "reddit": "Reddit",
+        "openFeed": "Im Feed ansehen",
+        "openFeedForNetwork": "Runde {round} auf {network} im Feed ansehen",
+        "actionsLoadError": "Die Aktionen konnten nicht geladen werden: {reason}",
+        "filterRound": "Runde",
+        "filterNetwork": "Netzwerk",
+        "filterType": "Aktionsart",
+        "filterAll": "Alle"
+      },
+      "simDiagnostics": {
+        "title": "Diagnose",
+        "noAccess": "Das Protokoll gehört dem Betreiber. Mit dieser Anmeldung ist es nicht einsehbar.",
+        "serverTitle": "Server-Protokoll dieses Laufs",
+        "serverNote": "Zeigt Tool-Calls, Fehler, Warnungen und Fortschritt. Die Zuordnung zum Lauf ist eine Textsuche nach der Kennung und nicht exakt.",
+        "showAll": "Alles anzeigen (ungekürzt)",
+        "collapsed": "({count} Zeilen zusammengefasst)",
+        "processTitle": "Simulationsprozess",
+        "processNote": "Rohausgabe des Simulationsprozesses dieses Laufs: Tool-Calls, Fehler, Warnungen und Fortschritt.",
+        "processEmpty": "Der Simulationsprozess hat noch nichts ausgegeben.",
+        "processFiltered": "Keine Tool-Calls, Fehler oder Fortschrittszeilen. „Alles anzeigen“ zeigt die ganze Ausgabe.",
+        "processError": "Das Prozessprotokoll konnte nicht geladen werden: {reason}",
+        "retry": "Erneut laden"
+      },
       "overview": {
         "title": "Übersicht",
         "stagesLabel": "Stufen des Laufs",
@@ -2382,6 +2306,160 @@
         "start": "Starten",
         "resume": "Fortsetzen",
         "view": "Ansehen"
+      },
+      "simFeed": {
+        "ariaLabel": "Feed der Simulation",
+        "network": {
+          "label": "Netzwerk",
+          "twitter": "Twitter",
+          "reddit": "Reddit"
+        },
+        "filters": {
+          "title": "Filter",
+          "persona": "Persona",
+          "personaAll": "Alle Personas",
+          "round": "Nur Runde",
+          "roundAll": "Alle Runden",
+          "search": "Textsuche",
+          "searchPlaceholder": "Im Beitrag suchen",
+          "reset": "Filter zurücksetzen",
+          "contested": "Streitfrage",
+          "contestedNone": "Für diesen Lauf ist keine Streitfrage erfasst."
+        },
+        "toggle": {
+          "showFilters": "Filter anzeigen",
+          "hideFilters": "Filter ausblenden",
+          "showSide": "Persona und Runde anzeigen",
+          "hideSide": "Persona und Runde ausblenden"
+        },
+        "timeline": {
+          "twitter": "Beiträge auf Twitter, neueste zuerst",
+          "reddit": "Beiträge auf Reddit, neueste zuerst"
+        },
+        "scrubber": {
+          "label": "Rückblick",
+          "live": "Live",
+          "liveHint": "Der Feed läuft mit.",
+          "status": "Gezeigt bis Runde {round} von {max}",
+          "slider": "Bis zu Runde",
+          "noRounds": "Noch keine Rundenangabe vorhanden.",
+          "pill": "{count} neue Beiträge anzeigen"
+        },
+        "post": {
+          "sim": "SIM",
+          "simText": "synthetische Äußerung",
+          "open": "Beitrag von {name} öffnen",
+          "openLink": "Beitrag öffnen",
+          "reposted": "Weiterleitung ohne eigenen Text",
+          "quoteOf": "Zitiert",
+          "referenceMissing": "Der Bezugsbeitrag liegt außerhalb des geladenen Ausschnitts.",
+          "round": "Runde {round}",
+          "counts": "Zähler",
+          "replies": "keine Antworten | eine Antwort | {n} Antworten",
+          "reposts": "keine Weiterleitungen | eine Weiterleitung | {n} Weiterleitungen",
+          "likes": "keine Zustimmung | eine Zustimmung | {n} Zustimmungen",
+          "votes": "Stimmen: {n}",
+          "comments": "keine Kommentare | ein Kommentar | {n} Kommentare"
+        },
+        "persona": {
+          "title": "Persona",
+          "none": "Wählen Sie eine Persona im Filter oder fokussieren Sie einen Beitrag.",
+          "role": "Rolle",
+          "stance": "Haltung",
+          "stanceMissing": "Haltung nicht erfasst",
+          "roleMissing": "Rolle nicht erfasst",
+          "bio": "Beschreibung",
+          "profileMissing": "Zu dieser Persona liegt kein Profil vor."
+        },
+        "roundPanel": {
+          "title": "Runde {round} von {total}",
+          "titleUnknownTotal": "Runde {round} von ?",
+          "titleNone": "Noch keine Rundenangabe",
+          "activity": "Aktivität",
+          "activityLine": "{twitter} Twitter · {reddit} Reddit",
+          "activityNone": "Keine Beiträge in dieser Runde."
+        },
+        "notices": {
+          "error": "Der Feed konnte nicht vollständig geladen werden: {message}",
+          "retry": "Erneut laden",
+          "truncated": "Es werden nur die neuesten {limit} Beiträge je Netzwerk gezeigt.",
+          "invalid": "{count} Beiträge entsprechen nicht dem Vertrag und wurden verworfen.",
+          "evicted": "{count} ältere Beiträge wurden wegen der Pufferobergrenze verdrängt.",
+          "unrounded": "{count} Beiträge ohne Rundenangabe werden in jeder Runde gezeigt.",
+          "stream": "Die Live-Verbindung ist unterbrochen. Neue Beiträge erscheinen erst nach erneutem Laden."
+        },
+        "states": {
+          "loading": "Feed wird geladen …",
+          "empty": "In diesem Netzwerk gibt es noch keine Beiträge.",
+          "emptyFiltered": "Kein Beitrag passt zu den Filtern."
+        },
+        "thread": {
+          "back": "Zurück zum Feed",
+          "loading": "Beitrag wird geladen …",
+          "rootMissing": "Der Ausgangsbeitrag liegt außerhalb des geladenen Ausschnitts.",
+          "broken": "Die Antwortkette dieses Beitrags ist fehlerhaft (Zyklus oder zu tief) und wird nicht dargestellt.",
+          "parentMissing": "Der Elternbeitrag fehlt im geladenen Ausschnitt.",
+          "replies": "Antworten",
+          "noReplies": "Keine Antworten im geladenen Ausschnitt.",
+          "quotes": "Zitate",
+          "reposts": "Weiterleitungen: {count}",
+          "claim": "Beleg dieser Aussage",
+          "region": "Faden"
+        },
+        "tree": {
+          "region": "Kommentare",
+          "collapse": "Ast von {name} einklappen",
+          "expand": "Ast von {name} ausklappen ({count} Antworten darunter)",
+          "flatOnly": "Dieser Lauf enthält keine Verschachtelung der Kommentare. Alle Kommentare stehen flach unter dem Beitrag.",
+          "unplaced": "{count} Kommentare konnten nicht eingeordnet werden (Zyklus oder zu tiefe Verschachtelung).",
+          "noComments": "Keine Kommentare im geladenen Ausschnitt.",
+          "parentMissing": "Der Elternkommentar fehlt im geladenen Ausschnitt."
+        }
+      },
+      "simHeader": {
+        "ariaLabel": "Simulation",
+        "round": "Runde {current} von {total}",
+        "roundTotalUnknown": "Runde {current} von ?",
+        "roundNone": "Noch keine Runde",
+        "roundLabel": "Runde",
+        "postsLabel": "Beiträge",
+        "posts": "{total} ({twitter} Twitter · {reddit} Reddit)",
+        "costLabel": "Kosten",
+        "modelLabel": "Modell",
+        "modelPlanned": "{model} (Standard für diesen Start)",
+        "modelNone": "kein Standard erfasst",
+        "notRecorded": "nicht erfasst",
+        "start": "Starten",
+        "starting": "Startet …",
+        "restart": "Erneut starten",
+        "pause": "Pausieren",
+        "pausing": "Pausiert …",
+        "resume": "Fortsetzen",
+        "resuming": "Setzt fort …",
+        "stop": "Stoppen",
+        "stopping": "Wird gestoppt …",
+        "stopTitle": "Simulation stoppen?",
+        "stopDescription": "Die laufende Simulation wird beendet. Bereits erzeugte Beiträge bleiben erhalten; der Lauf zählt als gestoppt, nicht als fertig.",
+        "stopConfirm": "Simulation stoppen",
+        "stopCancel": "Weiterlaufen lassen",
+        "cancel": "Job abbrechen",
+        "cancelling": "Wird abgebrochen …",
+        "cancelTitle": "Simulationsjob abbrechen?",
+        "cancelDescription": "Bricht den Job im Auftragsregister sanft ab, auch wenn Stoppen ihn nicht beendet. Bereits abgeschlossene Stufen und erzeugte Beiträge bleiben erhalten.",
+        "cancelConfirm": "Job abbrechen",
+        "cancelKeep": "Nicht abbrechen",
+        "reasonStopped": "Gestoppt: {reason}",
+        "reasonBudget": "Abgebrochen wegen Budget: {reason}",
+        "reasonFailed": "Fehlgeschlagen: {reason}",
+        "reasonUnknown": "Grund nicht erfasst",
+        "blockedPersonas": "Die Personas sind noch nicht fertig vorbereitet. Starten ist erst danach möglich.",
+        "error": "Fehler: {message}",
+        "live": "Zustand: {state}",
+        "empty": {
+          "title": "Noch nicht gestartet",
+          "explainRounds": "In der Simulation schreiben die Personas in Runden Beiträge und antworten aufeinander.",
+          "explainSynthetic": "Das sind synthetische Äußerungen eines Modells, keine Vorhersage menschlichen Verhaltens."
+        }
       },
       "termination": {
         "user_stop": "Auf Wunsch gestoppt",
@@ -2633,7 +2711,6 @@
       "subtitle": "Wissensgraph aus hochgeladenen Dokumenten aufbauen"
     },
     "stepSimulation": {
-      "title": "Simulation",
       "subtitle": "Multi-Agent-Simulationslauf starten und beobachten"
     },
     "stepSimulationFeed": {

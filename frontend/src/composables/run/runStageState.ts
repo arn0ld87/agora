@@ -8,6 +8,9 @@
  * "Unvollständig" ist ein eigener Zustand und nie "fertig".
  */
 
+import { asRunRegistryId } from '@/contracts/runIdentifiers'
+import { PENDING_REPORT_ID, REPORT_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
+
 export type StageKey = 'graph' | 'personas' | 'simulation' | 'report' | 'interviews'
 
 export const STAGE_ORDER: readonly StageKey[] = ['graph', 'personas', 'simulation', 'report', 'interviews']
@@ -197,6 +200,14 @@ function target(name: string, params: Record<string, string>, query?: Record<str
   return query && Object.keys(query).length > 0 ? { name, params, query } : { name, params }
 }
 
+/** Berichtsseite im Zustand „bereit, noch nicht gestartet“ (Sentinel-ID, Simulation und Lauf in der Query). */
+function reportReadyTarget(data: RunWorkspaceData): RouteTarget {
+  const query: Record<string, string> = { [REPORT_SIMULATION_ID_QUERY_KEY]: data.simulationId }
+  const runId = asRunRegistryId(data.jobs['simulation_run']?.runId)
+  if (runId) query.runId = runId
+  return target('Report', { reportId: PENDING_REPORT_ID }, query)
+}
+
 function disabled(reason: string, kind: StepKind): NextStep {
   return { kind, to: null, disabledReason: reason }
 }
@@ -213,7 +224,6 @@ function nextStepFor(
   data: RunWorkspaceData,
   reportId: string | null,
   rows: Map<StageKey, StageStateKind>,
-  startQuery: Record<string, string>,
 ): NextStep {
   const stepKind: StepKind =
     state === 'notStarted' ? 'start' : RESUMABLE.has(state) ? 'resume' : 'view'
@@ -230,13 +240,14 @@ function nextStepFor(
         : disabled('noProject', stepKind)
     case 'simulation':
       return stepKind === 'view'
-        ? enabled('view', target('StepSimulationFeed', { simulationId: data.simulationId }))
-        : enabled(stepKind, target('StepSimulation', { simulationId: data.simulationId }, startQuery))
+        ? enabled('view', target('RunSimulationFeed', { simulationId: data.simulationId }))
+        : enabled(stepKind, target('RunSimulationFeed', { simulationId: data.simulationId }))
     case 'report': {
       if (reportId) return enabled('view', target('StepReport', { reportId }))
       const sim = rows.get('simulation') ?? 'notStarted'
       if (!DONE_KINDS.includes(sim)) return disabled('afterSimulation', 'start')
-      return enabled('start', target('StepSimulation', { simulationId: data.simulationId }, startQuery))
+      // Der Bericht wird erst auf der Berichtsseite nach Bestätigung gestartet (#1023, #1801).
+      return enabled('start', reportReadyTarget(data))
     }
     case 'interviews':
       return enabled('view', target('RunInterviewsLegacy', { simulationId: data.simulationId }))
@@ -244,11 +255,11 @@ function nextStepFor(
 }
 
 /**
- * Je Stufe eine Zeile; die Reihenfolge entspricht `STAGE_ORDER`. `startQuery`
- * (vorgemerkte Startparameter des Startdialogs) hängt nur an den Zielen, die
- * zum Simulationsstart führen.
+ * Je Stufe eine Zeile; die Reihenfolge entspricht `STAGE_ORDER`. Die
+ * vorgemerkten Startparameter des Startdialogs liest die Steuerung der
+ * Simulation selbst (`pendingRunParams`); sie reisen nicht mehr durch die Adresse.
  */
-export function deriveStages(data: RunWorkspaceData, startQuery: Record<string, string> = {}): StageRow[] {
+export function deriveStages(data: RunWorkspaceData): StageRow[] {
   const latestReport = data.reports[0] ?? null
   const reportJob = data.jobs['report_generate'] ?? null
 
@@ -313,7 +324,7 @@ export function deriveStages(data: RunWorkspaceData, startQuery: Record<string, 
       degradations,
       job,
       reportId,
-      next: nextStepFor(key, state, data, reportId, kinds, startQuery),
+      next: nextStepFor(key, state, data, reportId, kinds),
       updatedAt,
     })
   }

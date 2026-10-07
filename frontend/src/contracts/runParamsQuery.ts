@@ -9,7 +9,7 @@
  * Step 2 emittiert ``next-step`` mit den Werten, die der Nutzer gegen den
  * Auto-Vorschlag gesetzt hat. Der Wrapper verwarf sie bisher kommentarlos und
  * navigierte nur mit ``simulationId`` weiter; die Props ``maxRounds`` und
- * ``simulationDays`` an Step3Simulation blieben deshalb dauerhaft undefined.
+ * ``simulationDays`` an die Simulation blieben deshalb dauerhaft undefined (seit #1801 reist der Wert über `pendingRunParams`).
  *
  * Warum Query und nicht der pendingUpload-Store: Step 3 ist eine eigene Route,
  * auf der eine laufende Simulation beobachtet wird. Ein Reload dort darf die

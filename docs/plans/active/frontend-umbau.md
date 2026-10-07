@@ -679,6 +679,37 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 
 ---
 
+## 11c. Stand Etappe 4
+
+**Umgesetzt (Epic #1801)** nach 8 und 4.5: Simulation als Reiter am Lauf unter `/simulations/:simulationId/simulation/` mit den Unterreitern Feed (Dreispalter, Twitter-Zeitleiste und Faden, Reddit-Liste und Kommentarbaum, Rundenregler, „Neue Beiträge“-Pille, „SIM“-Kennzeichen), Runden (Umschalter Runden | Aktionen) und Diagnose (Protokoll des Laufs, vorgefiltert, plus Konsolenprotokoll des Simulationsprozesses). Der Kopf trägt Zustand, Runde, Beiträge, Kosten, Modell und die Steuerung; Starten liegt dort, die Pipeline-Seite entfällt. Kopf, Feed und Runden teilen einen Laufstand (`useSimulationRunStateContext`, ein Strom und ein Polling je Lauf). Weiterleitungen der Zeilen „ab Etappe 4“ aus 6.2 (`router/index.ts`, `router/legacyRedirects.ts`; Query und Hash bleiben, alte Routen-Namen bleiben als Weiterleitungs-Einträge). Entfernt: `Step3Simulation`, `StepSimulationView`, `SimulationLayout`, die Altansichten Feed, Diskurs, Strang, Runden und Protokoll, `SimulationLiveView` samt ihren Bausteinen (7: `FeedColumn`, `SimTabsBar`, Zeitleiste, Strangbaum und -liste, Rundenliste, `TwitterPost`, `RedditPost`, `RedditThread`, `NewItemsPill`, Filterleiste, Kopfstreifen) und die danach unbenutzten `useSimClock`, `useSimulationLiveMetrics` und `feedHighlight`; die i18n-Schlüssel `feed.*` (soweit nur von diesen Ansichten genutzt), `step3.*` (soweit nur von ihnen genutzt) und `views.run.simulation.diagnostics.pending`. Erhalten blieben `SimBadge`, `PersonaAvatar`, `SimActionsTable`, `SimulationPulseBar` (von keiner Ansicht importiert) und die Strang-Helfer in `useSimFeed.ts`. `StepModelOverrideChip` für die Stufe `simulation_rounds` entfällt mit `SimulationLayout`; die Komponente selbst bleibt (andere Stufen nutzen sie).
+
+**Backend trotz Planung „nein“:** Etappe 4 war ohne Backend geplant. Der Feed-Snapshot musste trotzdem erweitert werden, weil er für beendete Läufe nicht trug, was der Feed braucht: Der Twitter-Snapshot war für echte Läufe leer (die Twitter-Datenbank speichert in `post`/`comment` den OASIS-Zeitschritt als Ganzzahl, der Snapshot verwarf jede Zeile ohne Datum), die Runde je Beitrag steht nur im Aktionsprotokoll (`actions.jsonl`), nicht in den OASIS-Tabellen, und Twitter-Antworten (`CREATE_COMMENT`) samt Elternkommentar (`parent_comment_id`) fehlten. Die Änderung steht in `backend/app/api/simulation_history.py` und `backend/app/services/sim/snapshot_rounds.py`. Die Spalte „Backend“ der Etappentabelle bleibt unverändert.
+
+**Geklärt:** Die Startparameter des Startdialogs lesen Kopf und Steuerung direkt aus `pendingRunParams` (`useSimulationControl`); die Übergabe über die Adresse entfällt. Die Personas-Ansicht (`StepEnvSetupView`) legt dort geänderte Runden, Tage und das Budget des Dashboard-Starts (`HeroNewRun`) ebenfalls in `pendingRunParams` ab, bevor sie auf den Feed wechselt.
+
+**Abweichungen:**
+
+- `/simulation/:id` führte bisher auf die Personas-Ansicht (`StepEnvSetup`, ADR-0010-Seam mit Umbenennung `simulationId` → `projectId`); die Zeile „ab Etappe 4“ aus 6.2 setzt den Feed. Die Weiterleitung folgt 6.2.
+- Der „Bericht“-Start der Stufentabelle (`deriveStages`) führte auf die Pipeline-Seite, deren Knopf „Weiter zum Bericht“ ihn auslöste. Er führt jetzt auf die Berichtsseite im Zustand „bereit“ (Sentinel-ID `new`, `simulationId` und – soweit bekannt – `runId` in der Query); die Berichtsseite fragt wie bisher vor dem Start nach.
+- „Job abbrechen“ (`cancelRun`, vorher „Abbrechen“ der Pipeline-Seite, gedacht für einen hängenden Job) ist im Kopf nachgezogen, mit Bestätigung. Der Neustart nach Stopp, Budgetabbruch oder Fehlschlag liegt als „Erneut starten“ ebenfalls im Kopf (das Backend setzt eine vorbereitete, nicht laufende Simulation beim Start auf „bereit“ zurück, `_ensure_startable_state`); ein abgeschlossener Lauf lässt sich dort bewusst nicht neu starten.
+- Bewusst entfallen mit der Pipeline-Seite: der Link zum Trace des Statusstroms (SigNoz), die Dichte-Umschaltung des Feeds, das Kopieren einer Protokollzeile als JSON und der Ungelesen-Zähler des Werkzeug-Panels, die Sim-Uhr der Feed-Kopfzeile (#1018; der Kopf zeigt Runde x von y statt der Sim-Zeit), die Zählung der Aktionen aus dem Feed-Fenster (der Kopf nimmt die Zähler des Laufstatus) und der Zurück-Knopf.
+
+**Bewusst nicht gebaut / offen:**
+
+- Twitter-Antworten (`CREATE_COMMENT`) und `parent_comment_id` existieren in keinem der vorhandenen Läufe (die Twitter-Kommentare sind erst seit #1713 S5 freigeschaltet); ihre Darstellung ist per Fixture getestet, nicht an echten Daten. Auf Twitter bestehen Fäden in Altläufen aus Zitaten und Weiterleitungen.
+- Der Zeitstempel eines Twitter-Beitrags im Snapshot ist der Protokollzeitpunkt (Wanduhr beim Emittieren), nicht die Sim-Zeit; der Reddit-Zeitstempel kommt unverändert aus der Datenbank (OASIS schreibt dort `CURRENT_TIMESTAMP` bzw. Sim-Zeit).
+- Beiträge ohne eindeutig zuordenbare Runde bleiben ohne Runde (der Feed meldet das beim Zurückgehen); Twitter-Zeilen, die weder ein Datum noch eine eindeutige Protokollzuordnung haben, fehlen im Snapshot (nur im Server-Log sichtbar).
+- Snapshot-Obergrenze 5000 Beiträge je Netzwerk (die jüngsten), mit sichtbarem Hinweis, wenn sie erreicht ist.
+- Kein Streitfrage-Filter, weil der Beitrag kein entsprechendes Feld trägt; die Streitfrage steht als Text in der linken Spalte.
+- „Befragen“ an der Persona-Karte kommt in Etappe 6.
+- Die Diagnose beschränkt das Server-Protokoll per Textsuche auf den Lauf (kein Filter im Backend, wie bei der Konsole in 11a); Tool-Calls werden an belegten Zeilenmustern erkannt (`composables/activity/logKinds.ts`), nicht an einem Feld.
+- Die Persona-Zuordnung läuft über die Listenposition des Profils (`persona_id` = Position, `useRunPersonas`); die Haltung kann fehlen und steht dann als „nicht erfasst“.
+- Die Aktionstabelle filtert nach Runde, Netzwerk und Aktionsart, nicht nach Persona.
+- `useSimFeed.ts` hält noch den alten Store (`useSimFeed`, `clearSimFeed`), den kein Verbraucher mehr schreibt; die Strang-Helfer werden von `threads.ts` genutzt. Aufräumen, sobald sie umgezogen sind.
+- Die e2e-Smokes (Gates für Feed, Runden, Diagnose; Weiterleitungen der alten Adressen) laufen nur in der CI gegen den Docker-Stack; lokal wurden sie typgeprüft, nicht ausgeführt.
+
+---
+
 ## 12. Offene Punkte
 
 | Punkt | Wer klärt | Wann |

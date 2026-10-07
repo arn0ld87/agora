@@ -2,8 +2,8 @@
  * runModelOverride — transiente Run-Override-Senke für die Dashboard-Modellwahl.
  *
  * HeroNewRun schreibt hier beim Start die explizite Picker-Auswahl als vollen
- * {@link AiModelRef} (inkl. ``provider_connection_id``); Step3Simulation liest
- * sie beim Sim-Start vorrangig vor dem Kanon (routing/defaults.global_default)
+ * {@link AiModelRef} (inkl. ``provider_connection_id``); die Steuerung der Simulation
+ * (useSimulationControl) liest sie beim Sim-Start vorrangig vor dem Kanon (routing/defaults.global_default)
  * und sendet sie als autoritatives ``ai_model_ref``. Damit behält ein
  * Dashboard-Pick seine Connection-Bindung (Base-URL + Secret derselben
  * ProviderConnection), ohne den persistenten Kanon zu berühren — die
@@ -14,7 +14,7 @@
  * stirbt mit dem Tab. Lebensdauer: bis zum nächsten Dashboard-Start, der die
  * Senke neu schreibt oder cleart (Profile-Start / kein expliziter Pick) —
  * oder bis zum ersten erfolgreichen Sim-Start (consume-on-success in
- * Step3Simulation), damit kein späterer Start einer anderen Simulation im
+ * useSimulationControl), damit kein späterer Start einer anderen Simulation im
  * selben Tab den alten Override erbt.
  */
 import { AiModelRefSchema, type AiModelRef } from '@/contracts/aiModelRef'

@@ -495,8 +495,6 @@
   },
   "step3": {
     "kicker": "№ 03 — SIMULATION",
-    "title": "Run the world.",
-    "sub": "Agents interact round by round on the chosen platform. They don't hallucinate — instead they use tool calls to look things up online or query the knowledge graph before responding. You watch the actions live.",
     "config": {
       "title": "Run parameters",
       "rounds": "Number of rounds",
@@ -508,83 +506,22 @@
     },
     "controls": {
       "start": "Start simulation",
-      "starting": "Starting…",
-      "pause": "Pause",
-      "pauseHint": "Pauses after the current round ends.",
-      "resume": "Resume",
-      "stop": "Stop",
-      "stopConfirm": "Really abort the simulation? Existing data is preserved.",
-      "stopped": "Stopped.",
-      "cancel": "Cancel",
-      "cancelConfirm": "Gracefully cancel the simulation? Already completed stages are preserved as a partial report.",
-      "cancelled": "Cancellation requested.",
       "completed": "Completed."
     },
     "status": {
-      "ready": "Ready",
-      "running": "Running — round {current} / {total}",
-      "paused": "Paused after round {current} / {total}",
-      "completed": "Completed — {total} rounds",
-      "failed": "Failed",
       "elapsed": "Elapsed: {time}"
     },
-    "simClock": {
-      "tooltip": "Virtual sim clock (agent wallclock, Europe/Berlin)"
-    },
     "feed": {
-      "title": "Live feed",
-      "actions": "Actions: {count}",
       "posts": "Posts: {count}",
       "replies": "Replies: {count}",
       "filter": "Filter",
       "all": "All",
       "posts_only": "Posts only",
       "replies_only": "Replies only",
-      "empty": "No activity yet.",
-      "unread": "no new posts | one new post | {count} new posts",
-      "density": {
-        "label": "Density",
-        "comfort": "Comfort",
-        "compact": "Compact"
-      }
+      "unread": "no new posts | one new post | {count} new posts"
     },
-    "toolPanel": {
-      "toggle": "Tool calls & errors",
-      "show": "Show (Ctrl+L)",
-      "hide": "Hide (Ctrl+L)",
-      "unread": "no new errors | one new error | {count} new errors",
-      "filter": "Filter",
-      "filterAll": "All",
-      "filterErrors": "Errors only",
-      "copyAsJson": "Copy as JSON",
-      "empty": "Waiting for output…",
-      "noErrors": "No errors in log."
-    },
-    "next": "Next: report →",
     "live": {
-      "title": "Simulation live",
-      "round": "Round",
-      "elapsed": "elapsed",
-      "secPerRound": "s/round",
-      "roundAxis": "Round axis",
-      "roundAxisHint": "Round status: done, running, planned",
-      "now": "now",
-      "lanes": {
-        "actors": "Actors",
-        "reddit": "Reddit",
-        "twitter": "Twitter",
-        "system": "System and events"
-      },
-      "actorsActive": "{count} active",
-      "usage": {
-        "llmCalls": "LLM calls",
-        "tokens": "Total tokens"
-      },
-      "events": {
-        "title": "Events",
-        "empty": "No events yet."
-      },
-      "empty": "No activity yet."
+      "now": "now"
     }
   },
   "reportMode": {
@@ -1545,7 +1482,6 @@
     "projectFailed": "Project processing failed.",
     "pendingUploadMissing": "No pending files were found to create the project.",
     "personaGenFailed": "Persona generation failed.",
-    "simulationFailed": "Simulation failed.",
     "reportFailed": "Report failed.",
     "unknown": "Unknown error."
   },
@@ -1702,66 +1638,17 @@
     "simBadge": "SIM",
     "activity": "posts/min",
     "live": "Live",
-    "empty": "No activity yet.",
-    "showMoreReplies": "{count} more reply | {count} more replies",
-    "pipeline": "Pipeline",
-    "feedTab": "Live Feed",
-    "threadsTab": "Discussion",
-    "roundsTab": "Rounds",
     "actionsTab": "Log",
     "resonanceBar": "Resonance of recent posts (upvotes minus downvotes)",
     "threadsPlaceholder": "No discussion threads in this run yet.",
-    "threadFocusPlaceholder": "This thread is not available yet.",
     "roundsPlaceholder": "No rounds started yet.",
     "actionsPlaceholder": "No actions logged yet.",
-    "noPosts": "No posts in this run yet.",
-    "noPostsHint": "Check the Rounds view to see whether the simulation is already running.",
-    "replyTo": "Reply to @{name}",
-    "replyToUnknown": "Reply to an earlier post",
-    "quoteMissing": "Quote no longer available",
-    "repostedBy": "@{name} reposted",
-    "repostSourceMissing": "Source not captured",
     "parentThreadMissing": "Parent post not captured",
-    "newItems": "{count} new posts",
-    "streamLost": "Connection lost — retrying",
     "errors": {
       "snapshotFailed": "Snapshot load failed"
     },
-    "degradation": {
-      "snapshot_missing": "Initial snapshot could not be loaded.",
-      "stream_lost": "Live connection lost.",
-      "legacy_run": "Older run without complete discussion data."
-    },
-    "scope": {
-      "platform": "Platform",
-      "platformAll": "All",
-      "round": "Round",
-      "roundAll": "All rounds",
-      "persona": "Persona",
-      "personaAll": "All personas",
-      "search": "Search",
-      "searchPlaceholder": "Search posts…",
-      "noPersonas": "No personas in the feed yet"
-    },
-    "threadList": {
-      "replies": "{count} replies",
-      "reposts": "{count} reposts",
-      "quotes": "{count} quotes",
-      "empty": "No discussion threads yet.",
-      "emptyFiltered": "No thread matches the current filters."
-    },
-    "threadTree": {
-      "orphan": "Parent post not captured",
-      "loading": "Loading thread…"
-    },
     "rounds": {
-      "empty": "No rounds started yet",
-      "error": "Rounds could not be loaded.",
-      "retry": "Retry"
-    },
-    "roundsList": {
-      "roundLabel": "Round {round}",
-      "noActions": "No actions in this round."
+      "error": "Rounds could not be loaded."
     },
     "actionType": {
       "CREATE_POST": "Posts",
@@ -1797,20 +1684,7 @@
       "noTarget": "—",
       "noPayload": "—",
       "loadError": "Could not load the action log."
-    },
-    "header": {
-      "round": "Round {current}/{total}",
-      "roundUnknown": "Round —",
-      "posts": "{count} posts",
-      "streamConnecting": "Connecting…",
-      "streamOpen": "Live",
-      "streamReconnecting": "Reconnecting…",
-      "streamClosed": "Connection closed",
-      "streamEnded": "Run ended"
     }
-  },
-  "observability": {
-    "viewTrace": "View trace ({id}…)"
   },
   "modelPicker": {
     "loading": "Loading models…",
@@ -2285,6 +2159,56 @@
       }
     },
     "run": {
+      "simulation": {
+        "tabsLabel": "Simulation views",
+        "tab": {
+          "feed": "Feed",
+          "rounds": "Rounds",
+          "diagnostics": "Diagnostics"
+        },
+        "headerSlotLabel": "Simulation header",
+        "diagnostics": {
+          "title": "Diagnostics"
+        }
+      },
+      "simRounds": {
+        "title": "Simulation rounds",
+        "viewLabel": "View",
+        "viewRounds": "Rounds",
+        "viewActions": "Actions",
+        "loading": "Loading rounds …",
+        "error": "Rounds could not be loaded: {reason}",
+        "retry": "Reload",
+        "empty": "No rounds yet",
+        "round": "Round {round}",
+        "roundOf": "Round {round} of {total}",
+        "startRound": "Initial posts",
+        "running": "running",
+        "noActions": "No actions",
+        "twitter": "Twitter",
+        "reddit": "Reddit",
+        "openFeed": "View in feed",
+        "openFeedForNetwork": "View round {round} on {network} in feed",
+        "actionsLoadError": "Actions could not be loaded: {reason}",
+        "filterRound": "Round",
+        "filterNetwork": "Network",
+        "filterType": "Action type",
+        "filterAll": "All"
+      },
+      "simDiagnostics": {
+        "title": "Diagnostics",
+        "noAccess": "The log belongs to the operator. This sign-in cannot view it.",
+        "serverTitle": "Server log of this run",
+        "serverNote": "Shows tool calls, errors, warnings and progress. Matching to the run is a text search for its ID and not exact.",
+        "showAll": "Show everything (unabridged)",
+        "collapsed": "({count} lines merged)",
+        "processTitle": "Simulation process",
+        "processNote": "Raw output of this run's simulation process: tool calls, errors, warnings and progress.",
+        "processEmpty": "The simulation process has not printed anything yet.",
+        "processFiltered": "No tool calls, errors or progress lines. \"Show everything\" shows the whole output.",
+        "processError": "The process log could not be loaded: {reason}",
+        "retry": "Reload"
+      },
       "overview": {
         "title": "Overview",
         "stagesLabel": "Stages of the run",
@@ -2382,6 +2306,160 @@
         "start": "Start",
         "resume": "Resume",
         "view": "View"
+      },
+      "simFeed": {
+        "ariaLabel": "Simulation feed",
+        "network": {
+          "label": "Network",
+          "twitter": "Twitter",
+          "reddit": "Reddit"
+        },
+        "filters": {
+          "title": "Filters",
+          "persona": "Persona",
+          "personaAll": "All personas",
+          "round": "Round only",
+          "roundAll": "All rounds",
+          "search": "Text search",
+          "searchPlaceholder": "Search in posts",
+          "reset": "Reset filters",
+          "contested": "Contested question",
+          "contestedNone": "No contested question is recorded for this run."
+        },
+        "toggle": {
+          "showFilters": "Show filters",
+          "hideFilters": "Hide filters",
+          "showSide": "Show persona and round",
+          "hideSide": "Hide persona and round"
+        },
+        "timeline": {
+          "twitter": "Posts on Twitter, newest first",
+          "reddit": "Posts on Reddit, newest first"
+        },
+        "scrubber": {
+          "label": "Look back",
+          "live": "Live",
+          "liveHint": "The feed follows along.",
+          "status": "Shown up to round {round} of {max}",
+          "slider": "Up to round",
+          "noRounds": "No round information yet.",
+          "pill": "Show {count} new posts"
+        },
+        "post": {
+          "sim": "SIM",
+          "simText": "synthetic utterance",
+          "open": "Open post by {name}",
+          "openLink": "Open post",
+          "reposted": "Repost without own text",
+          "quoteOf": "Quoted",
+          "referenceMissing": "The referenced post is outside the loaded excerpt.",
+          "round": "Round {round}",
+          "counts": "Counts",
+          "replies": "no replies | one reply | {n} replies",
+          "reposts": "no reposts | one repost | {n} reposts",
+          "likes": "no likes | one like | {n} likes",
+          "votes": "Votes: {n}",
+          "comments": "no comments | one comment | {n} comments"
+        },
+        "persona": {
+          "title": "Persona",
+          "none": "Pick a persona in the filter or focus a post.",
+          "role": "Role",
+          "stance": "Stance",
+          "stanceMissing": "Stance not recorded",
+          "roleMissing": "Role not recorded",
+          "bio": "Description",
+          "profileMissing": "No profile is available for this persona."
+        },
+        "roundPanel": {
+          "title": "Round {round} of {total}",
+          "titleUnknownTotal": "Round {round} of ?",
+          "titleNone": "No round information yet",
+          "activity": "Activity",
+          "activityLine": "{twitter} Twitter · {reddit} Reddit",
+          "activityNone": "No posts in this round."
+        },
+        "notices": {
+          "error": "The feed could not be loaded completely: {message}",
+          "retry": "Reload",
+          "truncated": "Only the newest {limit} posts per network are shown.",
+          "invalid": "{count} posts did not match the contract and were discarded.",
+          "evicted": "{count} older posts were evicted because of the buffer limit.",
+          "unrounded": "{count} posts without a round are shown in every round.",
+          "stream": "The live connection is interrupted. New posts only appear after reloading."
+        },
+        "states": {
+          "loading": "Loading feed …",
+          "empty": "There are no posts in this network yet.",
+          "emptyFiltered": "No post matches the filters."
+        },
+        "thread": {
+          "back": "Back to feed",
+          "loading": "Loading post …",
+          "rootMissing": "The original post is outside the loaded excerpt.",
+          "broken": "The reply chain of this post is broken (cycle or too deep) and is not shown.",
+          "parentMissing": "The parent post is missing from the loaded excerpt.",
+          "replies": "Replies",
+          "noReplies": "No replies in the loaded excerpt.",
+          "quotes": "Quotes",
+          "reposts": "Reposts: {count}",
+          "claim": "Evidence for this statement",
+          "region": "Thread"
+        },
+        "tree": {
+          "region": "Comments",
+          "collapse": "Collapse branch of {name}",
+          "expand": "Expand branch of {name} ({count} replies below)",
+          "flatOnly": "This run does not contain nested comments. All comments are listed flat under the post.",
+          "unplaced": "{count} comments could not be placed (cycle or nesting too deep).",
+          "noComments": "No comments in the loaded excerpt.",
+          "parentMissing": "The parent comment is missing from the loaded excerpt."
+        }
+      },
+      "simHeader": {
+        "ariaLabel": "Simulation",
+        "round": "Round {current} of {total}",
+        "roundTotalUnknown": "Round {current} of ?",
+        "roundNone": "No round yet",
+        "roundLabel": "Round",
+        "postsLabel": "Posts",
+        "posts": "{total} ({twitter} Twitter · {reddit} Reddit)",
+        "costLabel": "Cost",
+        "modelLabel": "Model",
+        "modelPlanned": "{model} (default for this start)",
+        "modelNone": "no default recorded",
+        "notRecorded": "not recorded",
+        "start": "Start",
+        "starting": "Starting …",
+        "restart": "Start again",
+        "pause": "Pause",
+        "pausing": "Pausing …",
+        "resume": "Resume",
+        "resuming": "Resuming …",
+        "stop": "Stop",
+        "stopping": "Stopping …",
+        "stopTitle": "Stop the simulation?",
+        "stopDescription": "The running simulation ends. Posts already created are kept; the run counts as stopped, not as finished.",
+        "stopConfirm": "Stop simulation",
+        "stopCancel": "Keep running",
+        "cancel": "Cancel job",
+        "cancelling": "Cancelling …",
+        "cancelTitle": "Cancel the simulation job?",
+        "cancelDescription": "Gracefully cancels the job in the job registry, even if stopping does not end it. Completed stages and posts already created are kept.",
+        "cancelConfirm": "Cancel job",
+        "cancelKeep": "Do not cancel",
+        "reasonStopped": "Stopped: {reason}",
+        "reasonBudget": "Ended by budget: {reason}",
+        "reasonFailed": "Failed: {reason}",
+        "reasonUnknown": "Reason not recorded",
+        "blockedPersonas": "The personas are not fully prepared yet. Starting is possible only afterwards.",
+        "error": "Error: {message}",
+        "live": "State: {state}",
+        "empty": {
+          "title": "Not started yet",
+          "explainRounds": "In the simulation, the personas write posts in rounds and reply to each other.",
+          "explainSynthetic": "These are synthetic statements from a model, not a prediction of human behaviour."
+        }
       },
       "termination": {
         "user_stop": "Stopped on request",
@@ -2633,7 +2711,6 @@
       "subtitle": "Build knowledge graph from uploaded documents"
     },
     "stepSimulation": {
-      "title": "Simulation",
       "subtitle": "Start and observe multi-agent simulation run"
     },
     "simThreads": {

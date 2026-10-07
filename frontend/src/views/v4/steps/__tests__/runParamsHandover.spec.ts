@@ -2,13 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-// Regressionstest fuer B-09/B-27: Runden/Tage aus Schritt 2 kamen in Schritt 3
-// nie an. Beide Views werden hier gemeinsam geprueft, weil der Fehler nicht in
-// einer Datei lag, sondern in der Uebergabe zwischen beiden.
+// Regressionstest fuer B-09/B-27 und #1234, seit #1801 ueber die vorgemerkten
+// Startparameter: Runden/Tage aus Schritt 2 und Budget aus dem Dashboard-Start
+// muessen beim Start der Simulation ankommen. Schritt 2 legt sie in
+// `pendingRunParams` ab (die Simulation am Lauf liest sie beim Start, siehe
+// useSimulationControl.spec) und wechselt dann auf den Feed des Laufs.
 
 const routerPush = vi.fn()
 const route: { name: string; query: Record<string, unknown>; params: Record<string, unknown> } = {
-  name: 'StepSimulation',
+  name: 'StepEnvSetup',
   query: {},
   params: {},
 }
@@ -23,7 +25,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 import StepEnvSetupView from '../StepEnvSetupView.vue'
-import StepSimulationView from '../StepSimulationView.vue'
+import { readPendingRunParams, writePendingRunParams } from '@/composables/new-run/pendingRunParams'
 
 const i18nMock = { $t: (key: string) => key }
 
@@ -34,12 +36,6 @@ const DASHBOARD_BUDGET = {
   enforcement: 'hard',
   currency: 'USD',
   max_tokens: 5000,
-}
-
-/** Query der letzten Navigation. Das Budget wird als JSON verglichen, nicht als String — die Schluesselreihenfolge gehoert dem Zod-Schema. */
-function pushedQuery(): Record<string, unknown> {
-  const call = routerPush.mock.calls.at(-1)?.[0] as { query?: Record<string, unknown> }
-  return call?.query ?? {}
 }
 
 function mountEnvSetup() {
@@ -63,136 +59,77 @@ function mountEnvSetup() {
   })
 }
 
-function mountSimulation() {
-  return mount(StepSimulationView, {
-    props: { simulationId: 'sim_x' },
-    shallow: true,
-    global: {
-      mocks: i18nMock,
-      stubs: {
-        Step3Simulation: {
-          name: 'Step3Simulation',
-          props: ['simulationId', 'maxRounds', 'simulationDays', 'budget'],
-          emits: ['go-back'],
-          template: '<section />',
-        },
-      },
-    },
-  })
-}
+const FEED_TARGET = { name: 'RunSimulationFeed', params: { simulationId: 'sim_x' } }
 
 beforeEach(() => {
-    setActivePinia(createPinia())
+  setActivePinia(createPinia())
   routerPush.mockClear()
-  route.name = 'StepSimulation'
+  window.sessionStorage.clear()
   route.query = {}
 })
 
-describe('Schritt 2 -> Schritt 3: Uebergabe der Run-Parameter', () => {
-  it('haengt uebersteuerte Runden/Tage an die Query der Folge-Route', async () => {
-    const wrapper = mountEnvSetup()
-
-    await wrapper.getComponent({ name: 'Step2EnvSetup' }).vm.$emit('next-step', {
+describe('Schritt 2 -> Simulation: Uebergabe der Run-Parameter', () => {
+  it('merkt uebersteuerte Runden/Tage vor und wechselt auf den Feed ohne Query', async () => {
+    await mountEnvSetup().getComponent({ name: 'Step2EnvSetup' }).vm.$emit('next-step', {
       simulationId: 'sim_x',
       maxRounds: 7,
       simulationDays: 2,
     })
 
-    // Ohne Query gingen die Werte verloren: die Route reicht via ``props: true``
-    // ausschliesslich Route-Params durch.
-    expect(routerPush).toHaveBeenCalledWith({
-      name: 'StepSimulation',
-      params: { simulationId: 'sim_x' },
-      query: { projectId: 'project_42', maxRounds: '7', simulationDays: '2' },
-    })
+    expect(readPendingRunParams('sim_x')).toEqual({ maxRounds: 7, simulationDays: 2, budget: null })
+    expect(routerPush).toHaveBeenCalledWith(FEED_TARGET)
   })
 
-  it('haelt die Query sauber, wenn der Nutzer den Auto-Wert nicht anfasst', async () => {
-    const wrapper = mountEnvSetup()
+  it('merkt nichts Erfundenes vor, wenn der Nutzer den Auto-Wert nicht anfasst', async () => {
+    await mountEnvSetup().getComponent({ name: 'Step2EnvSetup' }).vm.$emit('next-step', { simulationId: 'sim_x' })
 
-    await wrapper
-      .getComponent({ name: 'Step2EnvSetup' })
-      .vm.$emit('next-step', { simulationId: 'sim_x' })
+    expect(readPendingRunParams('sim_x')).toEqual({ maxRounds: null, simulationDays: null, budget: null })
+    expect(routerPush).toHaveBeenCalledWith(FEED_TARGET)
+  })
 
-    expect(routerPush).toHaveBeenCalledWith({
-      name: 'StepSimulation',
-      params: { simulationId: 'sim_x' },
-      query: { projectId: 'project_42' },
+  it('verwirft unbrauchbare Werte (Null-Runden, Tage ausserhalb des Bereichs)', async () => {
+    await mountEnvSetup().getComponent({ name: 'Step2EnvSetup' }).vm.$emit('next-step', {
+      simulationId: 'sim_x',
+      maxRounds: 0,
+      simulationDays: 99999,
     })
+
+    expect(readPendingRunParams('sim_x')).toEqual({ maxRounds: null, simulationDays: null, budget: null })
   })
 })
 
-// Regressionstest fuer #1234: Rundenzahl und Budget aus dem Dashboard-Start
-// erreichten Schritt 3 nie. Sie reisten ueber den pendingUpload-Store, den
-// Schritt 1 nach dem Ontologie-Upload leert — Schritt 3 las anschliessend den
-// Reset-Default 10 und gar kein Budget. Nicht erst nach einem Reload, sondern
-// im normalen Durchlauf.
-describe('Dashboard -> Schritt 3: Uebergabe ueber Schritt 2 hinweg', () => {
-  it('erbt die Dashboard-Werte, laesst aber eine Eingabe in Schritt 2 gewinnen', async () => {
+describe('Dashboard -> Simulation: Uebergabe ueber Schritt 2 hinweg (#1234)', () => {
+  beforeEach(() => {
     route.query = {
       projectId: 'project_42',
       maxRounds: '25',
       budget: JSON.stringify(DASHBOARD_BUDGET),
     }
+  })
 
+  it('erbt die Dashboard-Werte aus der Query', async () => {
+    await mountEnvSetup().getComponent({ name: 'Step2EnvSetup' }).vm.$emit('next-step', { simulationId: 'sim_x' })
+
+    expect(readPendingRunParams('sim_x')).toEqual({ maxRounds: 25, simulationDays: null, budget: DASHBOARD_BUDGET })
+  })
+
+  it('laesst eine Eingabe in Schritt 2 gewinnen und verliert das Budget nicht', async () => {
     await mountEnvSetup()
       .getComponent({ name: 'Step2EnvSetup' })
-      .vm.$emit('next-step', { simulationId: 'sim_x' })
+      .vm.$emit('next-step', { simulationId: 'sim_x', maxRounds: 7 })
 
-    expect(pushedQuery().maxRounds).toBe('25')
+    // Schritt 2 kennt das Budget nicht und darf es deshalb auch nicht verlieren.
+    expect(readPendingRunParams('sim_x')).toEqual({ maxRounds: 7, simulationDays: null, budget: DASHBOARD_BUDGET })
+  })
+
+  it('ueberschreibt einen frueher vorgemerkten Eintrag nur dort, wo es etwas Neues gibt', async () => {
+    route.query = {}
+    writePendingRunParams('sim_x', { maxRounds: 12, simulationDays: 3, budget: null })
 
     await mountEnvSetup()
       .getComponent({ name: 'Step2EnvSetup' })
       .vm.$emit('next-step', { simulationId: 'sim_x', maxRounds: 7 })
 
-    // Schritt 2 kennt das Budget nicht und darf es deshalb auch nicht
-    // verlieren — nur die Rundenzahl wird ueberschrieben.
-    const query = pushedQuery()
-    expect(query.projectId).toBe('project_42')
-    expect(query.maxRounds).toBe('7')
-    expect(JSON.parse(String(query.budget))).toEqual(DASHBOARD_BUDGET)
+    expect(readPendingRunParams('sim_x')).toEqual({ maxRounds: 7, simulationDays: 3, budget: null })
   })
-})
-
-describe('Schritt 3: Uebernahme der Run-Parameter', () => {
-  it('reicht Runden/Tage aus der Query als Zahlen an Step3Simulation', () => {
-    route.query = { projectId: 'project_42', maxRounds: '7', simulationDays: '2' }
-
-    const step3 = mountSimulation().getComponent({ name: 'Step3Simulation' })
-
-    // Genau hier war der sichtbare Schaden: Step 3 startete stets mit dem
-    // Auto-Wert, egal was der Nutzer in Schritt 2 eingestellt hatte.
-    expect(step3.props('maxRounds')).toBe(7)
-    expect(step3.props('simulationDays')).toBe(2)
-  })
-
-  it('laesst die Props leer, wenn nichts uebersteuert wurde', () => {
-    route.query = { projectId: 'project_42' }
-
-    const step3 = mountSimulation().getComponent({ name: 'Step3Simulation' })
-
-    // undefined statt 0/null — sonst wuerde eine Null-Runden-Simulation starten.
-    expect(step3.props('maxRounds')).toBeUndefined()
-    expect(step3.props('simulationDays')).toBeUndefined()
-  })
-
-  it('ignoriert unbrauchbare Werte aus manipulierten URLs', () => {
-    route.query = { maxRounds: '0', simulationDays: 'abc' }
-
-    const step3 = mountSimulation().getComponent({ name: 'Step3Simulation' })
-
-    expect(step3.props('maxRounds')).toBeUndefined()
-    expect(step3.props('simulationDays')).toBeUndefined()
-  })
-
-  it('reicht das Run-Budget aus der Query als Objekt an Step3Simulation', () => {
-    route.query = { projectId: 'project_42', budget: JSON.stringify(DASHBOARD_BUDGET) }
-
-    const step3 = mountSimulation().getComponent({ name: 'Step3Simulation' })
-
-    expect(step3.props('budget')).toEqual(DASHBOARD_BUDGET)
-  })
-  // Fix #1713: der Tab-Wechsel (Pipeline<->Feed) sitzt jetzt in
-  // SimulationLayout.vue, nicht mehr in dieser View — siehe
-  // SimulationLayout.spec.ts ("nimmt die Query beim Tab-Wechsel mit").
 })

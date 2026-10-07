@@ -31,7 +31,7 @@ export function deriveRunTabs(input: RunTabInput): RunTab[] {
     projectId
       ? { key: 'personas', to: { name: 'StepEnvSetup', params: { projectId } }, disabledReason: null }
       : { key: 'personas', to: null, disabledReason: 'noProject' },
-    { key: 'simulation', to: { name: 'StepSimulationFeed', params: { simulationId } }, disabledReason: null },
+    { key: 'simulation', to: { name: 'RunSimulationFeed', params: { simulationId } }, disabledReason: null },
     latestReportId
       ? { key: 'report', to: { name: 'StepReport', params: { reportId: latestReportId } }, disabledReason: null }
       : { key: 'report', to: null, disabledReason: 'noReport' },

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   PENDING_RUN_PARAMS_PREFIX,
   clearPendingRunParams,
-  pendingRunParamsQuery,
   readPendingRunParams,
   writePendingRunParams,
 } from '../pendingRunParams'
@@ -23,21 +22,6 @@ describe('pendingRunParams', () => {
     expect(readPendingRunParams('s2')).not.toBeNull()
   })
 
-  it('pendingRunParamsQuery liefert die fertige Route-Query', () => {
-    writePendingRunParams('s1', { maxRounds: 12, simulationDays: 2, budget: BUDGET })
-    expect(pendingRunParamsQuery('s1')).toEqual({
-      maxRounds: '12',
-      simulationDays: '2',
-      budget: JSON.stringify(BUDGET),
-    })
-    expect(pendingRunParamsQuery('unbekannt')).toEqual({})
-  })
-
-  it('lässt Nullwerte aus der Query weg', () => {
-    writePendingRunParams('s1', { maxRounds: 24, simulationDays: null, budget: null })
-    expect(pendingRunParamsQuery('s1')).toEqual({ maxRounds: '24' })
-  })
-
   it('beschädigte oder ungültige Einträge gelten als nicht vorhanden', () => {
     window.sessionStorage.setItem(`${PENDING_RUN_PARAMS_PREFIX}s1`, '{kaputt')
     window.sessionStorage.setItem(
@@ -46,7 +30,6 @@ describe('pendingRunParams', () => {
     )
     expect(readPendingRunParams('s1')).toBeNull()
     expect(readPendingRunParams('s2')).toBeNull()
-    expect(pendingRunParamsQuery('s2')).toEqual({})
   })
 
   it('schreibt keine ungültigen Werte', () => {

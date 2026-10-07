@@ -190,7 +190,7 @@ describe('deriveStages: genau ein nächster Schritt', () => {
     )
     expect(row(rows, 'graph').next).toMatchObject({ kind: 'view', to: { name: 'RunGraph', params: { simulationId: 'sim_1' } } })
     expect(row(rows, 'personas').next.to).toEqual({ name: 'StepEnvSetup', params: { projectId: 'proj_1' } })
-    expect(row(rows, 'simulation').next.to).toEqual({ name: 'StepSimulationFeed', params: { simulationId: 'sim_1' } })
+    expect(row(rows, 'simulation').next.to).toEqual({ name: 'RunSimulationFeed', params: { simulationId: 'sim_1' } })
     expect(row(rows, 'report').next).toMatchObject({ kind: 'view', to: { name: 'StepReport', params: { reportId: 'report_1' } } })
     expect(row(rows, 'interviews').next.to).toEqual({ name: 'RunInterviewsLegacy', params: { simulationId: 'sim_1' } })
   })
@@ -199,7 +199,7 @@ describe('deriveStages: genau ein nächster Schritt', () => {
     const stopped = deriveStages(
       data({ jobs: { simulation_run: job('simulation_run', { status: 'stopped', terminationReason: 'user_stop' }) } }),
     )
-    expect(row(stopped, 'simulation').next).toMatchObject({ kind: 'resume', to: { name: 'StepSimulation' } })
+    expect(row(stopped, 'simulation').next).toMatchObject({ kind: 'resume', to: { name: 'RunSimulationFeed' } })
     expect(row(deriveStages(data({ hasGraph: false })), 'simulation').next.kind).toBe('start')
   })
 
@@ -207,7 +207,7 @@ describe('deriveStages: genau ein nächster Schritt', () => {
     const before = row(deriveStages(data({ hasGraph: false })), 'report').next
     expect(before).toMatchObject({ kind: 'start', to: null, disabledReason: 'afterSimulation' })
     const after = row(deriveStages(data({ jobs: { simulation_run: job('simulation_run') } })), 'report').next
-    expect(after).toMatchObject({ kind: 'start', to: { name: 'StepSimulation' } })
+    expect(after).toMatchObject({ kind: 'start', to: { name: 'Report', params: { reportId: 'new' } } })
   })
 
   it('ohne Projekt sind Personas deaktiviert mit Grund', () => {
@@ -217,34 +217,39 @@ describe('deriveStages: genau ein nächster Schritt', () => {
   })
 })
 
-describe('deriveStages: vorgemerkte Startparameter (#1799)', () => {
-  const startQuery = { maxRounds: '12', simulationDays: '3' }
-  const plain = { name: 'StepSimulation', params: { simulationId: 'sim_1' } }
+describe('deriveStages: Ziele von Simulationsstart und Berichtsstart (#1801)', () => {
+  const feed = { name: 'RunSimulationFeed', params: { simulationId: 'sim_1' } }
 
-  it('Start und Fortsetzen der Simulation tragen die Startquery', () => {
-    const start = row(deriveStages(data({ hasGraph: false }), startQuery), 'simulation').next
-    expect(start).toMatchObject({ kind: 'start', to: { name: 'StepSimulation', query: startQuery } })
+  it('Start und Fortsetzen der Simulation führen auf den Feed, ohne Query (der Kopf liest die vorgemerkten Startwerte selbst)', () => {
+    const start = row(deriveStages(data({ hasGraph: false })), 'simulation').next
+    expect(start).toEqual({ kind: 'start', to: feed, disabledReason: null })
     const stopped = deriveStages(
       data({ jobs: { simulation_run: job('simulation_run', { status: 'stopped', terminationReason: 'user_stop' }) } }),
-      startQuery,
     )
-    expect(row(stopped, 'simulation').next.to).toMatchObject({ name: 'StepSimulation', query: startQuery })
+    expect(row(stopped, 'simulation').next.to).toEqual(feed)
   })
 
-  it('der Berichtsstart über die Simulation trägt sie ebenfalls', () => {
-    const rows = deriveStages(data({ jobs: { simulation_run: job('simulation_run') } }), startQuery)
-    expect(row(rows, 'report').next.to).toMatchObject({ name: 'StepSimulation', query: startQuery })
+  it('der Berichtsstart führt auf die Berichtsseite im Zustand „bereit“ mit Simulation und Lauf in der Query', () => {
+    const rows = deriveStages(data({ jobs: { simulation_run: job('simulation_run') } }))
+    expect(row(rows, 'report').next.to).toEqual({
+      name: 'Report',
+      params: { reportId: 'new' },
+      query: { simulationId: 'sim_1', runId: 'run_simulation_run' },
+    })
   })
 
-  it('ohne Eintrag (leere oder fehlende Query) bleibt das Ziel unverändert', () => {
-    expect(row(deriveStages(data({ hasGraph: false }), {}), 'simulation').next.to).toEqual(plain)
-    expect(row(deriveStages(data({ hasGraph: false })), 'simulation').next.to).toEqual(plain)
+  it('ohne Registry-Kennung des Simulationsjobs bleibt runId aus der Query', () => {
+    const rows = deriveStages(data({ jobs: { simulation_run: job('simulation_run', { runId: 'sim_1' }) } }))
+    expect(row(rows, 'report').next.to).toEqual({
+      name: 'Report',
+      params: { reportId: 'new' },
+      query: { simulationId: 'sim_1' },
+    })
   })
 
   it('andere Ziele (Ansehen, Personas, Interviews) bekommen keine Query', () => {
     const rows = deriveStages(
       data({ jobs: { simulation_prepare: job('simulation_prepare'), simulation_run: job('simulation_run') } }),
-      startQuery,
     )
     expect(row(rows, 'personas').next.to).not.toHaveProperty('query')
     expect(row(rows, 'simulation').next.to).not.toHaveProperty('query')

@@ -127,6 +127,15 @@ Antwortform (`data`-Feld der Envelope):
 
 Keine Query-Parameter. Einträge werden nach `(round_num, platform)` aufsteigend sortiert. Altbestand mit unbekanntem `platform`-Wert wird mit `logger.warning` übersprungen statt HTTP 500 zu werfen (Degradations-Haltung analog zu `evidence_omitted`).
 
+---
+
+`GET /api/simulation/<id>/feed-snapshot?platform=reddit|twitter&limit=200` — Feed eines (auch beendeten) Laufs als `{"platform", "count", "posts": [PostCreatedEvent]}`, aufsteigend nach `timestamp`; bei mehr als `limit` Einträgen bleiben die neuesten. Quelle ist die OASIS-SQLite-Datei `<platform>_simulation.db`, ergänzt um das Aktionsprotokoll `<platform>/actions.jsonl`.
+
+- Kommentare (`kind="comment"`, `parent_post_id`/`root_post_id` = Elternpost) werden für Reddit **und** Twitter geliefert. Twitter-Kommentare gibt es erst in Läufen, in denen `CREATE_COMMENT` freigeschaltet war (#1713 S5); ältere Twitter-Läufe liefern Antworten nur als Zitate/Reposts.
+- `parent_comment_id` kommt aus der Spalte `comment.parent_comment_id` (nested-comments, #1713 S5). Läufe ohne diese Spalte liefern `null`.
+- `round_num` wird nur gesetzt, wenn das Aktionsprotokoll die Zeile eindeutig belegt: Kommentare über `comment_id`, Reposts/Zitate über `new_post_id`, Originalposts über Autor und Text (Startposts, die später ein zweites Mal im Protokoll stehen, zählen als Runde 0). Mehrdeutige Zuordnungen, fehlende Protokolle und Protokolle mit mehreren `simulation_start`-Ereignissen liefern `null` — nie eine Schätzung.
+- Twitter-Datenbanken speichern statt eines Datums den OASIS-Zeitschritt als Ganzzahl. `timestamp` ist dort der Protokollzeitpunkt der zugeordneten Aktion; Zeilen ohne belegte Zuordnung werden ausgelassen und per `logger.warning` gezählt.
+
 ### Report — `/api/report`
 
 Wichtige Bereiche:

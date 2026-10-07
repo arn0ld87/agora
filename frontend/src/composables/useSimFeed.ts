@@ -42,7 +42,7 @@ export function parentIdOf(post: PostCreatedEvent): string | null {
  * kein `kind`). `comment`/`quote`/`repost` sind nie Wurzeln, auch wenn
  * ihre Elternkante fehlt — das ist ein Data Gap, keine neue Wurzel.
  */
-function isThreadRoot(post: PostCreatedEvent): boolean {
+export function isThreadRoot(post: PostCreatedEvent): boolean {
   return parentIdOf(post) === null && (post.kind == null || post.kind === 'post')
 }
 
@@ -84,7 +84,7 @@ export interface SimThreadSummary {
 }
 
 /**
- * Gruppiert eine Post-Liste zu Strang-Zusammenfassungen fuer `SimThreadList`
+ * Gruppiert eine Post-Liste zu Strang-Zusammenfassungen fuer die frühere Strangliste
  * (§2.7). Reine Funktion ohne Store-Zugriff — die aufrufende View liefert
  * die (bereits gefilterte) Post-Liste.
  */
@@ -128,7 +128,7 @@ export function buildThreadSummaries(posts: PostCreatedEvent[]): SimThreadSummar
 
 /**
  * Sammelt alle Posts eines Strangs ohne die Wurzel selbst — Datenquelle fuer
- * `SimThreadTree` (§2.8). Gleiche Zuordnungsregel wie `buildThreadSummaries`
+ * den früheren Strangbaum (§2.8). Gleiche Zuordnungsregel wie `buildThreadSummaries`
  * (`root_post_id`, sonst Elternkette), nur als flache Liste statt Summary.
  */
 export function collectThreadNodes(rootId: string, posts: PostCreatedEvent[]): PostCreatedEvent[] {
@@ -281,7 +281,7 @@ function createStore(simulationId: string) {
 
   /**
    * Chronologisch aufsteigende Gesamtliste beider Plattformen — Datenquelle
-   * fuer `FeedTimeline` (Slice UI-2b, §2.5). Filter (Plattform/Runde/Persona/
+   * fuer die frühere Feed-Timeline (Slice UI-2b, §2.5). Filter (Plattform/Runde/Persona/
    * Freitext) liegen bei der aufrufenden View, nicht hier.
    */
   const flatTimeline = computed<PostCreatedEvent[]>(() =>
@@ -346,7 +346,8 @@ export function useSimFeed(simulationId: string) {
 
 /**
  * clearSimFeed — entfernt den Store für eine simulationId.
- * Wird in StepSimulationFeedView.vue onBeforeUnmount aufgerufen.
+ * Seit Etappe 4 (#1801) schreibt kein Verbraucher mehr in diesen Store; der Feed am Lauf
+ * nutzt `useRunFeed`. Die Strang-Helfer (`parentIdOf`, `isThreadRoot`) bleiben in Gebrauch.
  */
 export function clearSimFeed(simulationId: string): void {
   stores.delete(simulationId)

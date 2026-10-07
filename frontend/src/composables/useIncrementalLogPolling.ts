@@ -2,7 +2,7 @@
  * useIncrementalLogPolling — inkrementelles Log-Polling über `usePolling`.
  *
  * Issue #39 (EPIC-05-ST-03): konsolidiert die duplizierte Append- und
- * Auto-Scroll-Logik aus `Step3Simulation.vue` (Simulation Console Logs)
+ * Auto-Scroll-Logik der früheren Simulationsansicht (Simulation Console Logs)
  * sowie `Step4Report.vue` (Agent Logs + Console Logs). Die drei Stellen
  * teilen exakt dasselbe Muster:
  *

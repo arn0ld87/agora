@@ -69,3 +69,32 @@ export function shelfObjectGuard(to: RouteLocationNormalized): NavigationGuardRe
   }
   return true
 }
+
+/**
+ * Etappe 4 (#1801, Bauplan §6.2): die Simulations-Adressen unter
+ * `/v4/simulation/:id/…` leiten auf die Unterreiter am Lauf um. Query und Hash
+ * bleiben erhalten; `postId` (mit Doppelpunkten) wird unveraendert uebernommen.
+ */
+/** Das Minimum, das die Weiterleitungen aus dem Ziel lesen. */
+interface RedirectSource {
+  params: RouteLocationNormalized['params']
+  query: LocationQuery
+  hash: string
+}
+
+function simulationCarry(to: RedirectSource) {
+  return { params: { simulationId: String(to.params.simulationId) }, query: to.query, hash: to.hash }
+}
+
+export function simulationFeedRedirect(to: RedirectSource): RouteLocationAsRelativeGeneric {
+  return { name: 'RunSimulationFeed', ...simulationCarry(to) }
+}
+
+export function simulationPostRedirect(to: RedirectSource): RouteLocationAsRelativeGeneric {
+  const { params, ...rest } = simulationCarry(to)
+  return { name: 'RunSimulationPost', params: { ...params, postId: String(to.params.postId) }, ...rest }
+}
+
+export function simulationRoundsRedirect(to: RedirectSource): RouteLocationAsRelativeGeneric {
+  return { name: 'RunSimulationRounds', ...simulationCarry(to) }
+}

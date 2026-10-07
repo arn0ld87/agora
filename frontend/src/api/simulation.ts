@@ -217,6 +217,7 @@ export interface RunStatusResponse {
   simulation_id: string
   status: string
   current_round?: number
+  total_rounds?: number
   max_rounds?: number
   paused?: boolean
   /**
@@ -500,6 +501,51 @@ export const getSimulationFeedSnapshot = async (
     .map((p) => PostCreatedEventSchema.safeParse(p))
     .filter((r): r is z.ZodSafeParseSuccess<PostCreatedEvent> => r.success)
     .map((r) => r.data)
+}
+
+export interface FeedSnapshotResult {
+  /** Gegen `PostCreatedEventSchema` validierte Beiträge, älteste zuerst. */
+  posts: PostCreatedEvent[]
+  /** Rohe Anzahl der vom Backend gelieferten Einträge (vor der Validierung). */
+  receivedCount: number
+  /** Einträge, die den Vertrag verletzen und verworfen wurden. */
+  invalidCount: number
+}
+
+const FeedSnapshotEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.object({ posts: z.array(z.unknown()) }).passthrough(),
+})
+
+/**
+ * Wie `getSimulationFeedSnapshot`, aber mit `limit` (das Backend behält die
+ * NEUESTEN `limit` Einträge, Default 200, keine Obergrenze) und ohne stilles
+ * Verschlucken: eine vertragswidrige Hülle wirft, verworfene Einträge werden
+ * gezählt (`invalidCount`), die Rohzahl steht in `receivedCount`.
+ */
+export const getSimulationFeedSnapshotPage = async (
+  simulationId: string,
+  platform: SimulationPlatform,
+  options: { limit?: number } = {}
+): Promise<FeedSnapshotResult> => {
+  const params: Record<string, string | number> = { platform }
+  if (options.limit !== undefined) params.limit = options.limit
+  const raw = await service.get(`/api/simulation/${simulationId}/feed-snapshot`, { params })
+  const envelope = FeedSnapshotEnvelopeSchema.safeParse(raw)
+  if (!envelope.success) {
+    throw new Error('Feed-Snapshot: Antwort entspricht nicht dem Vertrag')
+  }
+  const rawPosts = envelope.data.data.posts
+  const posts: PostCreatedEvent[] = []
+  for (const entry of rawPosts) {
+    const parsed = PostCreatedEventSchema.safeParse(entry)
+    if (parsed.success) posts.push(parsed.data)
+  }
+  return {
+    posts,
+    receivedCount: rawPosts.length,
+    invalidCount: rawPosts.length - posts.length,
+  }
 }
 
 /**
