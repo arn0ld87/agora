@@ -17,7 +17,7 @@
  *
  * Master-Prompt §6.1-6.3, ADR-0009, docs/epics/onboarding-provider-unification/slice-5-subplan.md
  */
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AiModelPickerTestId as testIds } from '@/contracts/testIds'
 import {
@@ -49,35 +49,6 @@ import { useOperatorAccess } from '@/composables/useOperatorAccess'
 
 const { t } = useI18n()
 
-const anchorRef = ref<{ $el?: HTMLElement } | null>(null)
-/** Unterhalb dieser Resthöhe (px) wird das Feld beim Öffnen nach oben gescrollt. */
-const MIN_SPACE_BELOW_PX = 240
-
-function scrollParent(el: HTMLElement): HTMLElement | null {
-  for (let node = el.parentElement; node; node = node.parentElement) {
-    const { overflowY } = window.getComputedStyle(node)
-    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node
-  }
-  return null
-}
-
-/**
- * Die Liste öffnet immer unter dem Feld (kein Umklappen, Tab-Reihenfolge).
- * Reicht der Platz darunter nicht, scrollt der umgebende Bereich genau um den
- * fehlenden Betrag, damit die Liste vollständig erreichbar bleibt.
- */
-async function onOpenChange(open: boolean): Promise<void> {
-  if (!open) return
-  await nextTick()
-  const el = anchorRef.value?.$el
-  if (!el || typeof el.getBoundingClientRect !== 'function') return
-  const shortfall = MIN_SPACE_BELOW_PX - (window.innerHeight - el.getBoundingClientRect().bottom)
-  if (shortfall <= 0) return
-  const parent = scrollParent(el)
-  if (parent) parent.scrollTop += shortfall
-  else window.scrollBy({ top: shortfall })
-}
-
 const props = withDefaults(
   defineProps<{
     modelValue?: AiModelRef | null
@@ -105,6 +76,15 @@ const emit = defineEmits<{
 
 const { models: discoveredModels, providers, loading, error, refresh: refreshDiscovery } = useAvailableModels()
 const operatorAccess = useOperatorAccess()
+/**
+ * Liste öffnet per Klick auf das Feld, per Trigger und per Pfeiltaste — nicht
+ * mehr beim bloßen Fokussieren (`open-on-focus`). Sonst springt der Fokus beim
+ * Durchtabben jedes Pickers sofort in das Suchfeld der Liste (eigener Portal-Knoten
+ * am Seitenende); im scrollenden Einstellungsfenster verschieben sich diese
+ * Suchfelder mit dem Scrollen von Picker zu Picker, die Tab-Reihenfolge springt
+ * scheinbar nach oben (#1797).
+ */
+const open = ref(false)
 const customProviderId = ref('')
 const customModelId = ref('')
 const customProvider = computed(() => providers.value.find((provider) =>
@@ -342,11 +322,10 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
     <ComboboxRoot
       :model-value="selectedId ?? ''"
       :disabled="disabled"
-      :open-on-focus="true"
+      v-model:open="open"
       @update:model-value="onUpdate"
-      @update:open="onOpenChange"
     >
-      <ComboboxAnchor ref="anchorRef" class="ai-model-picker__anchor">
+      <ComboboxAnchor class="ai-model-picker__anchor">
         <ComboboxInput
           class="ai-model-picker__input"
           :placeholder="placeholderText"
@@ -356,6 +335,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
           spellcheck="false"
           :data-testid="testIds.input"
           :aria-label="placeholderText"
+          @click="open = true"
         />
         <ComboboxTrigger class="ai-model-picker__trigger" :aria-label="placeholderText" tabindex="-1">
           <span aria-hidden="true">▾</span>
