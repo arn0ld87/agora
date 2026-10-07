@@ -129,6 +129,9 @@ from app.contracts.embedding_contract import (
     EmbeddingModelMetadata,
 )
 from app.contracts.interview_envelope_contract import InterviewEnvelope
+from app.contracts.interview_budget_exceeded_contract import (
+    InterviewBudgetExceededResponse,
+)
 # Kennzahlen "Simulation lebt" (Issue #1713 Slice S0) — kein API-Endpoint,
 # kein Zod-Spiegel, siehe Docstring in simulation_liveness_contract.py.
 from app.contracts.simulation_liveness_contract import (
@@ -270,6 +273,7 @@ CONTRACTS: dict[str, type] = {
     "embedding-model-metadata.schema.json": EmbeddingModelMetadata,
     # Interview-Envelope (Issue #1005)
     "interview-envelope.schema.json": InterviewEnvelope,
+    "interview-budget-exceeded.schema.json": InterviewBudgetExceededResponse,
     # Dokument-Manifest-Sidecar (ADR-0013 Slice 1, Teil A — Issue #1152)
     "document-manifest.schema.json": DocumentManifest,
     "document-manifest-entry.schema.json": DocumentManifestEntry,

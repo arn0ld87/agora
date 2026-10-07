@@ -44,7 +44,7 @@ function build() {
     routes: [
       { path: '/simulations/:simulationId', name: 'RunOverview', component: Stub },
       { path: '/simulations/:simulationId/graph', name: 'RunGraph', component: Stub },
-      { path: '/v4/simulation/:simulationId/interviews', name: 'RunInterviewsLegacy', component: Stub },
+      { path: '/simulations/:simulationId/interviews/:conversationId?', name: 'RunInterviews', component: Stub },
       {
         path: '/simulations/:simulationId/simulation',
         name: 'RunSimulation',

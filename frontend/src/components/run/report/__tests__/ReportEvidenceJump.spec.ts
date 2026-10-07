@@ -25,7 +25,7 @@ async function mountJump(
     routes: [
       { name: 'RunSimulationPost', path: '/p/:simulationId/:postId', component: Stub },
       { name: 'RunGraph', path: '/g/:simulationId', component: Stub },
-      { name: 'RunInterviewsLegacy', path: '/i/:simulationId', component: Stub },
+      { name: 'RunInterviews', path: '/i/:simulationId', component: Stub },
     ],
   })
   await router.push('/g/sim_1')

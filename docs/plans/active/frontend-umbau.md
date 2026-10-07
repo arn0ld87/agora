@@ -345,7 +345,7 @@ Der Lauf-Arbeitsbereich liegt unter `/simulations/…` und nicht unter `/runs/�
 | `/simulations/:simulationId/simulation/rounds` | Runden |
 | `/simulations/:simulationId/simulation/diagnostics` | Diagnose |
 | `/simulations/:simulationId/report/:reportId?` | Bericht; ohne `reportId` die jüngste Fassung. `?claim=` für die Auswahl, `?panel=questions` öffnet rechts die Nachfragen an den Berichtsagenten. |
-| `/simulations/:simulationId/interviews/:conversationId?` | Interviews |
+| `/simulations/:simulationId/interviews/:conversationId?` | Interviews (seit Etappe 6). `conversationId` ist `persona-<agent_id>` oder `group-<kennung>`; eine Gruppe gibt es nur in der Sitzung, in der sie gefragt wurde. |
 | `/graphs/:projectId` | Graph-Ansicht der Bibliothek |
 | `/persona-sets/:setId` | Personasatz |
 | `/compare/:simulationId?` | Vergleich; mit Kennung ist der erste Lauf vorgewählt |
@@ -386,10 +386,11 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 | `/settings/llm-providers`, `/workspace/provider-keys` | `/settings/providers` | 3 |
 | `/settings/embedding` | `/settings/embedding` | 3 |
 | `/settings-classic` | `/settings/general` | 3 |
+| `/v4/simulation/:simulationId/interviews` (Übergangsadresse aus Etappe 2) | `/simulations/:simulationId/interviews` | 6 (umgesetzt; Query und Hash bleiben) |
 
 Zwischen Etappe 2 und der Etappe einer Zeile verlinken die Reiter des Laufs auf die noch bestehende alte Ansicht. Der Reiter „Simulation" führt also bis Etappe 4 auf `/v4/simulation/:id/feed`. Der Reiter „Bericht" führt bis Etappe 5 auf `/v4/report/:reportId`, der Reiter „Interviews" bis Etappe 6 auf die alte Gesprächsansicht.
 
-Die alte Gesprächsansicht ist heute nur über `/v4/interaction/:reportId` geroutet. Ein Lauf ohne Bericht, also auch jeder Lauf ohne Graph, käme so bis Etappe 6 nicht an seine Interviews. Etappe 2 legt deshalb die Übergangsadresse `/v4/simulation/:simulationId/interviews` an, die dieselbe Ansicht nur mit der Simulationskennung öffnet. `Step5Interaction` nimmt `reportId` und `simulationId` schon heute als getrennte, optionale Props und lädt ohne `reportId` keinen Bericht. Der Reiter „Interviews" führt bis Etappe 6 immer auf diese Übergangsadresse, mit oder ohne Bericht; `/v4/interaction/:reportId` bleibt für gespeicherte Links bestehen. In Etappe 2 zu prüfen: Ohne `reportId` öffnet die Ansicht im Interview-Teil und blendet den Chat mit dem Berichtsagenten aus. Etappe 6 leitet die Übergangsadresse auf `/simulations/:simulationId/interviews` um.
+Die alte Gesprächsansicht ist heute nur über `/v4/interaction/:reportId` geroutet. Ein Lauf ohne Bericht, also auch jeder Lauf ohne Graph, käme so bis Etappe 6 nicht an seine Interviews. Etappe 2 legt deshalb die Übergangsadresse `/v4/simulation/:simulationId/interviews` an, die dieselbe Ansicht nur mit der Simulationskennung öffnet. `Step5Interaction` nimmt `reportId` und `simulationId` schon heute als getrennte, optionale Props und lädt ohne `reportId` keinen Bericht. Der Reiter „Interviews" führt bis Etappe 6 immer auf diese Übergangsadresse, mit oder ohne Bericht; `/v4/interaction/:reportId` bleibt für gespeicherte Links bestehen. In Etappe 2 zu prüfen: Ohne `reportId` öffnet die Ansicht im Interview-Teil und blendet den Chat mit dem Berichtsagenten aus. Etappe 6 leitet die Übergangsadresse auf `/simulations/:simulationId/interviews` um (umgesetzt, #1805).
 
 Auflösungen, die eine Weiterleitung braucht:
 
@@ -701,12 +702,36 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 - Beiträge ohne eindeutig zuordenbare Runde bleiben ohne Runde (der Feed meldet das beim Zurückgehen); Twitter-Zeilen, die weder ein Datum noch eine eindeutige Protokollzuordnung haben, fehlen im Snapshot (nur im Server-Log sichtbar).
 - Snapshot-Obergrenze 5000 Beiträge je Netzwerk (die jüngsten), mit sichtbarem Hinweis, wenn sie erreicht ist.
 - Kein Streitfrage-Filter, weil der Beitrag kein entsprechendes Feld trägt; die Streitfrage steht als Text in der linken Spalte.
-- „Befragen“ an der Persona-Karte kommt in Etappe 6.
+- „Befragen“ an der Persona-Karte kam mit Etappe 6 (11e).
 - Die Diagnose beschränkt das Server-Protokoll per Textsuche auf den Lauf (kein Filter im Backend, wie bei der Konsole in 11a); Tool-Calls werden an belegten Zeilenmustern erkannt (`composables/activity/logKinds.ts`), nicht an einem Feld.
 - Die Persona-Zuordnung läuft über die Listenposition des Profils (`persona_id` = Position, `useRunPersonas`); die Haltung kann fehlen und steht dann als „nicht erfasst“.
 - Die Aktionstabelle filtert nach Runde, Netzwerk und Aktionsart, nicht nach Persona.
 - `useSimFeed.ts` hält noch den alten Store (`useSimFeed`, `clearSimFeed`), den kein Verbraucher mehr schreibt; die Strang-Helfer werden von `threads.ts` genutzt. Aufräumen, sobald sie umgezogen sind.
 - Die e2e-Smokes (Gates für Feed, Runden, Diagnose; Weiterleitungen der alten Adressen) laufen nur in der CI gegen den Docker-Stack; lokal wurden sie typgeprüft, nicht ausgeführt.
+
+## 11e. Stand Etappe 6
+
+**Umgesetzt (Issue #1805)** nach 8 und 4.7: Interviews als Reiter am Lauf unter `/simulations/:simulationId/interviews/:conversationId?` als Dreispalter.
+
+- **Links** (`ConversationList`): Gespräche je Persona aus dem Verlauf, „Neues Gespräch“ mit Persona-Auswahl, Gruppenfrage mit Personenauswahl, Warnung bei vielen Personas und Kostenhinweis „n Aufrufe“.
+- **Mitte** (`ConversationPane`): Einzelgespräch als Verlauf „Du: …“ / „<Name>“ mit den Marken „SIM“ und „Interview“, Plattform und Zeitstempel; die Antwort steht auf einer eigenen Fläche (gestrichelter Rahmen, Akzentkante), nicht in `TwitterCard`/`RedditRow`. Fehler je Antwort stehen mit Grund da, nie als leere Antwort. Antworten sind kopierbar. Gruppenfrage: Antworten nebeneinander im Spaltenraster (bricht bei schmaler Breite um), Zählzeile „x von y beantwortet“, je Antwort Verweis ins Einzelgespräch. Eingabe mit echtem Label, Senden per Knopf und Strg/Cmd+Enter, während des Sendens gesperrt (`readonly`, Status per `aria-live`), daneben Modell des Laufs und Kostenhinweis. Ein Erklärsatz nennt, dass Einträge auch aus Interviews des Berichts stammen können.
+- **Rechts** (`InterviewPersonaPane`): `PersonaCard` mit „Beiträge im Feed (n) →“ (Sprung in den Feed mit `?persona=<id>`, Zahl aus dem Feed-Snapshot; bei erreichtem Snapshot-Limit „mindestens n“) und „Im Bericht zitiert (n) →“. Bei Gruppengesprächen die Liste der Beteiligten mit Sprung ins Einzelgespräch.
+- **„Befragen“ aus dem Feed:** `PersonaCard` zeigt den Verweis (Prop `interviewTo`), wenn im Feed eine Persona gewählt und die Simulation nicht mehr läuft; Ziel `persona-<persona_id>`.
+- **Deep-Link** `persona-<n>` ohne Verlauf öffnet ein leeres Gespräch; ohne Profil und ohne Verlauf steht ein Hinweis statt des Eingabefelds.
+- **Budget:** Interviews aus der Oberfläche buchen auf den `simulation_run`-Job. Ein Budgetabbruch kommt als HTTP 409 `budget_exceeded`; die Ansicht zeigt eine dauerhafte Meldung mit Abbruchgrund (`termination_reason`) und Zahlen (`dimension`, `observed`, `threshold`) aus dieser Antwort (`InterviewBudgetNotice`), das Eingabefeld bleibt bedienbar. Fehlt ein Feld im Body, steht nur die Meldung.
+- **Weiterleitung:** `/v4/simulation/:id/interviews` leitet auf die neue Adresse um (6.2).
+
+**Wie „Im Bericht zitiert“ belegt ist:** Die Zahl zählt Einträge des Beleg-Index (`GET /api/report/<id>/evidence`) der jüngsten Berichtsfassung mit `voice_key === "agent:<agent_id>"` (Backend: `agent:{agent_id}` in `stance_analysis.py`/`action_search.py`). Es ist die Zahl der Belege dieser Persona, nicht die Zahl der Stellen im Text. Fehlt der Bericht oder ist die Evidence nicht lesbar (Fehler, `evidence_omitted`), fehlt die Zeile; nichts wird geschätzt. Bei 0 steht „Im Bericht zitiert (0)“ ohne Verweis. Ziel des Sprungs ist bis Etappe 5 der Berichts-Reiter aus `runTabs` (`StepReport`); `RunReport` gab es auf diesem Stand nicht.
+
+**Bewusst nicht gebaut / offen:**
+
+- Kein Gesprächsobjekt im Backend: ein „Gespräch“ ist die Menge der Verlaufszeilen einer Persona; Gruppen gibt es nur in der Sitzung der Frage und verschwinden beim Neuladen (der Verlauf enthält nur Einzelzeilen, gleiche Fragen an mehrere Personas sind dort nicht von Einzelfragen zu unterscheiden).
+- Keine Modellwahl je Frage: der Endpunkt nimmt kein Modell an, die Ansicht nennt das Modell des Laufs (`llm_model` der Konfiguration).
+- Interviews, die der Bericht geführt hat, liegen in derselben Tabelle und sind nicht unterscheidbar; der Erklärsatz sagt das.
+- **Folgen der Budget-Zurechnung zum Simulations-Job:** Interviews zählen gegen das Budget des Laufs der Simulation. Nach Ende wegen Zeit- oder Token-Limit werden weitere Fragen dauerhaft abgelehnt (409). Der Budgetstatus der beendeten Simulation wird durch Interviews „überschritten“, auch wenn der Lauf selbst regulär endete.
+- Der Zähler „Beiträge im Feed“ lädt je Interviews-Ansicht einen Feed-Snapshot (ohne SSE-Strom) und zählt über beide Netzwerke; bei mehr als 5000 Beiträgen je Netzwerk steht „mindestens“.
+- `Step5Interaction`, `StepInteractionView` und die Route `StepInteraction` bleiben bis zur Übernahme des Berichtsagenten-Chats durch Etappe 5 bestehen.
+- Das Gate `golden-gate-accessibility` prüft den Interviews-Reiter einer nicht gelaufenen Simulation (Hinweiszustand) und die Weiterleitung der Übergangsadresse; es läuft nur in der CI gegen den Docker-Stack. Lokal wurden Verlauf, Gruppenraster und Budgetmeldung mit denselben Helfern (axe, 320 px, Tastatur, Tab-Reihenfolge, Fokus) gegen den Vite-Dev-Server mit gemockten Antworten geprüft.
 
 ---
 

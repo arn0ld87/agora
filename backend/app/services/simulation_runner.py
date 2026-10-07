@@ -755,11 +755,13 @@ class SimulationRunner:
         prompt: str,
         platform: Optional[str] = None,
         timeout: float = 180.0,
+        run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Interview all agents in a simulation using the same prompt."""
         return _interview_all_agents_fn(
             simulation_id, prompt, platform, timeout,
             run_state_dir=cls.RUN_STATE_DIR,
+            run_id=run_id,
         )
 
     @classmethod

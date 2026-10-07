@@ -24,7 +24,7 @@ import type { RouteLocationRaw } from 'vue-router'
 import type { EvidenceRecord } from '@/contracts/reportContract'
 
 /** Routenname des Interviews-Reiters; einzige Stelle, die ihn kennt (Umstellung in der Interviews-Etappe). */
-export const INTERVIEWS_ROUTE_NAME = 'RunInterviewsLegacy'
+export const INTERVIEWS_ROUTE_NAME = 'RunInterviews'
 
 /** Warum es keinen Sprung gibt; die Oberfläche übersetzt den Schlüssel. */
 export type NoJumpReason =

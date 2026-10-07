@@ -15,7 +15,7 @@ describe('deriveRunTabs', () => {
       { name: 'StepEnvSetup', params: { projectId: 'proj_1' } },
       { name: 'RunSimulationFeed', params: { simulationId: 'sim_1' } },
       { name: 'RunReport', params: { simulationId: 'sim_1' } },
-      { name: 'RunInterviewsLegacy', params: { simulationId: 'sim_1' } },
+      { name: 'RunInterviews', params: { simulationId: 'sim_1' } },
     ])
     expect(tabs.every((t) => t.disabledReason === null)).toBe(true)
   })
@@ -38,7 +38,7 @@ describe('deriveRunTabs', () => {
   it('Interviews sind mit und ohne Bericht aktiv', () => {
     for (const latestReportId of [null, 'report_9']) {
       const t = deriveRunTabs({ ...full, latestReportId }).find((x) => x.key === 'interviews')!
-      expect(t.to).toEqual({ name: 'RunInterviewsLegacy', params: { simulationId: 'sim_1' } })
+      expect(t.to).toEqual({ name: 'RunInterviews', params: { simulationId: 'sim_1' } })
     }
   })
 
