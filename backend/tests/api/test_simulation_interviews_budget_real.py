@@ -240,6 +240,27 @@ def test_within_budget_interview_runs_and_is_booked(client, run_dirs):
     assert _history_count(client) == 1
 
 
+def test_job_without_budget_config_runs_and_logs_structured_warning(
+    client, run_dirs, monkeypatch
+):
+    """Kein Budget am Job: Interview läuft, die Lücke ist sichtbar (F3)."""
+    run_id = _create_job(None)
+    fake_logger = MagicMock()
+    monkeypatch.setattr("app.api.simulation_interviews.logger", fake_logger)
+
+    response = _post_single(client)
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    assert RunBudgetEnforcer.for_run(run_id) is None
+    fake_logger.warning.assert_called_once()
+    call = fake_logger.warning.call_args
+    assert "interview_unbudgeted" in call.args[0]
+    assert "reason=no_budget_config" in call.args[0]
+    assert call.args[1:] == (SIM_ID, run_id)
+    assert _history_count(client) == 1
+
+
 # ---------------------------------------------------------------------------
 # F4: Teilpersistenz im Direkt-Batch ist sichtbar (persisted_count)
 # ---------------------------------------------------------------------------

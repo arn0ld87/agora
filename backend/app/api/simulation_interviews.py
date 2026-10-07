@@ -12,7 +12,7 @@ from ..contracts.interview_budget_exceeded_contract import (
     InterviewBudgetExceededResponse,
 )
 from ..contracts.interview_envelope_contract import InterviewEnvelope
-from ..services.run_budget import BudgetExceededError
+from ..services.run_budget import BudgetExceededError, get_run_budget_config
 from ..services.run_registry import RunRegistry
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
@@ -29,21 +29,49 @@ def _resolve_budget_run_id(simulation_id: str) -> Optional[str]:
     ``run_type="simulation_run"``. Das Interview laeuft damit gegen Budget-Guard
     und Ledger der Simulation (#1805, Variante A).
 
-    Altbestand ohne Job bleibt unbudgetiert wie bisher, aber nicht still: die
-    Luecke wird als strukturierte Warnung protokolliert. Registry-Fehler werden
-    bewusst nicht geschluckt — sonst liefe ein Interview unbemerkt am Budget vorbei.
+    Hat die Simulation mehrere ``simulation_run``-Jobs (Neustart), zaehlt
+    deterministisch der juengste nach Anlagezeit (``started_at`` ist der
+    Anlagezeitpunkt) — nicht der zuletzt aktualisierte, den
+    ``get_latest_by_linked_id`` liefern wuerde. Mehr als ein Treffer wird als
+    ``interview_budget_multiple_runs`` protokolliert. ``find_by_linked_id`` ist
+    der gezielteste Registry-Zugriff; er scannt wie ``get_latest_by_linked_id``
+    die Registry einmal je Request.
+
+    Altbestand ohne Job und ein Job ohne Budget-Konfiguration bleiben
+    unbudgetiert wie bisher, aber nicht still: die Luecke wird als strukturierte
+    Warnung ``interview_unbudgeted`` (``reason=no_simulation_run`` bzw.
+    ``reason=no_budget_config``) protokolliert. Registry-Fehler werden bewusst
+    nicht geschluckt — sonst liefe ein Interview unbemerkt am Budget vorbei.
     """
-    run = RunRegistry().get_latest_by_linked_id(
-        "simulation_id", simulation_id, run_type="simulation_run"
-    )
-    run_id = run.get("run_id") if run else None
-    if not run_id:
+    runs = [
+        run
+        for run in RunRegistry().find_by_linked_id(
+            "simulation_id", simulation_id, run_type="simulation_run"
+        )
+        if run.get("run_id")
+    ]
+    if not runs:
         logger.warning(
             "interview_unbudgeted simulation_id=%s reason=no_simulation_run",
             simulation_id,
         )
         return None
-    return str(run_id)
+    run = max(runs, key=lambda r: (str(r.get("started_at") or ""), str(r["run_id"])))
+    run_id = str(run["run_id"])
+    if len(runs) > 1:
+        logger.warning(
+            "interview_budget_multiple_runs simulation_id=%s count=%d chosen_run_id=%s",
+            simulation_id,
+            len(runs),
+            run_id,
+        )
+    if get_run_budget_config(run_id) is None:
+        logger.warning(
+            "interview_unbudgeted simulation_id=%s run_id=%s reason=no_budget_config",
+            simulation_id,
+            run_id,
+        )
+    return run_id
 
 
 def _budget_exceeded_response(exc: BudgetExceededError):
