@@ -2307,6 +2307,81 @@
         "resume": "Resume",
         "view": "View"
       },
+      "interviews": {
+        "loading": "Loading interviews …",
+        "retry": "Reload",
+        "unavailable": "Interviews are not available for this run.",
+        "notRun": "Interviews are available once the simulation has finished. Earlier history stays readable.",
+        "stateUnknown": "The simulation state is not known yet. Questions stay locked until it has loaded.",
+        "noAnswer": "No answer received.",
+        "sending": "Asking …",
+        "budgetExceeded": "Budget exhausted, the question was not answered.",
+        "agentFallback": "Agent {n}",
+        "list": {
+          "aria": "Conversations",
+          "heading": "Conversations",
+          "empty": "No conversation yet",
+          "group": "Group: {question}"
+        },
+        "new": {
+          "title": "New conversation",
+          "label": "Persona",
+          "placeholder": "Choose a persona",
+          "open": "Open conversation"
+        },
+        "group": {
+          "title": "Group question",
+          "personas": "Choose personas",
+          "question": "Question for everyone",
+          "send": "Ask the group",
+          "large": "Asking {n} personas at once may exceed the backend deadline. Some answers can be missing.",
+          "summary": "{asked} asked, {answered} answered, {failed} failed",
+          "cost": "No persona chosen: no calls | One call, it counts against the run budget | {n} calls, each counts against the run budget"
+        },
+        "persona": {
+          "participants": "Participating personas",
+          "feed": "Posts in the feed",
+          "feedCount": "Posts in the feed ({n})",
+          "feedCountAtLeast": "Posts in the feed (at least {n})",
+          "cited": "Cited in the report ({n})"
+        },
+        "budget": {
+          "title": "Run budget reached",
+          "explain": "The run has reached its budget. The question was not answered or stored; further questions are rejected while the budget is exhausted.",
+          "reason": "Termination reason: {reason}",
+          "figures": "{dimension}: {observed} of {threshold}",
+          "dimensionUnknown": "Limit",
+          "persisted": "{n} answer(s) were stored before the run stopped and appear in the history."
+        },
+        "pane": {
+          "aria": "Conversation",
+          "choose": "Choose a conversation from the list.",
+          "none": "No conversation yet",
+          "with": "Conversation with {name}",
+          "noTurns": "No questions to this persona yet.",
+          "you": "You:",
+          "badgeSim": "SIM",
+          "badgeInterview": "Interview",
+          "origin": "Entries may also come from interviews the report conducted; they cannot be told apart here.",
+          "unknownPersona": "There is no persona profile and no history for agent {n}. Choose a persona from the list.",
+          "failedReason": "No answer: {reason}",
+          "copy": "Copy",
+          "copyAnswer": "Copy answer from {name}",
+          "copied": "Answer copied to the clipboard.",
+          "copyFailed": "Copying failed. The clipboard is not available.",
+          "groupCount": "{answered} of {total} answered",
+          "cost": "Each question is a model call and counts against the run budget.",
+          "shortcut": "Send with Ctrl/Cmd+Enter.",
+          "groupTitle": "Group question",
+          "groupGone": "This group question only exists in the session where it was asked.",
+          "answeredStatus": "Answer from {name} received.",
+          "inputLabel": "Question to the persona",
+          "model": "Run model: {model}",
+          "modelUnknown": "Run model: unknown",
+          "send": "Ask",
+          "notRun": "Questions are only possible once the simulation has finished."
+        }
+      },
       "simFeed": {
         "ariaLabel": "Simulation feed",
         "network": {
@@ -2363,6 +2438,7 @@
         },
         "persona": {
           "title": "Persona",
+          "interview": "Interview",
           "none": "Pick a persona in the filter or focus a post.",
           "role": "Role",
           "stance": "Stance",

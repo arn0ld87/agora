@@ -15,6 +15,14 @@ export type StageKey = 'graph' | 'personas' | 'simulation' | 'report' | 'intervi
 
 export const STAGE_ORDER: readonly StageKey[] = ['graph', 'personas', 'simulation', 'report', 'interviews']
 
+/** Stufenzustände, in denen es (noch) keine abgeschlossene Simulation gibt. */
+export const NOT_FINISHED_STATES: ReadonlySet<StageStateKind> = new Set<StageStateKind>([
+  'notStarted',
+  'queued',
+  'running',
+  'paused',
+])
+
 export type StageStateKind =
   | 'notStarted'
   | 'queued'
@@ -250,7 +258,7 @@ function nextStepFor(
       return enabled('start', reportReadyTarget(data))
     }
     case 'interviews':
-      return enabled('view', target('RunInterviewsLegacy', { simulationId: data.simulationId }))
+      return enabled('view', target('RunInterviews', { simulationId: data.simulationId }))
   }
 }
 

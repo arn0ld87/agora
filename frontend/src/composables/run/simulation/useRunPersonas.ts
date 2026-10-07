@@ -77,6 +77,8 @@ export interface UseRunPersonasReturn {
   contestedQuestion: ComputedRef<string | null>
   /** Persona zur `persona_id` eines Beitrags oder null, wenn kein Profil dort liegt. */
   personaById: (personaId: string) => RunPersona | null
+  /** Alle Personen des Laufs in Profilreihenfolge (`personaId` = Position); für Auswahllisten. */
+  personas: ComputedRef<RunPersona[]>
   reload: () => Promise<void>
 }
 
@@ -204,6 +206,12 @@ export function useRunPersonas(simulationId: Ref<string> | string): UseRunPerson
     error: computed(() => error.value),
     contestedQuestion: computed(() => question.value),
     personaById,
+    personas: computed(() =>
+      profiles.value.flatMap((_, position) => {
+        const p = personaById(String(position))
+        return p ? [p] : []
+      }),
+    ),
     reload,
   }
 }

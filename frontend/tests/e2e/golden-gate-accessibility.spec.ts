@@ -372,6 +372,14 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, `/simulations/${simulationId}/simulation/diagnostics`);
     });
 
+    // Etappe 6 (#1805): Interviews am Lauf. Eine frische Simulation ist nicht
+    // gelaufen: die Ansicht zeigt dann den Hinweis statt des Eingabefelds (ohne
+    // Betreiberzugang die Zugangshinweise); gegatet werden Liste, Gespräch und
+    // Persona-Spalte in diesem Zustand.
+    test('Lauf Interviews passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/interviews`);
+    });
+
     // Gespeicherte Links auf die alten Simulationsadressen funktionieren weiter;
     // Query und Hash bleiben, geprüft wird die Weiterleitung (URL).
     const oldSimulationAddresses: Array<[string, (id: string) => string, (id: string) => RegExp]> = [
@@ -389,6 +397,11 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
         '/v4/simulation/:id/rounds',
         (id) => `/v4/simulation/${id}/rounds`,
         (id) => new RegExp(`/simulations/${id}/simulation/rounds$`),
+      ],
+      [
+        '/v4/simulation/:id/interviews',
+        (id) => `/v4/simulation/${id}/interviews`,
+        (id) => new RegExp(`/simulations/${id}/interviews$`),
       ],
     ];
     for (const [label, from, target] of oldSimulationAddresses) {

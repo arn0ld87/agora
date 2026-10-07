@@ -101,6 +101,7 @@ async function mountAt(path: string, stubs: Record<string, boolean> = { RunSimEm
         props: true,
       },
       { path: '/simulations/:simulationId/simulation/post/:postId', name: 'RunSimulationPost', component: Stub, props: true },
+      { path: '/simulations/:simulationId/interviews/:conversationId?', name: 'RunInterviews', component: Stub },
     ],
   })
   await router.push(path)
@@ -215,6 +216,21 @@ describe('RunSimulationFeedView', () => {
     expect(w.get('[data-testid="persona-card-name"]').text()).toBe('Anna Profil')
     expect(w.get('[data-testid="persona-card-stance"]').text()).toBe('Haltung nicht erfasst')
     expect(w.get('[data-testid="round-panel-title"]').text()).toBe('Runde 2 von 24')
+  })
+
+  it('„Befragen" führt in die Interviews der Persona, aber erst bei abgeschlossener Simulation', async () => {
+    hoisted.stateKind.value = 'running'
+    const running = await mountAt(`${BASE}/twitter?persona=0`)
+    expect(running.w.find('[data-testid="persona-card-interview"]').exists()).toBe(false)
+    running.w.unmount()
+    hoisted.stateKind.value = 'done'
+    const { w, router } = await mountAt(`${BASE}/twitter?persona=0`)
+    const link = w.get('[data-testid="persona-card-interview"]')
+    expect(link.text()).toBe('Befragen')
+    await link.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('RunInterviews')
+    expect(router.currentRoute.value.params.conversationId).toBe('persona-0')
   })
 
   it('Rundenregler ruft setRoundCursor, Pille ruft flushPending', async () => {
