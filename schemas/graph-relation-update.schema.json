@@ -1,0 +1,38 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-relation-update.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Name und/oder Fakt einer Beziehung \u00e4ndern. Mindestens ein Feld.",
+  "properties": {
+    "fact": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fact"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    }
+  },
+  "title": "RelationUpdate",
+  "type": "object"
+}

@@ -22,6 +22,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+def _empty_provenance(episode_count: int = 0) -> Dict[str, Any]:
+    """Herkunftsobjekt „extrahiert“ (kein Merkmal), siehe ADR-0022 §1."""
+    return {"origin": None, "changed_at": None, "episode_count": episode_count}
+
+
 @dataclass
 class GraphNodeDTO:
     """Knoten im Wissensgraphen.
@@ -37,15 +42,20 @@ class GraphNodeDTO:
     summary: str = ""
     attributes: Dict[str, Any] = field(default_factory=dict)
     created_at: Optional[Any] = None
+    # Additiv (Issue #1808): Entitätstyp und Herkunftsmerkmal (ADR-0022).
+    entity_type: Optional[str] = None
+    provenance: Dict[str, Any] = field(default_factory=_empty_provenance)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "uuid": self.uuid,
             "name": self.name,
             "labels": list(self.labels),
+            "entity_type": self.entity_type,
             "summary": self.summary,
             "attributes": dict(self.attributes),
             "created_at": self.created_at,
+            "provenance": dict(self.provenance),
         }
 
     @classmethod
@@ -57,6 +67,8 @@ class GraphNodeDTO:
             summary=data.get("summary", ""),
             attributes=dict(data.get("attributes", {}) or {}),
             created_at=data.get("created_at"),
+            entity_type=data.get("entity_type"),
+            provenance=dict(data.get("provenance") or _empty_provenance()),
         )
 
 
@@ -92,6 +104,9 @@ class GraphEdgeDTO:
     target_node_name: str = ""
     episodes: List[Any] = field(default_factory=list)
 
+    # Additiv (Issue #1808): Herkunftsmerkmal (ADR-0022).
+    provenance: Dict[str, Any] = field(default_factory=_empty_provenance)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "uuid": self.uuid,
@@ -112,6 +127,7 @@ class GraphEdgeDTO:
             "source_node_name": self.source_node_name,
             "target_node_name": self.target_node_name,
             "episodes": list(self.episodes),
+            "provenance": dict(self.provenance),
         }
 
     @classmethod
@@ -141,6 +157,9 @@ class GraphEdgeDTO:
             source_node_name=data.get("source_node_name", "") or "",
             target_node_name=data.get("target_node_name", "") or "",
             episodes=list(episodes),
+            provenance=dict(
+                data.get("provenance") or _empty_provenance(len(episode_ids))
+            ),
         )
 
 

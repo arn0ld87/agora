@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "GraphProvenanceInfo": {
+      "additionalProperties": false,
+      "description": "Herkunftsmerkmal eines Knotens oder einer Kante.\n\n``origin=None`` hei\u00dft \u201eextrahiert\u201c (Bestand, kein Merkmal).\n``changed_at`` ist der Zeitpunkt der Handeingabe bzw. der letzten\nHand\u00e4nderung. ``episode_count`` ist die Zahl der Episoden, aus denen die\nKante urspr\u00fcnglich stammt (bei Knoten und manuellen Kanten ``0``); eine\nbearbeitete Kante beh\u00e4lt ihre Episoden zur Anzeige.",
+      "properties": {
+        "changed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Changed At"
+        },
+        "episode_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Episode Count",
+          "type": "integer"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "manual",
+                "edited"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        }
+      },
+      "title": "GraphProvenanceInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/graph-edge-view.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Kante (Beziehung) in der Leseform.",
+  "properties": {
+    "attributes": {
+      "additionalProperties": true,
+      "title": "Attributes",
+      "type": "object"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "episode_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Episode Ids",
+      "type": "array"
+    },
+    "expired_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expired At"
+    },
+    "fact": {
+      "default": "",
+      "title": "Fact",
+      "type": "string"
+    },
+    "invalid_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Invalid At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/$defs/GraphProvenanceInfo"
+    },
+    "reinforced_count": {
+      "default": 1,
+      "title": "Reinforced Count",
+      "type": "integer"
+    },
+    "source_node_uuid": {
+      "minLength": 1,
+      "title": "Source Node Uuid",
+      "type": "string"
+    },
+    "target_node_uuid": {
+      "minLength": 1,
+      "title": "Target Node Uuid",
+      "type": "string"
+    },
+    "uuid": {
+      "minLength": 1,
+      "title": "Uuid",
+      "type": "string"
+    },
+    "valid_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid At"
+    },
+    "valid_from_round": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid From Round"
+    },
+    "valid_to_round": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid To Round"
+    }
+  },
+  "required": [
+    "uuid",
+    "name",
+    "source_node_uuid",
+    "target_node_uuid"
+  ],
+  "title": "GraphEdgeView",
+  "type": "object"
+}

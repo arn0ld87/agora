@@ -18,6 +18,21 @@ from pathlib import Path
 from app.contracts.branch_comparison import BranchComparison
 from app.contracts.branch_request_contract import BranchOverrides
 from app.contracts.graph_diff import GraphDiff
+from app.contracts.graph_edit_contract import (
+    EntityCreate,
+    EntityDeleteResult,
+    EntityMerge,
+    EntityMergeResult,
+    EntityUpdate,
+    GraphEdgeView,
+    GraphLockState,
+    GraphLockUser,
+    GraphNodeView,
+    GraphProvenanceInfo,
+    RelationCreate,
+    RelationDeleteResult,
+    RelationUpdate,
+)
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.persona_target_contract import PersonaTargetContract
@@ -163,6 +178,20 @@ CONTRACTS: dict[str, type] = {
     # Aktivitätsmodell einer Simulation, time_config.activity_model (Issue #1779, Schritt 2.4)
     "simulation-activity-model.schema.json": ActivityModelConfig,
     "graph-diff.schema.json": GraphDiff,
+    # Graph bearbeiten, Herkunftsmerkmal und Sperre (Issue #1808, ADR-0022)
+    "graph-provenance-info.schema.json": GraphProvenanceInfo,
+    "graph-node-view.schema.json": GraphNodeView,
+    "graph-edge-view.schema.json": GraphEdgeView,
+    "graph-entity-create.schema.json": EntityCreate,
+    "graph-entity-update.schema.json": EntityUpdate,
+    "graph-entity-merge.schema.json": EntityMerge,
+    "graph-entity-merge-result.schema.json": EntityMergeResult,
+    "graph-entity-delete-result.schema.json": EntityDeleteResult,
+    "graph-relation-create.schema.json": RelationCreate,
+    "graph-relation-update.schema.json": RelationUpdate,
+    "graph-relation-delete-result.schema.json": RelationDeleteResult,
+    "graph-lock-user.schema.json": GraphLockUser,
+    "graph-lock-state.schema.json": GraphLockState,
     "persona-entity-context.schema.json": PersonaEntityContext,
     # Pipeline-Degradierung (Issue #1029)
     "pipeline-degradation.schema.json": PipelineDegradationModel,

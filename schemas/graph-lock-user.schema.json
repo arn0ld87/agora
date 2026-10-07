@@ -1,0 +1,40 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-lock-user.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eine Simulation, die den Graphen (oder sein Projekt) verwendet.",
+  "properties": {
+    "branch_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Branch Name"
+    },
+    "project_id": {
+      "default": "",
+      "title": "Project Id",
+      "type": "string"
+    },
+    "simulation_id": {
+      "minLength": 1,
+      "title": "Simulation Id",
+      "type": "string"
+    },
+    "status": {
+      "default": "",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "simulation_id"
+  ],
+  "title": "GraphLockUser",
+  "type": "object"
+}

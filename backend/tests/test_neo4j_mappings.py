@@ -25,9 +25,39 @@ class TestNodeToDict:
             "uuid": "u1",
             "name": "Alice",
             "labels": ["Person"],  # Entity-Label wird gefiltert
+            "entity_type": None,  # additiv (#1808): Altknoten ohne Property
             "summary": "an entity",
             "attributes": {},
             "created_at": "2026-05-01T12:00:00Z",
+            # additiv (#1808): fehlendes Merkmal = extrahiert
+            "provenance": {"origin": None, "changed_at": None, "episode_count": 0},
+        }
+
+    def test_entity_type_and_manual_origin_are_exposed(self):
+        node = {
+            "uuid": "u1",
+            "name": "Alice",
+            "entity_type": "Person",
+            "origin": "manual",
+            "origin_changed_at": "2026-10-07T10:00:00+00:00",
+        }
+        result = node_to_dict(node, ["Entity", "Person"])
+        assert result["entity_type"] == "Person"
+        assert result["provenance"] == {
+            "origin": "manual",
+            "changed_at": "2026-10-07T10:00:00+00:00",
+            "episode_count": 0,
+        }
+        # Herkunftsfelder sind keine Attribute
+        assert "origin" not in result["attributes"]
+
+    def test_unknown_origin_value_reads_as_extracted(self):
+        node = {"uuid": "u1", "name": "A", "origin": "magic", "origin_changed_at": "x"}
+        result = node_to_dict(node, [])
+        assert result["provenance"] == {
+            "origin": None,
+            "changed_at": None,
+            "episode_count": 0,
         }
 
     def test_attributes_json_is_parsed(self):
@@ -100,6 +130,30 @@ class TestEdgeToDict:
         assert result["valid_to_round"] is None
         assert result["reinforced_count"] == 1
         assert result["episode_ids"] == ["ep1"]
+
+    def test_edge_provenance_defaults_to_extracted_with_episode_count(self):
+        rel = {"uuid": "r1", "episode_ids": ["ep1", "ep2"]}
+        result = edge_to_dict(rel, "ua", "ub")
+        assert result["provenance"] == {
+            "origin": None,
+            "changed_at": None,
+            "episode_count": 2,
+        }
+
+    def test_edited_edge_keeps_episode_ids_and_carries_origin(self):
+        rel = {
+            "uuid": "r1",
+            "episode_ids": ["ep1"],
+            "origin": "edited",
+            "origin_changed_at": "2026-10-07T10:00:00+00:00",
+        }
+        result = edge_to_dict(rel, "ua", "ub")
+        assert result["episode_ids"] == ["ep1"]
+        assert result["provenance"] == {
+            "origin": "edited",
+            "changed_at": "2026-10-07T10:00:00+00:00",
+            "episode_count": 1,
+        }
 
     def test_fact_embedding_is_stripped(self):
         rel = {"uuid": "r1", "fact_embedding": [0.1] * 384}

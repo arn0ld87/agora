@@ -1,0 +1,18 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-relation-delete-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ergebnis eines L\u00f6schens einer Beziehung.",
+  "properties": {
+    "uuid": {
+      "minLength": 1,
+      "title": "Uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "uuid"
+  ],
+  "title": "RelationDeleteResult",
+  "type": "object"
+}

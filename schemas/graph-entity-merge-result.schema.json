@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "GraphNodeView": {
+      "additionalProperties": false,
+      "description": "Knoten (Entit\u00e4t) in der Leseform.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": true,
+          "title": "Attributes",
+          "type": "object"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "entity_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Type"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/GraphProvenanceInfo"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "uuid": {
+          "minLength": 1,
+          "title": "Uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uuid",
+        "name"
+      ],
+      "title": "GraphNodeView",
+      "type": "object"
+    },
+    "GraphProvenanceInfo": {
+      "additionalProperties": false,
+      "description": "Herkunftsmerkmal eines Knotens oder einer Kante.\n\n``origin=None`` hei\u00dft \u201eextrahiert\u201c (Bestand, kein Merkmal).\n``changed_at`` ist der Zeitpunkt der Handeingabe bzw. der letzten\nHand\u00e4nderung. ``episode_count`` ist die Zahl der Episoden, aus denen die\nKante urspr\u00fcnglich stammt (bei Knoten und manuellen Kanten ``0``); eine\nbearbeitete Kante beh\u00e4lt ihre Episoden zur Anzeige.",
+      "properties": {
+        "changed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Changed At"
+        },
+        "episode_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Episode Count",
+          "type": "integer"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "manual",
+                "edited"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin"
+        }
+      },
+      "title": "GraphProvenanceInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/graph-entity-merge-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ergebnis eines Zusammenf\u00fchrens.",
+  "properties": {
+    "dropped_relation_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Dropped Relation Count",
+      "type": "integer"
+    },
+    "merged_source_uuids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Merged Source Uuids",
+      "type": "array"
+    },
+    "rewired_relation_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Rewired Relation Count",
+      "type": "integer"
+    },
+    "target": {
+      "$ref": "#/$defs/GraphNodeView"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "title": "EntityMergeResult",
+  "type": "object"
+}

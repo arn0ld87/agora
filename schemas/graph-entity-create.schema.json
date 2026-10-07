@@ -1,0 +1,48 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-entity-create.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Entit\u00e4t von Hand anlegen.\n\n``client_request_id`` (UUID vom Aufrufer) macht das Anlegen wiederholbar:\ndieselbe Kennung ergibt dieselbe Entit\u00e4t, nie eine zweite.\n``entity_type`` muss in der Ontologie des Graphen vorkommen.",
+  "properties": {
+    "aliases": {
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Aliases",
+      "type": "array"
+    },
+    "client_request_id": {
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "title": "Client Request Id",
+      "type": "string"
+    },
+    "entity_type": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Entity Type",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "client_request_id",
+    "name",
+    "entity_type"
+  ],
+  "title": "EntityCreate",
+  "type": "object"
+}

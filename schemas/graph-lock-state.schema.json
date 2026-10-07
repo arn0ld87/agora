@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "GraphLockUser": {
+      "additionalProperties": false,
+      "description": "Eine Simulation, die den Graphen (oder sein Projekt) verwendet.",
+      "properties": {
+        "branch_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Branch Name"
+        },
+        "project_id": {
+          "default": "",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "simulation_id": {
+          "minLength": 1,
+          "title": "Simulation Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "simulation_id"
+      ],
+      "title": "GraphLockUser",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/graph-lock-state.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Sperrzustand eines Graphen (ADR-0022 \u00a76).\n\nGesperrt ist ein Graph, sobald eine Simulation sein Projekt oder seine\n``graph_id`` verwendet. Der Zustand wird bei jeder Abfrage aus dem\nBestand abgeleitet; es gibt kein eigenes Feld.",
+  "properties": {
+    "graph_id": {
+      "minLength": 1,
+      "title": "Graph Id",
+      "type": "string"
+    },
+    "locked": {
+      "title": "Locked",
+      "type": "boolean"
+    },
+    "used_by": {
+      "items": {
+        "$ref": "#/$defs/GraphLockUser"
+      },
+      "title": "Used By",
+      "type": "array"
+    }
+  },
+  "required": [
+    "graph_id",
+    "locked"
+  ],
+  "title": "GraphLockState",
+  "type": "object"
+}
