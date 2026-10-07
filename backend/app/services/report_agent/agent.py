@@ -1,7 +1,7 @@
 import re
 from contextlib import nullcontext
 from copy import deepcopy
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
 
 from pydantic import ValidationError
 
@@ -213,6 +213,25 @@ _HARD_ROLE_CONFLICTS = frozenset({"foreign_role", "foreign_name_signature"})
 
 def _is_non_factual_claim(claim: Dict[str, Any]) -> bool:
     return claim.get("claim_type") in _NON_FACTUAL_CLAIM_TYPES
+
+
+def _counts_for_claim(evidence_item: Dict[str, Any], evidence_index: Mapping[str, Any]) -> bool:
+    """Zaehlt dieser Beleg fuer eine Confidence-Stufe? (ADR-0022 §4, #1808)
+
+    Handarbeit im Graphen zaehlt fuer keine Stufe. Sie darf deshalb auch keinen
+    Claim in ``claims[]`` halten: sonst stuenden im Bericht ein Label, ein
+    ``confidence_scope`` und eine ``aggregation_basis``, die ausschliesslich auf
+    einem Handeintrag ohne Dokumentstelle beruhen.
+
+    Geprueft wird am Item und, wenn es das Feld nicht traegt, am kanonischen
+    Record: der Binder setzt ``graph_origin`` am Item, der Schreibpfad fuehrt es
+    zusaetzlich im Index (``register_evidence_record``). Ohne den zweiten Blick
+    koennte ein Handeintrag ueber den Index durchrutschen.
+    """
+    if not counts_for_confidence(evidence_item):
+        return False
+    record = evidence_index.get(str(evidence_item.get("evidence_id") or ""))
+    return counts_for_confidence(record) if isinstance(record, Mapping) else True
 
 
 def _count_scenario_bindings(claim: Dict[str, Any]) -> int:
@@ -1353,6 +1372,7 @@ class ReportAgent:
                 if isinstance(item, dict)
                 and item.get("evidence_id")
                 and item.get("supports_claim") is True
+                and _counts_for_claim(item, evidence_index)
             }
             unkeyed_related = sum(
                 1 for item in evidence if not isinstance(item, dict) or not item.get("evidence_id")

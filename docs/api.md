@@ -344,8 +344,10 @@ Bei Contract-Änderungen gelten die Regeln aus `AGENTS.md`: Pydantic zuerst, Zod
 `graph_origin` steht als optionales Feld (`manual` | `edited`) neben `source_kind` an Evidence-Items und -Records des Berichts; Vorbild ist `document_role`. Fehlt es, gilt die Evidence als nicht von Hand erzeugt, und Bestandsberichte bleiben unverändert lesbar.
 
 - `source_kind` bleibt `graph_relation`; `EvidenceSourceKind` bekommt keinen eigenen Wert für Handarbeit.
-- Handarbeit ist im Bericht sichtbar, zählt aber für **keine** Confidence-Stufe: die Rechnung nimmt diese Belege vor Relevanz, Quellengüte, Spezifität, Konsens und Widerspruchs-Penalty heraus. Ein Claim darf `high`/`verified` bleiben, wenn er die Regeln ohne diese Belege erfüllt.
+- Handarbeit bleibt im Antwortvertrag und in den Exporten sichtbar (Feld `graph_origin` am Record); die Belegspalte der Berichtsansicht gruppiert weiterhin nach `source_kind`. Sie zählt aber für **keine** Confidence-Stufe: die Rechnung nimmt diese Belege vor Relevanz, Quellengüte, Spezifität, Konsens und Widerspruchs-Penalty heraus. Ein Claim darf `high`/`verified` bleiben, wenn er die Regeln ohne diese Belege erfüllt.
+- Ein Claim, dessen einziger stützender Beleg Handarbeit ist, wird als Hypothese geführt — er trägt damit kein Confidence-Label und keinen `confidence_scope`.
 - Handarbeit darf keinen `seed_doc:`-Anker tragen; der Vertrag weist solche Records ab. Eine textlich bearbeitete extrahierte Beziehung zeigt weiter ihre ursprüngliche Quelle, liefert aber keinen Dokumentanker mehr.
+- Die Belegdichte-Kennzahl (`GET /api/report/<id>/evidence-density`) wertet die Herkunft nicht: Handarbeit zählt dort als sichtbare Stützung mit, weil die Kennzahl die Belegbreite misst und selbst keine Confidence-Stufe ist.
 - Der Zod-Spiegel ([`../frontend/src/contracts/reportContract.ts`](../frontend/src/contracts/reportContract.ts)) prüft dieselben Grenzen: `graph_origin` verlangt `source_kind=graph_relation` und verbietet `seed_doc:`-Anker.
 - Die Regel steht in [ADR-0022](decisions/0022-manuelle-herkunft-im-graphen.md); die fünf Evidence-Gating-Anker aus ADR-0002 bleiben unverändert.
 

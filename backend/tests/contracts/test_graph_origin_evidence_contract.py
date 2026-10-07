@@ -150,13 +150,23 @@ def test_graph_origin_rejects_seed_doc_anchor_even_on_graph_relation() -> None:
 
 
 def test_manual_fact_alone_supports_no_high_confidence() -> None:
-    with pytest.raises(ValidationError):
+    """Hier greift bereits ADR-0002 Anker 4, nicht die neue Herkunftsregel.
+
+    Anker 4 verlangt zwei stuetzende Rollenfamilien aus ``agent_quote``; eine
+    Graph-Relation liefert sie nicht. Die Isolation der neuen Regel — ein Label,
+    das nur *durch* Handarbeit erreichbar waere — prueft
+    ``test_verified_resting_on_manual_strong_match_is_rejected``.
+    """
+    with pytest.raises(
+        ValidationError, match="mindestens 2 unterschiedlichen Stakeholder-Rollenfamilien"
+    ):
         _claim(ConfidenceLabel.high, [_graph_fact(graph_origin="manual", score=0.95)])
 
 
 @pytest.mark.parametrize("origin", ["manual", "edited"])
 def test_claim_with_only_hand_made_evidence_is_never_medium(origin: str) -> None:
-    with pytest.raises(ValidationError):
+    """Auch hier greift die medium-Regel aus ADR-0002 zuerst."""
+    with pytest.raises(ValidationError, match="agent_quote=False, seed_corpus=False"):
         _claim(
             ConfidenceLabel.medium,
             [_graph_fact(graph_origin=origin, score=0.95)],

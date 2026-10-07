@@ -87,6 +87,48 @@ def test_finalization_and_section_normalization_keep_independently_met_label(str
     assert sections[0]["claims"][0]["confidence_label"] == expected
 
 
+def _agent_and_hand_work_only_claim(origin: str):
+    """Ein Claim, dessen einziger stuetzender Beleg Handarbeit im Graphen ist."""
+    agent, claim = _agent_and_claim("high", strong_quote=False)
+    manual_id = claim["evidence"][-1]["evidence_id"]
+    agent.evidence_map["evidence_index"][manual_id]["graph_origin"] = origin
+    claim["evidence"] = [
+        binding for binding in claim["evidence"] if binding["evidence_id"] == manual_id
+    ]
+    return agent, claim
+
+
+@pytest.mark.parametrize("origin", ["manual", "edited"])
+def test_claim_with_only_hand_work_support_is_a_hypothesis(origin):
+    """Handarbeit zaehlt fuer keine Confidence-Stufe, also auch fuer keinen Claim.
+
+    Haelt sie den Claim in ``claims[]``, stuenden im Bericht ein Label, ein
+    ``confidence_scope`` und eine ``aggregation_basis``, die ausschliesslich auf
+    einem Handeintrag ohne Dokumentstelle beruhen. Das ist die vorgetaeuschte
+    Pruefbarkeit, die ADR-0013/ADR-0022 ausschliessen.
+    """
+    agent, claim = _agent_and_hand_work_only_claim(origin)
+
+    claims, hypotheses, _gaps, _decisions = agent._finalize_section_claims([claim])
+
+    assert claims == []
+    assert len(hypotheses) == 1
+    assert hypotheses[0]["hypothesis_text"] == claim["claim_text"]
+
+
+@pytest.mark.parametrize("origin", ["manual", "edited"])
+def test_one_simulated_support_beside_hand_work_keeps_the_claim(origin):
+    """Gegenprobe: Handarbeit nimmt einem belegten Claim nichts weg."""
+    agent, claim = _agent_and_claim("high", strong_quote=False)
+    manual_id = claim["evidence"][-1]["evidence_id"]
+    agent.evidence_map["evidence_index"][manual_id]["graph_origin"] = origin
+
+    claims, hypotheses, _gaps, _decisions = agent._finalize_section_claims([claim])
+
+    assert not hypotheses
+    assert claims and claims[0]["confidence_label"] in ("high", "verified")
+
+
 @pytest.mark.parametrize("origin", ["manual", "edited"])
 def test_claim_builder_excludes_hand_work_from_external_penalty(monkeypatch, origin):
     import app.services.report_agent.agent as agent_module
