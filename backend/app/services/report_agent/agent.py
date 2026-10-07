@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from pydantic import ValidationError
 
+from ...contracts.report_contract import counts_for_confidence
 from ...utils.llm_client import LLMClient
 from ..claim_atomizer import split_claim_chunks
 from ..claim_type_classifier import classify_claim_type
@@ -23,6 +24,7 @@ from .evidence import (
     init_evidence_map,
     normalize_claims_for_contract,
     normalize_sections_for_contract,
+    provenance_graph_origin,
     record_evidence_item,
     register_evidence_record,
     resolve_embedder,
@@ -76,7 +78,11 @@ from .tools import (
 )
 from .section_pipeline import SectionEvidenceOutcome
 from .text_verification import prose_gate_decisions
-from .workflow import chat as chat_impl, generate_report as generate_report_impl, generate_section_react as generate_section_react_impl
+from .workflow import (
+    chat as chat_impl,
+    generate_report as generate_report_impl,
+    generate_section_react as generate_section_react_impl,
+)
 from .prompts import (
     CHAT_OBSERVATION_SUFFIX,
     CHAT_SYSTEM_PROMPT_TEMPLATE,
@@ -96,22 +102,25 @@ from ..graph_tools import (
     SearchResult,
     InsightForgeResult,
     PanoramaResult,
-    InterviewResult
+    InterviewResult,
 )
+
 # Issue #1152: Zugriff auf die positionsparallelen Provenance-Listen der
 # Retrieval-DTOs. Der Helper toleriert leere Listen (Altgraphen), ein `zip`
 # über eine leere Liste würde die Fakten still verschlucken.
 from ..graph.graph_dtos import provenance_at
 
-logger = get_logger('agora.report_agent')
+logger = get_logger("agora.report_agent")
 
 # S5: diese Item-Typen sind Modell-Output, keine Evidence. Sie dürfen
 # nicht im `evidence`-Array eines Claims stehen, sondern im separaten
 # `audit_trail`-Feld.
-FORBIDDEN_EVIDENCE_TYPES = frozenset({
-    "model_generated_inference",
-    "section_synthesis",
-})
+FORBIDDEN_EVIDENCE_TYPES = frozenset(
+    {
+        "model_generated_inference",
+        "section_synthesis",
+    }
+)
 
 #: Platzhalter, den GraphToolsService für stumme Interview-Plattformen einsetzt
 #: — ein Interview, das nur daraus besteht, ist fehlgeschlagen, keine Evidence.
@@ -175,8 +184,7 @@ def _remap_claim_bindings(
 #: wird jetzt aus dem `gap_reason` abgeleitet.
 _GAP_SUGGESTED_FIX: Dict[str, str] = {
     "no_evidence_bound": (
-        "Keine Quelle gebunden — Beleg gezielt recherchieren oder die "
-        "Aussage streichen."
+        "Keine Quelle gebunden — Beleg gezielt recherchieren oder die Aussage streichen."
     ),
     "related_evidence_only": (
         "Evidence bindet thematisch, aber keine stützt die Aussage — "
@@ -231,13 +239,15 @@ def _typed_confidence(
     claim_type = classify_claim_type(chunk).value
     floored = apply_claim_type_floor(claim_type, score, label)
     if floored != (score, label):
-        audit_trail.append({
-            "type": "claim_type_floor_applied",
-            "claim_type": claim_type,
-            "from_label": label,
-            "value": floored[0],
-            "source": "confidence_calculator.apply_claim_type_floor",
-        })
+        audit_trail.append(
+            {
+                "type": "claim_type_floor_applied",
+                "claim_type": claim_type,
+                "from_label": label,
+                "value": floored[0],
+                "source": "confidence_calculator.apply_claim_type_floor",
+            }
+        )
     return claim_type, floored[0], floored[1]
 
 
@@ -275,7 +285,7 @@ def _record_action_search_hits(
 
 class ReportAgent:
     """Simulation report generation agent."""
-    
+
     # Maximum tool call count (per section)
     MAX_TOOL_CALLS_PER_SECTION = 5
 
@@ -300,7 +310,7 @@ class ReportAgent:
     REACT_PREFETCH_EMPTY_NOTE = REACT_PREFETCH_EMPTY_NOTE
     CHAT_SYSTEM_PROMPT_TEMPLATE = CHAT_SYSTEM_PROMPT_TEMPLATE
     CHAT_OBSERVATION_SUFFIX = CHAT_OBSERVATION_SUFFIX
-    
+
     def __init__(
         self,
         graph_id: str,
@@ -348,7 +358,7 @@ class ReportAgent:
                 "Create it via GraphToolsService(storage=...) and pass it in."
             )
         self.graph_tools = graph_tools
-        
+
         # Tool definitions
         self.tools = self._define_tools()
 
@@ -361,7 +371,9 @@ class ReportAgent:
         self._active_section_unresolved_evidence: List[Dict[str, Any]] = []
         self._current_section_index: Optional[int] = None
 
-        logger.info(f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}")
+        logger.info(
+            f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}"
+        )
 
     def _init_evidence_map(self, report_id: str) -> None:
         self.evidence_map = init_evidence_map(
@@ -393,11 +405,10 @@ class ReportAgent:
             # die Query-Secrets enthalten können (CodeRabbit PR #1151, Major).
             logger.warning(
                 "register_evidence_record: Item verworfen (type=%r, %d Validierungsfehler)",
-                enriched.get("type"), len(exc.errors()),
+                enriched.get("type"),
+                len(exc.errors()),
             )
-            ledger_for(self).dropped(
-                enriched, f"validation_error:{len(exc.errors())}_fields"
-            )
+            ledger_for(self).dropped(enriched, f"validation_error:{len(exc.errors())}_fields")
             self._active_section_unresolved_evidence.append(enriched)
             return None
         if record is None:
@@ -451,10 +462,14 @@ class ReportAgent:
             if not action_dicts:
                 return []
 
-            metrics = NetworkAnalyticsService().compute_metrics(
-                action_dicts,
-                simulation_id=self.simulation_id,
-            ).to_dict()
+            metrics = (
+                NetworkAnalyticsService()
+                .compute_metrics(
+                    action_dicts,
+                    simulation_id=self.simulation_id,
+                )
+                .to_dict()
+            )
             items: List[Dict[str, Any]] = []
             # S2b: Wenn der Snapshot keinen "ok"-Status hat (z. B. Broadcast-
             # only-Run ohne pairwise Interactions), keine 0er Pseudo-Metriken
@@ -462,16 +477,18 @@ class ReportAgent:
             # mit klarer Aussage anhängen, damit der Audit-Trail nicht ganz
             # leer ist.
             if metrics.get("status") != "ok":
-                items.append(EvidenceItem(
-                    type="graph_metric_status",
-                    source="simulation_metrics",
-                    value=f"status={metrics.get('status')}",
-                    snippet=(
-                        f"Polarization-Metriken nicht verfügbar "
-                        f"(Status: {metrics.get('status')})"
-                    ),
-                    raw={"metrics": metrics},
-                ).to_dict())
+                items.append(
+                    EvidenceItem(
+                        type="graph_metric_status",
+                        source="simulation_metrics",
+                        value=f"status={metrics.get('status')}",
+                        snippet=(
+                            f"Polarization-Metriken nicht verfügbar "
+                            f"(Status: {metrics.get('status')})"
+                        ),
+                        raw={"metrics": metrics},
+                    ).to_dict()
+                )
                 items[-1]["producer_key"] = "simulation-metric:status"
             else:
                 metric_fields = (
@@ -484,13 +501,15 @@ class ReportAgent:
                     value = metrics.get(field)
                     if value in (None, [], ""):
                         continue
-                    items.append(EvidenceItem(
-                        type="graph_metric",
-                        source="simulation_metrics",
-                        value=f"{field}={value}",
-                        snippet=f"{field}: {value}",
-                        raw={"metric": field, "value": value, "metrics": metrics},
-                    ).to_dict())
+                    items.append(
+                        EvidenceItem(
+                            type="graph_metric",
+                            source="simulation_metrics",
+                            value=f"{field}={value}",
+                            snippet=f"{field}: {value}",
+                            raw={"metric": field, "value": value, "metrics": metrics},
+                        ).to_dict()
+                    )
                     items[-1]["producer_key"] = f"simulation-metric:{field}"
 
             # Slice 5.2 (#1323): Aktionen mit hartem Rollenwechsel-Konflikt
@@ -500,7 +519,8 @@ class ReportAgent:
             # Aktionen darin lagen (Codex-Review PR #1620).
             # ``unmatched_self_reference`` bleibt drin (schwächere Kategorie).
             eligible_actions = [
-                action for action in action_dicts
+                action
+                for action in action_dicts
                 if action.get("role_conflict") not in _HARD_ROLE_CONFLICTS
             ]
             _skipped_foreign = len(action_dicts) - len(eligible_actions)
@@ -536,6 +556,7 @@ class ReportAgent:
         # Abschnitt nicht mit einem anderen Werkzeug wiederholt wird.
         if is_search_tool(tool_name) and is_empty_result(structured_result):
             registry_for(self).record_empty(dedup_key(tool_name, parameters))
+
         # Kanonische Identität für Fakten aus dem Graphen: der Fakt-Text selbst
         # ist die deterministische Quelle (kein freier LLM-Text), die Query
         # bleibt außen vor — derselbe Fakt über verschiedene Queries ist
@@ -560,13 +581,17 @@ class ReportAgent:
                     "empty_after_truncate",
                 )
                 return None
-            item = {
+            item: Dict[str, Any] = {
                 "type": item_type,
                 "tool_name": tool_name,
                 "query": query,
                 "snippet": snippet,
                 "raw": fact,
-                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                "agent_log_ref": {
+                    "section_index": section_index,
+                    "action": "tool_result",
+                    "tool_name": tool_name,
+                },
                 "producer_key": build_producer_key(key_prefix, str(fact).strip()),
             }
             # ADR-0013 / #1154: Trägt der Fakt eine verifizierte Dokumentherkunft
@@ -574,15 +599,24 @@ class ReportAgent:
             # Identität dann aus der Doc-Herkunft — derselbe Chunk ist dieselbe
             # Quelle, unabhängig vom LLM-formulierten Fakt-Text. Ohne Herkunft
             # bleibt es bei ``graph_relation``: nicht raten (Akzeptanzkriterium 3).
-            anchor = build_seed_document_anchor(provenance)
-            if anchor:
-                item["type"] = "seed_document"
-                item["source_id_anchor"] = anchor
-                item["producer_key"] = build_producer_key(
-                    "seed-doc",
-                    str(provenance["document_id"]).strip(),
-                    str(provenance.get("chunk_id")),
-                )
+            #
+            # ADR-0022 §2: Handarbeit im Graphen ist nie ein Dokumentfakt. Der
+            # Graph-Leser verweigert den Anker bereits; das hier ist die zweite
+            # Verteidigungslinie für Aufrufer, die Marke *und* Dokumentbezug
+            # mitschicken. Eine Handeingabe bleibt ``graph_relation`` und trägt
+            # keinen ``seed_doc:``-Anker.
+            if provenance_graph_origin(provenance) is not None:
+                item["graph_origin"] = provenance_graph_origin(provenance)
+            else:
+                anchor = build_seed_document_anchor(provenance)
+                if anchor:
+                    item["type"] = "seed_document"
+                    item["source_id_anchor"] = anchor
+                    item["producer_key"] = build_producer_key(
+                        "seed-doc",
+                        str(provenance["document_id"]).strip(),
+                        str(provenance.get("chunk_id")),
+                    )
             # Issue #1240: Die Textsorte hängt am Dokument, nicht am Anker —
             # auch ein Fakt ohne Chunk-Nummer stammt aus seinem Dokument.
             role = document_role_of(provenance, getattr(self, "document_roles", None))
@@ -632,13 +666,27 @@ class ReportAgent:
                     "query": structured_result.query,
                     "snippet": self._truncate(entity.get("summary") or entity.get("name")),
                     "raw": entity,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                    "agent_log_ref": {
+                        "section_index": section_index,
+                        "action": "tool_result",
+                        "tool_name": tool_name,
+                    },
                 }
                 if entity.get("uuid"):
                     item["producer_key"] = f"graph-node:{entity['uuid']}"
+                # ADR-0022 §2: die Summary einer von Hand angelegten oder
+                # bearbeiteten Entität ist von Hand eingegebener Text.
+                if entity.get("graph_origin"):
+                    item["graph_origin"] = entity["graph_origin"]
                 items.append(item)
-            for chain in structured_result.relationship_chains[:8]:
-                item = _graph_fact_item(chain, "relationship_chain", structured_result.query, "graph-chain")
+            for position, chain in enumerate(structured_result.relationship_chains[:8]):
+                item = _graph_fact_item(
+                    chain,
+                    "relationship_chain",
+                    structured_result.query,
+                    "graph-chain",
+                    provenance_at(structured_result.relationship_chains_provenance, position),
+                )
                 if item:
                     items.append(item)
         elif isinstance(structured_result, PanoramaResult):
@@ -696,17 +744,13 @@ class ReportAgent:
                 # Fallback, sonst wirft build_producer_key ValueError.
                 agent_name = (interview.agent_name or "").strip() or "unknown-agent"
                 question = (interview.question or "").strip() or "no-question"
-                role_family = (
-                    getattr(interview, "agent_role_family", None) or ""
-                ).strip() or None
+                role_family = (getattr(interview, "agent_role_family", None) or "").strip() or None
                 # Issue #1766: Fehlende Rollenangabe ("", "Unknown", "unbekannt")
                 # ist keine Gruppe. Kette: Rolle, nicht-generische Rollenfamilie,
                 # sonst ein konstanter Wert. Bewusst kein Agentenname: der
                 # Cross-Stakeholder-Validator zaehlt Titel, die Zahl
                 # unterscheidbarer Gruppen darf hier nicht steigen.
-                stakeholder_group = resolve_stakeholder_group(
-                    interview.agent_role, role_family
-                )
+                stakeholder_group = resolve_stakeholder_group(interview.agent_role, role_family)
                 # Issue #1277-4: Fallback ist das bereinigte substance, nicht
                 # das rohe response — sonst bleiben Plattform-Strukturmarker
                 # wie "[Twitter Platform Response]" im persistierten quote.
@@ -737,8 +781,14 @@ class ReportAgent:
                     "topic_stance": getattr(interview, "topic_stance", None),
                     # Issue #1778 (Schritt 1.2): Stimme des Belegs. Post und
                     # Interview derselben Persona tragen denselben voice_key.
-                    "voice_key": f"agent:{interview.agent_id}" if getattr(interview, "agent_id", None) is not None else None,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                    "voice_key": f"agent:{interview.agent_id}"
+                    if getattr(interview, "agent_id", None) is not None
+                    else None,
+                    "agent_log_ref": {
+                        "section_index": section_index,
+                        "action": "tool_result",
+                        "tool_name": tool_name,
+                    },
                     "producer_key": build_producer_key(
                         f"interview:s{section_index}",
                         topic or "no-topic",
@@ -762,33 +812,53 @@ class ReportAgent:
                     "query": structured_result.get("query") or parameters.get("query"),
                     "snippet": self._truncate(result.get("content") or result.get("title")),
                     "raw": result,
-                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                    "agent_log_ref": {
+                        "section_index": section_index,
+                        "action": "tool_result",
+                        "tool_name": tool_name,
+                    },
                 }
                 result_url = result.get("url") or result.get("source_url")
                 if result_url:
                     item["producer_key"] = f"web:{result_url}"
                 items.append(item)
         elif isinstance(structured_result, dict) and "url" in structured_result:
-            items.append({
-                "type": "web_fetch",
-                "tool_name": tool_name,
-                "query": structured_result.get("url"),
-                "snippet": self._truncate(structured_result.get("content") or structured_result.get("title")),
-                "raw": structured_result,
-                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-                "producer_key": f"web:{structured_result['url']}",
-            })
+            items.append(
+                {
+                    "type": "web_fetch",
+                    "tool_name": tool_name,
+                    "query": structured_result.get("url"),
+                    "snippet": self._truncate(
+                        structured_result.get("content") or structured_result.get("title")
+                    ),
+                    "raw": structured_result,
+                    "agent_log_ref": {
+                        "section_index": section_index,
+                        "action": "tool_result",
+                        "tool_name": tool_name,
+                    },
+                    "producer_key": f"web:{structured_result['url']}",
+                }
+            )
 
         if not items and rendered_result:
-            items.append({
-                "type": "model_generated_inference",
-                "source": "report_tool",
-                "tool_name": tool_name,
-                "query": parameters.get("query") or parameters.get("url") or parameters.get("interview_topic"),
-                "snippet": self._truncate(rendered_result),
-                "raw": rendered_result,
-                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
-            })
+            items.append(
+                {
+                    "type": "model_generated_inference",
+                    "source": "report_tool",
+                    "tool_name": tool_name,
+                    "query": parameters.get("query")
+                    or parameters.get("url")
+                    or parameters.get("interview_topic"),
+                    "snippet": self._truncate(rendered_result),
+                    "raw": rendered_result,
+                    "agent_log_ref": {
+                        "section_index": section_index,
+                        "action": "tool_result",
+                        "tool_name": tool_name,
+                    },
+                }
+            )
 
         for item in items:
             item.setdefault("source", "report_tool")
@@ -815,6 +885,14 @@ class ReportAgent:
     @staticmethod
     def _build_source_id_anchor(item: Dict[str, Any]) -> Optional[str]:
         return build_source_id_anchor(item)
+
+    def _evidence_index_map(self) -> Dict[str, Any]:
+        """Die kanonische Evidence-Map des laufenden Reports.
+
+        ``getattr`` statt ``self.evidence_map``: zahlreiche Tests bauen den
+        Agent über ``ReportAgent.__new__`` ohne Konstruktor.
+        """
+        return (getattr(self, "evidence_map", None) or {}).get("evidence_index") or {}
 
     @property
     def empty_searches(self) -> EmptySearchRegistry:
@@ -864,7 +942,9 @@ class ReportAgent:
         content: str,
         heartbeat: Optional[Callable[[str], None]] = None,
     ) -> List[Dict[str, Any]]:
-        raw_chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
+        raw_chunks = [
+            part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()
+        ]
         # S3a: Strukturmarkup (Header, Bold-Section-Titel) verwerfen.
         chunks = [c for c in raw_chunks if self._is_claim_candidate(c)]
         # S3b: Mehrsatz-Chunks in atomare Aussagen splitten und Übergangs-
@@ -913,7 +993,8 @@ class ReportAgent:
         # nach dem ersten Tool-Call voll und die spaeter erhobenen
         # Persona-Zitate und Seed-Treffer waren fuer die Bindung unerreichbar.
         direct_items = [
-            deepcopy(item) for item in self._active_section_evidence
+            deepcopy(item)
+            for item in self._active_section_evidence
             if item.get("type") not in FORBIDDEN_EVIDENCE_TYPES
         ]
         # S4b: claim-spezifisches Binding wenn ein Embedder verfügbar ist.
@@ -940,12 +1021,14 @@ class ReportAgent:
                 ).to_dict()
             ]
             for unresolved in getattr(self, "_active_section_unresolved_evidence", [])[:10]:
-                audit_trail.append({
-                    "type": "unresolved_evidence",
-                    "source": str(unresolved.get("source") or "report_tool"),
-                    "snippet": self._truncate(str(unresolved.get("snippet") or "")),
-                    "raw": {"reason": "missing_producer_key"},
-                })
+                audit_trail.append(
+                    {
+                        "type": "unresolved_evidence",
+                        "source": str(unresolved.get("source") or "report_tool"),
+                        "snippet": self._truncate(str(unresolved.get("snippet") or "")),
+                        "raw": {"reason": "missing_producer_key"},
+                    }
+                )
 
             bound: List[Dict[str, Any]] = []
             embedder_ok = False
@@ -967,9 +1050,7 @@ class ReportAgent:
                     embedder_ok = True
                 except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     reraise_if_budget_exceeded(exc)
-                    logger.warning(
-                        f"EvidenceBinder failed, falling back to generic pool: {exc!r}"
-                    )
+                    logger.warning(f"EvidenceBinder failed, falling back to generic pool: {exc!r}")
                     self._embed_cache = None
                     embedder = None
                     pool = None
@@ -996,28 +1077,34 @@ class ReportAgent:
             # Gewichtung), specificity (top match_score), consistency
             # (Anzahl unique Quellen). Verified-Label nur bei Top-
             # Match-Score >= 0.85.
-            penalty = detect_contradiction_penalty(resolved_evidence)
+            penalty = detect_contradiction_penalty(
+                list(filter(counts_for_confidence, resolved_evidence))
+            )
             confidence_score, confidence_label = compute_confidence(
                 resolved_evidence,
                 contradiction_penalty=penalty,
             )
             if penalty > 0.0:
-                audit_trail.append({
-                    "type": "contradiction_penalty_applied",
-                    "value": penalty,
-                    "source": "evidence_binder.detect_contradiction_penalty",
-                })
+                audit_trail.append(
+                    {
+                        "type": "contradiction_penalty_applied",
+                        "value": penalty,
+                        "source": "evidence_binder.detect_contradiction_penalty",
+                    }
+                )
             # Anti-Dekorations-Guard: kein Evidence → ehrliches speculative-Label
             # und Audit-Eintrag statt dekorativem global_items-Fallback.
             if not resolved_evidence:
                 confidence_score, confidence_label = 0.15, "speculative"
-                audit_trail.append({
-                    "type": "model_generated_inference",
-                    "source": "validator",
-                    "tool_name": "evidence_validator",
-                    "snippet": "no_direct_evidence_bound",
-                    "raw": {"reason": "no_direct_evidence_bound"},
-                })
+                audit_trail.append(
+                    {
+                        "type": "model_generated_inference",
+                        "source": "validator",
+                        "tool_name": "evidence_validator",
+                        "snippet": "no_direct_evidence_bound",
+                        "raw": {"reason": "no_direct_evidence_bound"},
+                    }
+                )
             # Issue #1400: Empfehlungen, Analysen und Struktursätze sind keine
             # unbelegten Tatsachenbehauptungen. Sie bekommen einen Boden, der
             # nie über ``low`` hinausreicht; ``medium`` und höher bleiben
@@ -1040,14 +1127,16 @@ class ReportAgent:
             claim_dict["audit_trail"] = audit_trail
             claims.append(claim_dict)
         if not claims:
-            claims.append(ReportClaim(
-                claim_id="claim_01",
-                claim_text="No claim candidate extracted from this section.",
-                evidence=[],
-                confidence_score=0.0,
-                confidence_label="speculative",
-                notes="No section content captured.",
-            ).to_dict())
+            claims.append(
+                ReportClaim(
+                    claim_id="claim_01",
+                    claim_text="No claim candidate extracted from this section.",
+                    evidence=[],
+                    confidence_score=0.0,
+                    confidence_label="speculative",
+                    notes="No section content captured.",
+                ).to_dict()
+            )
         return claims
 
     def _route_claim_to_hypothesis(
@@ -1102,8 +1191,7 @@ class ReportAgent:
                 )
         else:
             rationale = (
-                "Keine direkte Evidence gebunden; deshalb nicht als "
-                "validierter Claim persistiert."
+                "Keine direkte Evidence gebunden; deshalb nicht als validierter Claim persistiert."
             )
         hypothesis_id = f"hypothesis_{index:02d}"
         hypothesis: Dict[str, Any] = {
@@ -1116,12 +1204,14 @@ class ReportAgent:
             hypothesis["claim_type"] = claim_type
         hypotheses.append(hypothesis)
         if non_factual:
-            gate_decisions.append({
-                "claim_id": str(claim.get("claim_id") or "<no-id>"),
-                "violation": "no_supporting_evidence",
-                "action": "moved_to_hypotheses",
-                "detail": f"[non_factual:{claim_type}] {rationale}"[:500],
-            })
+            gate_decisions.append(
+                {
+                    "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                    "violation": "no_supporting_evidence",
+                    "action": "moved_to_hypotheses",
+                    "detail": f"[non_factual:{claim_type}] {rationale}"[:500],
+                }
+            )
             return
         gap_kind = self._append_data_gap_if_absent(
             claim_text,
@@ -1134,16 +1224,18 @@ class ReportAgent:
         # medium/high/verified ohne jede Evidence ab (der spätere P2.1-Zweig
         # ist dafür unerreichbar) — das Label macht die Verletzung im
         # Audit-Trail unterscheidbar.
-        gate_decisions.append({
-            "claim_id": str(claim.get("claim_id") or "<no-id>"),
-            "violation": (
-                "confidence_label_without_evidence"
-                if not has_evidence and label in ("medium", "high", "verified")
-                else "no_supporting_evidence"
-            ),
-            "action": "moved_to_hypotheses",
-            "detail": f"[{gap_kind.value}] {rationale}"[:500],
-        })
+        gate_decisions.append(
+            {
+                "claim_id": str(claim.get("claim_id") or "<no-id>"),
+                "violation": (
+                    "confidence_label_without_evidence"
+                    if not has_evidence and label in ("medium", "high", "verified")
+                    else "no_supporting_evidence"
+                ),
+                "action": "moved_to_hypotheses",
+                "detail": f"[{gap_kind.value}] {rationale}"[:500],
+            }
+        )
 
     def _append_data_gap_if_absent(
         self,
@@ -1196,7 +1288,7 @@ class ReportAgent:
         feststellen lässt — die an den Claim gebundene Evidence sagt das
         gerade nicht aus, denn ihr Fehlen ist ja der zu erklärende Befund.
         """
-        index = (getattr(self, "evidence_map", None) or {}).get("evidence_index") or {}
+        index = self._evidence_index_map()
         pool = [record for record in index.values() if isinstance(record, dict)]
         # Auch was an der Producer-Grenze scheiterte, zählt: ein Fakt ohne
         # producer_key ist nicht kanonisiert, aber er *lag vor*. Ihn hier
@@ -1240,7 +1332,8 @@ class ReportAgent:
         # section_index ergänzt der Caller (_save_evidence_section).
         gate_decisions: List[Dict[str, Any]] = []
 
-        for claim in normalize_claims_for_contract(claims):
+        evidence_index = self._evidence_index_map()
+        for claim in normalize_claims_for_contract(claims, evidence_index=evidence_index):
             evidence = claim.get("evidence") or []
             label = str(claim.get("confidence_label") or "").lower()
 
@@ -1262,9 +1355,7 @@ class ReportAgent:
                 and item.get("supports_claim") is True
             }
             unkeyed_related = sum(
-                1
-                for item in evidence
-                if not isinstance(item, dict) or not item.get("evidence_id")
+                1 for item in evidence if not isinstance(item, dict) or not item.get("evidence_id")
             )
             related_only = len(evidence_ids - supporting_ids) + unkeyed_related
             # P0-5: Ohne eine einzige stützende Quelle ist die Aussage eine
@@ -1313,7 +1404,7 @@ class ReportAgent:
             # unterschiedlichen Labels durch.
             # getattr: ``_finalize_section_claims`` wird in Tests auch an einer
             # per ``__new__`` gebauten Instanz ohne ``__init__`` aufgerufen.
-            evidence_index = (getattr(self, "evidence_map", None) or {}).get("evidence_index") or {}
+            evidence_index = self._evidence_index_map()
             decision = downgrade_medium_without_agent_grounded(
                 claim, evidence_index=evidence_index, logger=logger
             )
@@ -1411,11 +1502,13 @@ class ReportAgent:
             self._pending_unverified_statements = {}
         bucket = self._pending_unverified_statements.setdefault(section_index, [])
         for statement in unverified:
-            bucket.append({
-                "statement_text": str(statement.text)[:1000],
-                "verdict": str(getattr(statement.verdict, "value", statement.verdict)),
-                "reason": str(statement.reason)[:200],
-            })
+            bucket.append(
+                {
+                    "statement_text": str(statement.text)[:1000],
+                    "verdict": str(getattr(statement.verdict, "value", statement.verdict)),
+                    "reason": str(statement.reason)[:200],
+                }
+            )
 
     def _record_section_metadata(self, section_index: int, metadata: Dict[str, Any]) -> None:
         """Merkt die Struktur-Metadaten eines Abschnitts für ReportV3 vor.
@@ -1532,20 +1625,20 @@ class ReportAgent:
             claims: List[Dict[str, Any]] = []
             raw_hypotheses: List[Dict[str, Any]] = []
             gate_decisions: List[Dict[str, Any]] = []
-            data_gaps: List[Dict[str, Any]] = [{
-                # ReportSectionDataGapModel.gap_id erzwingt ^gap_\d{2,}$ —
-                # ein sprechendes Präfix ("gap_section_03") lässt die gesamte
-                # EvidenceMap-Validierung scheitern (E2E-Lauf, Runde 4).
-                "gap_id": f"gap_{section_index:02d}",
-                "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
-                "claim_text": section_title,
-            }]
+            data_gaps: List[Dict[str, Any]] = [
+                {
+                    # ReportSectionDataGapModel.gap_id erzwingt ^gap_\d{2,}$ —
+                    # ein sprechendes Präfix ("gap_section_03") lässt die gesamte
+                    # EvidenceMap-Validierung scheitern (E2E-Lauf, Runde 4).
+                    "gap_id": f"gap_{section_index:02d}",
+                    "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
+                    "claim_text": section_title,
+                }
+            ]
         else:
             heartbeat_cb = phase_tracker.heartbeat if phase_tracker is not None else None
             with _phase("claim_extraction_and_evidence_binding"):
-                extracted_claims = self._build_claims_for_section(
-                    content, heartbeat=heartbeat_cb
-                )
+                extracted_claims = self._build_claims_for_section(content, heartbeat=heartbeat_cb)
             with _phase("claim_finalization"):
                 claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
                     extracted_claims
@@ -1560,9 +1653,9 @@ class ReportAgent:
         # sie bleiben für den Leser nachvollziehbar. Issue #1356: der Puffer
         # trägt Paare aus Hypothese und Statement, damit das Gate-Log den
         # entfernten vom bloß markierten Fall unterscheiden kann.
-        prose_entries = (
-            getattr(self, "_pending_prose_hypotheses", {}) or {}
-        ).get(section_index, [])
+        prose_entries = (getattr(self, "_pending_prose_hypotheses", {}) or {}).get(
+            section_index, []
+        )
         prose_hypotheses = [entry[0] for entry in prose_entries]
         raw_hypotheses = list(raw_hypotheses) + prose_hypotheses
         # IDs zentral neu vergeben: Claim-Routing und Fließtext-Prüfung zählen
@@ -1576,10 +1669,7 @@ class ReportAgent:
             # Statusmangel und darf apply_degradation_downgrade nicht auslösen.
             self.evidence_map["gate_decision_log"] = list(
                 self.evidence_map.get("gate_decision_log") or []
-            ) + [
-                {**decision, "section_index": section_index}
-                for decision in gate_decisions
-            ]
+            ) + [{**decision, "section_index": section_index} for decision in gate_decisions]
         # Der Verbleib der Tool-Fakten gehört in die persistierte Map, nicht in
         # ein Log, das mit dem Prozess endet. Nur dort ist er nachträglich
         # prüfbar — und nur dann lässt sich ein "die Zahl stand doch in der
@@ -1589,6 +1679,7 @@ class ReportAgent:
             self.evidence_map["evidence_coverage_ledger"] = coverage_ledger.as_payload()
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
+
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)
         section_entry = {
             "section_index": section_index,
@@ -1598,9 +1689,9 @@ class ReportAgent:
             "hypotheses": hypotheses_visible,
             "hypotheses_appendix": hypotheses_appendix,
             "data_gaps": data_gaps,
-            "structured_metadata": (
-                getattr(self, "_pending_section_metadata", {}) or {}
-            ).get(section_index, {}),
+            "structured_metadata": (getattr(self, "_pending_section_metadata", {}) or {}).get(
+                section_index, {}
+            ),
             "generation_failed": generation_failed,
             # Issue #1324: Zitierte, aber nie gebundene Evidence-Refs. Sie
             # standen bisher nur im Log — im Artefakt war nicht sichtbar,
@@ -1626,10 +1717,10 @@ class ReportAgent:
         # schema_version auf Section-Ebene entfernen — Überbleibsel von
         # migrate_v1_to_v2 oder alten Persistierungen; ReportSectionModel
         # erlaubt das Feld nicht (extra="forbid").
-        existing_sections = normalize_sections_for_contract([
-            s for s in self.evidence_map["sections"]
-            if s.get("section_index") != section_index
-        ])
+        existing_sections = normalize_sections_for_contract(
+            [s for s in self.evidence_map["sections"] if s.get("section_index") != section_index],
+            evidence_index=ReportAgent._evidence_index_map(self),
+        )
         # Reader Honesty: Section-Dedup — Duplikat-Marker im audit_trail ablegen,
         # Section selbst nicht droppen (Frontend entscheidet).
         dedup_marker = self._section_dedup_check(
@@ -1648,7 +1739,9 @@ class ReportAgent:
         # ADR-0002-Cross-Stakeholder-Anforderung nicht erfüllt ist
         # (Smoke-Live 2026-05-15). Der Validator bleibt strikt.
         self.evidence_map["sections"] = normalize_sections_for_contract(
-            existing_sections, logger=logger,
+            existing_sections,
+            evidence_index=ReportAgent._evidence_index_map(self),
+            logger=logger,
         )
         try:
             validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
@@ -1658,7 +1751,9 @@ class ReportAgent:
             # mitreissen. Statt den Validator zu lockern, wird der
             # verletzende Claim lokal abgestuft/entfernt und protokolliert.
             repaired_sections, violations = degrade_sections_for_violations(
-                self.evidence_map["sections"], first_error, logger=logger,
+                self.evidence_map["sections"],
+                first_error,
+                logger=logger,
             )
             self.evidence_map["sections"] = repaired_sections
             self.evidence_map["degradation_log"] = (
@@ -1666,10 +1761,13 @@ class ReportAgent:
             )
             logger.warning(
                 "_save_evidence_section: section=%d ValidationError repariert — %d Verstoss/Verstösse.",
-                section_index, len(violations),
+                section_index,
+                len(violations),
             )
             try:
-                validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+                validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(
+                    mode="json"
+                )
             except ValidationError as second_error:
                 # Zweiter Versuch ebenfalls ungültig: degrade_sections_for_violations
                 # kennt nur die Fehlerformen aus dem ersten Durchlauf. Jetzt werden
@@ -1698,13 +1796,15 @@ class ReportAgent:
                     entry_id = ""
                     if isinstance(entry, dict):
                         entry_id = str(entry.get("claim_id") or entry.get("hypothesis_id") or "")
-                    removed_entries.append({
-                        "section_index": sections[si].get("section_index", 0),
-                        "claim_id": entry_id,
-                        "violation": str(err.get("type") or "unknown"),
-                        "action": "dropped",
-                        "detail": str(err.get("msg") or "")[:500],
-                    })
+                    removed_entries.append(
+                        {
+                            "section_index": sections[si].get("section_index", 0),
+                            "claim_id": entry_id,
+                            "violation": str(err.get("type") or "unknown"),
+                            "action": "dropped",
+                            "detail": str(err.get("msg") or "")[:500],
+                        }
+                    )
                 for (si, kind), indices in indices_to_remove.items():
                     entries = sections[si].get(kind)
                     if not isinstance(entries, list):
@@ -1716,11 +1816,14 @@ class ReportAgent:
                 )
                 logger.warning(
                     "_save_evidence_section: section=%d zweiter ValidationError — %d Eintrag/Einträge hart entfernt.",
-                    section_index, len(removed_entries),
+                    section_index,
+                    len(removed_entries),
                 )
                 # Dritter Versuch: scheitert er erneut, ist etwas anderes kaputt —
                 # die Exception läuft bewusst ungefangen weiter (Issue #1006).
-                validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+                validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(
+                    mode="json"
+                )
         # Issue #1766: Kernaussagen haben kein eigenes Confidence-Urteil. Sie
         # entstehen vor der Claim-Bindung (``generate_section_metadata``) und
         # werden hier — nach Validierung und Reparatur, direkt vor dem
@@ -1742,7 +1845,9 @@ class ReportAgent:
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         return define_tools(self)
 
-    def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
+    def _execute_tool(
+        self, tool_name: str, parameters: Dict[str, Any], report_context: str = ""
+    ) -> str:
         return execute_tool_call(self, tool_name, parameters, report_context=report_context)
 
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
@@ -1775,7 +1880,7 @@ class ReportAgent:
         outline: ReportOutline,
         previous_sections: List[str],
         progress_callback: Optional[Callable] = None,
-        section_index: int = 0
+        section_index: int = 0,
     ) -> str:
         return generate_section_react_impl(
             self,
@@ -1802,9 +1907,5 @@ class ReportAgent:
             cancel_run_id=cancel_run_id,
         )
 
-    def chat(
-        self,
-        message: str,
-        chat_history: List[Dict[str, str]] = None
-    ) -> Dict[str, Any]:
+    def chat(self, message: str, chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         return chat_impl(self, message=message, chat_history=chat_history)

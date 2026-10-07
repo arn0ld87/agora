@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, Dict, List, Optional, Tuple
 
 from ..services.embedding_configuration_store import EmbeddingConfigurationStore
 from .neo4j_mappings import (
@@ -41,6 +41,11 @@ from .neo4j_mappings import (
     node_to_dict,
     sanitize_label,
 )
+
+if TYPE_CHECKING:
+    from neo4j import Session
+
+    from .embedding_service import EmbeddingService
 
 logger = logging.getLogger("agora.neo4j_storage")
 
@@ -82,7 +87,7 @@ def _load_attributes(props: Dict[str, Any]) -> Dict[str, Any]:
     raw = props.get("attributes_json") or "{}"
     try:
         value = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -100,6 +105,14 @@ def _merge_aliases(*groups: List[str], exclude_name: str) -> List[str]:
 
 class Neo4jEditMixin:
     """Handänderungen am Graphen. Siehe Modul-Docstring."""
+
+    if TYPE_CHECKING:
+        # Vom konkreten Storage bereitgestellte Mixin-Voraussetzungen.
+        _embedding: EmbeddingService
+
+        def _get_session(self, **kwargs: Any) -> ContextManager[Session]: ...
+
+        def _call_with_retry[T](self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T: ...
 
     # ── Hilfen ──────────────────────────────────────────────────────
 
@@ -119,10 +132,9 @@ class Neo4jEditMixin:
     # ── Lesen ───────────────────────────────────────────────────────
 
     def edit_get_entity(self, graph_id: str, entity_uuid: str) -> Optional[Dict[str, Any]]:
-        def _read(tx):
+        def _read(tx: Any) -> Optional[Dict[str, Any]]:
             record = tx.run(
-                "MATCH (n:Entity {graph_id: $gid, uuid: $uuid}) "
-                "RETURN n, labels(n) AS labels",
+                "MATCH (n:Entity {graph_id: $gid, uuid: $uuid}) RETURN n, labels(n) AS labels",
                 gid=graph_id,
                 uuid=entity_uuid,
             ).single()
@@ -134,7 +146,7 @@ class Neo4jEditMixin:
             return self._call_with_retry(session.execute_read, _read)
 
     def edit_get_relation(self, graph_id: str, relation_uuid: str) -> Optional[Dict[str, Any]]:
-        def _read(tx):
+        def _read(tx: Any) -> Optional[Dict[str, Any]]:
             record = tx.run(
                 "MATCH (src:Entity)-[r:RELATION {graph_id: $gid, uuid: $uuid}]->(tgt:Entity) "
                 "RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid",
@@ -174,7 +186,7 @@ class Neo4jEditMixin:
         attributes = {ALIASES_KEY: _merge_aliases(aliases, exclude_name=name)} if aliases else {}
         safe_label = sanitize_label(entity_type)
 
-        def _create(tx):
+        def _create(tx: Any) -> Tuple[Dict[str, Any], bool]:
             existing = tx.run(
                 "MATCH (n:Entity {uuid: $uuid}) RETURN n, labels(n) AS labels",
                 uuid=entity_uuid,
@@ -218,9 +230,7 @@ class Neo4jEditMixin:
                 now=now,
             ).single()
             if record is None or record["uuid"] != entity_uuid:
-                raise GraphEditConflict(
-                    "Eine Entität mit diesem Namen und Typ existiert bereits"
-                )
+                raise GraphEditConflict("Eine Entität mit diesem Namen und Typ existiert bereits")
             if safe_label:
                 tx.run(f"MATCH (n:Entity {{uuid: $uuid}}) SET n:`{safe_label}`", uuid=entity_uuid)
             created = tx.run(
@@ -254,7 +264,7 @@ class Neo4jEditMixin:
         geändert: Konflikt statt einer Einbettung zum falschen Text.
         """
 
-        def _update(tx):
+        def _update(tx: Any) -> Dict[str, Any]:
             record = tx.run(
                 "MATCH (n:Entity {graph_id: $gid, uuid: $uuid}) RETURN n, labels(n) AS labels",
                 gid=graph_id,
@@ -352,7 +362,7 @@ class Neo4jEditMixin:
     def edit_delete_entity(self, graph_id: str, entity_uuid: str) -> int:
         """Löscht die Entität hart samt ihrer Beziehungen. Rückgabe: Zahl der Beziehungen."""
 
-        def _delete(tx):
+        def _delete(tx: Any) -> int:
             record = tx.run(
                 "MATCH (n:Entity {graph_id: $gid, uuid: $uuid}) "
                 "OPTIONAL MATCH (n)-[r:RELATION]-() "
@@ -393,7 +403,7 @@ class Neo4jEditMixin:
         """
         ids = [target_uuid, *source_uuids]
 
-        def _merge(tx):
+        def _merge(tx: Any) -> Dict[str, Any]:
             fetched = tx.run(
                 "MATCH (n:Entity {graph_id: $gid}) WHERE n.uuid IN $ids "
                 "RETURN n, labels(n) AS labels",
@@ -524,7 +534,7 @@ class Neo4jEditMixin:
     ) -> Tuple[Dict[str, Any], bool]:
         """Legt eine manuelle Beziehung an (ohne Episoden). Rückgabe ``(Kante, neu_angelegt)``."""
 
-        def _create(tx):
+        def _create(tx: Any) -> Tuple[Dict[str, Any], bool]:
             existing = tx.run(
                 "MATCH (src:Entity)-[r:RELATION {uuid: $uuid}]->(tgt:Entity) "
                 "RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid",
@@ -597,7 +607,7 @@ class Neo4jEditMixin:
         gesetzt, wenn sich der Fakt ändert.
         """
 
-        def _update(tx):
+        def _update(tx: Any) -> Dict[str, Any]:
             found = tx.run(
                 "MATCH (:Entity)-[r:RELATION {graph_id: $gid, uuid: $uuid}]->(:Entity) "
                 "RETURN r.uuid AS uuid",
@@ -637,7 +647,7 @@ class Neo4jEditMixin:
     def edit_delete_relation(self, graph_id: str, relation_uuid: str) -> None:
         """Löscht eine Beziehung hart (siehe ``GraphEditService`` zur Abweichung vom Tombstone)."""
 
-        def _delete(tx):
+        def _delete(tx: Any) -> None:
             record = tx.run(
                 "MATCH (:Entity)-[r:RELATION {graph_id: $gid, uuid: $uuid}]->(:Entity) "
                 "DELETE r RETURN count(r) AS hit",

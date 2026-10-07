@@ -18,7 +18,13 @@ from typing import Any, Dict, List, Optional
 from app.contracts.decision_contract import DecisionResult
 from app.contracts.graph_relevance_contract import SearchRelevanceVerdict
 from app.storage.graph_storage import GraphStorage
-from app.services.graph.graph_dtos import EdgeInfo, NodeInfo, SearchResult
+from app.services.graph.graph_dtos import (
+    EdgeInfo,
+    NodeInfo,
+    SearchResult,
+    graph_origin_of,
+    origin_marker,
+)
 from app.services.decisions.local_search_relevance import resolve_relevance
 
 logger = logging.getLogger(__name__)
@@ -29,7 +35,7 @@ def _resolve_edge_provenance(
     *,
     storage: GraphStorage,
 ) -> Dict[str, Optional[Dict[str, Any]]]:
-    """Dokumentherkunft je Kante auflösen (Issue #1152).
+    """Dokumentherkunft je Kante auflösen (Issue #1152, ADR-0022 §2).
 
     Sammelt die ``episode_ids`` aller übergebenen Kanten ein, holt deren
     Herkunft in *einem* Storage-Aufruf und ordnet sie den Kanten wieder zu.
@@ -40,29 +46,44 @@ def _resolve_edge_provenance(
     #1152 und die Voraussetzung dafür, dass #1154 daraus einen
     verifizierten Anker nach ADR-0013 bauen darf.
 
-    Fehler sind hier nie fatal: das Retrieval liefert dann Fakten ohne
-    Herkunft, statt auszufallen.
-    """
-    lookup = getattr(storage, "get_episode_provenance", None)
-    if lookup is None:
-        return {}
+    Von Hand angelegte und bearbeitete Kanten sind ausgenommen: sie tragen
+    statt des Ankers ihre Herkunftsmarke. Eine bearbeitete Kante behält ihre
+    Episoden zur Anzeige („ursprünglich aus Dokument X"), der geänderte
+    Satz stand aber nie im Dokument — ihre Episoden werden deshalb gar nicht
+    erst abgefragt. Sie werden nicht verworfen, sondern markiert (ADR-0022
+    §2, eine Verschärfung von ADR-0013).
 
+    Fehler sind hier nie fatal: das Retrieval liefert dann Fakten ohne
+    Herkunft, statt auszufallen. Die bereits ermittelten Marken bleiben
+    trotzdem erhalten.
+    """
+    resolved: Dict[str, Optional[Dict[str, Any]]] = {}
     episode_ids: List[str] = []
     for edge in edge_dicts:
+        edge_uuid = edge.get("uuid", "")
+        if not edge_uuid:
+            continue
+        marker = origin_marker(edge)
+        if marker is not None:
+            resolved[edge_uuid] = marker
+            continue
         episode_ids.extend(edge.get("episode_ids") or [])
     if not episode_ids:
-        return {}
+        return resolved
+
+    lookup = getattr(storage, "get_episode_provenance", None)
+    if lookup is None:
+        return resolved
 
     try:
         provenance_by_episode = lookup(episode_ids)
     except Exception as exc:  # noqa: BLE001 — Provenance ist optional, Retrieval nicht
         logger.warning("Episode provenance lookup failed: %s", exc)
-        return {}
+        return resolved
 
-    resolved: Dict[str, Optional[Dict[str, Any]]] = {}
     for edge in edge_dicts:
         edge_uuid = edge.get("uuid", "")
-        if not edge_uuid:
+        if not edge_uuid or edge_uuid in resolved:
             continue
         candidates: set[tuple[Any, Any]] = set()
         for episode_id in edge.get("episode_ids") or []:
@@ -200,8 +221,14 @@ def search_graph(
                 projected.update(provenance)
             edges.append(projected)
 
-        # Parse node results
-        if hasattr(search_results, "nodes"):
+        # Parse node results. ``scope`` entscheidet, welche Elementart
+        # überhaupt in die Antwort gehört — ohne diese Schranke landeten
+        # Entity-Summaries auch in einer reinen Kanten-Suche im Ergebnis
+        # (``insight_forge`` sucht mit ``scope="edges"``) und erschienenen
+        # dort als Fakten ohne Kantenbezug.
+        if scope not in ("nodes", "both"):
+            node_list = []
+        elif hasattr(search_results, "nodes"):
             node_list = search_results.nodes
         elif isinstance(search_results, dict) and "nodes" in search_results:
             node_list = search_results["nodes"]
@@ -220,8 +247,11 @@ def search_graph(
                 if summary:
                     facts.append(f"[{node.get('name', '')}]: {summary}")
                     # Entity-Summaries sind aggregiert und lassen sich keinem
-                    # einzelnen Chunk zuordnen — kein Anker, kein Raten.
-                    fact_provenance.append(None)
+                    # einzelnen Chunk zuordnen — kein Anker, kein Raten. Eine von
+                    # Hand angelegte oder bearbeitete Entität trägt statt dessen
+                    # ihre Herkunftsmarke: ihre Summary ist ebenfalls von Hand
+                    # eingegebener Text (ADR-0022 §2).
+                    fact_provenance.append(origin_marker(node))
 
         logger.info("Search complete: Found %d related facts", len(facts))
 
@@ -380,7 +410,9 @@ def local_search(
                 summary = node.get("summary", "")
                 if summary:
                     facts.append(f"[{node.get('name', '')}]: {summary}")
-                    fact_provenance.append(None)
+                    # Siehe ``search_graph``: aggregierte Summary ohne
+                    # Chunk-Anker, aber mit Herkunftsmarke bei Handarbeit.
+                    fact_provenance.append(origin_marker(node))
 
         logger.info("Local search complete: Found %d related facts", len(facts))
 
@@ -412,6 +444,7 @@ def get_all_nodes(graph_id: str, *, storage: GraphStorage) -> List[NodeInfo]:
             labels=node.get("labels", []),
             summary=node.get("summary", ""),
             attributes=node.get("attributes", {}),
+            graph_origin=graph_origin_of(node),
         )
         for node in raw_nodes
     ]
@@ -444,6 +477,7 @@ def get_all_edges(
             target_node_uuid=edge.get("target_node_uuid", ""),
             document_id=provenance.get("document_id"),
             chunk_id=provenance.get("chunk_id"),
+            graph_origin=provenance.get("graph_origin"),
         )
 
         if include_temporal:
@@ -474,6 +508,7 @@ def get_node_detail(node_uuid: str, *, storage: GraphStorage) -> Optional[NodeIn
             labels=node.get("labels", []),
             summary=node.get("summary", ""),
             attributes=node.get("attributes", {}),
+            graph_origin=graph_origin_of(node),
         )
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error("Failed to get node details: %s", str(exc))

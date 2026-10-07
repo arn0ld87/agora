@@ -14,6 +14,7 @@ from app.contracts.graph_edit_contract import (
     RelationCreate,
     RelationUpdate,
 )
+from app.storage.neo4j_edit import ALIASES_KEY
 from app.services.graph_edit_service import (
     EmbeddingMigrationRunningError,
     GraphEditEmbeddingError,
@@ -257,6 +258,120 @@ class TestUpdateEntity:
         service, _ = _service(storage)
         with pytest.raises(GraphEditEmbeddingError):
             service.update_entity(GID, U1, EntityUpdate(name="Neu"))
+        assert storage.calls == []
+
+    # ── Verhaltensfestlegung fuer den Zerlegungs-Slice (MAI-17) ──
+
+    def test_each_field_is_written_only_when_it_really_differs(self):
+        """Gleicher Wert → kein Schreibfeld. Der Aufrufer darf idempotent senden."""
+        service, storage = _service()
+        service.update_entity(
+            GID, U1, EntityUpdate(name="Alex", entity_type="Person", summary="Alex (Person)", aliases=[])
+        )
+        assert storage.calls == []
+
+    def test_only_the_changed_field_reaches_the_write_path(self):
+        """Unveraenderte Felder bleiben ``None`` — kein Ueberschreiben mit Altstand."""
+        service, storage = _service()
+        service.update_entity(GID, U1, EntityUpdate(summary="Von Hand gepflegt."))
+        kw = storage.calls[0][1]
+        assert kw["summary"] == "Von Hand gepflegt."
+        assert kw["name"] is None
+        assert kw["entity_type"] is None
+        assert kw["aliases"] is None
+
+    def test_alias_change_writes_aliases_only(self):
+        storage = _FakeStorage()
+        storage.entity = _node(attributes={ALIASES_KEY: ["Al"]})
+        service, storage = _service(storage)
+        service.update_entity(GID, U1, EntityUpdate(aliases=["Al", "Alex"]))
+        kw = storage.calls[0][1]
+        assert kw["aliases"] == ["Al", "Alex"]
+        assert kw["embedding"] is None and kw["embedding_text"] is None
+        assert storage.embedded == []
+
+    def test_identical_aliases_are_not_a_change(self):
+        storage = _FakeStorage()
+        storage.entity = _node(attributes={ALIASES_KEY: ["Al"]})
+        service, storage = _service(storage)
+        service.update_entity(GID, U1, EntityUpdate(aliases=["Al"]))
+        assert storage.calls == []
+
+    def test_embedded_text_combines_new_name_with_current_type(self):
+        """Nur der geaenderte Teil ist neu; der andere kommt aus dem Bestand."""
+        service, storage = _service()
+        service.update_entity(GID, U1, EntityUpdate(name="Alexander"))
+        assert storage.calls[0][1]["embedding_text"] == "Alexander (Person)"
+        assert storage.calls[0][1]["property_key"] == "embedding"
+        assert storage.calls[0][1]["now"] == NOW
+
+    def test_type_change_reembeds_with_the_current_name(self):
+        service, storage = _service()
+        service.update_entity(GID, U1, EntityUpdate(entity_type="Organization"))
+        assert storage.embedded == ["Alex (Organization)"]
+
+    def test_type_change_follows_the_automatic_summary(self):
+        service, storage = _service()
+        service.update_entity(GID, U1, EntityUpdate(entity_type="Organization"))
+        assert storage.calls[0][1]["summary"] == "Alex (Organization)"
+
+    def test_automatic_summary_follows_the_new_name_not_the_old_type(self):
+        """Name und Typ zusammen: die automatische Summary folgt beiden."""
+        service, storage = _service()
+        service.update_entity(GID, U1, EntityUpdate(name="Alexander", entity_type="Organization"))
+        kw = storage.calls[0][1]
+        assert kw["embedding_text"] == "Alexander (Organization)"
+        assert kw["summary"] == "Alexander (Organization)"
+
+    def test_explicit_summary_survives_the_rename(self):
+        """Ausdruecklich gesetzte Summary wird nie von der Auto-Summary ersetzt."""
+        storage = _FakeStorage()
+        storage.entity = _node(summary="Alte automatische Summary")  # nicht default
+        service, _ = _service(storage)
+        service.update_entity(GID, U1, EntityUpdate(name="Neu", summary="Eigene Formulierung"))
+        assert storage.calls[0][1]["summary"] == "Eigene Formulierung"
+
+    def test_missing_entity_type_falls_back_to_the_first_label(self):
+        """Altbestand ohne ``entity_type`` liest den Typ aus den Labels."""
+        storage = _FakeStorage()
+        entity = _node()
+        entity.pop("entity_type")
+        storage.entity = entity
+        service, storage = _service(storage)
+        service.update_entity(GID, U1, EntityUpdate(name="Alexander"))
+        assert storage.calls[0][1]["embedding_text"] == "Alexander (Person)"
+
+    def test_entity_without_type_and_without_label_embeds_without_type(self):
+        """Weder ``entity_type`` noch Label: der Typ bleibt leer, kein Absturz."""
+        storage = _FakeStorage()
+        entity = _node()
+        entity.pop("entity_type")
+        entity["labels"] = []
+        storage.entity = entity
+        service, storage = _service(storage)
+        service.update_entity(GID, U1, EntityUpdate(name="Anonym"))
+        assert storage.embedded == ["Anonym ()"]
+
+    def test_no_change_returns_the_unmodified_record_without_embedding(self):
+        """Der Frühausstieg kostet weder Schreibzugriff noch Einbettung."""
+        service, storage = _service()
+        view = service.update_entity(GID, U1, EntityUpdate(summary="Alex (Person)"))
+        assert storage.calls == []
+        assert storage.embedded == []
+        assert view.uuid == U1
+
+    def test_ontology_check_runs_before_the_embedding(self):
+        """Ein ungültiger Typ darf keine Einbettung erzwingen."""
+        service, storage = _service()
+        with pytest.raises(GraphEditValidationError):
+            service.update_entity(GID, U1, EntityUpdate(entity_type="Planet", summary="x"))
+        assert storage.embedded == []
+        assert storage.calls == []
+
+    def test_ontology_check_also_runs_on_a_pure_type_change(self):
+        service, storage = _service()
+        with pytest.raises(GraphEditValidationError):
+            service.update_entity(GID, U1, EntityUpdate(entity_type="Planet"))
         assert storage.calls == []
 
 
