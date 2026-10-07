@@ -14,6 +14,12 @@ const api = vi.hoisted(() => ({
 vi.mock('@/api/interviews', () => ({ askPersonas: api.askPersonas, getInterviewHistory: api.getInterviewHistory }))
 vi.mock('@/api/simulation', () => ({ getSimulationConfig: api.getSimulationConfig }))
 
+const download = vi.hoisted(() => ({ triggerDownload: vi.fn() }))
+vi.mock('@/composables/useReportExports', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/composables/useReportExports')>()),
+  triggerDownload: download.triggerDownload,
+}))
+
 const refs = vi.hoisted(() => ({
   evidence: vi.fn(),
   posts: [] as { persona_id: string }[],
@@ -108,6 +114,7 @@ const hist = (agent_id: number, prompt: string, response: string) => ({
 
 beforeEach(() => {
   Object.values(api).forEach((m) => m.mockReset())
+  download.triggerDownload.mockReset()
   api.getInterviewHistory.mockResolvedValue([])
   api.getSimulationConfig.mockResolvedValue({ success: true, data: { llm_model: 'gpt-x' } })
   refs.evidence.mockReset()
@@ -425,6 +432,98 @@ describe('RunInterviewsView', () => {
     await flushPromises()
     expect(writeText).toHaveBeenCalledWith('Kopierbar')
     expect(w.get('[data-testid="copy-status"]').text()).toContain('kopiert')
+  })
+
+  describe('Umfrage (#1790)', () => {
+    async function askAll(w: Awaited<ReturnType<typeof mountAt>>['w'], text = 'Frage an alle') {
+      await w.get('[data-testid="group-toggle"]').trigger('click')
+      await w.get('[data-testid="group-select-all"]').trigger('click')
+      await w.get('[data-testid="group-text"]').setValue(text)
+      await w.get('[data-testid="group-send"]').trigger('click')
+      await flushPromises()
+    }
+
+    it('Alle auswählen und Alle abwählen setzen die Häkchen, die Zählzeile folgt', async () => {
+      const { w } = await mountAt('/simulations/sim_1/interviews')
+      await w.get('[data-testid="group-toggle"]').trigger('click')
+      expect(w.get('[data-testid="group-selected"]').text()).toBe('Keine Persona ausgewählt')
+      await w.get('[data-testid="group-select-all"]').trigger('click')
+      const boxes = w.findAll('input[type="checkbox"]')
+      expect(boxes.every((b) => (b.element as HTMLInputElement).checked)).toBe(true)
+      expect(w.get('[data-testid="group-selected"]').text()).toBe('2 von 2 Personas ausgewählt')
+      expect(w.get('[data-testid="group-selected"]').attributes('aria-live')).toBe('polite')
+      expect(w.get('[data-testid="group-cost"]').text()).toContain('2 Aufrufe')
+      await w.get('[data-testid="group-clear"]').trigger('click')
+      expect(boxes.some((b) => (b.element as HTMLInputElement).checked)).toBe(false)
+      expect(w.get('[data-testid="group-selected"]').text()).toBe('Keine Persona ausgewählt')
+    })
+
+    it('Senden ruft den Sendepfad mit allen gewählten IDs auf', async () => {
+      api.askPersonas.mockResolvedValue([
+        { agentId: 0, platform: 'reddit', prompt: 'p', response: 'Ja', timestamp: '2026-10-07T12:00:00', error: null },
+        { agentId: 1, platform: 'reddit', prompt: 'p', response: 'Nein', timestamp: '2026-10-07T12:00:00', error: null },
+      ])
+      const { w } = await mountAt('/simulations/sim_1/interviews')
+      await askAll(w)
+      expect(api.askPersonas).toHaveBeenCalledWith('sim_1', [
+        { agentId: 0, prompt: 'Frage an alle' },
+        { agentId: 1, prompt: 'Frage an alle' },
+      ])
+    })
+
+    it('ohne abgeschlossene Simulation erklärt die Gruppenfrage die Sperre und sendet nicht', async () => {
+      const { w } = await mountAt('/simulations/sim_1/interviews', 'running')
+      await w.get('[data-testid="group-toggle"]').trigger('click')
+      expect(w.get('[data-testid="group-blocked"]').text()).toContain('abgeschlossen')
+      await w.get('[data-testid="group-select-all"]').trigger('click')
+      await w.get('[data-testid="group-text"]').setValue('Frage')
+      expect(w.get('[data-testid="group-send"]').attributes('disabled')).toBeDefined()
+      expect(api.askPersonas).not.toHaveBeenCalled()
+    })
+
+    it('exportiert die Antworten als CSV mit Spalten, Dateiname und Fehlerspalte', async () => {
+      api.askPersonas.mockResolvedValue([
+        { agentId: 0, platform: 'reddit', prompt: 'p', response: 'Sagt "ja"\n=1+1', timestamp: '2026-10-07T12:00:00', error: null },
+        { agentId: 1, platform: 'reddit', prompt: null, response: null, timestamp: null, error: 'kaputt' },
+      ])
+      const { w } = await mountAt('/simulations/sim_1/interviews')
+      await askAll(w)
+      await w.get('[data-testid="group-export-csv"]').trigger('click')
+      expect(download.triggerDownload).toHaveBeenCalledTimes(1)
+      const [blob, filename] = download.triggerDownload.mock.calls[0] as [Blob, string]
+      expect(filename).toMatch(/^agora-survey-\d+\.csv$/)
+      expect(blob.type).toBe('text/csv;charset=utf-8')
+      const csv = await blob.text()
+      expect(csv.split('\n')[0]).toBe('"agent_id","username","question","answer","error"')
+      expect(csv).toContain('"0","Anke Wübbena","Frage an alle","Sagt ""ja""\n=1+1",""')
+      expect(csv).toContain('"1","Jörg Kreistag","Frage an alle","","kaputt"')
+      expect(w.get('[data-testid="group-export-status"]').text()).toBe('CSV mit 2 Zeilen exportiert.')
+    })
+
+    it('Budgetabbruch (409): kein CSV-Knopf, Budgethinweis bleibt sichtbar', async () => {
+      api.askPersonas.mockRejectedValue(
+        new ApiError({
+          code: 'budget_exceeded',
+          status: 409,
+          message: 'Token-Budget überschritten',
+          originalResponse: {
+            success: false,
+            code: 'budget_exceeded',
+            error: 'Token-Budget überschritten',
+            termination_reason: 'budget_tokens',
+            dimension: 'tokens',
+            observed: 12000,
+            threshold: 10000,
+          },
+        }),
+      )
+      const { w } = await mountAt('/simulations/sim_1/interviews')
+      await askAll(w)
+      expect(w.get('[data-testid="budget-notice"]').attributes('role')).toBe('alert')
+      expect(w.find('[data-testid="group-export-csv"]').exists()).toBe(false)
+      expect(w.get('[data-testid="group-export-none"]').text()).toContain('Keine Antwort zum Exportieren')
+      expect(download.triggerDownload).not.toHaveBeenCalled()
+    })
   })
 
   it('jedes Formularfeld hat ein echtes <label for>', async () => {

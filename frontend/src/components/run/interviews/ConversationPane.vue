@@ -15,7 +15,7 @@
  * `personaById`, `canAsk` (false: Hinweis statt Eingabefeld), `personasLoading`
  * (Profile noch nicht geladen: unbekannte Persona wird dann nicht gemeldet).
  */
-import { computed, ref, useId } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunPersona } from '@/composables/run/simulation/useRunPersonas'
 import { useRunInterviewsContext } from '@/composables/run/interviews/useRunInterviews'
@@ -23,6 +23,8 @@ import {
   conversationIdForPersona,
   type ParsedConversationId,
 } from '@/composables/run/interviews/conversations'
+import { buildSurveyCsv, surveyCsvFilename } from '@/composables/run/interviews/surveyCsv'
+import { triggerDownload } from '@/composables/useReportExports'
 
 const props = withDefaults(
   defineProps<{
@@ -97,6 +99,35 @@ async function copy(value: string | null): Promise<void> {
   } catch {
     copyStatus.value = t('views.run.interviews.pane.copyFailed')
   }
+}
+
+// --- CSV-Export der Gruppenfrage (Umfrage) -------------------------------------
+
+const exportStatus = ref('')
+watch(
+  () => group.value?.groupId,
+  () => {
+    exportStatus.value = ''
+  },
+)
+function exportGroupCsv(): void {
+  const g = group.value
+  // Ohne eine einzige Antwort (z. B. Budgetabbruch, alle fehlgeschlagen) gibt es keine CSV.
+  if (!g || answeredCount.value === 0) {
+    exportStatus.value = t('views.run.interviews.survey.nothingToExport')
+    return
+  }
+  const csv = buildSurveyCsv(
+    g.answers.map((a) => ({
+      agentId: a.agentId,
+      name: nameOf(a.agentId),
+      question: g.question,
+      answer: a.error ? null : a.answer,
+      error: a.error,
+    })),
+  )
+  triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8' }), surveyCsvFilename())
+  exportStatus.value = t('views.run.interviews.survey.exported', { n: g.answers.length })
 }
 
 // --- Senden ------------------------------------------------------------------
@@ -175,6 +206,21 @@ async function send() {
       <p class="cpane__count" data-testid="group-count">
         {{ t('views.run.interviews.pane.groupCount', { answered: answeredCount, total: group.answers.length }) }}
       </p>
+      <div class="cpane__export">
+        <button
+          v-if="answeredCount > 0"
+          type="button"
+          class="cpane__copy"
+          data-testid="group-export-csv"
+          @click="exportGroupCsv"
+        >
+          {{ t('views.run.interviews.survey.exportCsv') }}
+        </button>
+        <p v-else class="cpane__hint" data-testid="group-export-none">
+          {{ t('views.run.interviews.survey.nothingToExport') }}
+        </p>
+        <p class="cpane__sr" role="status" aria-live="polite" data-testid="group-export-status">{{ answeredCount > 0 ? exportStatus : '' }}</p>
+      </div>
       <ul class="cpane__grid" data-testid="group-answers">
         <li v-for="a in group.answers" :key="a.agentId" class="cpane__cell">
           <div v-if="a.error" class="cpane__sim cpane__sim--error" role="alert" data-testid="group-answer-error">
@@ -374,6 +420,11 @@ async function send() {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+.cpane__export {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .cpane__form {
   display: flex;

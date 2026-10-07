@@ -2380,6 +2380,15 @@
           "modelUnknown": "Modell des Laufs: unbekannt",
           "send": "Fragen",
           "notRun": "Fragen sind erst nach abgeschlossener Simulation möglich."
+        },
+        "survey": {
+          "selectAll": "Alle auswählen",
+          "clear": "Alle abwählen",
+          "selected": "Keine Persona ausgewählt | Eine von {total} Personas ausgewählt | {n} von {total} Personas ausgewählt",
+          "blocked": "Umfragen sind erst nach abgeschlossener Simulation möglich.",
+          "exportCsv": "Als CSV exportieren",
+          "exported": "CSV mit {n} Zeilen exportiert.",
+          "nothingToExport": "Keine Antwort zum Exportieren: Alle Personas haben fehlgeschlagen oder nicht geantwortet."
         }
       },
       "simFeed": {

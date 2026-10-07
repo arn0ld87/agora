@@ -55,6 +55,13 @@ const canSendGroup = computed(
   () => props.canAsk && groupIds.value.length > 0 && groupText.value.trim() !== '' && !ctx.sending.value,
 )
 
+function selectAll() {
+  groupIds.value = props.personas.map((p) => p.personaId)
+}
+function clearAll() {
+  groupIds.value = []
+}
+
 async function sendGroup() {
   if (!canSendGroup.value) return
   const out = await ctx.askGroup(groupIds.value.map(Number), groupText.value)
@@ -132,8 +139,22 @@ function groupLabel(question: string): string {
         </button>
       </h3>
       <div v-show="groupOpen" :id="`${groupTextId}-panel`" class="clist__panel">
+        <p v-if="!canAsk" class="clist__hint" role="status" data-testid="group-blocked">
+          {{ t('views.run.interviews.survey.blocked') }}
+        </p>
         <fieldset class="clist__fieldset">
           <legend class="clist__label">{{ t('views.run.interviews.group.personas') }}</legend>
+          <div class="clist__row">
+            <button type="button" class="clist__btn clist__btn--ghost" data-testid="group-select-all" @click="selectAll">
+              {{ t('views.run.interviews.survey.selectAll') }}
+            </button>
+            <button type="button" class="clist__btn clist__btn--ghost" data-testid="group-clear" @click="clearAll">
+              {{ t('views.run.interviews.survey.clear') }}
+            </button>
+          </div>
+          <p class="clist__hint" role="status" aria-live="polite" data-testid="group-selected">
+            {{ t('views.run.interviews.survey.selected', { n: groupIds.length, total: personas.length }, groupIds.length) }}
+          </p>
           <div v-for="p in personas" :key="p.personaId" class="clist__check">
             <input :id="`${groupTextId}-p${p.personaId}`" v-model="groupIds" type="checkbox" :value="p.personaId" />
             <label :for="`${groupTextId}-p${p.personaId}`">{{ p.name }}</label>
@@ -206,6 +227,7 @@ function groupLabel(question: string): string {
 .clist__item:focus-visible,
 .clist__btn:focus-visible,
 .clist__toggle:focus-visible,
+.clist__check input:focus-visible,
 .clist__field:focus-visible {
   outline: 2px solid var(--acc);
   outline-offset: 2px;
@@ -273,6 +295,16 @@ function groupLabel(question: string): string {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+}
+.clist__btn--ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--fg);
+}
+.clist__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .clist__btn:disabled {
   opacity: 0.5;

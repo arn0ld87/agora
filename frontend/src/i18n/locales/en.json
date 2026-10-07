@@ -2380,6 +2380,15 @@
           "modelUnknown": "Run model: unknown",
           "send": "Ask",
           "notRun": "Questions are only possible once the simulation has finished."
+        },
+        "survey": {
+          "selectAll": "Select all",
+          "clear": "Clear selection",
+          "selected": "No persona selected | One of {total} personas selected | {n} of {total} personas selected",
+          "blocked": "Surveys are only possible once the simulation has finished.",
+          "exportCsv": "Export as CSV",
+          "exported": "CSV with {n} rows exported.",
+          "nothingToExport": "No answer to export: every persona failed or did not answer."
         }
       },
       "simFeed": {
