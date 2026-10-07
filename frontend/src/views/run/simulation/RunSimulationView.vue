@@ -8,6 +8,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import RunSimHeader from '@/components/run/simulation/RunSimHeader.vue'
 import { usePersonasReady } from '@/composables/run/simulation/usePersonasReady'
+import { provideSimulationRunState } from '@/composables/run/simulation/useSimulationRunStateContext'
 import { useRunWorkspaceContext } from '@/composables/run/useRunWorkspace'
 import { clearSimFeed } from '@/composables/useSimFeed'
 import { clearSimClock } from '@/composables/useSimClock'
@@ -19,6 +20,9 @@ const route = useRoute()
 const workspace = useRunWorkspaceContext()
 const personasReady = usePersonasReady()
 const simulationJob = computed(() => workspace.data.value?.jobs.simulation_run ?? null)
+
+// Eine Instanz für Kopf, Feed und Runden: ein SSE-Strom und ein Polling je Lauf.
+provideSimulationRunState(() => props.simulationId, { runId: () => simulationJob.value?.runId ?? null })
 
 /** Start, Stopp, Pause oder Fortsetzen ist durch: Stufenstand des Arbeitsbereichs neu laden. */
 function reloadWorkspace(): void {

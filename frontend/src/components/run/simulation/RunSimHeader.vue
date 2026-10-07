@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from 'reka-ui'
 import RunStateMark from '@/components/run/RunStateMark.vue'
-import { useSimulationRunState } from '@/composables/run/simulation/useSimulationRunState'
+import { useSimulationRunStateContext } from '@/composables/run/simulation/useSimulationRunStateContext'
 import { useSimulationControl } from '@/composables/run/simulation/useSimulationControl'
 import { formatCostMicros } from '@/utils/format'
 
@@ -44,7 +44,7 @@ const emit = defineEmits<{
 const { t, te, locale } = useI18n()
 
 const idRef = toRef(props, 'simulationId')
-const state = useSimulationRunState(() => idRef.value, { runId: () => props.runId })
+const state = useSimulationRunStateContext(() => idRef.value, { runId: () => props.runId })
 const control = useSimulationControl(() => idRef.value)
 
 const kind = state.stateKind

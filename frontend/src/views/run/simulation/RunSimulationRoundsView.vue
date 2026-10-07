@@ -9,7 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getSimulationRounds } from '@/api/simulation'
 import { readEnvelope, describeError } from '@/composables/run/simulation/simulationEnvelope'
-import { useSimulationRunState } from '@/composables/run/simulation/useSimulationRunState'
+import { useSimulationRunStateContext } from '@/composables/run/simulation/useSimulationRunStateContext'
 import { RoundsResponseSchema, type RoundSummary } from '@/contracts/simActionContract'
 import RoundsActionsToggle, { type RoundsView } from '@/components/run/simulation/RoundsActionsToggle.vue'
 import RoundsList from '@/components/run/simulation/RoundsList.vue'
@@ -20,7 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
-const state = useSimulationRunState(() => props.simulationId)
+const state = useSimulationRunStateContext(() => props.simulationId)
 
 const view = computed<RoundsView>(() => (route.query.view === 'actions' ? 'actions' : 'rounds'))
 function setView(next: RoundsView): void {

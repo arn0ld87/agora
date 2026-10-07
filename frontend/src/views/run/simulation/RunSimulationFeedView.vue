@@ -20,7 +20,7 @@ import TwitterCard from '@/components/run/simulation/TwitterCard.vue'
 import { FEED_SNAPSHOT_LIMIT, useRunFeed } from '@/composables/run/simulation/useRunFeed'
 import { useRunPersonas } from '@/composables/run/simulation/useRunPersonas'
 import { usePersonasReady } from '@/composables/run/simulation/usePersonasReady'
-import { useSimulationRunState } from '@/composables/run/simulation/useSimulationRunState'
+import { useSimulationRunStateContext } from '@/composables/run/simulation/useSimulationRunStateContext'
 import {
   buildRedditList,
   buildTwitterTimeline,
@@ -41,7 +41,7 @@ const personasReady = usePersonasReady()
 const idRef = toRef(props, 'simulationId')
 const feed = useRunFeed(idRef)
 const personas = useRunPersonas(idRef)
-const runState = useSimulationRunState(() => props.simulationId)
+const runState = useSimulationRunStateContext(() => props.simulationId)
 
 const network = computed<FeedNetwork>(() => (props.network === 'reddit' ? 'reddit' : 'twitter'))
 
