@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import sqlite3
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -25,6 +26,7 @@ from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner
+from ..services.sim.snapshot_rounds import ActionRef, SnapshotRoundIndex, load_round_index
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
@@ -479,6 +481,8 @@ def _build_snapshot_event(
     quote_body: Optional[str] = None,
     parent_persona_id: Optional[str] = None,
     parent_persona_name: Optional[str] = None,
+    round_num: Optional[int] = None,
+    parent_comment_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Baut ein validiertes PostCreatedEvent-Dict oder None bei unbrauchbaren Daten.
 
@@ -518,11 +522,13 @@ def _build_snapshot_event(
         timestamp=timestamp,
         score=score,
         kind=PostKind(kind) if kind else None,
-        # Der Snapshot liest aus der SQLite-Post-/Comment-Tabelle — dort ist
-        # keine Runde persistiert (anders als im Live-Emit ueber die
-        # trace-Tabelle). None statt eines erfundenen Werts.
-        round_num=None,
-        parent_comment_id=None,
+        # Die SQLite-Post-/Comment-Tabelle kennt keine Runde. Der Aufrufer
+        # leitet sie nur ueber eindeutige Schluessel aus dem Aktionsprotokoll
+        # ab (``snapshot_rounds``), sonst bleibt sie None — nie geschaetzt.
+        # ``parent_comment_id`` stammt aus der comment-Spalte, die der
+        # nested-comments-Wrapper (#1713 S5) anlegt; Altlaeufe haben sie nicht.
+        round_num=round_num,
+        parent_comment_id=parent_comment_id,
         root_post_id=root_post_id,
         quoted_post_id=quoted_post_id,
         reposted_post_id=reposted_post_id,
@@ -590,6 +596,115 @@ def _derive_post_reference_fields(
     }
 
 
+def _post_action_ref(
+    row: Any,
+    rounds: SnapshotRoundIndex,
+    original_row_counts: "Counter[tuple[Optional[int], str]]",
+) -> Optional[ActionRef]:
+    """Protokoll-Zuordnung einer ``post``-Zeile; None, wenn sie nicht belegt ist."""
+    if row["original_post_id"] is not None:
+        return rounds.reference(row["post_id"])
+    content = row["content"] or ""
+    return rounds.original_post(
+        row["agent_id"], content, original_row_counts[(row["agent_id"], content)]
+    )
+
+
+def _effective_created_at(raw: Any, ref: Optional[ActionRef]) -> Any:
+    """DB-Zeitstempel, ersatzweise Protokollzeitpunkt der zugeordneten Aktion.
+
+    Twitter-DBs speichern den OASIS-Zeitschritt als Ganzzahl statt eines
+    Datums; ohne Ersatz wuerde der Snapshot jede Zeile verwerfen.
+    """
+    if _parse_created_at_tz(raw) is not None or ref is None or ref.timestamp is None:
+        return raw
+    return ref.timestamp
+
+
+def _comment_parent_column_present(cur: sqlite3.Cursor) -> bool:
+    """True, wenn ``comment.parent_comment_id`` existiert (nested-comments, #1713 S5)."""
+    return any(
+        col["name"] == "parent_comment_id"
+        for col in cur.execute("PRAGMA table_info(comment)").fetchall()
+    )
+
+
+def _build_comment_events(
+    cur: sqlite3.Cursor,
+    *,
+    simulation_id: str,
+    platform: str,
+    profiles: Dict[int, Dict[str, Any]],
+    author_by_post_id: Dict[int, "tuple[Optional[int], Optional[str]]"],
+    rounds: SnapshotRoundIndex,
+) -> list[Dict[str, Any]]:
+    """``comment``-Zeilen -> PostCreatedEvents (Reddit und Twitter).
+
+    Ohne ``comment``-Tabelle liefert der Snapshot nur Posts.
+    """
+    try:
+        has_parent = _comment_parent_column_present(cur)
+        # Zwei statische Abfragen statt String-Zusammenbau (kein dynamisches SQL).
+        if has_parent:
+            cur.execute(
+                "SELECT c.comment_id, c.post_id, c.user_id, c.content, "
+                "c.created_at, c.num_likes, c.num_dislikes, u.agent_id, u.name, "
+                "c.parent_comment_id "
+                "FROM comment c LEFT JOIN user u ON c.user_id = u.user_id "
+                "ORDER BY c.created_at ASC",
+            )
+        else:
+            cur.execute(
+                "SELECT c.comment_id, c.post_id, c.user_id, c.content, "
+                "c.created_at, c.num_likes, c.num_dislikes, u.agent_id, u.name "
+                "FROM comment c LEFT JOIN user u ON c.user_id = u.user_id "
+                "ORDER BY c.created_at ASC",
+            )
+        rows = cur.fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+    events: list[Dict[str, Any]] = []
+    for row in rows:
+        parent_post_id = f"{platform}:{row['post_id']}"
+        # Autor des Elternposts fuer die Kontextzeile im Feed ("Antwort an
+        # @..."), #1713 UI-2a — wie im Live-Emit der Post-Autor, auch bei
+        # verschachtelten Kommentaren.
+        parent_agent_id, parent_name = author_by_post_id.get(row["post_id"], (None, None))
+        parent_comment_id = row["parent_comment_id"] if has_parent else None
+        ref = rounds.comment(row["comment_id"])
+        ev = _build_snapshot_event(
+            simulation_id=simulation_id,
+            platform=platform,
+            post_id_prefixed=f"{platform}:comment:{row['comment_id']}",
+            parent_post_id=parent_post_id,
+            user_id=row["user_id"],
+            agent_id=row["agent_id"],
+            user_name=row["name"],
+            body=row["content"] or "",
+            created_at=_effective_created_at(row["created_at"], ref),
+            num_likes=row["num_likes"] or 0,
+            num_dislikes=row["num_dislikes"] or 0,
+            profiles=profiles,
+            kind="comment",
+            root_post_id=parent_post_id,
+            parent_persona_id=str(parent_agent_id) if parent_agent_id is not None else None,
+            parent_persona_name=parent_name,
+            round_num=ref.round_num if ref else None,
+            parent_comment_id=str(parent_comment_id) if parent_comment_id is not None else None,
+        )
+        if ev is not None:
+            events.append(ev)
+    if len(events) < len(rows):
+        logger.warning(
+            "Feed-Snapshot %s/%s: %d Kommentare ohne verwertbaren Zeitstempel oder Text ausgelassen",
+            simulation_id,
+            platform,
+            len(rows) - len(events),
+        )
+    return events
+
+
 def _build_feed_snapshot(
     simulation_id: str,
     platform: str,
@@ -601,6 +716,9 @@ def _build_feed_snapshot(
         return []
 
     profiles = _load_profiles_by_user_id(simulation_id, platform)
+    rounds = load_round_index(
+        ArtifactLocator.simulation_file(simulation_id, f"{platform}/actions.jsonl")
+    )
     events: list[Dict[str, Any]] = []
     conn = _connect_sqlite_readonly(db_path)
     try:
@@ -620,8 +738,14 @@ def _build_feed_snapshot(
             author_by_post_id: Dict[int, tuple[Optional[int], Optional[str]]] = {
                 row["post_id"]: (row["agent_id"], row["name"]) for row in post_rows
             }
+            original_row_counts = Counter(
+                (row["agent_id"], row["content"] or "")
+                for row in post_rows
+                if row["original_post_id"] is None
+            )
             for row in post_rows:
                 ref = _derive_post_reference_fields(row, author_by_post_id, platform)
+                action_ref = _post_action_ref(row, rounds, original_row_counts)
                 ev = _build_snapshot_event(
                     simulation_id=simulation_id,
                     platform=platform,
@@ -631,7 +755,7 @@ def _build_feed_snapshot(
                     agent_id=row["agent_id"],
                     user_name=row["name"],
                     body=ref["body"],
-                    created_at=row["created_at"],
+                    created_at=_effective_created_at(row["created_at"], action_ref),
                     num_likes=row["num_likes"] or 0,
                     num_dislikes=row["num_dislikes"] or 0,
                     profiles=profiles,
@@ -642,56 +766,34 @@ def _build_feed_snapshot(
                     quote_body=ref["quote_body"],
                     parent_persona_id=ref["parent_persona_id"],
                     parent_persona_name=ref["parent_persona_name"],
+                    round_num=action_ref.round_num if action_ref else None,
                 )
                 if ev is not None:
                     events.append(ev)
+            if len(events) < len(post_rows):
+                logger.warning(
+                    "Feed-Snapshot %s/%s: %d Posts ohne verwertbaren Zeitstempel oder Text ausgelassen",
+                    simulation_id,
+                    platform,
+                    len(post_rows) - len(events),
+                )
         except sqlite3.OperationalError:
             return []
 
-        # Reddit ist die Kommentar-Plattform; Kommentare hängen unter ihrem
-        # Elternpost und füllen den Reply-Tree (#1216 5c).
-        if platform == "reddit":
-            try:
-                cur.execute(
-                    "SELECT c.comment_id, c.post_id, c.user_id, c.content, "
-                    "c.created_at, c.num_likes, c.num_dislikes, u.agent_id, u.name "
-                    "FROM comment c LEFT JOIN user u ON c.user_id = u.user_id "
-                    "ORDER BY c.created_at ASC",
-                )
-                for row in cur.fetchall():
-                    parent_post_id = f"{platform}:{row['post_id']}"
-                    # Elternpost-Autor fuer die Kontextzeile im Feed
-                    # ("Antwort an @..."), #1713 UI-2a. Reddit kennt bislang
-                    # nur eine Verschachtelungsebene — der Elternpost ist
-                    # immer ein echter Post, kein Kommentar.
-                    parent_agent_id, parent_name = author_by_post_id.get(
-                        row["post_id"], (None, None)
-                    )
-                    ev = _build_snapshot_event(
-                        simulation_id=simulation_id,
-                        platform=platform,
-                        post_id_prefixed=f"{platform}:comment:{row['comment_id']}",
-                        parent_post_id=parent_post_id,
-                        user_id=row["user_id"],
-                        agent_id=row["agent_id"],
-                        user_name=row["name"],
-                        body=row["content"] or "",
-                        created_at=row["created_at"],
-                        num_likes=row["num_likes"] or 0,
-                        num_dislikes=row["num_dislikes"] or 0,
-                        profiles=profiles,
-                        kind="comment",
-                        root_post_id=parent_post_id,
-                        parent_persona_id=(
-                            str(parent_agent_id) if parent_agent_id is not None else None
-                        ),
-                        parent_persona_name=parent_name,
-                    )
-                    if ev is not None:
-                        events.append(ev)
-            except sqlite3.OperationalError:
-                # Ohne comment-Tabelle liefert der Snapshot nur Posts.
-                pass
+        # Kommentare haengen unter ihrem Elternpost und fuellen den Reply-Tree
+        # (#1216 5c). Reddit kennt sie immer; Twitter erst seit #1713 S5
+        # (CREATE_COMMENT freigeschaltet) — aeltere Twitter-Laeufe haben nur
+        # eine leere comment-Tabelle bzw. gar keine.
+        events.extend(
+            _build_comment_events(
+                cur,
+                simulation_id=simulation_id,
+                platform=platform,
+                profiles=profiles,
+                author_by_post_id=author_by_post_id,
+                rounds=rounds,
+            )
+        )
     finally:
         conn.close()
 
