@@ -87,7 +87,7 @@ def _load_attributes(props: Dict[str, Any]) -> Dict[str, Any]:
     raw = props.get("attributes_json") or "{}"
     try:
         value = json.loads(raw)
-    except json.JSONDecodeError, TypeError:
+    except (json.JSONDecodeError, TypeError):
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -114,7 +114,7 @@ class Neo4jEditMixin:
 
         def _call_with_retry[T](self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T: ...
 
-    # ── Hilfen ──────────────────────────────────────────────────────
+    # ── Hilfen ─────────────────────────────────────────────────────────────
 
     def edit_property_keys(self) -> Tuple[str, str]:
         """Aktive Property-Namen für Entitäts- und Fakt-Einbettung."""
@@ -129,7 +129,7 @@ class Neo4jEditMixin:
         """Einbettung über den Embedding-Dienst des Storage (derselbe wie in der Ingestion)."""
         return self._embedding.embed_batch(texts)
 
-    # ── Lesen ───────────────────────────────────────────────────────
+    # ── Lesen ──────────────────────────────────────────────────────────────
 
     def edit_get_entity(self, graph_id: str, entity_uuid: str) -> Optional[Dict[str, Any]]:
         def _read(tx: Any) -> Optional[Dict[str, Any]]:
@@ -160,7 +160,7 @@ class Neo4jEditMixin:
         with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
-    # ── Entitäten ───────────────────────────────────────────────────
+    # ── Entitäten ──────────────────────────────────────────────────────────
 
     def edit_create_entity(
         self,
@@ -183,7 +183,11 @@ class Neo4jEditMixin:
         Ein bestehender Knoten mit gleichem (``graph_id``, ``name_lower``,
         ``entity_type``) aber anderer UUID ist eine Kollision.
         """
-        attributes = {ALIASES_KEY: _merge_aliases(aliases, exclude_name=name)} if aliases else {}
+        merged_aliases = _merge_aliases(aliases, exclude_name=name) if aliases else []
+        if merged_aliases:
+            attributes = {ALIASES_KEY: merged_aliases}
+        else:
+            attributes = {}
         safe_label = sanitize_label(entity_type)
 
         def _create(tx: Any) -> Tuple[Dict[str, Any], bool]:
@@ -323,8 +327,11 @@ class Neo4jEditMixin:
                 merged = _merge_aliases(aliases, exclude_name=new_name)
                 if merged:
                     attributes[ALIASES_KEY] = merged
+                    attributes["aliases"] = merged
                 else:
                     attributes.pop(ALIASES_KEY, None)
+                    attributes.pop("aliases", None)
+                    attributes.pop("alias", None)
                 sets.append("n.attributes_json = $attrs_json")
                 params["attrs_json"] = json.dumps(attributes, ensure_ascii=False)
             if embedding is not None:
@@ -475,16 +482,27 @@ class Neo4jEditMixin:
             source_aliases = [
                 alias
                 for uid in source_uuids
-                for alias in _load_attributes(nodes[uid]).get(ALIASES_KEY, [])
+                for alias in (
+                    _load_attributes(nodes[uid]).get(ALIASES_KEY)
+                    or _load_attributes(nodes[uid]).get("aliases")
+                    or _load_attributes(nodes[uid]).get("alias")
+                    or []
+                )
+                if isinstance(alias, str)
             ]
             merged_aliases = _merge_aliases(
-                attributes.get(ALIASES_KEY, []),
+                attributes.get(ALIASES_KEY) or attributes.get("aliases") or attributes.get("alias") or [],
                 source_names,
                 source_aliases,
                 exclude_name=target_name,
             )
             if merged_aliases:
                 attributes[ALIASES_KEY] = merged_aliases
+                attributes["aliases"] = merged_aliases
+            else:
+                attributes.pop(ALIASES_KEY, None)
+                attributes.pop("aliases", None)
+                attributes.pop("alias", None)
 
             tx.run(
                 "MATCH (n:Entity {graph_id: $gid}) WHERE n.uuid IN $sources DETACH DELETE n",
@@ -517,7 +535,7 @@ class Neo4jEditMixin:
         with self._get_session() as session:
             return self._call_with_retry(session.execute_write, _merge)
 
-    # ── Beziehungen ─────────────────────────────────────────────────
+    # ── Beziehungen ────────────────────────────────────────────────────────
 
     def edit_create_relation(
         self,

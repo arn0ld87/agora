@@ -103,6 +103,13 @@ describe('GraphEditDetail', () => {
     ])
   })
 
+  it('bietet Typen aus der Ontologie im Typauswahl-Feld an', () => {
+    const wrapper = mountDetail({ mode: 'create-entity', ontologyTypes: ['SpezialRolle', 'Ort'] })
+    const form = wrapper.get(`[data-testid="${GraphEditTestId.entityForm}"]`)
+    const options = form.get(`[data-testid="${GraphEditTestId.entityType}"]`).findAll('option')
+    expect(options.map((o) => o.text())).toContain('SpezialRolle')
+  })
+
   it('verlangt beim Anlegen von Hand eine Typauswahl und einen Namen', async () => {
     const wrapper = mountDetail({ mode: 'create-entity' })
     const submit = wrapper.get(`[data-testid="${GraphEditTestId.entitySubmit}"]`)

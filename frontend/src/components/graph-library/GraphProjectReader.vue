@@ -35,6 +35,24 @@ const notice = computed(() =>
   props.state.kind === 'ready' && props.state.incomplete ? t('views.graphLibrary.state.incomplete') : null,
 )
 const percent = computed(() => (props.state.kind === 'building' ? props.state.progress : null))
+
+function extractOntologyTypes(ontology: Record<string, unknown> | null | undefined): string[] {
+  if (!ontology) return []
+  const raw = ontology.entity_types
+  if (!Array.isArray(raw)) return []
+  const types: string[] = []
+  for (const item of raw) {
+    if (typeof item === 'string' && item.trim()) {
+      types.push(item.trim())
+    } else if (item && typeof item === 'object' && 'name' in item && typeof (item as { name?: unknown }).name === 'string') {
+      const name = (item as { name: string }).name.trim()
+      if (name) types.push(name)
+    }
+  }
+  return types
+}
+
+const ontologyTypes = computed(() => extractOntologyTypes(props.project?.ontology))
 </script>
 
 <template>
@@ -92,6 +110,7 @@ const percent = computed(() => (props.state.kind === 'building' ? props.state.pr
         v-if="editable && model && graphData"
         :model="model"
         :graph-data="graphData"
+        :ontology-types="ontologyTypes"
         :notice="notice"
         :graph-name="project?.name ?? null"
         @changed="emit('changed')"

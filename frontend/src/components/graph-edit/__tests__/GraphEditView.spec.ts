@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const api = vi.hoisted(() => ({
   getGraphLock: vi.fn(),
+  getGraphOntology: vi.fn(),
   createEntity: vi.fn(),
   updateEntity: vi.fn(),
   deleteEntity: vi.fn(),
@@ -57,6 +58,7 @@ async function mountView(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset()
   api.getGraphLock.mockResolvedValue({ graph_id: editableGraphFixture().graph_id, locked: false, used_by: [] })
+  api.getGraphOntology.mockResolvedValue({ ontology: null, entity_types: ['Person', 'Organization'] })
 })
 
 describe('GraphEditView', () => {

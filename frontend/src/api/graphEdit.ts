@@ -35,6 +35,7 @@ import {
   GraphLockUserSchema,
   GraphNodeViewSchema,
   GraphEdgeViewSchema,
+  GraphOntologyResponseSchema,
   RelationCreateSchema,
   RelationDeleteResultSchema,
   RelationUpdateSchema,
@@ -48,6 +49,7 @@ import {
   type GraphLockState,
   type GraphLockUser,
   type GraphNodeView,
+  type GraphOntologyResponse,
   type RelationCreateInput,
   type RelationDeleteResult,
   type RelationUpdateInput,
@@ -233,6 +235,10 @@ export function getGraphLock(graphId: string): Promise<GraphLockState> {
   return call(() => service.get(`${base(graphId)}/lock`), GraphLockStateSchema, 'graph/lock')
 }
 
+export function getGraphOntology(graphId: string): Promise<GraphOntologyResponse> {
+  return call(() => service.get(`${base(graphId)}/ontology`), GraphOntologyResponseSchema, 'graph/ontology')
+}
+
 export type EntityCreateArgs = Omit<EntityCreateInput, 'client_request_id'> & { client_request_id?: string }
 export type RelationCreateArgs = Omit<RelationCreateInput, 'client_request_id'> & { client_request_id?: string }
 
@@ -318,7 +324,7 @@ export type GraphDuplicateArgs = { name: string; client_request_id?: string }
  * der Bestand ist aber erst bei `status='completed'` vollständig.
  *
  * Ohne `client_request_id` erzeugt der Client eine; wer einen Versuch wiederholt,
- * übergibt dieselbe und bekommt denselben Auftrag statt einer zweiten Kopie.
+ * übergibt dieselbe `client_request_id`.
  */
 export async function duplicateGraph(graphId: string, args: GraphDuplicateArgs): Promise<GraphDuplicateJob> {
   const body = parseInput(

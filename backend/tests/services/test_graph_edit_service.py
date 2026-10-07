@@ -119,7 +119,7 @@ def _service(storage=None, *, locked=False, migrating=False):
     ), storage
 
 
-# ── Sperre und Migration ────────────────────────────────────────────────
+# ── Sperre und Migration ───────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -154,7 +154,7 @@ class TestEveryWriteIsGuarded:
         assert storage.embedded == []
 
 
-# ── Entitäten ────────────────────────────────────────────────────────────
+# ── Entitäten ──────────────────────────────────────────────────────────────
 
 
 class TestCreateEntity:
@@ -353,7 +353,7 @@ class TestUpdateEntity:
         assert storage.embedded == ["Anonym ()"]
 
     def test_no_change_returns_the_unmodified_record_without_embedding(self):
-        """Der Frühausstieg kostet weder Schreibzugriff noch Einbettung."""
+        """Der Frühaufstieg kostet weder Schreibzugriff noch Einbettung."""
         service, storage = _service()
         view = service.update_entity(GID, U1, EntityUpdate(summary="Alex (Person)"))
         assert storage.calls == []
@@ -390,7 +390,7 @@ class TestDeleteAndMerge:
         assert result.target.provenance.origin == "edited"
 
 
-# ── Beziehungen ──────────────────────────────────────────────────────────
+# ── Beziehungen ────────────────────────────────────────────────────────────
 
 
 class TestRelations:
@@ -423,3 +423,30 @@ class TestRelations:
         service, storage = _service()
         assert service.delete_relation(GID, U2).uuid == U2
         assert storage.calls[0][0] == "delete_relation"
+
+
+# ── Ontologie & Aliase ─────────────────────────────────────────────────────
+
+
+def test_get_allowed_entity_types_sorted_and_filtered():
+    storage = _FakeStorage()
+    storage.ontology = {
+        "entity_types": [
+            {"name": "Organization"},
+            {"name": "Person"},
+            {"name": ""},
+            {"name": "Entity"},  # invalid label, filtered
+            {"name": "Organization"},  # duplicate
+        ]
+    }
+    service, _ = _service(storage)
+    types = service.get_allowed_entity_types(GID)
+    assert types == ["Organization", "Person"]
+
+
+def test_alias_fallback_reading_in_update_entity():
+    storage = _FakeStorage()
+    storage.entity = _node(attributes={"aliases": ["Alt1", "Alt2"]})
+    service, _ = _service(storage)
+    service.update_entity(GID, U1, EntityUpdate(summary="neue summary"))
+    assert storage.calls[0][1]["aliases"] is None  # unchanged

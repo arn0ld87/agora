@@ -26,6 +26,7 @@ const props = defineProps<{
   relation: ReaderRelation | null
   entities: readonly ReaderEntity[]
   relations: readonly ReaderRelation[]
+  ontologyTypes?: readonly string[]
   editable: boolean
   busy: boolean
   mode: EditMode
@@ -56,7 +57,10 @@ const confirmingEntityDelete = ref(false)
 
 const typeOptions = computed(() => {
   const seen: string[] = []
-  for (const entity of props.entities) if (!seen.includes(entity.type)) seen.push(entity.type)
+  if (props.ontologyTypes) {
+    for (const t of props.ontologyTypes) if (t && !seen.includes(t)) seen.push(t)
+  }
+  for (const entity of props.entities) if (entity.type && !seen.includes(entity.type)) seen.push(entity.type)
   return seen
 })
 

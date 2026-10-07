@@ -131,13 +131,17 @@ function stamp(value: string | number | null | undefined): string | null {
 }
 
 function aliasesOf(attributes: Record<string, unknown> | null | undefined): string[] {
-  const raw = attributes?.['aliases'] ?? attributes?.['alias']
+  const raw = attributes?.['aliases'] ?? attributes?.['alias'] ?? attributes?.['_agora_aliases']
   if (Array.isArray(raw)) return raw.filter((a): a is string => typeof a === 'string' && a.length > 0)
   if (typeof raw === 'string' && raw.length > 0) return [raw]
   return []
 }
 
-export function typeOfNode(labels: readonly string[] | null | undefined): string {
+export function typeOfNode(
+  labels?: readonly string[] | null,
+  entityType?: string | null,
+): string {
+  if (entityType && entityType.trim()) return entityType.trim()
   return labels?.find((label) => label !== 'Entity') || 'Entity'
 }
 
@@ -168,7 +172,7 @@ export function buildReaderModel(data: GraphData): ReaderModel {
   const entities: ReaderEntity[] = data.nodes.map((node) => ({
     id: node.uuid,
     name: node.name || node.uuid,
-    type: typeOfNode(node.labels),
+    type: typeOfNode(node.labels, (node as { entity_type?: string | null }).entity_type),
     summary: node.summary || '',
     aliases: aliasesOf(node.attributes),
     createdAt: stamp(node.created_at),

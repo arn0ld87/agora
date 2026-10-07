@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GraphDataSchema, buildReaderModel } from '../graphReaderModel'
+import { GraphDataSchema, buildReaderModel, typeOfNode } from '../graphReaderModel'
 
 const base = {
   graph_id: 'g1',
@@ -45,5 +45,38 @@ describe('GraphDataSchema — Herkunft (#1808)', () => {
       ],
     })
     expect(parsed.nodes[0].provenance?.origin).toBeNull()
+  })
+})
+
+
+describe('typeOfNode und aliasesOf (#1808 / Codex findings)', () => {
+  it('bevorzugt entity_type gegenueber labels', () => {
+    expect(typeOfNode(['Entity', 'Fallback'], 'Prioritaet')).toBe('Prioritaet')
+    expect(typeOfNode(['Entity', 'Fallback'], '')).toBe('Fallback')
+    expect(typeOfNode(['Entity'], null)).toBe('Entity')
+  })
+
+  it('liest Aliase aus _agora_aliases, aliases und alias', () => {
+    const dataWithAgoraAliases = GraphDataSchema.parse({
+      ...base,
+      nodes: [
+        {
+          ...base.nodes[0],
+          attributes: { _agora_aliases: ['Alpha', 'Beta'] },
+        },
+      ],
+    })
+    expect(buildReaderModel(dataWithAgoraAliases).entities[0].aliases).toEqual(['Alpha', 'Beta'])
+
+    const dataWithSingleAlias = GraphDataSchema.parse({
+      ...base,
+      nodes: [
+        {
+          ...base.nodes[0],
+          attributes: { alias: 'Gamma' },
+        },
+      ],
+    })
+    expect(buildReaderModel(dataWithSingleAlias).entities[0].aliases).toEqual(['Gamma'])
   })
 })

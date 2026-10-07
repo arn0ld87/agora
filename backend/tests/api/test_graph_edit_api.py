@@ -145,7 +145,7 @@ def _create_body(**kw):
     return body
 
 
-# ── Erfolg ───────────────────────────────────────────────────────────────
+# ── Erfolg ─────────────────────────────────────────────────────────────────
 
 
 def test_create_entity_returns_201_with_manual_provenance(client):
@@ -237,7 +237,17 @@ def test_lock_endpoint_reports_free_and_locked(client, monkeypatch):
     assert data["used_by"][0]["simulation_id"] == "sim_0123456789ab"
 
 
-# ── Validierungsfehler ───────────────────────────────────────────────────
+def test_get_graph_ontology(client):
+    response = client.get(f"/api/graph/{GID}/ontology")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["success"] is True
+    assert "entity_types" in data["data"]
+    assert "Person" in data["data"]["entity_types"]
+    assert "Organization" in data["data"]["entity_types"]
+
+
+# ── Validierungsfehler ─────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -289,7 +299,7 @@ def test_unknown_entity_returns_404(client):
     assert response.get_json()["code"] == "not_found"
 
 
-# ── Sperre, Kollision, Migration, Einbettung ─────────────────────────────
+# ── Sperre, Kollision, Migration, Einbettung ───────────────────────────────
 
 
 def test_locked_graph_returns_409_for_every_write(client, storage, monkeypatch):

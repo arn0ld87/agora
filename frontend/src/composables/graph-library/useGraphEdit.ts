@@ -20,6 +20,7 @@ import {
   createRelation,
   deleteEntity,
   deleteRelation,
+  getGraphOntology,
   mergeEntities,
   updateEntity,
   updateRelation,
@@ -73,6 +74,19 @@ export function useGraphEdit(
 ) {
   const busy = ref(false)
   const error = ref<GraphEditFailure | null>(null)
+  const ontologyTypes = ref<string[]>([])
+
+  async function loadOntologyTypes(): Promise<string[]> {
+    const id = toValue(graphId)
+    if (!id) return []
+    try {
+      const response = await getGraphOntology(id)
+      ontologyTypes.value = response.entity_types ?? []
+      return ontologyTypes.value
+    } catch {
+      return []
+    }
+  }
 
   async function run<T>(action: (id: string) => Promise<T>): Promise<T | null> {
     const id = toValue(graphId)
@@ -102,6 +116,8 @@ export function useGraphEdit(
     busy,
     error,
     clearError,
+    ontologyTypes,
+    loadOntologyTypes,
     createEntity: (args: EntityCreateArgs): Promise<GraphNodeView | null> => run((id) => createEntity(id, args)),
     updateEntity: (uuid: string, patch: EntityUpdateInput): Promise<GraphNodeView | null> =>
       run((id) => updateEntity(id, uuid, patch)),

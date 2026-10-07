@@ -22,6 +22,7 @@ import {
   duplicateGraph,
   getGraphDuplicateRun,
   getGraphLock,
+  getGraphOntology,
   mergeEntities,
   updateEntity,
   updateRelation,
@@ -46,6 +47,18 @@ function apiError(status: number, code: string, body: Record<string, unknown> = 
     originalResponse: { success: false, code, error: 'Meldung', ...body },
   })
 }
+
+describe('getGraphOntology', () => {
+  it('liest die Ontologie-Typen aus dem Endpunkt', async () => {
+    get.mockResolvedValue({
+      success: true,
+      data: { ontology: null, entity_types: ['Person', 'Organization'] },
+    })
+    const res = await getGraphOntology('g1')
+    expect(get).toHaveBeenCalledWith('/api/graph/g1/ontology')
+    expect(res.entity_types).toEqual(['Person', 'Organization'])
+  })
+})
 
 describe('getGraphLock', () => {
   it('liest den Sperrzustand durch das Schema', async () => {

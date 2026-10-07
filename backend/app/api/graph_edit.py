@@ -4,6 +4,7 @@ Graph API: Handänderungen und Sperrzustand (Issue #1808, ADR-0022).
 Routen unter ``/api/graph``:
 
 * ``GET    /<graph_id>/lock`` — Sperrzustand (Scope ``graph:read``)
+* ``GET    /<graph_id>/ontology`` — Ontologie und zulässige Entitätstypen (Scope ``graph:read``)
 * ``POST   /<graph_id>/entities`` — Entität anlegen (201, bei Wiederholung 200)
 * ``PATCH  /<graph_id>/entities/<uuid>`` — Entität ändern
 * ``DELETE /<graph_id>/entities/<uuid>`` — Entität samt Beziehungen löschen
@@ -119,6 +120,18 @@ def get_graph_lock(graph_id: str):
     if not validate_graph_id(graph_id):
         return _invalid_id()
     return json_success(get_graph_lock_state(graph_id).model_dump(mode="json"))
+
+
+@graph_bp.route("/<graph_id>/ontology", methods=["GET"])
+@require_scope("graph:read")
+@handle_api_errors
+def get_graph_ontology(graph_id: str):
+    """Liefert die Ontologie und zulässige Entitätstypen des Graphen."""
+    if not validate_graph_id(graph_id):
+        return _invalid_id()
+    types = _service().get_allowed_entity_types(graph_id)
+    ontology = get_container().neo4j_storage.get_ontology(graph_id) or {}
+    return json_success({"ontology": ontology, "entity_types": types})
 
 
 @graph_bp.route("/<graph_id>/entities", methods=["POST"])

@@ -3,6 +3,7 @@ import { nextTick, ref } from 'vue'
 
 const api = vi.hoisted(() => ({
   getGraphLock: vi.fn(),
+  getGraphOntology: vi.fn(),
   createEntity: vi.fn(),
   updateEntity: vi.fn(),
   deleteEntity: vi.fn(),
@@ -127,5 +128,14 @@ describe('useGraphEdit', () => {
     expect(await edit.deleteRelation(UUID_A)).toBeNull()
     expect(api.deleteRelation).not.toHaveBeenCalled()
     expect(edit.error.value?.kind).toBe('other')
+  })
+
+  it('loadOntologyTypes laedt Typen und setzt ontologyTypes', async () => {
+    api.getGraphOntology.mockResolvedValue({ ontology: null, entity_types: ['Person', 'Event'] })
+    const edit = useGraphEdit('g1')
+    expect(edit.ontologyTypes.value).toEqual([])
+    await edit.loadOntologyTypes()
+    expect(api.getGraphOntology).toHaveBeenCalledWith('g1')
+    expect(edit.ontologyTypes.value).toEqual(['Person', 'Event'])
   })
 })

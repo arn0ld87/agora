@@ -49,6 +49,7 @@ const LIST_CAP = 500
 const props = defineProps<{
   model: ReaderModel
   graphData: GraphData
+  ontologyTypes?: readonly string[]
   notice?: string | null
   /** Anzeigename des Graphen; Vorschlag fuer den Namen der Kopie. */
   graphName?: string | null
@@ -65,6 +66,30 @@ const edit = useGraphEdit(computed(() => props.model.graphId), lock)
 // Ausweg aus der Sperre. Der Auftrag laeuft als Hintergrundjob; die Ansicht
 // zeigt seinen Zustand, statt eine Kopie zu behaupten (Entscheid 3).
 const duplicate = useGraphDuplicate(computed(() => props.model.graphId))
+
+watch(
+  () => props.model.graphId,
+  (id) => {
+    if (id) {
+      void edit.loadOntologyTypes()
+    }
+  },
+  { immediate: true },
+)
+
+const allowedEntityTypes = computed<string[]>(() => {
+  const seen: string[] = []
+  if (props.ontologyTypes) {
+    for (const t of props.ontologyTypes) if (t && !seen.includes(t)) seen.push(t)
+  }
+  for (const t of edit.ontologyTypes.value) {
+    if (t && !seen.includes(t)) seen.push(t)
+  }
+  for (const entity of props.model.entities) {
+    if (entity.type && !seen.includes(entity.type)) seen.push(entity.type)
+  }
+  return seen
+})
 
 const editable = computed(() => lock.editable.value)
 const busy = computed(() => edit.busy.value)
@@ -105,7 +130,7 @@ const glyphByType = computed(() => new Map(props.model.types.map((type) => [type
 const netData = computed<GraphData>(() => {
   if (activeTypes.value.size === 0) return props.graphData
   const keep = new Set(
-    props.graphData.nodes.filter((node) => activeTypes.value.has(typeOfNode(node.labels))).map((node) => node.uuid),
+    props.graphData.nodes.filter((node) => activeTypes.value.has(typeOfNode(node.labels, node.entity_type))).map((node) => node.uuid),
   )
   return {
     ...props.graphData,
@@ -387,6 +412,7 @@ function originMark(entity: ReaderEntity): ReturnType<typeof originOf> {
         :relation="selectedRelation"
         :entities="model.entities"
         :relations="model.relations"
+        :ontology-types="allowedEntityTypes"
         :editable="editable"
         :busy="busy"
         :mode="mode"

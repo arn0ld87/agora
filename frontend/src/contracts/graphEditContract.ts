@@ -211,6 +211,14 @@ export const GraphLockStateSchema = z
   .strict()
 export type GraphLockState = z.infer<typeof GraphLockStateSchema>
 
+export const GraphOntologyResponseSchema = z
+  .object({
+    ontology: z.record(z.string(), z.unknown()).nullable().default(null),
+    entity_types: z.array(z.string()).default(() => []),
+  })
+  .passthrough()
+export type GraphOntologyResponse = z.infer<typeof GraphOntologyResponseSchema>
+
 // === Duplizieren ===
 
 export const GraphDuplicateStatusSchema = z.enum([
