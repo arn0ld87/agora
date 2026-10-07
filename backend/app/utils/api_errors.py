@@ -49,6 +49,11 @@ class ApiErrorCode(StrEnum):
     GRAPH_BUILD_IN_PROGRESS = "graph_build_in_progress"
     REPORT_GENERATE_IN_PROGRESS = "report_generate_in_progress"
 
+    # Personasätze (#1807): Satz gesperrt (erster Lauf angelegt) bzw. Konflikt
+    # (z. B. doppelter ``username`` im Satz). Beide HTTP 409.
+    PERSONA_SET_LOCKED = "persona_set_locked"
+    CONFLICT = "conflict"
+
     UPLOAD_TOO_LARGE = "upload_too_large"
     UNSUPPORTED_FORMAT = "unsupported_format"
 
@@ -84,6 +89,9 @@ DEFAULT_MESSAGES: dict[ApiErrorCode, str] = {
 
     ApiErrorCode.GRAPH_BUILD_IN_PROGRESS: "Graph-Build läuft bereits",
     ApiErrorCode.REPORT_GENERATE_IN_PROGRESS: "Report-Generierung läuft bereits",
+
+    ApiErrorCode.PERSONA_SET_LOCKED: "Personasatz ist gesperrt",
+    ApiErrorCode.CONFLICT: "Konflikt",
 
     ApiErrorCode.UPLOAD_TOO_LARGE: "Upload zu groß",
     ApiErrorCode.UNSUPPORTED_FORMAT: "Format nicht unterstützt",

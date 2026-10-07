@@ -20,7 +20,7 @@ from __future__ import annotations
 import csv
 import os
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..config import Config
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
@@ -58,6 +58,7 @@ def prepare_from_personas(
     manager: "SimulationManager",
     simulation_id: str,
     personas: List[Dict[str, Any]],
+    persona_set_id: Optional[str] = None,
 ) -> "SimulationState":
     """Bereitet eine frisch angelegte Simulation aus Bibliotheks-Personas vor.
 
@@ -71,6 +72,9 @@ def prepare_from_personas(
         manager: Simulation-Manager, dessen Store/Status-Setter genutzt wird.
         simulation_id: ID einer Simulation im Status ``CREATED``.
         personas: Nicht-leere Liste von Bibliotheks-Personas (Dicts).
+        persona_set_id: Kennung des Personasatzes (#1807), aus dem die Liste
+            als Kopie stammt. Landet in den Metadaten des Prepare-Runs
+            (``persona_source="set"``); ohne Wert bleibt es bei ``"library"``.
 
     Raises:
         ValueError: bei leerer Personaliste, unbekannter Simulation oder
@@ -105,7 +109,7 @@ def prepare_from_personas(
     state.config_generated = True
 
     manager._set_status(state, SimulationStatus.READY)
-    _register_run(state, len(profiles))
+    _register_run(state, len(profiles), persona_set_id)
     return state
 
 
@@ -254,13 +258,25 @@ def _build_config(state: "SimulationState", profile_count: int) -> Dict[str, Any
     return config
 
 
-def _register_run(state: "SimulationState", profile_count: int) -> None:
+def _register_run(
+    state: "SimulationState",
+    profile_count: int,
+    persona_set_id: Optional[str] = None,
+) -> None:
+    from_set = persona_set_id is not None
+    source_metadata: Dict[str, Any] = {"persona_source": "set" if from_set else "library"}
+    if persona_set_id is not None:
+        source_metadata["persona_set_id"] = persona_set_id
     RunRegistry().create_run(
         run_type="simulation_prepare",
         entity_id=state.simulation_id,
         status="completed",
         progress=100,
-        message=f"Simulation aus {profile_count} Bibliotheks-Personas vorbereitet",
+        message=(
+            f"Simulation aus {profile_count} Personas des Personasatzes vorbereitet"
+            if from_set
+            else f"Simulation aus {profile_count} Bibliotheks-Personas vorbereitet"
+        ),
         linked_ids={
             "simulation_id": state.simulation_id,
             "project_id": state.project_id,
@@ -272,7 +288,7 @@ def _register_run(state: "SimulationState", profile_count: int) -> None:
         # faellt die spaetere Routen-Aufloesung fuer diesen Run ausserhalb
         # eines gebundenen Kontexts auf den Operator zurueck.
         metadata={
-            "persona_source": "library",
+            **source_metadata,
             "persona_count": profile_count,
             **workspace_credential_metadata(),
         },

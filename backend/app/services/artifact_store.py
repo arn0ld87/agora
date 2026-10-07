@@ -40,6 +40,10 @@ _ARTIFACT_FILENAMES: dict[str, str] = {
     "control_state": "control_state.json",
     "reddit_profiles": "reddit_profiles.json",
     "persona_library": "persona_library.json",
+    # Issue #1807: Marker, dass die Vorlagen der alten Bibliothek einmalig in
+    # den Personasatz „Importiert“ uebernommen wurden (liegt neben der
+    # alten Bibliothek in ``_persona_library/``).
+    "persona_library_import": "persona_library_import.json",
     "env_status": "env_status.json",
     # Issue #1472c: Zwischenstand der Persona-Generierung, damit ein
     # abgebrochener Prepare fortgesetzt werden kann statt von vorn zu

@@ -1,0 +1,22 @@
+{
+  "$id": "https://alexle135.de/schemas/persona-set-entries-delete.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Mehrfachauswahl zum Loeschen. Alles oder nichts.\n\nIst eine Kennung dem Satz unbekannt, aendert die Anfrage nichts und\nantwortet 404. Doppelte Kennungen zaehlen einmal.",
+  "properties": {
+    "entry_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 500,
+      "minItems": 1,
+      "title": "Entry Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "entry_ids"
+  ],
+  "title": "PersonaSetEntriesDelete",
+  "type": "object"
+}

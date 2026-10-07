@@ -33,7 +33,7 @@ traegt es (``used_by_simulation_ids`` nicht leer => ``locked_at`` gesetzt).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import (
     AfterValidator,
@@ -289,3 +289,93 @@ class PersonaSetEntryUpdate(BaseModel):
         if self.origin is None and self.profile is None:
             raise ValueError("at least one of origin, profile is required")
         return self
+
+
+class PersonaSetEntriesDelete(BaseModel):
+    """Mehrfachauswahl zum Loeschen. Alles oder nichts.
+
+    Ist eine Kennung dem Satz unbekannt, aendert die Anfrage nichts und
+    antwortet 404. Doppelte Kennungen zaehlen einmal.
+    """
+
+    model_config = _STRICT
+
+    entry_ids: list[str] = Field(
+        min_length=1, max_length=PERSONA_SET_MAX_ENTRIES
+    )
+
+
+class PersonaSetListResponse(BaseModel):
+    """Antwort von ``GET /api/persona-sets``: Kacheln, neuester Satz zuerst."""
+
+    model_config = _STRICT
+
+    count: int = Field(ge=0)
+    sets: list[PersonaSetSummary]
+
+
+class PersonaSetDeleteResponse(BaseModel):
+    """Antwort von ``DELETE /api/persona-sets/<set_id>``."""
+
+    model_config = _STRICT
+
+    removed: str
+
+
+class PersonaSetEntriesDeleteResponse(BaseModel):
+    """Antwort auf das Loeschen von Eintraegen: Kennungen und neuer Stand."""
+
+    model_config = _STRICT
+
+    removed_entry_ids: list[str]
+    set: PersonaSetSummary
+
+
+QualitySeverity = Literal["error", "warning", "info"]
+
+
+class PersonaSetQualityIssue(BaseModel):
+    """Ein Qualitaetshinweis (Code und Schwere wie ``PersonaQualityService``)."""
+
+    model_config = _STRICT
+
+    code: str
+    severity: QualitySeverity
+    detail: Optional[dict[str, Any]] = None
+
+
+class PersonaSetQualityPersona(BaseModel):
+    """Hinweise zu einem Eintrag. Die Reihenfolge ist die der Eintraege im Satz."""
+
+    model_config = _STRICT
+
+    entry_id: str
+    username: str
+    issues: list[PersonaSetQualityIssue]
+
+
+class PersonaSetQualitySummary(BaseModel):
+    """Verteilungskennzahlen des Satzes (ohne Review-Zaehler: Saetze kennen kein Review)."""
+
+    model_config = _STRICT
+
+    total: int = Field(ge=0)
+    role_diversity: float = Field(ge=0.0)
+    mbti_diversity: float = Field(ge=0.0)
+    distinct_roles: list[str]
+    distinct_mbti: list[str]
+
+
+class PersonaSetQualityReport(BaseModel):
+    """Antwort von ``GET /api/persona-sets/<set_id>/quality``.
+
+    Reine Heuristik ohne LLM-Aufruf und ohne Simulation. Hinweise sind
+    Hinweise: sie sperren nichts.
+    """
+
+    model_config = _STRICT
+
+    set_id: str
+    summary: PersonaSetQualitySummary
+    global_issues: list[PersonaSetQualityIssue]
+    personas: list[PersonaSetQualityPersona]
