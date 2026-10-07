@@ -296,7 +296,53 @@ class GraphLockState(BaseModel):
     used_by: list[GraphLockUser] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Duplizieren
+# ---------------------------------------------------------------------------
+
+GraphDuplicateStatus = Literal["pending", "processing", "completed", "failed", "stopped", "paused"]
+
+
+class GraphDuplicateRequest(BaseModel):
+    """Einen Graphen als unabhängige, nicht gesperrte Kopie anlegen.
+
+    ``client_request_id`` (UUID vom Aufrufer) macht den Auftrag wiederholbar:
+    dieselbe Kennung ergibt denselben Auftrag, nie eine zweite Kopie.
+    ``name`` ist der Name der Kopie (Graph und Projekt).
+    """
+
+    model_config = _STRICT
+
+    client_request_id: str = Field(pattern=_UUID_PATTERN)
+    name: EntityName
+
+
+class GraphDuplicateJob(BaseModel):
+    """Der Kopierauftrag (ein Job der ``RunRegistry`` mit ``run_type='graph_duplicate'``).
+
+    ``graph_id`` und ``project_id`` sind die Kennungen der Kopie. Sie stehen
+    von Anfang an fest, die Kopie ist aber erst bei ``status='completed'``
+    vollständig lesbar. Bei ``failed`` sind Zielgraph und Zielprojekt
+    wieder entfernt. Fortschritt und Endzustand liefert
+    ``GET /api/runs/<run_id>``.
+    """
+
+    model_config = _STRICT
+
+    run_id: str = Field(min_length=1)
+    source_graph_id: str = Field(min_length=1)
+    graph_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    status: GraphDuplicateStatus
+    progress: int = Field(default=0, ge=0, le=100)
+    message: str = ""
+    error: str | None = None
+
+
 __all__ = [
+    "GraphDuplicateJob",
+    "GraphDuplicateRequest",
+    "GraphDuplicateStatus",
     "GraphOrigin",
     "GraphProvenanceInfo",
     "GraphNodeView",

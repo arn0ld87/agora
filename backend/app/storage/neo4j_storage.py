@@ -31,6 +31,7 @@ from .neo4j_mappings import (
     edge_to_dict as _edge_to_dict_func,
     node_to_dict as _node_to_dict_func,
 )
+from .neo4j_duplicate import Neo4jDuplicateMixin
 from .neo4j_edit import Neo4jEditMixin
 from .neo4j_read import Neo4jReadMixin
 from .neo4j_search import Neo4jSearchMixin
@@ -46,7 +47,12 @@ _ABANDONED_DRIVERS: list = []
 
 
 class Neo4jStorage(
-    Neo4jReadMixin, Neo4jWriteMixin, Neo4jEditMixin, Neo4jSearchMixin, GraphStorage
+    Neo4jReadMixin,
+    Neo4jWriteMixin,
+    Neo4jEditMixin,
+    Neo4jDuplicateMixin,
+    Neo4jSearchMixin,
+    GraphStorage,
 ):
     """Neo4j CE implementation of the GraphStorage interface."""
 
