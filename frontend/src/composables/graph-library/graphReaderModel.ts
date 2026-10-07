@@ -13,11 +13,28 @@ import { z } from 'zod'
 
 const TimestampSchema = z.union([z.string(), z.number()]).nullish()
 
+/**
+ * Herkunftsmerkmal (#1808, ADR-0022) in der Leseantwort. Optional: Altgraphen
+ * und Antworten ohne Feld bleiben gueltig; `origin: null` heisst „extrahiert“.
+ * Der Zeitpunkt ist hier locker gelesen (Text oder Zahl), die strenge Form
+ * steht in `contracts/graphEditContract`.
+ */
+export const GraphProvenanceSchema = z
+  .object({
+    origin: z.enum(['manual', 'edited']).nullish(),
+    changed_at: TimestampSchema,
+    episode_count: z.number().int().nonnegative().nullish(),
+  })
+  .passthrough()
+export type GraphProvenance = z.infer<typeof GraphProvenanceSchema>
+
 export const GraphNodeSchema = z
   .object({
     uuid: z.string().min(1),
     name: z.string().nullish(),
     labels: z.array(z.string()).nullish(),
+    entity_type: z.string().nullish(),
+    provenance: GraphProvenanceSchema.nullish(),
     summary: z.string().nullish(),
     attributes: z.record(z.string(), z.unknown()).nullish(),
     created_at: TimestampSchema,
@@ -34,6 +51,7 @@ export const GraphEdgeSchema = z
     source_node_name: z.string().nullish(),
     target_node_name: z.string().nullish(),
     episode_ids: z.array(z.unknown()).nullish(),
+    provenance: GraphProvenanceSchema.nullish(),
     created_at: TimestampSchema,
   })
   .passthrough()
