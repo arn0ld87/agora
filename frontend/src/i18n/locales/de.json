@@ -2597,6 +2597,21 @@
           "title": "Bericht: {title}",
           "version": "Fassung {n}"
         },
+        "chat": {
+          "unavailable": "Nachfragen sind möglich, sobald es mindestens eine Berichtsfassung gibt.",
+          "scope": "Nachfragen gelten für den ganzen Lauf, nicht für eine einzelne Fassung. Der Verlauf bleibt nur in dieser Sitzung.",
+          "logLabel": "Verlauf der Nachfragen",
+          "empty": "Noch keine Frage gestellt.",
+          "you": "Du",
+          "mark": "SIM",
+          "agentLabel": "Modellausgabe des Berichtsagenten",
+          "sending": "Der Berichtsagent antwortet …",
+          "inputLabel": "Frage an den Berichtsagenten",
+          "hint": "Strg+Enter oder Cmd+Enter sendet.",
+          "send": "Senden",
+          "clear": "Verlauf leeren",
+          "noResponse": "Keine Antwort erhalten."
+        },
         "redirect": {
           "loading": "Der Bericht wird gesucht …",
           "notFoundTitle": "Bericht nicht gefunden",

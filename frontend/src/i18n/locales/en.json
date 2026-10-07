@@ -2597,6 +2597,21 @@
           "title": "Report: {title}",
           "version": "Version {n}"
         },
+        "chat": {
+          "unavailable": "Follow-up questions are possible once there is at least one report version.",
+          "scope": "Questions apply to the whole run, not to a single version. The history only lasts for this session.",
+          "logLabel": "Follow-up history",
+          "empty": "No question asked yet.",
+          "you": "You",
+          "mark": "SIM",
+          "agentLabel": "Model output of the report agent",
+          "sending": "The report agent is answering …",
+          "inputLabel": "Question to the report agent",
+          "hint": "Ctrl+Enter or Cmd+Enter sends.",
+          "send": "Send",
+          "clear": "Clear history",
+          "noResponse": "No response received."
+        },
         "redirect": {
           "loading": "Looking for the report …",
           "notFoundTitle": "Report not found",

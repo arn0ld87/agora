@@ -16,7 +16,8 @@
 import { computed, inject, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import ReportExportMenu from '@/components/run/report/ReportExportMenu.vue'
+import ReportAgentChat from '@/components/run/report/ReportAgentChat.vue'
+import ReportExportMenu from'@/components/run/report/ReportExportMenu.vue'
 import ReportHeader from '@/components/run/report/ReportHeader.vue'
 import ReportIncompleteBanner from '@/components/run/report/ReportIncompleteBanner.vue'
 import ReportOutlinePane from '@/components/run/report/ReportOutlinePane.vue'
@@ -128,7 +129,9 @@ const noGraph = computed(
           <ReportReadingPane :active-section="activeSection" />
         </div>
         <div class="run-report__col run-report__col--side">
-          <ReportSidePane :panel="panel" @update:panel="(value) => setQuery({ panel: value })" />
+          <ReportSidePane :panel="panel" @update:panel="(value) => setQuery({ panel: value })">
+            <template #questions><ReportAgentChat :simulation-id="simulationId" /></template>
+          </ReportSidePane>
         </div>
       </div>
     </template>
