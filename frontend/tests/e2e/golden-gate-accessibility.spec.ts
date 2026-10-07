@@ -442,6 +442,10 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   });
 
   // Issue #838 — dokumentierte Ausnahme (KEIN stilles Weglassen):
+  // Seit #1790 ist /v4/interaction/:reportId nur noch eine Weiterleitung auf den
+  // Bericht (?panel=questions); die Ansicht dahinter ist `RunReportView`.
+  // Die folgende Ausnahme galt der entfernten Altansicht und bleibt als Begründung
+  // dafür stehen, dass der Bericht selbst nicht im Smoke liegt:
   // /v4/interaction/:reportId ist bewusst NICHT Teil dieses Golden-Gate-Smokes.
   // Ein zugänglicher, vollständiger Report erfordert den kompletten
   // Report-Generierungs-Flow aus minimal-report.spec.ts (Persona-Floor-Seeding

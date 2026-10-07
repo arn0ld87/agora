@@ -54,7 +54,6 @@ vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepGraphBuildView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/StepInteractionView.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsIntegrationsView.vue', () => VIEW_STUB)
@@ -442,10 +441,15 @@ describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
     expect(route.fullPath).toBe('/simulations/sim_1/interviews?x=1#h')
   })
 
-  it('/v4/interaction/:reportId bleibt unberührt (Etappe 5 übernimmt den Berichtschat)', async () => {
-    await pushAndSettle('/v4/interaction/report_1')
-    expect(router.currentRoute.value.name).toBe('StepInteraction')
-    expect(router.currentRoute.value.params.reportId).toBe('report_1')
+  it('/v4/interaction/:reportId löst die Berichts-ID wie StepReport auf (ReportRedirectView) und zielt auf ?panel=questions (#1790)', async () => {
+    await pushAndSettle('/v4/interaction/report_1?simId=sim_1#x')
+    const route = router.currentRoute.value
+    expect(route.name).toBe('StepInteraction')
+    expect(route.params.reportId).toBe('report_1')
+    expect(route.query.simId).toBe('sim_1')
+    expect(route.hash).toBe('#x')
+    const propsFn = route.matched[0].props.default as (to: typeof route) => Record<string, unknown>
+    expect(propsFn(route)).toEqual({ reportId: 'report_1', panel: 'questions' })
   })
 
   it('Interviews-Adresse: conversationId nur in den Formaten persona-<n> und group-<kennung>', async () => {
@@ -495,7 +499,7 @@ describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
     expect(record?.props.default).toBe(true)
   })
 
-  it('/v4/interaction/:reportId bleibt unberührt; die alte Interviews-Adresse leitet seit Etappe 6 um', async () => {
+  it('/v4/interaction/:reportId behält den Routennamen; die alte Interviews-Adresse leitet seit Etappe 6 um', async () => {
     await pushAndSettle('/v4/interaction/report_1')
     expect(router.currentRoute.value.name).toBe('StepInteraction')
     await pushAndSettle('/v4/simulation/sim_1/interviews')
@@ -810,7 +814,7 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     expect(route.params.reportId).toBeUndefined()
   })
 
-  it('Adressen späterer Etappen lösen unverändert auf', async () => {
+  it('/v4/interaction/:reportId und /process/:projectId lösen auf', async () => {
     await pushAndSettle('/v4/interaction/report_abc')
     expect(router.currentRoute.value.name).toBe('StepInteraction')
     expect(router.currentRoute.value.params.reportId).toBe('report_abc')
