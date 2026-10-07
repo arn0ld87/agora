@@ -32,12 +32,29 @@ export interface GraphEdgeViewModel {
   curvature: number
   /** `true` bei Self-Loop-Aggregat */
   isSelfLoop: boolean
+  /**
+   * Von Hand angelegt oder von Hand geändert (#1808, ADR-0022 §5). Nur ein
+   * Merkmal zum Rendern: `provenance.origin` steht an `rawData.provenance`.
+   */
+  isHandMade: boolean
   /** Index in der Paar-Gruppe (nicht-Self-Loops) */
   pairIndex?: number
   /** Gesamtzahl Edges zwischen demselben Paar */
   pairTotal?: number
   /** ungemapptes Backend-Edge plus aufgelöste Namen */
   rawData: Record<string, unknown>
+}
+
+/** Strichmuster einer Handkante. `null` heisst: durchgezogen. */
+export const MANUAL_EDGE_DASH = '5 4'
+
+/**
+ * Strichmuster fuer eine Kante. Die Herkunft entscheidet ueber die Darstellung,
+ * nicht ueber eine Farbe — nur so bleibt eine Handkante auch im Schwarz-Weiss-
+ * Ausdruck und fuer Farbfehlsichtige erkennbar (ADR-0022 §5).
+ */
+export function manualEdgeDashPattern(edge: GraphEdgeViewModel): string | null {
+  return edge.isHandMade ? MANUAL_EDGE_DASH : null
 }
 
 function getNodeType(node: Record<string, unknown>): string {
@@ -56,6 +73,16 @@ function normalizeEdgeAliases(edge: Record<string, unknown>): { type: string; la
     type: factType || name || 'RELATED',
     label: name || factType || 'RELATED',
   }
+}
+
+/**
+ * Handkante im Sinne von ADR-0022 §5: von Hand angelegt (`manual`) oder von Hand
+ * geaendert (`edited`). Ein fehlendes Merkmal heisst „extrahiert“ (Altbestand).
+ */
+function isHandMadeEdge(edge: Record<string, unknown>): boolean {
+  const provenance = edge.provenance as { origin?: string | null } | null | undefined
+  const origin = provenance?.origin
+  return origin === 'manual' || origin === 'edited'
 }
 
 function buildColorMap(entityTypes: Array<{ name: string; color: string }>): Record<string, string> {
@@ -147,6 +174,7 @@ function buildCurvedEdge(
     name: aliases.label,
     curvature,
     isSelfLoop: false,
+    isHandMade: isHandMadeEdge(edge),
     pairIndex: currentIndex,
     pairTotal: totalCount,
     rawData: {
@@ -173,6 +201,9 @@ function buildSelfLoopEdge(
     name: `Self Relations (${allSelfLoops.length})`,
     curvature: 0,
     isSelfLoop: true,
+    // Das Aggregat gilt als Handarbeit, sobald eine der Kanten darin es ist —
+    // sonst verliert die Gruppe die Marke, obwohl eine Handkante enthalten ist.
+    isHandMade: allSelfLoops.some((loop) => isHandMadeEdge(loop)),
     rawData: {
       isSelfLoopGroup: true,
       source_name: nodeName,

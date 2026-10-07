@@ -211,7 +211,7 @@ export const GraphLockStateSchema = z
   .strict()
 export type GraphLockState = z.infer<typeof GraphLockStateSchema>
 
-// === Duplizieren (nur Vertrag; der Client folgt mit dem Endpunkt) ===
+// === Duplizieren ===
 
 export const GraphDuplicateStatusSchema = z.enum([
   'pending',
@@ -244,3 +244,42 @@ export const GraphDuplicateJobSchema = z
   })
   .strict()
 export type GraphDuplicateJob = z.infer<typeof GraphDuplicateJobSchema>
+
+/**
+ * `GET /api/runs/<run_id>` für einen laufenden Kopierauftrag. Der Auftrag ist ein
+ * Job der RunRegistry (`run_type='graph_duplicate'`), Fortschritt und Endzustand
+ * kommen von dort — der Endpunkt hat keinen eigenen Statusabruf.
+ *
+ * Gespiegelt wird nur, was der Auftrag braucht; `RunDetail` (extra="allow")
+ * trägt daneben Stage-, Budget- und Metadatenfelder, die hier nichts bedeuten.
+ */
+export const GraphDuplicateRunSchema = z
+  .object({
+    run_id: z.string().min(1),
+    run_type: z.string().default(''),
+    status: GraphDuplicateStatusSchema,
+    progress: z.number().int().min(0).max(100).default(0),
+    message: z.string().default(''),
+    error: z.string().nullable().default(null),
+    linked_ids: z
+      .object({
+        source_graph_id: z.string().default(''),
+        graph_id: z.string().default(''),
+        project_id: z.string().default(''),
+      })
+      .partial()
+      .default({}),
+  })
+  .passthrough()
+export type GraphDuplicateRun = z.infer<typeof GraphDuplicateRunSchema>
+
+/** Zielzustände: danach wird nicht mehr gepollt. */
+export const GRAPH_DUPLICATE_TERMINAL_STATUS: readonly GraphDuplicateStatus[] = [
+  'completed',
+  'failed',
+  'stopped',
+]
+
+export function isGraphDuplicateTerminal(status: GraphDuplicateStatus): boolean {
+  return GRAPH_DUPLICATE_TERMINAL_STATUS.includes(status)
+}

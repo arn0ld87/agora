@@ -3,23 +3,31 @@
  * Zustandshuelle um den GraphReader (#1797): Laden, Fehler, „kein Graph“,
  * Aufbau mit Fortschritt (bei vorliegendem Teilgraph samt Leser) und fertig.
  * Gemeinsam fuer Lauf-Graph und Bibliotheks-Detail.
+ *
+ * `editable` (#1808, Entscheid 9) tauscht den Leser gegen die bearbeitbare
+ * Ansicht: im Lauf bleibt es beim Leser, in der Bibliothek wird bearbeitet.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Project } from '@/contracts/projectContract'
 import type { GraphData, ReaderModel } from '@/composables/graph-library/graphReaderModel'
 import type { ProjectGraphState } from '@/composables/graph-library/useProjectGraph'
+import GraphEditView from '@/components/graph-edit/GraphEditView.vue'
 import GraphReader from './GraphReader.vue'
 
-const props = defineProps<{
-  state: ProjectGraphState
-  projectId: string | null
-  project: Project | null
-  model: ReaderModel | null
-  graphData: GraphData | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    state: ProjectGraphState
+    projectId: string | null
+    project: Project | null
+    model: ReaderModel | null
+    graphData: GraphData | null
+    editable?: boolean
+  }>(),
+  { editable: false },
+)
 
-defineEmits<{ retry: [] }>()
+const emit = defineEmits<{ retry: []; changed: [] }>()
 
 const { t } = useI18n()
 
@@ -79,7 +87,16 @@ const percent = computed(() => (props.state.kind === 'building' ? props.state.pr
         </RouterLink>
       </div>
 
-      <GraphReader v-if="model && graphData" :model="model" :graph-data="graphData" :notice="notice">
+      <!-- Der Server bleibt die Quelle der Wahrheit: nach jeder Aktion neu laden. -->
+      <GraphEditView
+        v-if="editable && model && graphData"
+        :model="model"
+        :graph-data="graphData"
+        :notice="notice"
+        :graph-name="project?.name ?? null"
+        @changed="emit('changed')"
+      />
+      <GraphReader v-else-if="model && graphData" :model="model" :graph-data="graphData" :notice="notice">
         <template #actions><slot name="actions" /></template>
       </GraphReader>
       <slot v-else-if="state.kind === 'ready'" name="empty" />

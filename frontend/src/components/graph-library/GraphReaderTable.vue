@@ -13,19 +13,29 @@ import {
   type ReaderType,
   type SortDirection,
 } from '@/composables/graph-library/graphReaderModel'
+import GraphOriginMark from '@/components/graph-edit/GraphOriginMark.vue'
+import { originOf } from '@/components/graph-edit/graphOrigin'
 
 export type TableTab = 'entities' | 'relations'
 
 const ROW_CAP = 500
 
-const props = defineProps<{
-  tab: TableTab
-  entities: readonly ReaderEntity[]
-  relations: readonly ReaderRelation[]
-  types: readonly ReaderType[]
-  selectedEntityId: string | null
-  selectedEdgeId: string | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    tab: TableTab
+    entities: readonly ReaderEntity[]
+    relations: readonly ReaderRelation[]
+    types: readonly ReaderType[]
+    selectedEntityId: string | null
+    selectedEdgeId: string | null
+    /**
+     * Herkunftsmarken anzeigen (#1808, ADR-0022 §5). Nur die bearbeitbare
+     * Ansicht braucht sie; der Leser im Lauf laesst die Spalte weg.
+     */
+    showOrigin?: boolean
+  }>(),
+  { showOrigin: false },
+)
 
 const emit = defineEmits<{
   'update:tab': [tab: TableTab]
@@ -177,6 +187,7 @@ const relationColumns: RelationColumn[] = ['from', 'label', 'to', 'episodes']
                 <span aria-hidden="true" class="grt__mark">{{ row.id === selectedEntityId ? '›' : '' }}</span>
                 {{ row.name }}
               </button>
+              <GraphOriginMark v-if="showOrigin" :origin="originOf(row.raw)" />
             </th>
             <td>
               <span aria-hidden="true" class="grt__glyph">{{ glyphByType.get(row.type) }}</span>
@@ -236,6 +247,7 @@ const relationColumns: RelationColumn[] = ['from', 'label', 'to', 'episodes']
                 <span aria-hidden="true" class="grt__mark">{{ row.id === selectedEdgeId ? '›' : '' }}</span>
                 {{ row.fromName }}
               </button>
+              <GraphOriginMark v-if="showOrigin" :origin="originOf(row.raw)" />
             </th>
             <td>{{ row.label }}</td>
             <td>{{ row.toName }}</td>

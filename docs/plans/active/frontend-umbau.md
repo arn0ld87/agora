@@ -752,6 +752,15 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 
 ---
 
+## 11g. Iststand Etappe 8 — Graphen bearbeiten (#1808)
+
+- Der vorhandene Graph-Schreibpfad bietet Entitäten und Beziehungen anlegen, ändern und löschen sowie Entitäten zusammenführen. Die Bibliotheksansicht verbindet Netz, Tabelle und Detailspalte mit den Bearbeitungsdialogen. Herkunftsmarken und gestrichelte manuelle Kanten unterscheiden Handarbeit von Extraktion.
+- Ein von einer Simulation benutzter Graph bleibt gesperrt; die Oberfläche bietet stattdessen Duplizieren, verfolgt den Hintergrundjob und führt zur Kopie. Simulationen, Personas und Berichte werden nicht kopiert.
+- Handarbeit trägt in Evidence zusätzlich `graph_origin` (`manual` | `edited`), bleibt `graph_relation` und erhält keinen Dokumentanker. Sie zählt für keine Confidence-Stufe. Andere gültige Evidence kann hohe Confidence weiterhin tragen; die fünf Hartanker aus ADR-0002 bleiben unverändert.
+- Lokal verifiziert: gezielte Report-Vertragsregressionen, vollständiges Frontend-Gate mit Lint, Typecheck, Tests, Build und Zod-Abgleich. Die Docker-e2e-Szenarien sind verdrahtet, aber lokal nicht erfolgreich ausgeführt. Backend-Abschlussgate und Evidence-Audit sind noch offen; Etappe 8 ist deshalb noch nicht zur Veröffentlichung freigegeben.
+
+---
+
 ## 12. Offene Punkte
 
 | Punkt | Wer klärt | Wann |

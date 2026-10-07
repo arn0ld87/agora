@@ -9,6 +9,8 @@ vi.mock('../index', () => ({ default: { get, post, patch, delete: del } }))
 import { ApiError } from '../envelope'
 import {
   EmbeddingMigrationRunningError,
+  GraphBuildInProgressError,
+  GraphDuplicateUnavailableError,
   GraphEditConflictError,
   GraphEditEmbeddingFailedError,
   GraphEditInputError,
@@ -17,6 +19,8 @@ import {
   createRelation,
   deleteEntity,
   deleteRelation,
+  duplicateGraph,
+  getGraphDuplicateRun,
   getGraphLock,
   mergeEntities,
   updateEntity,
@@ -163,5 +167,125 @@ describe('typisierte Fehler', () => {
     const nf = apiError(404, 'not_found')
     del.mockRejectedValue(nf)
     expect(await deleteRelation('g1', UUID_B).catch((e: unknown) => e)).toBe(nf)
+  })
+})
+
+const job = {
+  run_id: 'run_dup_1',
+  source_graph_id: 'g1',
+  graph_id: 'g2',
+  project_id: 'proj_kopie',
+  status: 'pending',
+  progress: 0,
+  message: 'Kopie angelegt',
+  error: null,
+}
+
+describe('duplicateGraph', () => {
+  it('legt einen Kopierauftrag an und liefert den Job, keine fertige Kopie', async () => {
+    post.mockResolvedValue({ success: true, data: job })
+    const out = await duplicateGraph('g1', { name: 'Kopie' })
+    const [url, body] = post.mock.calls[0]
+    expect(url).toBe('/api/graph/g1/duplicate')
+    expect(body.client_request_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(body).toMatchObject({ name: 'Kopie' })
+    // `completed` wäre eine Behauptung, die der Server noch nicht gedeckt hat.
+    expect(out.status).toBe('pending')
+    expect(out.graph_id).toBe('g2')
+  })
+
+  it('nutzt eine mitgegebene client_request_id (Wiederholung ergibt denselben Auftrag)', async () => {
+    post.mockResolvedValue({ success: true, data: job })
+    await duplicateGraph('g1', { name: 'Kopie', client_request_id: UUID_REQ })
+    expect(post.mock.calls[0][1].client_request_id).toBe(UUID_REQ)
+  })
+
+  it('weist einen leeren Namen vor dem Senden ab', async () => {
+    await expect(duplicateGraph('g1', { name: '   ' })).rejects.toBeInstanceOf(GraphEditInputError)
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('meldet einen Vertragsbruch der Antwort statt eine Kopie zu behaupten', async () => {
+    post.mockResolvedValue({ success: true, data: { ...job, status: 'fast_fertig' } })
+    await expect(duplicateGraph('g1', { name: 'Kopie' })).rejects.toThrow(/Vertragsbruch/)
+  })
+
+  it('409 graph_build_in_progress und 409 embedding_migration_running sind unterscheidbar', async () => {
+    post.mockRejectedValueOnce(apiError(409, 'graph_build_in_progress'))
+    expect(await duplicateGraph('g1', { name: 'Kopie' }).catch((e: unknown) => e)).toBeInstanceOf(
+      GraphBuildInProgressError,
+    )
+    post.mockRejectedValueOnce(apiError(409, 'embedding_migration_running'))
+    expect(await duplicateGraph('g1', { name: 'Kopie' }).catch((e: unknown) => e)).toBeInstanceOf(
+      EmbeddingMigrationRunningError,
+    )
+  })
+
+  it('503 heißt hier „Kopierpfad nicht verfügbar“, nicht „Einbettung fehlgeschlagen“', async () => {
+    post.mockRejectedValue(apiError(503, 'service_unavailable'))
+    const err = await duplicateGraph('g1', { name: 'Kopie' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(GraphDuplicateUnavailableError)
+    expect(err).not.toBeInstanceOf(GraphEditEmbeddingFailedError)
+    expect((err as GraphDuplicateUnavailableError).status).toBe(503)
+  })
+
+  it('ein gesperrter Quellgraph ist kein Fehler: 409 graph_locked bleibt ApiError', async () => {
+    // Duplizieren liest die Quelle nur und ist auch gesperrt erlaubt.
+    const locked = apiError(409, 'graph_locked')
+    post.mockRejectedValue(locked)
+    expect(await duplicateGraph('g1', { name: 'Kopie' }).catch((e: unknown) => e)).toBe(locked)
+  })
+
+  it('404 bleibt ApiError', async () => {
+    const nf = apiError(404, 'not_found')
+    post.mockRejectedValue(nf)
+    expect(await duplicateGraph('g1', { name: 'Kopie' }).catch((e: unknown) => e)).toBe(nf)
+  })
+})
+
+describe('getGraphDuplicateRun', () => {
+  it('liest den Auftrag aus der Run-Infrastruktur', async () => {
+    get.mockResolvedValue({
+      success: true,
+      data: {
+        run_id: 'run_dup_1',
+        run_type: 'graph_duplicate',
+        entity_id: 'proj_kopie',
+        status: 'processing',
+        progress: 42,
+        message: 'Quelle wird gelesen',
+        error: null,
+        started_at: '2026-10-07T10:00:00',
+        updated_at: '2026-10-07T10:00:05',
+        linked_ids: { source_graph_id: 'g1', graph_id: 'g2', project_id: 'proj_kopie' },
+      },
+    })
+    const run = await getGraphDuplicateRun('run_dup_1')
+    expect(get).toHaveBeenCalledWith('/api/runs/run_dup_1')
+    expect(run.status).toBe('processing')
+    expect(run.progress).toBe(42)
+    expect(run.linked_ids.project_id).toBe('proj_kopie')
+  })
+
+  it('meldet einen Vertragsbruch statt Stillstand zu zeigen', async () => {
+    get.mockResolvedValue({ success: true, data: { run_id: 'run_dup_1', status: 'irgendwie' } })
+    await expect(getGraphDuplicateRun('run_dup_1')).rejects.toThrow(/Vertragsbruch/)
+  })
+
+  it('ein fehlgeschlagener Auftrag behält seine Fehlermeldung', async () => {
+    get.mockResolvedValue({
+      success: true,
+      data: {
+        run_id: 'run_dup_1',
+        status: 'failed',
+        progress: 30,
+        message: 'Kopie abgebrochen',
+        error: 'Zielprojekt ließ sich nicht anlegen',
+        linked_ids: { source_graph_id: 'g1', graph_id: 'g2', project_id: 'proj_kopie' },
+      },
+    })
+    const run = await getGraphDuplicateRun('run_dup_1')
+    expect(run.status).toBe('failed')
+    expect(run.error).toBe('Zielprojekt ließ sich nicht anlegen')
   })
 })

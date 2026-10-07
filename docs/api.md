@@ -339,6 +339,16 @@ Streams sind keine normalen JSON-Responses. Authentifizierung erfolgt über die 
 
 Bei Contract-Änderungen gelten die Regeln aus `AGENTS.md`: Pydantic zuerst, Zod/Schema im selben Slice, Consumer/Tests mitziehen.
 
+### Evidence-Herkunft im Bericht (#1808)
+
+`graph_origin` steht als optionales Feld (`manual` | `edited`) neben `source_kind` an Evidence-Items und -Records des Berichts; Vorbild ist `document_role`. Fehlt es, gilt die Evidence als nicht von Hand erzeugt, und Bestandsberichte bleiben unverändert lesbar.
+
+- `source_kind` bleibt `graph_relation`; `EvidenceSourceKind` bekommt keinen eigenen Wert für Handarbeit.
+- Handarbeit ist im Bericht sichtbar, zählt aber für **keine** Confidence-Stufe: die Rechnung nimmt diese Belege vor Relevanz, Quellengüte, Spezifität, Konsens und Widerspruchs-Penalty heraus. Ein Claim darf `high`/`verified` bleiben, wenn er die Regeln ohne diese Belege erfüllt.
+- Handarbeit darf keinen `seed_doc:`-Anker tragen; der Vertrag weist solche Records ab. Eine textlich bearbeitete extrahierte Beziehung zeigt weiter ihre ursprüngliche Quelle, liefert aber keinen Dokumentanker mehr.
+- Der Zod-Spiegel ([`../frontend/src/contracts/reportContract.ts`](../frontend/src/contracts/reportContract.ts)) prüft dieselben Grenzen: `graph_origin` verlangt `source_kind=graph_relation` und verbietet `seed_doc:`-Anker.
+- Die Regel steht in [ADR-0022](decisions/0022-manuelle-herkunft-im-graphen.md); die fünf Evidence-Gating-Anker aus ADR-0002 bleiben unverändert.
+
 ## Wo nicht raten
 
 Wenn diese Übersicht und der Code auseinanderlaufen, gewinnt der Code. Routenanzahl, Testanzahl und Modellkataloge werden deshalb hier bewusst nicht als statische Marketingzahlen geführt. Wer eine exakte Liste benötigt, liest die Blueprints bzw. die generierten Contracts statt einen Monate alten Zähler zu verehren.

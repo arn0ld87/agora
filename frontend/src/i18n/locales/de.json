@@ -1878,11 +1878,74 @@
         "invalidInput": "Die Eingabe ist ungültig.",
         "other": "Die Änderung ist fehlgeschlagen."
       },
+      "duplicate": {
+        "nameLabel": "Name der Kopie",
+        "start": "Kopie anlegen",
+        "running": "Kopie wird angelegt …",
+        "done": "Kopie ist fertig — öffnen",
+        "failed": "Die Kopie wurde nicht angelegt.",
+        "error": {
+          "buildRunning": "Der Graph wird gerade gebaut. Die Kopie kann erst danach angelegt werden.",
+          "migrationRunning": "Eine Einbettungs-Migration läuft, der Kopierpfad ist gerade nicht verfügbar.",
+          "unavailable": "Der Kopierpfad ist gerade nicht verfügbar.",
+          "invalidInput": "Der Name der Kopie ist ungültig.",
+          "other": "Die Kopie konnte nicht angelegt werden."
+        }
+      },
       "origin": {
         "manual": "manuell",
         "edited": "bearbeitet",
         "extracted": "extrahiert",
         "changedAt": "Geändert am {date}"
+      },
+      "view": {
+        "label": "Graph bearbeiten",
+        "net": "Netz",
+        "table": "Tabelle",
+        "legend": "Gestrichelte Kante: von Hand angelegt oder von Hand geändert.",
+        "readonly": "Der Graph dieses Laufs lässt sich nicht ändern. Eine unabhängige Kopie lässt sich bearbeiten.",
+        "notEditable": "Dieser Graph ist gesperrt und nicht bearbeitbar.",
+        "busy": "Änderung läuft …",
+        "done": "Gespeichert.",
+        "dismissError": "Hinweis schließen",
+        "entity": {
+          "createTitle": "Entität anlegen",
+          "editTitle": "Entität ändern",
+          "name": "Name",
+          "type": "Typ",
+          "summary": "Beschreibung",
+          "aliases": "Aliase (kommagetrennt)",
+          "submitCreate": "Entität anlegen",
+          "submitSave": "Änderung speichern",
+          "cancel": "Abbrechen",
+          "delete": "Entität löschen",
+          "deleteConfirm": "Entität und ihre Beziehungen löschen?",
+          "selectPrompt": "Eine Entität wählen oder eine neue anlegen.",
+          "deleted": "Entität gelöscht, {n} Beziehungen entfernt."
+        },
+        "relation": {
+          "createTitle": "Beziehung anlegen",
+          "editTitle": "Beziehung ändern",
+          "source": "Von",
+          "target": "Nach",
+          "name": "Art",
+          "fact": "Satz",
+          "submitCreate": "Beziehung anlegen",
+          "submitSave": "Änderung speichern",
+          "cancel": "Abbrechen",
+          "delete": "Beziehung löschen",
+          "deleteConfirm": "Beziehung löschen?",
+          "deleted": "Beziehung gelöscht."
+        },
+        "merge": {
+          "open": "Zusammenführen öffnen",
+          "title": "Entitäten zusammenführen",
+          "hint": "Die gewählte Entität bleibt bestehen, die markierten werden in sie aufgelöst.",
+          "source": "Aufzulösende Entitäten",
+          "submit": "Zusammenführen",
+          "needSource": "Mindestens eine Entität zum Auflösen wählen.",
+          "result": "Zusammengeführt: {n} Beziehungen umgehängt, {d} entfernt."
+        }
       }
     },
     "newRun": {

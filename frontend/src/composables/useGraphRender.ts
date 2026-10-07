@@ -21,7 +21,7 @@
 import { onMounted, onUnmounted, onScopeDispose, ref, toValue, watch, nextTick, type MaybeRefOrGetter, type Ref } from 'vue'
 import * as d3 from 'd3'
 
-import { buildGraphRenderData } from '../components/graph/graphPanelData'
+import { buildGraphRenderData, manualEdgeDashPattern } from '../components/graph/graphPanelData'
 import { formatEdgeLabel } from '../components/graph/edgeLabelI18n'
 import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeometry'
 import type { BuildProgressDetail } from '../api/graph'
@@ -386,6 +386,10 @@ export function useGraphRender({
       .attr('stroke', 'var(--rule-strong)')
       .attr('stroke-width', 1.5)
       .attr('fill', 'none')
+      // Handkanten gestrichelt (#1808, ADR-0022 §5). Das Muster haengt am
+      // Herkunftsfeld, nicht an einer Farbe; Auswahl und Hover aendern nur die
+      // Strichbreite und lassen das Muster stehen.
+      .attr('stroke-dasharray', d => manualEdgeDashPattern(d))
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
         event.stopPropagation()

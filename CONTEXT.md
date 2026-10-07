@@ -42,7 +42,9 @@ Eine Sammlung synthetischer Personas. Personas können vor einer Simulation gepr
 
 ### Graph
 
-Das aus Quellen extrahierte Wissensumfeld: Entitäten, Relationen, Quellenfragmente und Vektoren in Neo4j.
+Das aus Quellen extrahierte Wissensumfeld: Entitäten, Relationen, Quellenfragmente und Vektoren in Neo4j. Elemente können vor der ersten Simulation von Hand ergänzt oder bearbeitet werden; ihre Herkunft steht dann als `origin="manual"` beziehungsweise `origin="edited"` am Graph-Element. Ohne Herkunftsfeld gilt das Element als extrahiert.
+
+Im Evidence-Vertrag bleibt Handarbeit `source_kind="graph_relation"` und trägt zusätzlich `graph_origin`. Sie darf weder als Dokumentfakt noch über einen `seed_doc:`-Anker ausgegeben werden und zählt für keine Confidence-Stufe. Ursprüngliche Quellen bleiben nachvollziehbar, geben einer bearbeiteten Beziehung aber keinen Dokumentanker zurück. Andere gültige Belege können einen Claim weiterhin hoch tragen ([ADR-0022](docs/decisions/0022-manuelle-herkunft-im-graphen.md)); die fünf Hartanker aus ADR-0002 bleiben unverändert.
 
 ### Projekt
 

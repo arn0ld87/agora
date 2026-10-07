@@ -11,8 +11,12 @@
  * - 503 (Einbettung fehlgeschlagen, nichts geschrieben) -> `GraphEditEmbeddingFailedError`
  * Alles andere (400, 404, Transport) bleibt der `ApiError` des Interceptors.
  *
- * Das Duplizieren (`GraphDuplicateRequest`/`GraphDuplicateJob`) ist im Vertrag
- * gespiegelt; die Client-Funktion folgt mit dem Endpunkt.
+ * - 409 `graph_build_in_progress` (nur Duplizieren) -> `GraphBuildInProgressError`
+ *
+ * Das Duplizieren (`GraphDuplicateRequest`/`GraphDuplicateJob`) hat keinen eigenen
+ * Statusabruf: der Auftrag ist ein Job der RunRegistry, gelesen über
+ * `GET /api/runs/<run_id>`. Dort ist 503 „Kopierpfad nicht verfügbar" und nicht
+ * „Einbettung fehlgeschlagen" — eigener Fehlertyp, eigener Text.
  */
 import type { z } from 'zod'
 import service from './index'
@@ -24,6 +28,9 @@ import {
   EntityMergeResultSchema,
   EntityMergeSchema,
   EntityUpdateSchema,
+  GraphDuplicateJobSchema,
+  GraphDuplicateRequestSchema,
+  GraphDuplicateRunSchema,
   GraphLockStateSchema,
   GraphLockUserSchema,
   GraphNodeViewSchema,
@@ -36,6 +43,7 @@ import {
   type EntityMerge,
   type EntityMergeResult,
   type EntityUpdateInput,
+  type GraphDuplicateJob,
   type GraphEdgeView,
   type GraphLockState,
   type GraphLockUser,
@@ -94,6 +102,32 @@ export class GraphEditEmbeddingFailedError extends GraphEditApiError {
   }
 }
 
+/**
+ * 409: der Quellgraph wird gerade gebaut, eine Kopie hätte sonst einen
+ * halben Bestand. Anders als `graph_locked` ist das kein Dauerzustand — nach
+ * dem Build geht es.
+ */
+export class GraphBuildInProgressError extends GraphEditApiError {
+  constructor(message: string) {
+    super(message, 'graph_build_in_progress', 409)
+    this.name = 'GraphBuildInProgressError'
+  }
+}
+
+/**
+ * 503: der Kopierpfad ist gerade nicht verfügbar. Bewusst eigener Typ statt
+ * `GraphEditEmbeddingFailedError`: dort heißt 503 „Einbettung fehlgeschlagen,
+ * nichts geschrieben", hier „der Dienst antwortet nicht" — die Einbettung ist
+ * gar nicht beteiligt, und die Oberfläche darf den Unterschied nicht als
+ * denselben Fehler ausgeben.
+ */
+export class GraphDuplicateUnavailableError extends GraphEditApiError {
+  constructor(message: string) {
+    super(message, 'service_unavailable', 503)
+    this.name = 'GraphDuplicateUnavailableError'
+  }
+}
+
 /** Die Eingabe verletzt den Vertrag; es wurde nichts gesendet. */
 export class GraphEditInputError extends Error {
   readonly issues: z.core.$ZodIssue[]
@@ -109,13 +143,17 @@ export type GraphEditTypedError =
   | GraphEditConflictError
   | EmbeddingMigrationRunningError
   | GraphEditEmbeddingFailedError
+  | GraphBuildInProgressError
+  | GraphDuplicateUnavailableError
 
 export function isGraphEditTypedError(value: unknown): value is GraphEditTypedError {
   return (
     value instanceof GraphLockedError ||
     value instanceof GraphEditConflictError ||
     value instanceof EmbeddingMigrationRunningError ||
-    value instanceof GraphEditEmbeddingFailedError
+    value instanceof GraphEditEmbeddingFailedError ||
+    value instanceof GraphBuildInProgressError ||
+    value instanceof GraphDuplicateUnavailableError
   )
 }
 
@@ -132,17 +170,43 @@ function mapError(err: unknown): unknown {
   if (err.status === 409 && err.code === 'embedding_migration_running') {
     return new EmbeddingMigrationRunningError(err.message)
   }
+  if (err.status === 409 && err.code === 'graph_build_in_progress') {
+    return new GraphBuildInProgressError(err.message)
+  }
   // Status 0 ist ein Transportfehler (Backend offline), kein Embedding-Fehler.
   if (err.status === 503) return new GraphEditEmbeddingFailedError(err.message)
   return err
 }
 
-async function call<T>(request: () => Promise<unknown>, data: z.ZodType<T>, label: string): Promise<T> {
+/**
+ * Fehler des Duplizierens. 503 heißt hier nicht „Einbettung fehlgeschlagen",
+ * sondern „der Kopierpfad antwortet nicht" — deshalb eigener Typ. `graph_locked`
+ * ist absichtlich nicht enthalten: Duplizieren liest die Quelle nur und ist auch
+ * aus einem gesperrten Graphen erlaubt (`backend/app/api/graph_duplicate.py`).
+ */
+function mapDuplicateError(err: unknown): unknown {
+  if (!(err instanceof ApiError)) return err
+  if (err.status === 409 && err.code === 'graph_build_in_progress') {
+    return new GraphBuildInProgressError(err.message)
+  }
+  if (err.status === 409 && err.code === 'embedding_migration_running') {
+    return new EmbeddingMigrationRunningError(err.message)
+  }
+  if (err.status === 503) return new GraphDuplicateUnavailableError(err.message)
+  return err
+}
+
+async function call<T>(
+  request: () => Promise<unknown>,
+  data: z.ZodType<T>,
+  label: string,
+  map: (err: unknown) => unknown = mapError,
+): Promise<T> {
   let raw: unknown
   try {
     raw = await request()
   } catch (err) {
-    throw mapError(err)
+    throw map(err)
   }
   return readEnvelope(raw, data, label) as T
 }
@@ -238,5 +302,47 @@ export function deleteRelation(graphId: string, relationUuid: string): Promise<R
     () => service.delete(`${base(graphId)}/relations/${segment(relationUuid)}`),
     RelationDeleteResultSchema,
     'graph/relations/delete',
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Duplizieren
+// ---------------------------------------------------------------------------
+
+export type GraphDuplicateArgs = { name: string; client_request_id?: string }
+
+/**
+ * Legt einen Kopierauftrag an (`POST /api/graph/<graph_id>/duplicate`, 202 mit
+ * `GraphDuplicateJob`). Der Auftrag läuft im Hintergrund: die Antwort ist ein
+ * Job, keine fertige Kopie. `graph_id` und `project_id` stehen darin schon fest,
+ * der Bestand ist aber erst bei `status='completed'` vollständig.
+ *
+ * Ohne `client_request_id` erzeugt der Client eine; wer einen Versuch wiederholt,
+ * übergibt dieselbe und bekommt denselben Auftrag statt einer zweiten Kopie.
+ */
+export async function duplicateGraph(graphId: string, args: GraphDuplicateArgs): Promise<GraphDuplicateJob> {
+  const body = parseInput(
+    GraphDuplicateRequestSchema,
+    { name: args.name, client_request_id: args.client_request_id ?? crypto.randomUUID() },
+    'duplicate',
+  )
+  return call(
+    () => service.post(`${base(graphId)}/duplicate`, body),
+    GraphDuplicateJobSchema,
+    'graph/duplicate',
+    mapDuplicateError,
+  )
+}
+
+/**
+ * Liest den Zustand eines Kopierauftrags (`GET /api/runs/<run_id>`). Der
+ * Auftrag ist ein Job der RunRegistry; ein eigener Statusabruf existiert nicht.
+ */
+export function getGraphDuplicateRun(runId: string) {
+  return call(
+    () => service.get(`/api/runs/${encodeURIComponent(runId)}`),
+    GraphDuplicateRunSchema,
+    'runs/graph-duplicate',
+    mapDuplicateError,
   )
 }

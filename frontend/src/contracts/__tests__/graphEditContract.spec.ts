@@ -13,6 +13,7 @@ import {
   EntityUpdateSchema,
   GraphDuplicateJobSchema,
   GraphDuplicateRequestSchema,
+  GraphDuplicateRunSchema,
   GraphEdgeViewSchema,
   GraphLockStateSchema,
   GraphLockUserSchema,
@@ -21,6 +22,7 @@ import {
   RelationCreateSchema,
   RelationDeleteResultSchema,
   RelationUpdateSchema,
+  isGraphDuplicateTerminal,
 } from '../graphEditContract'
 import entityCreateJson from '../../../../schemas/graph-entity-create.schema.json'
 import entityUpdateJson from '../../../../schemas/graph-entity-update.schema.json'
@@ -150,5 +152,31 @@ describe('graphEditContract — Antworten', () => {
     expect(GraphDuplicateJobSchema.safeParse(job).success).toBe(true)
     expect(GraphDuplicateJobSchema.safeParse({ ...job, status: 'weird' }).success).toBe(false)
     expect(GraphDuplicateJobSchema.safeParse({ ...job, progress: 101 }).success).toBe(false)
+  })
+
+  it('GraphDuplicateRun liest den Auftrag aus der Run-Infrastruktur', () => {
+    const run = GraphDuplicateRunSchema.parse({
+      run_id: 'r',
+      run_type: 'graph_duplicate',
+      status: 'processing',
+      progress: 40,
+      message: 'Quelle wird gelesen',
+      linked_ids: { source_graph_id: 'a', graph_id: 'b', project_id: 'p' },
+    })
+    expect(run.progress).toBe(40)
+    expect(run.linked_ids.project_id).toBe('p')
+    // `RunDetail` trägt extra="allow": unbekannte Felder dürfen durch.
+    expect(GraphDuplicateRunSchema.safeParse({ run_id: 'r', status: 'pending', budget: {} }).success).toBe(true)
+    expect(GraphDuplicateRunSchema.safeParse({ run_id: 'r', status: 'fast' }).success).toBe(false)
+  })
+
+  it('kennt die Endzustände des Kopierauftrags', () => {
+    expect(isGraphDuplicateTerminal('completed')).toBe(true)
+    expect(isGraphDuplicateTerminal('failed')).toBe(true)
+    expect(isGraphDuplicateTerminal('stopped')).toBe(true)
+    expect(isGraphDuplicateTerminal('pending')).toBe(false)
+    expect(isGraphDuplicateTerminal('processing')).toBe(false)
+    // `paused` ist ein Zustand, kein Ende: der Auftrag läuft weiter.
+    expect(isGraphDuplicateTerminal('paused')).toBe(false)
   })
 })
