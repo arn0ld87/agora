@@ -12,7 +12,7 @@
  *   6. Status-Polling via POST /api/report/generate/status bis "completed" (kein setTimeout).
  *      Timeout: 5 min (Stub-Modus: 12 Sections × 4 ReACT-Runden, aber kein echter LLM-Call).
  *   7. UI-Assertion: alle 12 Section-Header aus output-contract-required-sections.txt
- *      sind als Outline-Eintraege des ReportReader sichtbar.
+ *      sind als Outline-Eintraege der Gliederung (RunReportView) sichtbar.
  *      Die Liste wird zur Laufzeit aus der Snapshot-Datei gelesen — keine Hardcoded-Liste.
  *   8. Persona-Tabelle: Abschnitt "Persona-Tabelle" ist als Outline-Eintrag sichtbar.
  *      Der Backend-Persona-Floor bleibt auch im Stub-Modus aktiv.
@@ -35,14 +35,12 @@
  *   Daher wird der Upload+Graph-Vorlauf aus M11.4b wiederverwendet.
  *
  * DOM-Selektoren: ausschliesslich ueber den Testid-Kontrakt
- * (`ReportReaderTestId` aus src/contracts/testIds.ts), nie ueber CSS-Klassen.
- * Bis Redesign-PR 6 hing dieser Smoke an span.outline-title und
- * div.report-body.markdown-body und brach deshalb, als die Leseansicht auf
- * ReportOutline/ReportReader umgestellt wurde.
- *   - ReportReaderTestId.outline / .outlineItem — Outline und ihre Eintraege
- *   - ReportReaderTestId.body / .section — Lesespalte und einzelne Abschnitte
- *   - frontend/src/views/ReportView.vue:130 — Step4Report mit :reportId="currentReportId"
- *     (Route: /report/:reportId — router/index.ts:55)
+ * (`RunReportTestId` aus src/contracts/testIds.ts), nie ueber CSS-Klassen.
+ * Seit Etappe 5 (#1804) ist der Bericht ein Reiter am Lauf:
+ * /simulations/:simulationId/report/:reportId (RunReportView). Die alte
+ * Leseumgebung (Step4Report/ReportReader, `ReportReaderTestId`) ist entfernt.
+ *   - RunReportTestId.outline / .outlineItemPrefix — Gliederung und ihre Eintraege
+ *   - RunReportTestId.text — Lesetext; gespeicherte Berichte stehen als ein Block
  *
  * Endpoints abgeleitet aus:
  *   - POST /api/graph/ontology/generate  (backend/app/api/graph.py::generate_ontology)
@@ -58,7 +56,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
-import { ReportReaderTestId } from './helpers/testIds';
+import { RunReportTestId } from './helpers/testIds';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
 import { triggerGraphBuild, pollGraphReady } from './helpers/graph';
@@ -279,12 +277,10 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         await pollReportReady(apiCtx, report_id, baseURL!, headers, 300_000);
 
         // ===================================================================
-        // Schritt 10: UI — /report/<report_id> laden und Assertions prüfen
+        // Schritt 10: UI — /simulations/<simulation_id>/report/<report_id> laden
         //
-        // ReportView rendert Step4Report mit :reportId="currentReportId".
-        // Step4Report::onMounted() ruft pollStatus() auf, das GET /api/report/<id>
-        // aufruft und ReportSchema.parse() ausführt.
-        // Bei status="completed" wird fullReport gesetzt und reportHtml gerendert.
+        // RunReportView lädt über useRunReport GET /api/report/<id>, prüft die
+        // Antwort mit ReportSchema und rendert Gliederung und Lesetext.
         // ===================================================================
         // Sub-Slice 2/5 (Issue #739): Onboarding-Wizard wegräumen.
         // backend/app/api/onboarding.py::dismiss_onboarding setzt state.status='dismissed',
@@ -304,20 +300,22 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // SPAs mit Pinia-State-Polling erreichen niemals networkidle (>=500 ms ohne Request).
         // 'domcontentloaded': HTML-Parser durch, Inline-Scripts ausgeführt — deterministisch.
         // Nachfolgende expect(outlineList).toBeVisible() ist der Mount-Indikator via Auto-Wait.
-        await page.goto(`/report/${report_id}`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`/simulations/${simulationId}/report/${report_id}`, { waitUntil: 'domcontentloaded' });
 
         // Outline muss sichtbar sein.
-        // Seit Redesign-PR 6 rendert die abgeschlossene Leseansicht
-        // ReportOutline.vue (nav[role=tablist] mit Buttons) statt des
-        // vormaligen ReportOutlinePanel (ol > li > span.outline-title).
-        // Selektiert wird deshalb über den Testid-Kontrakt statt über
-        // CSS-Klassen — so, wie es die Repo-Konvention ohnehin vorsieht und
-        // wie es einen Markup-Wechsel unbeschadet übersteht.
-        const outlineList = page.getByTestId(ReportReaderTestId.outline);
+        // Seit Etappe 5 (#1804) rendert ReportOutlinePane die Gliederung
+        // (nav mit einem Eintrag je Abschnitt). Selektiert wird über den
+        // Testid-Kontrakt statt über CSS-Klassen.
+        const outlineList = page.getByTestId(RunReportTestId.outline);
         await expect(
           outlineList,
-          `[data-testid=${ReportReaderTestId.outline}] muss sichtbar sein (ReportOutline geladen)`,
+          `[data-testid=${RunReportTestId.outline}] muss sichtbar sein (Gliederung geladen)`,
         ).toBeVisible({ timeout: 30_000 });
+
+        // Ein Eintrag je Abschnitt: `report-outline-item-<n>`.
+        const outlineItems = page.getByTestId(
+          new RegExp(`^${RunReportTestId.outlineItemPrefix}\\d+$`),
+        );
 
         // ===================================================================
         // Schritt 10: Alle 12 Section-Header aus dem Snapshot assertieren
@@ -327,9 +325,7 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // dieselbe Zusicherung wie zuvor, nur über den Testid adressiert.
         // ===================================================================
         for (const header of REQUIRED_SECTION_HEADERS) {
-          const titleLocator = page
-            .getByTestId(ReportReaderTestId.outlineItem)
-            .filter({ hasText: header });
+          const titleLocator = outlineItems.filter({ hasText: header });
           await expect(
             titleLocator,
             `Section-Header "${header}" muss als Outline-Eintrag sichtbar sein`,
@@ -344,9 +340,7 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // MIN_PERSONA_TABLE_ROWS = 0: Stub erzeugt Freitext, keine Markdown-Tabelle.
         // Im echten Betrieb (nicht Stub): MIN_PERSONA_TABLE_ROWS = 50 (§6.1).
         // ===================================================================
-        const personaHeader = page
-          .getByTestId(ReportReaderTestId.outlineItem)
-          .filter({ hasText: 'Persona-Tabelle' });
+        const personaHeader = outlineItems.filter({ hasText: 'Persona-Tabelle' });
         await expect(
           personaHeader,
           '"Persona-Tabelle"-Section muss als Outline-Eintrag sichtbar sein',
@@ -355,12 +349,12 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // Wenn table-Zeilen vorhanden sind (im Stub: 0), muss die Mindestanzahl eingehalten werden.
         // Trivialer Stub-Check: MIN_PERSONA_TABLE_ROWS = 0 → Assertion immer true.
         // Bleibt als explizite Konstante für spätere Anhebung auf echte LLM-Werte.
-        const personaSection = page.getByTestId(ReportReaderTestId.section).filter({
-          has: page.locator('table'),
-        });
-        const personaSectionCount = await personaSection.count();
+        // Gespeicherte Berichte stehen im Lesetext als ein Block, ohne Container
+        // je Abschnitt: geprüft wird die erste Tabelle des Lesetexts.
+        const reportTables = page.getByTestId(RunReportTestId.text).locator('table');
+        const personaSectionCount = await reportTables.count();
         if (personaSectionCount > 0) {
-          const tableRows = personaSection.first().locator('tr');
+          const tableRows = reportTables.first().locator('tr');
           const rowCount = await tableRows.count();
           expect(
             rowCount,
@@ -371,15 +365,13 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // ===================================================================
         // Schritt 12: Report-Body mit gerendertem Markdown sichtbar
         //
-        // Seit Redesign-PR 6 traegt die Lesespalte des ReportReader den
-        // gerenderten Markdown (vormals div.report-body.markdown-body in
-        // Step4Report). Sichtbar wenn fullReport.value gesetzt ist
-        // (phase === 2 + reportHtml !== '').
+        // Seit Etappe 5 (#1804) traegt der Lesetext (RunReportTestId.text) den
+        // gerenderten Markdown des gespeicherten Berichts.
         // ===================================================================
-        const reportBody = page.getByTestId(ReportReaderTestId.body);
+        const reportBody = page.getByTestId(RunReportTestId.text);
         await expect(
           reportBody,
-          `[data-testid=${ReportReaderTestId.body}] muss sichtbar sein (gerenderter Finalbericht)`,
+          `[data-testid=${RunReportTestId.text}] muss sichtbar sein (gerenderter Finalbericht)`,
         ).toBeVisible({ timeout: 30_000 });
 
         // Report-Body darf nicht leer sein

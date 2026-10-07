@@ -325,6 +325,25 @@ class ReportManager:
         return save_evidence_density(cls._ensure_report_folder(report_id), density)
 
     @classmethod
+    def get_evidence_density(cls, report_id: str) -> Optional[Any]:
+        """Liest ``evidence_density.json`` streng (Issue #1804).
+
+        ``None`` bei fehlender Datei (Altbericht); ``ArtifactContractViolation``,
+        wenn die Datei den Vertrag verletzt. Anders als ``load_evidence_density``
+        (Resume-Pfad) verschwindet eine unbrauchbare Datei hier nicht still.
+        """
+        from .evidence_density import read_evidence_density
+
+        return read_evidence_density(cls._get_report_folder(report_id))
+
+    @classmethod
+    def get_stance_analysis(cls, report_id: str) -> Optional[Any]:
+        """Liest ``stance_analysis.json`` streng (Issue #1804), siehe ``get_evidence_density``."""
+        from .stance_analysis import read_stance_analysis
+
+        return read_stance_analysis(cls._get_report_folder(report_id))
+
+    @classmethod
     def _get_report_path(cls, report_id: str) -> str:
         """getreportmetainformationfile path"""
         return get_report_path(cls.REPORTS_DIR, report_id)

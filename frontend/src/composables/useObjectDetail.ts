@@ -4,6 +4,7 @@ import { getGraphData } from '../api/graph'
 import { listPersonaTemplates } from '../api/simulation'
 import type { ConfidenceLabel } from '../contracts/reportContract'
 import type { NextAction, ShelfObject } from '../types/shelf'
+import { reportTarget } from '../utils/reportRoute'
 
 type Translate = (key: string, values?: Record<string, unknown>) => string
 
@@ -157,7 +158,7 @@ export function useObjectDetail(object: Ref<ShelfObject | null>, t: Translate) {
               title: t('views.dossier.parts.output'),
               description: t('views.dossier.parts.outputDesc', { n: report.evidence_sections }),
               count: report.evidence_sections,
-              to: { name: 'StepReport', params: { reportId } },
+              to: reportTarget(reportId, report.simulation_id),
             })
           }
         }

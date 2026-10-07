@@ -200,7 +200,6 @@ async function mountView<T extends object>(
         // Step-Komponenten als Stubs — ihre Inhalte sind Folge-Slice
         Step1GraphBuild: { template: '<div class="stub-step1" />' },
         Step2EnvSetup: { template: '<div class="stub-step2" />' },
-        Step4Report: { template: '<div class="stub-step4" />' },
         Step5Interaction: { template: '<div class="stub-step5" />' },
         // Sidebar stub (Slice F, nicht angefasst)
         Sidebar: { template: '<nav class="stub-sidebar" />' },
@@ -214,7 +213,6 @@ async function mountView<T extends object>(
 // ── Imports nach Mocks ────────────────────────────────────────────────────────
 import StepGraphBuildView from '../StepGraphBuildView.vue'
 import StepEnvSetupView from '../StepEnvSetupView.vue'
-import StepReportView from '../StepReportView.vue'
 import StepInteractionView from '../StepInteractionView.vue'
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -263,51 +261,6 @@ describe('StepEnvSetupView', () => {
     const w = await mountView(StepEnvSetupView, { projectId: 'proj-42' }, '/v4/env-setup/proj-42')
     const stepper = w.findComponent({ name: 'PipelineStepper' })
     expect(stepper.props('currentStep')).toBe(2)
-  })
-})
-
-describe('StepReportView', () => {
-  beforeEach(() => { lsMock.clear(); setActivePinia(createPinia()) })
-
-  it('mountet ohne Crash', async () => {
-    const w = await mountView(StepReportView, { reportId: 'rpt-7' }, '/v4/report/rpt-7')
-    expect(w.exists()).toBe(true)
-  })
-
-  it('setzt Brotkrumen in die zentrale Huelle', async () => {
-    const w = await mountView(StepReportView, { reportId: 'rpt-7' }, '/v4/report/rpt-7')
-    expect(w.exists()).toBe(true)
-    expect(useShellStore().breadcrumbs.length).toBeGreaterThan(0)
-  })
-
-  it('rendert PipelineStepper mit currentStep=4', async () => {
-    const w = await mountView(StepReportView, { reportId: 'rpt-7' }, '/v4/report/rpt-7')
-    const stepper = w.findComponent({ name: 'PipelineStepper' })
-    expect(stepper.props('currentStep')).toBe(4)
-  })
-
-  // Issue #1023 (Befund B-26, P1): Schritt 3 navigiert bei Report-Bereitschaft
-  // auf den Sentinel-reportId 'new' (buildReportReadyRoute()), damit
-  // Step4Report seinen bestehenden Bestaetigungs-Block zeigt statt sofort in
-  // den "running"-Zustand zu springen. StepReportView muss den Sentinel auf
-  // report-id=undefined uebersetzen und simulationId/runId aus der Query
-  // durchreichen.
-  it('uebersetzt den Sentinel-reportId "new" auf report-id=undefined und reicht simulationId/runId durch', async () => {
-    const w = await mountView(
-      StepReportView,
-      { reportId: 'new' },
-      '/v4/report/new?simulationId=sim_test01&runId=run_a1b2c3d4e5f6',
-    )
-    const step4 = w.find('.stub-step4')
-    expect(step4.attributes('report-id')).toBeUndefined()
-    expect(step4.attributes('simulation-id')).toBe('sim_test01')
-    expect(step4.attributes('run-id')).toBe('run_a1b2c3d4e5f6')
-  })
-
-  it('reicht bei echtem reportId report-id unveraendert durch', async () => {
-    const w = await mountView(StepReportView, { reportId: 'rpt-7' }, '/v4/report/rpt-7')
-    const step4 = w.find('.stub-step4')
-    expect(step4.attributes('report-id')).toBe('rpt-7')
   })
 })
 

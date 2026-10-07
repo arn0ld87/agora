@@ -422,6 +422,37 @@
           "title": "Evidence Id",
           "type": "string"
         },
+        "origin_node_uuids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Node Uuids"
+        },
+        "origin_post_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^(twitter|reddit):(comment:)?\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Post Id"
+        },
         "persona_role_family": {
           "anyOf": [
             {
@@ -772,6 +803,19 @@
           "title": "Evidence Sections",
           "type": "integer"
         },
+        "generation_run_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generation Run Id"
+        },
         "graph_id": {
           "minLength": 1,
           "title": "Graph Id",
@@ -781,6 +825,32 @@
           "default": false,
           "title": "Has Evidence",
           "type": "boolean"
+        },
+        "llm_model": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Model"
+        },
+        "llm_provider_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Provider Id"
         },
         "markdown_content": {
           "default": "",

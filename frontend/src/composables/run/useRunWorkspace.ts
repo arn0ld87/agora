@@ -287,6 +287,7 @@ export function useRunWorkspace(simulationId: () => string): RunWorkspace {
       simulationId: simulationId(),
       projectId: data.value?.projectId ?? null,
       latestReportId: data.value?.reports[0]?.reportId ?? null,
+      reportStartable: stages.value.some((r) => r.key === 'report' && r.next.to !== null),
     }),
   )
   const budgetJob = computed<JobInfo | null>(() => {

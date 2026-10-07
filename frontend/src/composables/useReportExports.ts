@@ -21,7 +21,7 @@ interface UseReportExportsOptions {
   recordEvidenceOmission: (omission: EvidenceOmission | null) => void
 }
 
-function triggerDownload(blob: Blob, filename: string) {
+export function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

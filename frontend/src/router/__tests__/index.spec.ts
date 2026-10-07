@@ -54,7 +54,6 @@ vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepGraphBuildView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/StepReportView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepInteractionView.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
@@ -87,6 +86,9 @@ vi.mock('../../views/run/simulation/RunSimulationFeedView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/simulation/RunSimulationPostView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/simulation/RunSimulationRoundsView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/simulation/RunSimulationDiagnosticsView.vue', () => VIEW_STUB)
+// Etappe 5 (#1804): Bericht als Reiter am Lauf; die alte Berichtsadresse ist eine Aufloese-Ansicht.
+vi.mock('../../views/run/report/RunReportView.vue', () => VIEW_STUB)
+vi.mock('../../views/run/report/ReportRedirectView.vue', () => VIEW_STUB)
 vi.mock('../../views/run/interviews/RunInterviewsView.vue', () => VIEW_STUB)
 vi.mock('../../views/graph/GraphLibraryDetailView.vue', () => VIEW_STUB)
 vi.mock('../../views/activity/ActivityJobsView.vue', () => VIEW_STUB)
@@ -256,10 +258,11 @@ describe('Router – Redirects', () => {
     expect(router.currentRoute.value.params).toMatchObject(params)
   })
 
-  it('/ablage/bericht und /ablage/personasatz bleiben bis Etappe 5 bzw. 7 auf der alten Ansicht', async () => {
-    await pushAndSettle('/ablage/bericht/report_42')
-    expect(router.currentRoute.value.name).toBe('ShelfObject')
-    expect(router.currentRoute.value.params).toMatchObject({ kind: 'bericht', objectId: 'report_42' })
+  it('/ablage/bericht/:id leitet seit Etappe 5 auf die Berichtsadresse um (Lauf wird dort aufgelöst); /ablage/personasatz bleibt bis Etappe 7 auf der alten Ansicht', async () => {
+    await pushAndSettle('/ablage/bericht/report_42?x=1#kopf')
+    expect(router.currentRoute.value.name).toBe('StepReport')
+    expect(router.currentRoute.value.params).toMatchObject({ reportId: 'report_42' })
+    expect(router.currentRoute.value.fullPath).toBe('/v4/report/report_42?x=1#kopf')
     await pushAndSettle('/ablage/personasatz/set_42')
     expect(router.currentRoute.value.name).toBe('ShelfObject')
     expect(router.currentRoute.value.params).toMatchObject({ kind: 'personasatz', objectId: 'set_42' })
@@ -464,9 +467,39 @@ describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
     }
   })
 
-  it('/v4/report/:id bleibt unberührt', async () => {
+  it('/v4/report/:id bleibt eine eigene Route (Aufloese-Ansicht, kein Redirect-Eintrag)', async () => {
     await pushAndSettle('/v4/report/report_1')
     expect(router.currentRoute.value.name).toBe('StepReport')
+    const record = router.getRoutes().find((r) => r.name === 'StepReport')
+    expect(record?.redirect).toBeUndefined()
+    expect(record?.components).toBeDefined()
+  })
+
+  it('/report/:id leitet über /v4/report/:id (Aufloese-Ansicht); Query und Hash bleiben', async () => {
+    await pushAndSettle('/report/report_1?claim=c1#x')
+    expect(router.currentRoute.value.name).toBe('StepReport')
+    expect(router.currentRoute.value.fullPath).toBe('/v4/report/report_1?claim=c1#x')
+  })
+
+  it('der Bericht-Reiter hat die Adresse /simulations/:simulationId/report/:reportId? (Bauplan 6.1)', async () => {
+    await pushAndSettle('/simulations/sim_1/report')
+    expect(router.currentRoute.value.name).toBe('RunReport')
+    expect(router.currentRoute.value.params).toMatchObject({ simulationId: 'sim_1' })
+    expect(router.currentRoute.value.params.reportId === undefined || router.currentRoute.value.params.reportId === '').toBe(true)
+    await pushAndSettle('/simulations/sim_1/report/report_9?claim=c_1&section=2&panel=questions')
+    expect(router.currentRoute.value.name).toBe('RunReport')
+    expect(router.currentRoute.value.params).toMatchObject({ simulationId: 'sim_1', reportId: 'report_9' })
+    expect(router.currentRoute.value.query).toEqual({ claim: 'c_1', section: '2', panel: 'questions' })
+    const record = router.getRoutes().find((r) => r.name === 'RunReport')
+    expect(record?.path).toBe('/simulations/:simulationId/report/:reportId?')
+    expect(record?.props.default).toBe(true)
+  })
+
+  it('/v4/interaction/:reportId bleibt unberührt; die alte Interviews-Adresse leitet seit Etappe 6 um', async () => {
+    await pushAndSettle('/v4/interaction/report_1')
+    expect(router.currentRoute.value.name).toBe('StepInteraction')
+    await pushAndSettle('/v4/simulation/sim_1/interviews')
+    expect(router.currentRoute.value.name).toBe('RunInterviews')
   })
 })
 
@@ -559,8 +592,8 @@ describe('Router – Struktur-Integrität', () => {
       // /live ist ein Redirect auf die Runden-Ansicht (siehe Redirects-Suite oben).
       'StepReport',
       'StepInteraction',
-      // Block B3: ShelfObject zeigt weiter auf ShelfView (Bericht und
-      // Personasatz bis Etappe 5 bzw. 7); Lauf und Graph leitet beforeEnter um.
+      // Block B3: ShelfObject zeigt weiter auf ShelfView (Personasatz bis
+      // Etappe 7); Lauf, Graph und Bericht leitet beforeEnter um.
       'ShelfObject',
       // #1617: Supabase-Anmeldung, nur mit JWT erreichbar.
       'Login',
@@ -581,6 +614,8 @@ describe('Router – Struktur-Integrität', () => {
       'RunSimulationPost',
       'RunSimulationRounds',
       'RunSimulationDiagnostics',
+      // Etappe 5 (#1804): Bericht als Reiter; StepReport bleibt als Aufloese-Ansicht.
+      'RunReport',
       'GraphLibraryDetail',
       'Compare',
       'ActivityJobs',

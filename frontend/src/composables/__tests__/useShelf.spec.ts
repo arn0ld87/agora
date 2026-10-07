@@ -195,9 +195,9 @@ describe('nextActionFor — Tabellen-Test ueber run_type x status', () => {
       expected: { to: 'StepEnvSetup', labelKey: 'shelf.action.preparePersonas', kind: 'accent', params: { projectId: 'proj_1' } },
     },
     {
-      name: 'completed + simulation_run + report_id -> StepReport (readReport)',
+      name: 'completed + simulation_run + report_id -> RunReport (readReport)',
       run: { status: 'completed', run_type: 'simulation_run', linked_ids: { report_id: 'rep_1', simulation_id: 'sim_1' } },
-      expected: { to: 'StepReport', labelKey: 'shelf.action.readReport', kind: 'accent', params: { reportId: 'rep_1' } },
+      expected: { to: 'RunReport', labelKey: 'shelf.action.readReport', kind: 'accent', params: { simulationId: 'sim_1', reportId: 'rep_1' } },
     },
     {
       name: 'completed + simulation_run ohne report_id, mit sim_id -> StepSimulation (createReport)',
@@ -485,7 +485,7 @@ describe('buildShelfObjects', () => {
     expect(graphObjs.map((o) => o.id)).toEqual(['proj_free'])
   })
 
-  it('Bericht bekommt eigenes Objekt mit nextAction StepReport, auch wenn ein Lauf zur selben Simulation existiert', () => {
+  it('Bericht bekommt eigenes Objekt mit nextAction RunReport, auch wenn ein Lauf zur selben Simulation existiert', () => {
     const run = makeRun({ linked_ids: { simulation_id: 'sim_4' } })
     const report = makeReport({
       report_id: 'rep_4',
@@ -506,8 +506,8 @@ describe('buildShelfObjects', () => {
 
     expect(berichtObjs.length).toBe(1)
     expect(berichtObjs[0].id).toBe('rep_4')
-    expect(berichtObjs[0].nextAction?.to.name).toBe('StepReport')
-    expect(berichtObjs[0].nextAction?.to.params).toEqual({ reportId: 'rep_4' })
+    expect(berichtObjs[0].nextAction?.to.name).toBe('RunReport')
+    expect(berichtObjs[0].nextAction?.to.params).toEqual({ simulationId: 'sim_4', reportId: 'rep_4' })
   })
 
   it('Bericht-Titel wird nicht mehr auf 80 Zeichen gekuerzt (Issue #1458)', () => {

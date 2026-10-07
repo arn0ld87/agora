@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "EvidenceDensity": {
+      "additionalProperties": false,
+      "description": "Z\u00e4hler und Quoten der Belegdichte eines Berichts.",
+      "properties": {
+        "action_support_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action Support Ratio"
+        },
+        "claims_at_single_source_cap": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims At Single Source Cap",
+          "type": "integer"
+        },
+        "claims_multi_independent": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims Multi Independent",
+          "type": "integer"
+        },
+        "claims_multi_support": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims Multi Support",
+          "type": "integer"
+        },
+        "claims_single_support": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims Single Support",
+          "type": "integer"
+        },
+        "claims_total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims Total",
+          "type": "integer"
+        },
+        "claims_with_action_support": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims With Action Support",
+          "type": "integer"
+        },
+        "claims_without_support": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Claims Without Support",
+          "type": "integer"
+        },
+        "multi_independent_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multi Independent Ratio"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "single_source_cap_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Single Source Cap Ratio"
+        },
+        "single_support_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Single Support Ratio"
+        },
+        "supporting_links_by_type": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Supporting Links By Type",
+          "type": "object"
+        }
+      },
+      "title": "EvidenceDensity",
+      "type": "object"
+    },
+    "EvidenceDensityResponseOmittedVariant": {
+      "additionalProperties": false,
+      "description": "Degradations-Variante von ``EvidenceDensityResponseModel``.",
+      "properties": {
+        "artifact_omitted": {
+          "$ref": "#/$defs/ReportArtifactOmissionModel"
+        },
+        "success": {
+          "const": true,
+          "description": "Pflichtfeld ohne Default, damit es im JSON-Schema in `required` steht.",
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "artifact_omitted"
+      ],
+      "title": "EvidenceDensityResponseOmittedVariant",
+      "type": "object"
+    },
+    "EvidenceDensityResponseSuccessVariant": {
+      "additionalProperties": false,
+      "description": "Erfolgsvariante von ``EvidenceDensityResponseModel``.",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/EvidenceDensity"
+        },
+        "success": {
+          "const": true,
+          "description": "Pflichtfeld ohne Default, damit es im JSON-Schema in `required` steht.",
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "data"
+      ],
+      "title": "EvidenceDensityResponseSuccessVariant",
+      "type": "object"
+    },
+    "ReportArtifactOmissionModel": {
+      "additionalProperties": false,
+      "description": "Warum ein Berichts-Artefakt nicht ausgeliefert wurde.\n\nGesetzt genau dann, wenn die Datei vorliegt, aber den Vertrag verletzt\n(besch\u00e4digtes JSON oder Schemaversto\u00df). ``reason`` ist der stabile\nSchl\u00fcssel, aus dem die Oberfl\u00e4che per vue-i18n \u00fcbersetzt; ``detail`` ist\nkein UI-Text.",
+      "properties": {
+        "artifact": {
+          "enum": [
+            "evidence_density",
+            "stance_analysis"
+          ],
+          "title": "Artifact",
+          "type": "string"
+        },
+        "detail": {
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "reason": {
+          "const": "contract_violation",
+          "title": "Reason",
+          "type": "string"
+        },
+        "validation_errors": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Validation Errors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "artifact",
+        "reason",
+        "detail"
+      ],
+      "title": "ReportArtifactOmissionModel",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/evidence-density-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Envelope f\u00fcr ``GET /api/report/<id>/evidence-density``.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/EvidenceDensityResponseSuccessVariant"
+    },
+    {
+      "$ref": "#/$defs/EvidenceDensityResponseOmittedVariant"
+    }
+  ],
+  "title": "EvidenceDensityResponseModel"
+}

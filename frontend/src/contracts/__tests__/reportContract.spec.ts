@@ -13,6 +13,7 @@ import {
   ReportContractSchema,
   ReportClaimSchema,
   EvidenceItemSchema,
+  EvidenceRecordSchema,
   ReportOutlineSchema,
   ReportSchema,
   ReportSectionSchema,
@@ -182,6 +183,57 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
       missing_sections: ['Persona-Mindestanzahl nicht erreicht: 12/50 Personas vorhanden.'],
     });
     expect(result.success).toBe(true);
+  });
+
+  it('akzeptiert die optionale Erzeugungsherkunft einer Fassung und ihr Fehlen (#1804)', () => {
+    const base = {
+      schema_version: 2,
+      report_id: 'report_0123456789ab',
+      simulation_id: 'sim_1',
+      graph_id: 'graph_1',
+      simulation_requirement: 'Frage',
+      status: 'completed',
+    };
+    const without = ReportSchema.safeParse(base);
+    expect(without.success).toBe(true);
+    const withModel = ReportSchema.parse({
+      ...base,
+      llm_model: 'MiniMax-M3',
+      llm_provider_id: 'minimax',
+      generation_run_id: 'run_0123456789ab',
+    });
+    expect(withModel.llm_model).toBe('MiniMax-M3');
+    expect(ReportSchema.safeParse({ ...base, llm_model: null }).success).toBe(true);
+    expect(ReportSchema.safeParse({ ...base, llm_model: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  it('EvidenceRecord: Sprungkennungen sind optional und folgen dem Feed-Format (#1804)', () => {
+    const base = {
+      evidence_id: 'ev_00000000000000000000000000000009',
+      producer_key: 'simulation-action:twitter:3:7:CREATE_POST:2026-08-02T15:02:16',
+      type: 'agent_action',
+      source: 'simulation_actions',
+      snippet: 'Anna: Beitrag',
+      source_kind: 'agent_action',
+    };
+    expect(EvidenceRecordSchema.safeParse(base).success).toBe(true);
+    for (const id of ['twitter:12', 'reddit:comment:5']) {
+      expect(EvidenceRecordSchema.parse({ ...base, origin_post_id: id }).origin_post_id).toBe(id);
+    }
+    for (const bad of ['12', 'mastodon:1', 'twitter:comment:x', 'twitter:']) {
+      expect(EvidenceRecordSchema.safeParse({ ...base, origin_post_id: bad }).success).toBe(false);
+    }
+    const node = '3f2b9c1e-8a4d-4f6b-9c7e-1a2b3c4d5e6f';
+    expect(EvidenceRecordSchema.parse({ ...base, origin_node_uuids: [node] }).origin_node_uuids).toEqual([node]);
+    expect(EvidenceRecordSchema.safeParse({ ...base, origin_node_uuids: [] }).success).toBe(false);
+    expect(EvidenceRecordSchema.safeParse({ ...base, origin_node_uuids: ['nope'] }).success).toBe(false);
+  });
+
+  it('EvidenceRecord spiegelt die Properties des generierten Schemas (#1804)', () => {
+    const defs = reportContractJson.$defs;
+    expect(shapeKeys(EvidenceRecordSchema as unknown as { shape: Record<string, unknown> })).toEqual(
+      propertyKeys(defs.EvidenceRecordModel),
+    );
   });
 
   it('rejects claim_id that does not match the Pydantic regex', () => {

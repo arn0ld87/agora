@@ -71,7 +71,8 @@ beforeEach(async () => {
 
 describe('Legacy-Modus (JWT aus)', () => {
   it('lässt normale Routen ohne Anmeldung durch', async () => {
-    await go('/ablage/bericht/r1')
+    // Seit Etappe 5 leitet /ablage/bericht/:id um; der Personasatz bleibt bis Etappe 7 auf der Ablage.
+    await go('/ablage/personasatz/r1')
     expect(router.currentRoute.value.name).toBe('ShelfObject')
   })
 

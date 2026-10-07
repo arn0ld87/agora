@@ -196,6 +196,27 @@ Bei einem **persistierten Altartefakt**, das die heutige Evidence-Semantik nicht
 
 Belege aus Interview und Simulationsaktion tragen seit #1778 das optionale Feld `voice_key` (`agent:<agent_id>`), die Stimme, von der der Beleg stammt. `run_degradations` kennt seit #1778 die Komponente `simulation_positioning` (`warning`): zu wenige Stimmen beziehen in der Simulation Stellung zur Streitfrage.
 
+#### Sprungkennungen an Belegen (#1804)
+
+`GET /api/report/<id>/evidence` ergänzt Belege der Typen `agent_action` und `entity_summary` um optionale Sprungkennungen. Sie werden erst beim Ausliefern aus dem Beleg-Inhalt (`raw`, `producer_key`) abgeleitet, nie gespeichert; die Evidence-Map im Berichtsordner bleibt byte-identisch, und die Ableitung gilt damit auch für Altberichte. Ein nicht ableitbares Feld fehlt in der Antwort.
+
+- `origin_post_id` (`agent_action`): Feed-Format von `GET /api/simulation/<id>/feed-snapshot`, `<platform>:<id>` bzw. `<platform>:comment:<id>` mit `platform` = `twitter` | `reddit`. Nur für Aktionen, die einen eigenen Beitrag erzeugen und dessen Kennung das Aktionsprotokoll trägt: `CREATE_POST` (`post_id`), `QUOTE_POST` und `REPOST` (`new_post_id`), `CREATE_COMMENT` (`comment_id`). `LIKE_*`, `FOLLOW` und `SEARCH_*` tragen nur die Kennung ihres Ziels und bekommen kein Feld. Widerspricht der `producer_key` der Aktion Plattform oder Aktionsart in `raw`, bleibt das Feld leer. Die Kennung stammt aus dem Aktionsprotokoll; bei Läufen, deren Protokoll nach einem Neustart nicht zur Datenbank passt, kann sie auf einen anderen Beitrag zeigen. Clients sollten deshalb vor dem Sprung prüfen, ob der Beitrag im Feed existiert und zum Belegtext passt.
+- `origin_node_uuids` (`entity_summary`): Knoten-UUIDs im Wissensgraphen aus `raw.uuid`. `graph_fact` und `relationship_chain` tragen als `raw` nur den Faktentext und bekommen keine Kennung. `agent_interview` braucht keine: `voice_key` (`agent:<id>`) benennt die Persona bereits.
+
+#### Erzeugungsherkunft einer Berichtsfassung (#1804)
+
+`GET /api/report/<id>`, `GET /api/report/by-simulation/<simulation_id>` und `GET /api/report/list` tragen die optionalen Felder `llm_model`, `llm_provider_id` und `generation_run_id` (`ReportModel`, jeweils `null`, wenn nicht belegt). Quelle ist der jüngste Berichts-Job (`run_type=report_generate`, `entity_id=<report_id>`) der RunRegistry: `metadata.llm_model` und `metadata.llm_provider.provider_id` stammen dort aus der gelockten Route der Stufe `report_generation`, also aus dem Modell, das tatsächlich lief. `generation_run_id` ist die `run_id` dieses Jobs und der Schlüssel für `GET /api/runs/<run_id>/llm-routing`. Berichte ohne Job (Altbestand, gelöschter Lauf) und Jobs ohne Modellangabe lassen die Felder `null`; nichts wird aus Workspace-Defaults geraten, die Basis-URL des Anbieters wird nicht ausgeliefert. Die Berichts-Metadatei (`meta.json`) speichert sie nicht, und im Export (`report` im Envelope) bleiben sie `null`. `/list` liest die Registry einmal für alle Fassungen.
+
+#### Belegdichte und Positionierungsquote (#1804)
+
+`GET /api/report/<id>/evidence-density` liefert die je Bericht gespeicherte `evidence_density.json` (#1779), `GET /api/report/<id>/stance-analysis` die `stance_analysis.json` mit Positionierungsquote und Lagerverteilung (#1778). Beide sind rein lesend, ohne eigene Scope-Regel (wie `/evidence`), und antworten mit genau einer von drei Formen:
+
+1. `{"success": true, "data": {…}}` — die Datei liegt vor und erfüllt den Vertrag (`EvidenceDensity` bzw. `StanceAnalysis`). `data.applicable=false` bei der Haltungsanalyse ist ein Lauf ohne Streitfrage, kein Fehler.
+2. HTTP 404 (`{"success": false, "error": …}`) — der Bericht hat die Datei nicht (Altbericht aus der Zeit vor #1778/#1779).
+3. HTTP 200 `{"success": true, "artifact_omitted": {"artifact", "reason": "contract_violation", "detail", "validation_errors"}}` — die Datei liegt vor, ist aber beschädigt oder vertragswidrig. Das ist sichtbar und nicht dasselbe wie „keine Daten“ (Muster von `evidence_omitted`). Die Datei wird nie verändert.
+
+Verträge: `EvidenceDensityResponseModel` / `StanceAnalysisResponseModel` (`backend/app/contracts/report_artifact_contract.py`), Schemas `schemas/evidence-density-response.schema.json` und `schemas/stance-analysis-response.schema.json`, Zod-Spiegel `frontend/src/contracts/reportArtifactContract.ts`.
+
 Exportpfade bleiben strenger: Wenn ein Format Evidence als geprüfte Datei ausliefern würde, wird sie weggelassen (`evidence-omitted.json`) oder der spezifische Export antwortet mit Contract-Fehler. Die alten pauschalen Aussagen „jede invalide Evidence = 422“ sind damit nicht mehr korrekt.
 
 ### Runs — `/api/runs`

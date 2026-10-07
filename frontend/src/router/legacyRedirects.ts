@@ -56,14 +56,16 @@ function laufTarget(id: string, carry: { query: LocationQuery; hash: string }): 
 }
 
 /**
- * `beforeEnter` der Objekt-Route `/ablage/:kind/:objectId`. Lauf und Graph
- * werden umgeleitet; Bericht und Personasatz bleiben bis Etappe 5 bzw. 7 auf der
+ * `beforeEnter` der Objekt-Route `/ablage/:kind/:objectId`. Lauf, Graph und
+ * Bericht werden umgeleitet (der Bericht auf `/v4/report/:id`, das den Lauf aus
+ * dem Bericht aufloest, Etappe 5); der Personasatz bleibt bis Etappe 7 auf der
  * alten Ablage-Ansicht (Bauplan §6.2).
  */
 export function shelfObjectGuard(to: RouteLocationNormalized): NavigationGuardReturn {
   const id = String(to.params.objectId)
   const carry = { query: to.query, hash: to.hash }
   if (to.params.kind === 'lauf') return laufTarget(id, carry)
+  if (to.params.kind === 'bericht') return { name: 'StepReport', params: { reportId: id }, ...carry }
   if (to.params.kind === 'graph') {
     return { name: 'GraphLibraryDetail', params: { projectId: id }, ...carry }
   }

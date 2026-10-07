@@ -1,0 +1,311 @@
+{
+  "$defs": {
+    "ClassifiedContribution": {
+      "additionalProperties": false,
+      "description": "Ein Simulationsbeitrag mit seiner klassifizierten Haltung.",
+      "properties": {
+        "action_type": {
+          "title": "Action Type",
+          "type": "string"
+        },
+        "agent_id": {
+          "title": "Agent Id",
+          "type": "integer"
+        },
+        "agent_name": {
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "platform": {
+          "title": "Platform",
+          "type": "string"
+        },
+        "producer_key": {
+          "title": "Producer Key",
+          "type": "string"
+        },
+        "round_num": {
+          "title": "Round Num",
+          "type": "integer"
+        },
+        "stance_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "Stance Class",
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id",
+        "agent_name",
+        "platform",
+        "round_num",
+        "action_type",
+        "producer_key",
+        "stance_class"
+      ],
+      "title": "ClassifiedContribution",
+      "type": "object"
+    },
+    "ReportArtifactOmissionModel": {
+      "additionalProperties": false,
+      "description": "Warum ein Berichts-Artefakt nicht ausgeliefert wurde.\n\nGesetzt genau dann, wenn die Datei vorliegt, aber den Vertrag verletzt\n(besch\u00e4digtes JSON oder Schemaversto\u00df). ``reason`` ist der stabile\nSchl\u00fcssel, aus dem die Oberfl\u00e4che per vue-i18n \u00fcbersetzt; ``detail`` ist\nkein UI-Text.",
+      "properties": {
+        "artifact": {
+          "enum": [
+            "evidence_density",
+            "stance_analysis"
+          ],
+          "title": "Artifact",
+          "type": "string"
+        },
+        "detail": {
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "reason": {
+          "const": "contract_violation",
+          "title": "Reason",
+          "type": "string"
+        },
+        "validation_errors": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Validation Errors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "artifact",
+        "reason",
+        "detail"
+      ],
+      "title": "ReportArtifactOmissionModel",
+      "type": "object"
+    },
+    "StanceAnalysis": {
+      "additionalProperties": false,
+      "description": "Positionierungsquote und Lagerverteilung eines Laufs.",
+      "properties": {
+        "applicable": {
+          "title": "Applicable",
+          "type": "boolean"
+        },
+        "camp_distribution": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "in_favour",
+              "opposed",
+              "undecided"
+            ]
+          },
+          "title": "Camp Distribution",
+          "type": "object"
+        },
+        "classification_failed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Classification Failed",
+          "type": "integer"
+        },
+        "classified_total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Classified Total",
+          "type": "integer"
+        },
+        "contested_statement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contested Statement"
+        },
+        "contributions": {
+          "items": {
+            "$ref": "#/$defs/ClassifiedContribution"
+          },
+          "title": "Contributions",
+          "type": "array"
+        },
+        "positioning_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Positioning Ratio"
+        },
+        "voices": {
+          "items": {
+            "$ref": "#/$defs/VoiceStance"
+          },
+          "title": "Voices",
+          "type": "array"
+        },
+        "voices_positioned": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Voices Positioned",
+          "type": "integer"
+        },
+        "voices_total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Voices Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "applicable"
+      ],
+      "title": "StanceAnalysis",
+      "type": "object"
+    },
+    "StanceAnalysisResponseOmittedVariant": {
+      "additionalProperties": false,
+      "description": "Degradations-Variante von ``StanceAnalysisResponseModel``.",
+      "properties": {
+        "artifact_omitted": {
+          "$ref": "#/$defs/ReportArtifactOmissionModel"
+        },
+        "success": {
+          "const": true,
+          "description": "Pflichtfeld ohne Default, damit es im JSON-Schema in `required` steht.",
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "artifact_omitted"
+      ],
+      "title": "StanceAnalysisResponseOmittedVariant",
+      "type": "object"
+    },
+    "StanceAnalysisResponseSuccessVariant": {
+      "additionalProperties": false,
+      "description": "Erfolgsvariante von ``StanceAnalysisResponseModel``.",
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/StanceAnalysis"
+        },
+        "success": {
+          "const": true,
+          "description": "Pflichtfeld ohne Default, damit es im JSON-Schema in `required` steht.",
+          "title": "Success",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "success",
+        "data"
+      ],
+      "title": "StanceAnalysisResponseSuccessVariant",
+      "type": "object"
+    },
+    "VoiceStance": {
+      "additionalProperties": false,
+      "description": "Haltung einer Stimme: Startwert, Beitr\u00e4ge und Interview.",
+      "properties": {
+        "agent_name": {
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "contribution_classes": {
+          "items": {
+            "enum": [
+              "in_favour",
+              "opposed",
+              "undecided"
+            ],
+            "type": "string"
+          },
+          "title": "Contribution Classes",
+          "type": "array"
+        },
+        "interview_class": {
+          "anyOf": [
+            {
+              "enum": [
+                "in_favour",
+                "opposed",
+                "undecided"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interview Class"
+        },
+        "role_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role Family"
+        },
+        "start_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "Start Class",
+          "type": "string"
+        },
+        "voice_key": {
+          "title": "Voice Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voice_key",
+        "agent_name",
+        "start_class"
+      ],
+      "title": "VoiceStance",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/stance-analysis-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Envelope f\u00fcr ``GET /api/report/<id>/stance-analysis``.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/StanceAnalysisResponseSuccessVariant"
+    },
+    {
+      "$ref": "#/$defs/StanceAnalysisResponseOmittedVariant"
+    }
+  ],
+  "title": "StanceAnalysisResponseModel"
+}
