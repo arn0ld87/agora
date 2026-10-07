@@ -101,6 +101,7 @@ const showInitialLoad = computed(() => interviews.loading.value && interviews.co
         :active-id="activeId"
         :personas="personas.personas.value"
         :persona-by-id="personas.personaById"
+        :can-ask="canAsk && interviews.available.value"
       />
       <ConversationPane
         :selection="selection"

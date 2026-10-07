@@ -214,6 +214,18 @@ describe('RunInterviewsView', () => {
     expect(w.find('[data-testid="ask-blocked"]').exists()).toBe(true)
   })
 
+  it('Gruppenfrage bleibt gesperrt, solange die Simulation läuft', async () => {
+    const { w } = await mountAt('/simulations/sim_1/interviews', 'running')
+    await w.get('[data-testid="group-toggle"]').trigger('click')
+    const boxes = w.findAll('input[type="checkbox"]')
+    await boxes[0].setValue(true)
+    await w.get('[data-testid="group-text"]').setValue('Frage an alle')
+    const send = w.get('[data-testid="group-send"]')
+    expect(send.attributes('disabled')).toBeDefined()
+    await send.trigger('click')
+    expect(api.askPersonas).not.toHaveBeenCalled()
+  })
+
   it('ohne Arbeitsbereich oder bei ungeladenem Zustand bleibt die Eingabe gesperrt (fail-closed)', async () => {
     const none = await mountAt('/simulations/sim_1/interviews/persona-0', null)
     expect(none.w.find('[data-testid="ask-form"]').exists()).toBe(false)

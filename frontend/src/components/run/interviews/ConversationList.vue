@@ -20,6 +20,8 @@ const props = defineProps<{
   activeId: string | null
   personas: RunPersona[]
   personaById: (personaId: string) => RunPersona | null
+  /** Gleiche Freigabe wie die Einzelfrage: Simulation abgeschlossen und Interviews verfügbar. */
+  canAsk: boolean
 }>()
 const { t } = useI18n()
 const router = useRouter()
@@ -50,7 +52,7 @@ const groupSummary = ref<{ asked: number; answered: number; failed: number } | n
 
 const warn = computed(() => ctx.largeGroupWarning(groupIds.value.length))
 const canSendGroup = computed(
-  () => groupIds.value.length > 0 && groupText.value.trim() !== '' && !ctx.sending.value,
+  () => props.canAsk && groupIds.value.length > 0 && groupText.value.trim() !== '' && !ctx.sending.value,
 )
 
 async function sendGroup() {
