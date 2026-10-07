@@ -22,6 +22,7 @@ import { computed, inject, provide, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConversationList from '@/components/run/interviews/ConversationList.vue'
 import ConversationPane from '@/components/run/interviews/ConversationPane.vue'
+import InterviewBudgetNotice from '@/components/run/interviews/InterviewBudgetNotice.vue'
 import InterviewPersonaPane from '@/components/run/interviews/InterviewPersonaPane.vue'
 import { parseConversationId } from '@/composables/run/interviews/conversations'
 import { RUN_INTERVIEWS_KEY, useRunInterviews } from '@/composables/run/interviews/useRunInterviews'
@@ -72,6 +73,8 @@ const showInitialLoad = computed(() => interviews.loading.value && interviews.co
       <span v-if="interviews.unavailableReason.value"> {{ interviews.unavailableReason.value }}</span>
     </p>
 
+    <InterviewBudgetNotice />
+
     <p v-if="!canAsk" class="interviews__notice" role="status" data-testid="interviews-not-run">
       {{ t('views.run.interviews.notRun') }}
     </p>
@@ -87,6 +90,8 @@ const showInitialLoad = computed(() => interviews.loading.value && interviews.co
         :selection="selection"
         :persona-by-id="personas.personaById"
         :can-ask="canAsk && interviews.available.value"
+        :simulation-id="simulationId"
+        :personas-loading="personas.loading.value"
       />
       <InterviewPersonaPane :selection="selection" :persona-by-id="personas.personaById" />
     </div>

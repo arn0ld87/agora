@@ -142,6 +142,9 @@ function groupLabel(question: string): string {
         <p v-if="warn" class="clist__warn" role="status" data-testid="group-warning">
           {{ t('views.run.interviews.group.large', { n: groupIds.length }) }}
         </p>
+        <p class="clist__hint" data-testid="group-cost">
+          {{ t('views.run.interviews.group.cost', { n: groupIds.length }, groupIds.length) }}
+        </p>
         <button type="button" class="clist__btn" :disabled="!canSendGroup" data-testid="group-send" @click="sendGroup">
           {{ ctx.sending.value ? t('views.run.interviews.sending') : t('views.run.interviews.group.send') }}
         </button>
@@ -232,6 +235,11 @@ function groupLabel(question: string): string {
   margin: 0;
   padding: 0;
   border: 0;
+}
+.clist__hint {
+  margin: 0;
+  color: var(--fg3);
+  font-size: 12px;
 }
 .clist__label {
   color: var(--fg3);

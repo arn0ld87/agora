@@ -67,6 +67,41 @@ export interface GroupOutcome {
 
 const ConfigDataSchema = z.object({ llm_model: z.string().nullish() }).passthrough()
 
+/**
+ * Felder des 409-Envelopes `budget_exceeded` (flach im Body, siehe
+ * `_budget_exceeded_as_conflict` im Backend). Alles optional: fehlt etwas,
+ * zeigt die Oberfläche nur die Meldung, nie geratene Zahlen.
+ */
+const BudgetBodySchema = z
+  .object({
+    error: z.string().nullish(),
+    termination_reason: z.string().nullish(),
+    dimension: z.string().nullish(),
+    observed: z.number().nullish(),
+    threshold: z.number().nullish(),
+  })
+  .passthrough()
+
+export interface BudgetDetail {
+  message: string
+  reason: string | null
+  dimension: string | null
+  observed: number | null
+  threshold: number | null
+}
+
+function budgetDetailOf(err: unknown, message: string): BudgetDetail {
+  const parsed = isApiError(err) ? BudgetBodySchema.safeParse(err.originalResponse) : null
+  const body = parsed?.success ? parsed.data : null
+  return {
+    message,
+    reason: body?.termination_reason ?? null,
+    dimension: body?.dimension ?? null,
+    observed: body?.observed ?? null,
+    threshold: body?.threshold ?? null,
+  }
+}
+
 /** Erkennt den Abbruch durch ein erschöpftes Budget an Code oder Meldung des Backends. */
 export function isBudgetFailure(code: string | undefined, message: string | undefined | null): boolean {
   return /budget/i.test(code ?? '') || /budget|überschritten|exceeded/i.test(message ?? '')
@@ -84,6 +119,7 @@ export interface UseRunInterviews {
   sending: Readonly<Ref<boolean>>
   sendError: Readonly<Ref<string | null>>
   budgetExceeded: Readonly<Ref<boolean>>
+  budgetDetail: Readonly<Ref<BudgetDetail | null>>
   available: Readonly<Ref<boolean>>
   unavailableReason: Readonly<Ref<string | null>>
   modelLabel: Readonly<Ref<string | null>>
@@ -112,6 +148,7 @@ export function useRunInterviews(
   const sending = ref(false)
   const sendError = ref<string | null>(null)
   const budgetExceeded = ref(false)
+  const budgetDetail = ref<BudgetDetail | null>(null)
   const available = ref(true)
   const unavailableReason = ref<string | null>(null)
   const modelLabel = ref<string | null>(null)
@@ -184,6 +221,7 @@ export function useRunInterviews(
     sending.value = true
     sendError.value = null
     budgetExceeded.value = false
+    budgetDetail.value = null
     const asked = nowIso()
     try {
       const results = await askPersonas(
@@ -205,6 +243,7 @@ export function useRunInterviews(
       if (budget) {
         budgetExceeded.value = true
         sendError.value = budget.error
+        budgetDetail.value = budgetDetailOf(null, budget.error ?? '')
       }
       return { answers, status: budget ? 'budget' : 'answered', message: budget?.error ?? null }
     } catch (err) {
@@ -213,6 +252,7 @@ export function useRunInterviews(
       const message = err instanceof Error ? err.message : String(err)
       const budget = isBudgetFailure(code, message)
       budgetExceeded.value = budget
+      budgetDetail.value = budget ? budgetDetailOf(err, message) : null
       sendError.value = budget
         ? `${t('views.run.interviews.budgetExceeded')} ${message}`
         : interviewErrorMessage(err, t)
@@ -292,6 +332,7 @@ export function useRunInterviews(
     sending: computed(() => sending.value),
     sendError: computed(() => sendError.value),
     budgetExceeded: computed(() => budgetExceeded.value),
+    budgetDetail: computed(() => budgetDetail.value),
     available: computed(() => available.value),
     unavailableReason: computed(() => unavailableReason.value),
     modelLabel: computed(() => modelLabel.value),
@@ -321,6 +362,7 @@ export function useRunInterviewsContext(): UseRunInterviews {
     sending: idle,
     sendError: computed(() => null),
     budgetExceeded: idle,
+    budgetDetail: computed(() => null),
     available: computed(() => true),
     unavailableReason: computed(() => null),
     modelLabel: computed(() => null),

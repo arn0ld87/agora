@@ -120,6 +120,41 @@ describe('useRunInterviews', () => {
     expect(vm.sendError.value).toContain('views.run.interviews.budgetExceeded')
   })
 
+  it('409 budget_exceeded reicht Abbruchgrund und Zahlen aus dem Envelope durch', async () => {
+    api.askPersonas.mockRejectedValue(
+      new ApiError({
+        code: 'budget_exceeded',
+        status: 409,
+        message: 'Token-Budget überschritten',
+        originalResponse: {
+          success: false,
+          code: 'budget_exceeded',
+          error: 'Token-Budget überschritten',
+          termination_reason: 'budget_tokens',
+          dimension: 'tokens',
+          observed: 12000,
+          threshold: 10000,
+        },
+      }),
+    )
+    const vm = await setup()
+    await vm.ask(1, 'Hallo')
+    expect(vm.budgetDetail.value).toEqual({
+      message: 'Token-Budget überschritten',
+      reason: 'budget_tokens',
+      dimension: 'tokens',
+      observed: 12000,
+      threshold: 10000,
+    })
+  })
+
+  it('409 ohne Zahlen im Body liefert nur die Meldung, nichts Geratenes', async () => {
+    api.askPersonas.mockRejectedValue(new ApiError({ code: 'budget_exceeded', status: 409, message: 'voll' }))
+    const vm = await setup()
+    await vm.ask(1, 'Hallo')
+    expect(vm.budgetDetail.value).toMatchObject({ reason: null, observed: null, threshold: null })
+  })
+
   it('Budget-Meldung im Eintrag zählt ebenfalls als Budgetabbruch', async () => {
     api.askPersonas.mockResolvedValue([ans(1, { response: null, error: 'Budget überschritten' })])
     const vm = await setup()

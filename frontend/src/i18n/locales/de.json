@@ -2334,7 +2334,15 @@
           "question": "Frage an alle",
           "send": "Gruppenfrage stellen",
           "large": "{n} Personas auf einmal können die Frist des Backends überschreiten. Einzelne Antworten können fehlen.",
-          "summary": "{asked} gefragt, {answered} beantwortet, {failed} fehlgeschlagen"
+          "summary": "{asked} gefragt, {answered} beantwortet, {failed} fehlgeschlagen",
+          "cost": "Keine Persona gewählt: keine Aufrufe | Ein Aufruf, er zählt aufs Budget des Laufs | {n} Aufrufe, jeder zählt aufs Budget des Laufs"
+        },
+        "budget": {
+          "title": "Budget des Laufs erreicht",
+          "explain": "Der Lauf hat sein Budget erreicht. Die Frage wurde nicht beantwortet und nicht gespeichert; weitere Fragen werden abgelehnt, solange das Budget erschöpft ist.",
+          "reason": "Abbruchgrund: {reason}",
+          "figures": "{dimension}: {observed} von {threshold}",
+          "dimensionUnknown": "Grenze"
         },
         "pane": {
           "aria": "Gespräch",
@@ -2343,7 +2351,18 @@
           "with": "Gespräch mit {name}",
           "noTurns": "Noch keine Fragen an diese Persona.",
           "you": "Du:",
-          "badge": "SIM · Interview",
+          "badgeSim": "SIM",
+          "badgeInterview": "Interview",
+          "origin": "Einträge können auch aus Interviews stammen, die der Bericht geführt hat; sie sind hier nicht zu unterscheiden.",
+          "unknownPersona": "Für Agent {n} liegt kein Persona-Profil vor und es gibt keinen Verlauf. Wähle eine Persona aus der Liste.",
+          "failedReason": "Keine Antwort: {reason}",
+          "copy": "Kopieren",
+          "copyAnswer": "Antwort von {name} kopieren",
+          "copied": "Antwort in die Zwischenablage kopiert.",
+          "copyFailed": "Kopieren nicht möglich. Die Zwischenablage ist nicht verfügbar.",
+          "groupCount": "{answered} von {total} beantwortet",
+          "cost": "Jede Frage ist ein Modellaufruf und zählt aufs Budget des Laufs.",
+          "shortcut": "Senden mit Strg/Cmd+Enter.",
           "groupTitle": "Gruppenfrage",
           "groupGone": "Diese Gruppenfrage gibt es nur in der Sitzung, in der sie gestellt wurde.",
           "inputLabel": "Frage an die Persona",

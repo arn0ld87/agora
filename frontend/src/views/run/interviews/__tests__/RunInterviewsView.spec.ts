@@ -125,7 +125,9 @@ describe('RunInterviewsView', () => {
     expect(w.get('[data-testid="pane-title"]').text()).toContain('Jörg Kreistag')
     expect(w.get('[data-testid="turns"]').text()).toContain('Was sagen Sie?')
     expect(w.get('[data-testid="turn-answer"]').text()).toContain('Das lehne ich ab.')
-    expect(w.get('[data-testid="turn-answer"]').text()).toContain('SIM · Interview')
+    const marks = w.get('[data-testid="turn-answer"]').text()
+    expect(marks).toContain('SIM')
+    expect(marks).toContain('Interview')
     expect(w.get('[data-testid="persona-card-name"]').text()).toBe('Jörg Kreistag')
     expect(w.get('[data-testid="ask-model"]').text()).toContain('gpt-x')
   })
@@ -209,6 +211,98 @@ describe('RunInterviewsView', () => {
     expect(w.get('[data-testid="group-summary"]').text()).toBe('2 gefragt, 1 beantwortet, 1 fehlgeschlagen')
     expect(router.currentRoute.value.params.conversationId).toMatch(/^group-/)
     expect(w.get('[data-testid="group-answers"]').text()).toContain('kaputt')
+  })
+
+  it('Gruppenfrage: Antworten nebeneinander mit Zählzeile und Verweis ins Einzelgespräch', async () => {
+    api.askPersonas.mockResolvedValue([
+      { agentId: 0, platform: 'reddit', prompt: 'p', response: 'Ja', timestamp: '2026-10-07T12:00:00', error: null },
+      { agentId: 1, platform: 'reddit', prompt: null, response: null, timestamp: null, error: 'kaputt' },
+    ])
+    const { w, router } = await mountAt('/simulations/sim_1/interviews')
+    await w.get('[data-testid="group-toggle"]').trigger('click')
+    const boxes = w.findAll('input[type="checkbox"]')
+    await boxes[0].setValue(true)
+    await boxes[1].setValue(true)
+    expect(w.get('[data-testid="group-cost"]').text()).toContain('2 Aufrufe')
+    await w.get('[data-testid="group-text"]').setValue('Frage an alle')
+    await w.get('[data-testid="group-send"]').trigger('click')
+    await flushPromises()
+    expect(w.get('[data-testid="group-count"]').text()).toBe('1 von 2 beantwortet')
+    expect(w.get('[data-testid="group-answers"]').classes()).toContain('cpane__grid')
+    expect(w.findAll('[data-testid="group-answer"]')).toHaveLength(1)
+    expect(w.get('[data-testid="group-answer-error"]').text()).toContain('kaputt')
+    const links = w.findAll('[data-testid="group-answer-link"]')
+    expect(links).toHaveLength(2)
+    await links[0].trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.params.conversationId).toBe('persona-0')
+  })
+
+  it('zeigt den Kostenhinweis und sendet per Strg+Enter', async () => {
+    api.askPersonas.mockResolvedValue([
+      { agentId: 0, platform: 'reddit', prompt: 'p', response: 'Antwort', timestamp: '2026-10-07T12:00:00', error: null },
+    ])
+    const { w } = await mountAt('/simulations/sim_1/interviews/persona-0')
+    expect(w.get('[data-testid="ask-cost"]').text()).toContain('zählt aufs Budget des Laufs')
+    await w.get('[data-testid="ask-input"]').setValue('Hallo')
+    await w.get('[data-testid="ask-input"]').trigger('keydown', { key: 'Enter', ctrlKey: true })
+    await flushPromises()
+    expect(api.askPersonas).toHaveBeenCalledTimes(1)
+  })
+
+  it('Budgetabbruch (409) steht dauerhaft mit Grund und Zahlen da, nie als leere Antwort', async () => {
+    api.askPersonas.mockRejectedValue(
+      new ApiError({
+        code: 'budget_exceeded',
+        status: 409,
+        message: 'Token-Budget überschritten',
+        originalResponse: {
+          success: false,
+          code: 'budget_exceeded',
+          error: 'Token-Budget überschritten',
+          termination_reason: 'budget_tokens',
+          dimension: 'tokens',
+          observed: 12000,
+          threshold: 10000,
+        },
+      }),
+    )
+    const { w, router } = await mountAt('/simulations/sim_1/interviews/persona-0')
+    await w.get('[data-testid="ask-input"]').setValue('Hallo')
+    await w.get('[data-testid="ask-form"]').trigger('submit')
+    await flushPromises()
+    const box = w.get('[data-testid="budget-notice"]')
+    expect(box.attributes('role')).toBe('alert')
+    expect(w.get('[data-testid="budget-reason"]').text()).toContain('budget_tokens')
+    expect(w.get('[data-testid="budget-figures"]').text()).toBe('tokens: 12000 von 10000')
+    expect(w.find('[data-testid="turn-answer"]').exists()).toBe(false)
+    // Das Feld bleibt, die Meldung bleibt auch beim Wechsel des Gesprächs.
+    expect(w.find('[data-testid="ask-form"]').exists()).toBe(true)
+    await router.push('/simulations/sim_1/interviews/persona-1')
+    await flushPromises()
+    expect(w.find('[data-testid="budget-notice"]').exists()).toBe(true)
+  })
+
+  it('Deep-Link auf eine Persona ohne Verlauf öffnet ein leeres Gespräch, eine unbekannte wird gemeldet', async () => {
+    const known = await mountAt('/simulations/sim_1/interviews/persona-1')
+    expect(known.w.find('[data-testid="pane-no-turns"]').exists()).toBe(true)
+    expect(known.w.find('[data-testid="pane-unknown-persona"]').exists()).toBe(false)
+    expect(known.w.find('[data-testid="ask-form"]').exists()).toBe(true)
+    known.w.unmount()
+    const unknown = await mountAt('/simulations/sim_1/interviews/persona-42')
+    expect(unknown.w.get('[data-testid="pane-unknown-persona"]').text()).toContain('42')
+    expect(unknown.w.find('[data-testid="ask-form"]').exists()).toBe(false)
+  })
+
+  it('Antwort lässt sich kopieren', async () => {
+    api.getInterviewHistory.mockResolvedValue([hist(0, 'Frage?', 'Kopierbar')])
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const { w } = await mountAt('/simulations/sim_1/interviews/persona-0')
+    await w.get('[data-testid="turn-copy"]').trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('Kopierbar')
+    expect(w.get('[data-testid="copy-status"]').text()).toContain('kopiert')
   })
 
   it('jedes Formularfeld hat ein echtes <label for>', async () => {

@@ -2334,7 +2334,15 @@
           "question": "Question for everyone",
           "send": "Ask the group",
           "large": "Asking {n} personas at once may exceed the backend deadline. Some answers can be missing.",
-          "summary": "{asked} asked, {answered} answered, {failed} failed"
+          "summary": "{asked} asked, {answered} answered, {failed} failed",
+          "cost": "No persona chosen: no calls | One call, it counts against the run budget | {n} calls, each counts against the run budget"
+        },
+        "budget": {
+          "title": "Run budget reached",
+          "explain": "The run has reached its budget. The question was not answered or stored; further questions are rejected while the budget is exhausted.",
+          "reason": "Termination reason: {reason}",
+          "figures": "{dimension}: {observed} of {threshold}",
+          "dimensionUnknown": "Limit"
         },
         "pane": {
           "aria": "Conversation",
@@ -2343,7 +2351,18 @@
           "with": "Conversation with {name}",
           "noTurns": "No questions to this persona yet.",
           "you": "You:",
-          "badge": "SIM · Interview",
+          "badgeSim": "SIM",
+          "badgeInterview": "Interview",
+          "origin": "Entries may also come from interviews the report conducted; they cannot be told apart here.",
+          "unknownPersona": "There is no persona profile and no history for agent {n}. Choose a persona from the list.",
+          "failedReason": "No answer: {reason}",
+          "copy": "Copy",
+          "copyAnswer": "Copy answer from {name}",
+          "copied": "Answer copied to the clipboard.",
+          "copyFailed": "Copying failed. The clipboard is not available.",
+          "groupCount": "{answered} of {total} answered",
+          "cost": "Each question is a model call and counts against the run budget.",
+          "shortcut": "Send with Ctrl/Cmd+Enter.",
           "groupTitle": "Group question",
           "groupGone": "This group question only exists in the session where it was asked.",
           "inputLabel": "Question to the persona",
