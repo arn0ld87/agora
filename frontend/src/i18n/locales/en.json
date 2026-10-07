@@ -2337,6 +2337,13 @@
           "summary": "{asked} asked, {answered} answered, {failed} failed",
           "cost": "No persona chosen: no calls | One call, it counts against the run budget | {n} calls, each counts against the run budget"
         },
+        "persona": {
+          "participants": "Participating personas",
+          "feed": "Posts in the feed",
+          "feedCount": "Posts in the feed ({n})",
+          "feedCountAtLeast": "Posts in the feed (at least {n})",
+          "cited": "Cited in the report ({n})"
+        },
         "budget": {
           "title": "Run budget reached",
           "explain": "The run has reached its budget. The question was not answered or stored; further questions are rejected while the budget is exhausted.",
@@ -2428,6 +2435,7 @@
         },
         "persona": {
           "title": "Persona",
+          "interview": "Interview",
           "none": "Pick a persona in the filter or focus a post.",
           "role": "Role",
           "stance": "Stance",

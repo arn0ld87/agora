@@ -14,6 +14,20 @@ const api = vi.hoisted(() => ({
 vi.mock('@/api/interviews', () => ({ askPersonas: api.askPersonas, getInterviewHistory: api.getInterviewHistory }))
 vi.mock('@/api/simulation', () => ({ getSimulationConfig: api.getSimulationConfig }))
 
+const refs = vi.hoisted(() => ({
+  evidence: vi.fn(),
+  posts: [] as { persona_id: string }[],
+}))
+vi.mock('@/api/report', () => ({ getReportEvidence: refs.evidence }))
+vi.mock('@/composables/run/simulation/useRunFeed', () => ({
+  useRunFeed: () => ({
+    posts: { value: refs.posts },
+    truncated: { value: false },
+    error: { value: null },
+    reload: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 const persona = (id: number, name: string) => ({
   personaId: String(id),
   name,
@@ -41,13 +55,17 @@ import { INTERVIEW_PROMPT_PREFIX } from '@/composables/run/interviews/conversati
 
 const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'de', messages: { de } })
 
-function workspaceWith(simState: string) {
+function workspaceWith(simState: string, reportId: string | null = null) {
   return {
     stages: computed(() => [{ key: 'simulation', state: simState }]),
+    data: computed(() => ({ reports: reportId ? [{ reportId }] : [] })),
+    tabs: computed(() => [
+      { key: 'report', to: reportId ? { name: 'RunReportTab', params: { reportId } } : null, disabledReason: null },
+    ]),
   } as unknown as RunWorkspace
 }
 
-async function mountAt(path: string, simState: string | null = 'done') {
+async function mountAt(path: string, simState: string | null = 'done', reportId: string | null = null) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -57,13 +75,15 @@ async function mountAt(path: string, simState: string | null = 'done') {
         component: RunInterviewsView,
         props: true,
       },
+      { path: '/simulations/:simulationId/feed', name: 'RunSimulationFeed', component: { template: '<div />' } },
+      { path: '/report/:reportId', name: 'RunReportTab', component: { template: '<div />' } },
     ],
   })
   await router.push(path)
   await router.isReady()
   const Host = defineComponent({
     setup() {
-      if (simState) provide(RUN_WORKSPACE_KEY, workspaceWith(simState))
+      if (simState) provide(RUN_WORKSPACE_KEY, workspaceWith(simState, reportId))
       return () => h(RouterView)
     },
   })
@@ -84,6 +104,9 @@ beforeEach(() => {
   Object.values(api).forEach((m) => m.mockReset())
   api.getInterviewHistory.mockResolvedValue([])
   api.getSimulationConfig.mockResolvedValue({ success: true, data: { llm_model: 'gpt-x' } })
+  refs.evidence.mockReset()
+  refs.evidence.mockResolvedValue({ success: false, code: 'not_found', error: 'x' })
+  refs.posts = []
   document.body.innerHTML = ''
 })
 
@@ -292,6 +315,57 @@ describe('RunInterviewsView', () => {
     const unknown = await mountAt('/simulations/sim_1/interviews/persona-42')
     expect(unknown.w.get('[data-testid="pane-unknown-persona"]').text()).toContain('42')
     expect(unknown.w.find('[data-testid="ask-form"]').exists()).toBe(false)
+  })
+
+  it('Persona-Spalte: Feed-Sprung mit Zahl und Personen-Filter, Bericht nur mit belegter Zahl', async () => {
+    refs.posts = [{ persona_id: '0' }, { persona_id: '0' }, { persona_id: '1' }]
+    refs.evidence.mockResolvedValue({
+      success: true,
+      data: {
+        evidence_index: {
+          e1: { evidence_id: 'e1', voice_key: 'agent:0' },
+          e2: { evidence_id: 'e2', voice_key: 'agent:0' },
+          e3: { evidence_id: 'e3', voice_key: 'agent:1' },
+          e4: { evidence_id: 'e4', voice_key: null },
+        },
+      },
+    })
+    const { w, router } = await mountAt('/simulations/sim_1/interviews/persona-0', 'done', 'rep_1')
+    const feed = w.get('[data-testid="persona-feed-link"]')
+    expect(feed.text()).toBe('Beiträge im Feed (2) →')
+    const report = w.get('[data-testid="persona-report-link"]')
+    expect(report.text()).toBe('Im Bericht zitiert (2) →')
+    await feed.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('RunSimulationFeed')
+    expect(router.currentRoute.value.query.persona).toBe('0')
+  })
+
+  it('ohne lesbare Evidence fehlt die Berichtszeile, der Feed-Sprung bleibt', async () => {
+    const { w } = await mountAt('/simulations/sim_1/interviews/persona-0', 'done', 'rep_1')
+    expect(w.find('[data-testid="persona-report-link"]').exists()).toBe(false)
+    expect(w.find('[data-testid="persona-report-none"]').exists()).toBe(false)
+    expect(w.find('[data-testid="persona-feed-link"]').exists()).toBe(true)
+  })
+
+  it('Gruppengespräch: Persona-Spalte listet die Beteiligten mit Sprung ins Einzelgespräch', async () => {
+    api.askPersonas.mockResolvedValue([
+      { agentId: 0, platform: 'reddit', prompt: 'p', response: 'Ja', timestamp: '2026-10-07T12:00:00', error: null },
+      { agentId: 1, platform: 'reddit', prompt: 'p', response: 'Nein', timestamp: '2026-10-07T12:00:00', error: null },
+    ])
+    const { w, router } = await mountAt('/simulations/sim_1/interviews')
+    await w.get('[data-testid="group-toggle"]').trigger('click')
+    const boxes = w.findAll('input[type="checkbox"]')
+    await boxes[0].setValue(true)
+    await boxes[1].setValue(true)
+    await w.get('[data-testid="group-text"]').setValue('Frage')
+    await w.get('[data-testid="group-send"]').trigger('click')
+    await flushPromises()
+    const links = w.findAll('[data-testid="group-participant-link"]')
+    expect(links.map((l) => l.text())).toEqual(['Anke Wübbena', 'Jörg Kreistag'])
+    await links[1].trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.params.conversationId).toBe('persona-1')
   })
 
   it('Antwort lässt sich kopieren', async () => {

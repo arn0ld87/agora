@@ -26,6 +26,7 @@ import InterviewBudgetNotice from '@/components/run/interviews/InterviewBudgetNo
 import InterviewPersonaPane from '@/components/run/interviews/InterviewPersonaPane.vue'
 import { parseConversationId } from '@/composables/run/interviews/conversations'
 import { RUN_INTERVIEWS_KEY, useRunInterviews } from '@/composables/run/interviews/useRunInterviews'
+import { usePersonaReferences } from '@/composables/run/interviews/usePersonaReferences'
 import { useRunPersonas } from '@/composables/run/simulation/useRunPersonas'
 import { RUN_WORKSPACE_KEY } from '@/composables/run/useRunWorkspace'
 
@@ -45,6 +46,12 @@ const canAsk = computed(() => {
   const row = workspace?.stages.value.find((r) => r.key === 'simulation')
   return !row || !NOT_FINISHED.has(row.state)
 })
+
+// Verweise der Persona: Feed-Beiträge und Belege der jüngsten Berichtsfassung.
+// Berichtssprung über den Reiter-Verweis (`runTabs`), solange es `RunReport` nicht gibt.
+const latestReportId = computed(() => workspace?.data.value?.reports[0]?.reportId ?? null)
+const references = usePersonaReferences(simulationId, () => latestReportId.value)
+const reportTo = computed(() => workspace?.tabs.value.find((tab) => tab.key === 'report')?.to ?? null)
 
 const selection = computed(() => parseConversationId(props.conversationId))
 const activeId = computed(() => (selection.value ? (props.conversationId ?? null) : null))
@@ -93,7 +100,13 @@ const showInitialLoad = computed(() => interviews.loading.value && interviews.co
         :simulation-id="simulationId"
         :personas-loading="personas.loading.value"
       />
-      <InterviewPersonaPane :selection="selection" :persona-by-id="personas.personaById" />
+      <InterviewPersonaPane
+        :selection="selection"
+        :persona-by-id="personas.personaById"
+        :simulation-id="simulationId"
+        :references="references"
+        :report-to="reportTo"
+      />
     </div>
   </div>
 </template>

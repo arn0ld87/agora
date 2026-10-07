@@ -2337,6 +2337,13 @@
           "summary": "{asked} gefragt, {answered} beantwortet, {failed} fehlgeschlagen",
           "cost": "Keine Persona gewählt: keine Aufrufe | Ein Aufruf, er zählt aufs Budget des Laufs | {n} Aufrufe, jeder zählt aufs Budget des Laufs"
         },
+        "persona": {
+          "participants": "Beteiligte Personas",
+          "feed": "Beiträge im Feed",
+          "feedCount": "Beiträge im Feed ({n})",
+          "feedCountAtLeast": "Beiträge im Feed (mindestens {n})",
+          "cited": "Im Bericht zitiert ({n})"
+        },
         "budget": {
           "title": "Budget des Laufs erreicht",
           "explain": "Der Lauf hat sein Budget erreicht. Die Frage wurde nicht beantwortet und nicht gespeichert; weitere Fragen werden abgelehnt, solange das Budget erschöpft ist.",
@@ -2428,6 +2435,7 @@
         },
         "persona": {
           "title": "Persona",
+          "interview": "Befragen",
           "none": "Wählen Sie eine Persona im Filter oder fokussieren Sie einen Beitrag.",
           "role": "Rolle",
           "stance": "Haltung",
