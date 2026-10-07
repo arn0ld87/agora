@@ -13,7 +13,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { createSimulation, prepareSimulation } from '@/api/simulation'
+import { createSimulation, createSimulationFromPersonas, prepareSimulation } from '@/api/simulation'
 import type { PrepareSimulationData } from '@/api/simulation'
 import type { ApiEnvelope } from '@/api/envelope'
 import type { AiModelRef } from '@/contracts/aiModelRef'
@@ -38,6 +38,17 @@ export interface ExistingGraphRunInput {
   budget: RunBudgetConfig | null
   maxRounds: number
   simulationDays: number
+}
+
+/** Lauf aus einem Personasatz, ohne Graph (#1807, Maintainer-Entscheid). */
+export interface PersonaSetRunInput {
+  personaSetId: string
+  /** Pflicht auch ohne Graph: der Lauf braucht eine Fragestellung. */
+  simulationRequirement: string
+  language: string
+  maxRounds: number
+  simulationDays: number
+  budget: RunBudgetConfig | null
 }
 
 export type NewRunPhase = 'create' | 'prepare'
@@ -154,5 +165,62 @@ export function useNewRunSubmit() {
     }
   }
 
-  return { busy, phase, error, createdSimulationId, createOnly, createAndPrepare }
+  /**
+   * Lauf aus einem Personasatz, **ohne Graph** (#1807).
+   *
+   * Bewusst ein eigener Weg und nicht der regulaere mit leerem `graph_id`:
+   * `/api/simulation/create` verlangt einen Graphen, und der Weg soll das auch
+   * weiterhin. `create-from-personas` legt den Lauf an und bereitet ihn in einem
+   * Schritt vor — deshalb wird hier kein `prepare` nachgeschoben (Maintainer-
+   * Entscheid: „Prepare bleibt unberührt").
+   *
+   * Berichte gibt es fuer diese Laeufe nicht; der Satz wird nach erfolgreicher
+   * Vorbereitung serverseitig gesperrt.
+   */
+  async function createFromPersonaSet(input: PersonaSetRunInput): Promise<void> {
+    if (busy.value) return
+    // Vor dem Server, nicht danach: der Endpunkt lehnt beides mit 400 ab, und
+    // ein Fehlversuch mit klarer Ursache waere eine Anfrage, die der Nutzer
+    // nicht verstehen kann.
+    if (!input.personaSetId.trim()) {
+      error.value = t('views.newRun.errors.noPersonaSet')
+      return
+    }
+    if (!input.simulationRequirement.trim()) {
+      error.value = t('views.newRun.errors.noRequirement')
+      return
+    }
+    busy.value = true
+    error.value = ''
+    phase.value = 'create'
+    try {
+      const res = await createSimulationFromPersonas({
+        simulation_requirement: input.simulationRequirement,
+        persona_set_id: input.personaSetId,
+      })
+      if (!res.success) {
+        error.value = failure(res, t('views.newRun.errors.createFromPersonaSet'))
+        return
+      }
+      const parsed = CreatedSimulationSchema.safeParse(res.data)
+      if (!parsed.success) {
+        error.value = t('views.newRun.errors.createShape')
+        return
+      }
+      // Startwerte wie im Graph-Weg: der Lauf ist angelegt und vorbereitet.
+      writePendingRunParams(parsed.data.simulation_id, {
+        maxRounds: input.maxRounds,
+        simulationDays: input.simulationDays,
+        budget: input.budget,
+      })
+      await goToOverview(parsed.data.simulation_id)
+    } catch (caught) {
+      error.value = errorText(caught, t('views.newRun.errors.createFromPersonaSet'))
+    } finally {
+      busy.value = false
+      phase.value = null
+    }
+  }
+
+  return { busy, phase, error, createdSimulationId, createOnly, createAndPrepare, createFromPersonaSet }
 }

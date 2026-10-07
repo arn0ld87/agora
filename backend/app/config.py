@@ -387,6 +387,38 @@ def validate_report_backend(
     return []
 
 
+#: Ablagen, die `AGORA_PERSONA_SET_BACKEND` kennt (Issue #1807, Etappe 7).
+PERSONA_SET_BACKENDS = frozenset({'file', 'postgres'})
+
+
+def validate_persona_set_backend(
+    persona_set_backend: str,
+    database_url: str = '',
+) -> list[str]:
+    """Prueft AGORA_PERSONA_SET_BACKEND.
+
+    Modulfunktion aus demselben Grund wie `validate_report_backend`. Anders
+    als Simulationen, Runs und Reports hat `agora.persona_sets` **keinen**
+    Fremdschluessel auf eine andere Metadaten-Tabelle (`graph_id`,
+    `project_id` und die Simulationskennungen sind reine Verweise im Satz).
+    `postgres` verlangt deshalb nur `DATABASE_URL`, keinen anderen Schalter.
+    """
+    backend = (persona_set_backend or '').strip().lower()
+    if backend not in PERSONA_SET_BACKENDS:
+        # Ein Tippfehler darf nicht still auf die Dateiablage zurueckfallen.
+        return [
+            f"AGORA_PERSONA_SET_BACKEND has unknown value '{backend}' "
+            f"(expected one of: {', '.join(sorted(PERSONA_SET_BACKENDS))})"
+        ]
+
+    if backend == 'postgres' and not (database_url or '').strip():
+        return [
+            'AGORA_PERSONA_SET_BACKEND=postgres requires DATABASE_URL '
+            f'({DATABASE_URL_PREFIX}user:password@host:5432/dbname)'
+        ]
+
+    return []
+
 
 #: Auth-Modi (ADR-0018, Issue #1613). ``legacy`` ist der Pfad vor ADR-0018,
 #: ``hybrid`` nimmt zusaetzlich Supabase-JWTs an, ``supabase`` lehnt den
@@ -402,6 +434,7 @@ WORKSPACE_SCOPED_BACKENDS: tuple[tuple[str, str], ...] = (
     ('AGORA_SIMULATION_BACKEND', 'SIMULATION_BACKEND'),
     ('AGORA_RUN_BACKEND', 'RUN_BACKEND'),
     ('AGORA_REPORT_BACKEND', 'REPORT_BACKEND'),
+    ('AGORA_PERSONA_SET_BACKEND', 'PERSONA_SET_BACKEND'),
 )
 
 
@@ -762,6 +795,14 @@ class Config:
     # AGORA_SIMULATION_BACKEND=postgres voraus (Fremdschluessel).
     REPORT_BACKEND = os.environ.get(
         'AGORA_REPORT_BACKEND', 'file'
+    ).strip().lower()
+
+    # Ablage der Personasaetze (Issue #1807, Etappe 7). Default 'file' —
+    # uploads/persona_sets/<set_id>.json ist die Wahrheit. Anders als bei den
+    # uebrigen Schaltern gibt es keinen Fremdschluessel auf eine andere Tabelle;
+    # 'postgres' verlangt nur DATABASE_URL.
+    PERSONA_SET_BACKEND = os.environ.get(
+        'AGORA_PERSONA_SET_BACKEND', 'file'
     ).strip().lower()
 
     # Auth-Modus (ADR-0018, Issue #1613). Default 'hybrid': Supabase-JWTs
@@ -1149,6 +1190,9 @@ class Config:
             validate_report_backend(
                 cls.REPORT_BACKEND, cls.DATABASE_URL, cls.SIMULATION_BACKEND
             )
+        )
+        errors.extend(
+            validate_persona_set_backend(cls.PERSONA_SET_BACKEND, cls.DATABASE_URL)
         )
         # Auth-Modus und Supabase-JWT (ADR-0018).
         errors.extend(validate_auth_backend(cls))

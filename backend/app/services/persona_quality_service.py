@@ -75,21 +75,33 @@ class PersonaQualityService:
 
     def evaluate(self, simulation_id: str) -> Dict[str, Any]:
         profiles = self._reviews.list_profiles(simulation_id)
+        return {
+            "simulation_id": simulation_id,
+            **self.evaluate_profiles(profiles),
+        }
+
+    @classmethod
+    def evaluate_profiles(cls, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Heuristiken ueber eine Profil-Liste, ohne Simulation und ohne Ablage.
+
+        Wird auch vom Personasatz-Dienst genutzt (#1807): dort gibt es keine
+        ``reddit_profiles.json``, nur Eintraege eines Satzes. Die Reihenfolge
+        von ``personas`` ist die der uebergebenen Liste.
+        """
         username_counts = Counter(_norm(p.get("username")) for p in profiles)
         name_counts = Counter(
             _norm(p.get("name")) for p in profiles if _norm(p.get("name"))
         )
 
         personas = [
-            self._evaluate_persona(profile, username_counts, name_counts)
+            cls._evaluate_persona(profile, username_counts, name_counts)
             for profile in profiles
         ]
 
-        summary = self._build_summary(profiles)
-        global_issues = self._build_global_issues(profiles, summary)
+        summary = cls._build_summary(profiles)
+        global_issues = cls._build_global_issues(profiles, summary)
 
         return {
-            "simulation_id": simulation_id,
             "summary": summary,
             "global_issues": global_issues,
             "personas": personas,

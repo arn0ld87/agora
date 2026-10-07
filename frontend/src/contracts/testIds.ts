@@ -201,3 +201,20 @@ export const ShelfTableTestId = {
 } as const
 
 export type ShelfTableTestId = (typeof ShelfTableTestId)[keyof typeof ShelfTableTestId]
+
+/**
+ * PersonaSetTestId — Personasätze (#1807, Etappe 7): Bibliothek, Detailansicht
+ * und Reiter „Personas“ am Lauf. Das Skelett zeigt Überschrift, Lade-, Fehler-
+ * und Leerzustand; die Folgetickets hängen ihre Elemente an dieselben Wurzeln.
+ */
+export const PersonaSetTestId = {
+  libraryRoot: 'persona-sets-library',
+  detailRoot: 'persona-set-detail',
+  runRoot: 'run-personas',
+  loading: 'persona-sets-loading',
+  error: 'persona-sets-error',
+  empty: 'persona-sets-empty',
+  locked: 'persona-set-locked',
+} as const
+
+export type PersonaSetTestId = (typeof PersonaSetTestId)[keyof typeof PersonaSetTestId]

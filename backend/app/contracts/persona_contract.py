@@ -15,6 +15,8 @@ from typing import Annotated, Any, Literal, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .persona_set_contract import PersonaOrigin
+
 
 _STRICT = ConfigDict(extra="forbid")
 
@@ -121,6 +123,14 @@ class PersonaModel(BaseModel):
     # Nur bei einem Ausfall gesetzt, nicht bei bewusst regelbasierter
     # Erzeugung.
     generation_error: Optional[str] = Field(default=None, max_length=200)
+
+    # Herkunft der Persona im Personasatz (#1807). Nur Profile eines Laufs aus
+    # einem Satz tragen das Feld (dann ausnahmslos alle, denn
+    # ``_write_twitter_csv`` leitet die Spalten aus dem ersten Profil ab).
+    # ``generation_source`` kennt kein ``ai_draft``; dieses Feld ist die einzige
+    # Stelle am Profil, an der ein KI-Entwurf erkennbar bleibt. Additiv mit
+    # Default: Profile aus Laeufen ohne Satz validieren unveraendert.
+    persona_set_origin: Optional[PersonaOrigin] = None
 
 
 def persona_name_identity_reason(name: str, persona_text: str) -> Optional[str]:

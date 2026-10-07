@@ -1,0 +1,28 @@
+{
+  "$id": "https://alexle135.de/schemas/persona-draft-example-post.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ein Beispielbeitrag der Persona, wie sie in einem Netz schreiben wuerde.\n\nTeil der Antwort, kein gespeicherter Zustand (#1807): der Beitrag dient als\nVorschau, damit der Maintainer die Stimme der Persona beurteilt, bevor der\nEintrag im Satz landet. Er traegt deshalb kein ``origin`` und wird nicht\ngespeichert \u2014 der Feed der Simulation erzeugt eigene Beitraege.",
+  "properties": {
+    "content": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Content",
+      "type": "string"
+    },
+    "network": {
+      "default": "twitter",
+      "enum": [
+        "twitter",
+        "reddit"
+      ],
+      "title": "Network",
+      "type": "string"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "title": "PersonaDraftExamplePost",
+  "type": "object"
+}

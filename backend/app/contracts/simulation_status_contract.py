@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .simulation_record_contract import SimulationStatusValue
 
@@ -72,6 +72,12 @@ class SimulationStatusResponse(BaseModel):
     branch_name: Optional[str] = None
     branch_depth: int
     persona_floor: Optional[int] = None
+    # Rueckverweis auf den Personasatz (#1807). Nur bei einem Lauf aus einem
+    # Satz gesetzt; sonst fehlt der Schluessel in der Antwort (``exclude_if``),
+    # damit die Form fuer Laeufe ohne Satz und Altbestand unveraendert bleibt.
+    persona_set_id: Optional[str] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     run_instructions: Optional[dict[str, Any]] = None
 
     # Neu (#1713): Rohwert aus ``run_state.json`` (``None`` ohne Run-State)

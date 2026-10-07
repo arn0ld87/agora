@@ -1,0 +1,130 @@
+/* Gemeinsame Bausteine des Persona-Editors (#1807, E7-F3); Präfix `pe-` gegen Kollisionen. */
+.pe-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pe-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+  align-content: start;
+}
+
+.pe-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.pe-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pe-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.pe-field__req {
+  color: var(--err);
+  margin-left: 2px;
+}
+
+.pe-field__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--fg3);
+}
+
+.pe-field__error {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--err);
+}
+
+.pe-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--ag-r-8);
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+textarea.pe-input {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.pe-input[readonly],
+.pe-input:disabled {
+  background: var(--s1);
+  color: var(--fg2);
+}
+
+.pe-field--invalid .pe-input {
+  border-color: var(--err);
+}
+
+.pe-input:focus-visible,
+.pe-check input:focus-visible {
+  outline: 2px solid var(--acc-text);
+  outline-offset: 2px;
+}
+
+.pe-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  font-size: 13.5px;
+}
+
+.pe-check .pe-field__hint {
+  grid-column: 2;
+}
+
+.pe-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--ag-r-8);
+  background: var(--s1);
+  color: var(--fg2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pe-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.pe-dl dt {
+  color: var(--fg2);
+}
+
+.pe-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .pe-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

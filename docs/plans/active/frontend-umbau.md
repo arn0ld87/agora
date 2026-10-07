@@ -362,12 +362,12 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 | `/runs`, `/ablage`, `/ablage?filter=lauf` | `/library/runs` | 2 |
 | `/ablage?filter=bericht` | `/library/runs?view=with-report`: die Läufe, die mindestens einen Bericht haben, mit Zahl der Fassungen, Sprung zur jüngsten und aufklappbarer Liste aller Fassungen (4.1). Die alte Ablage zeigt jede Fassung als eigene Zeile; die Liste hält sie einzeln erreichbar, bis Etappe 5 den Fassungswähler bringt | 2 |
 | `/ablage?filter=graph` | `/library/graphs` | 2 |
-| `/ablage?filter=personasatz` | `/library/persona-sets` | 7; bis dahin `/library/runs` |
+| `/ablage?filter=personasatz` | `/library/persona-sets` | 7, umgesetzt (`shelfRedirect`, die übrige Query bleibt stehen) |
 | `/ablage?filter=jobs`, `/v4/history` | `/activity/jobs` | 2 |
 | `/ablage/lauf/:objectId` | `/simulations/:objectId` | 2 |
 | `/ablage/bericht/:objectId` | `/simulations/:simulationId/report/:objectId` (Simulation aus dem Bericht auflösen) | 5, umgesetzt |
 | `/ablage/graph/:objectId` | `/graphs/:projectId` (Projekt aus der Kennung auflösen) | 2 |
-| `/ablage/personasatz/:objectId` | `/persona-sets/:setId` | 7; bis dahin Personas-Reiter des zugehörigen Laufs |
+| `/ablage/personasatz/:objectId` | `/persona-sets/:setId` | 7, **offen**: `shelfObjectGuard` kennt den Satz weiterhin nicht und lässt die Adresse auf die alte Ablage-Ansicht fallen (siehe 11f) |
 | `/runs/:id` | `/activity/jobs/:id`, Kennung unverändert | 2 |
 | `/process/new` (Start aus einer neuen Quelle, von `HeroNewRun` angesteuert) | Startdialog „Neuer Lauf" mit „Graph: neu aus Quelle" | 3; bis dahin alte Ansicht, weil dort die vorgemerkten Dateien verarbeitet und Budget und Rundenzahl übergeben werden |
 | `/process/:projectId`, `/v4/graph-build/:projectId` | `/graphs/:projectId` | 3; bis dahin alte Ansicht, damit der Start aus einer neuen Quelle durchgehend funktioniert |
@@ -752,6 +752,33 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 
 ---
 
+## 11f. Stand Etappe 7
+
+**Umgesetzt (Issue #1807)** nach 8 und 4.4:
+
+- **Bibliothek** (`/library/persona-sets`, `LibraryPersonaSetsView`): Kacheln je Satz mit Zustand („bearbeitbar" | „gesperrt"), Anzahl Personas, Verwendung und Änderungsdatum; Aktionen Duplizieren und Löschen (bei gesperrtem Satz deaktiviert, mit Grund), Anlegen über einen eigenen Dialog. Der Sammelsatz „Importiert" (`pset_importiert`) ist als Kachel gekennzeichnet, damit übernommene Altbestände nicht wie handgepflegte Sätze aussehen.
+- **Satz-Ansicht** (`/persona-sets/:setId`, `PersonaSetView`): Kopf mit Name (auch bei gesperrtem Satz umbenennbar), Zustand, Liste der nutzenden Läufe und „Duplizieren"; Karten aus Persona-Kacheln mit Herkunftsplakette je Eintrag (`graph` · `manual` · `ai_draft` · `fallback`, Symbol und Text; Entwurf und Fallback sehen als Degradation aus); Filter nach Herkunft, Art und Rolle plus Textsuche; Mehrfachauswahl („Alle angezeigten auswählen", „Löschen (n)" nach Rückfrage); Qualitätshinweise aus `GET /api/persona-sets/<id>/quality`.
+- **Editor-Fenster** (`PersonaEditorDialog` mit den Abschnitten Identität · Haltung und Ziele · Sprache und Ton · Aktivität · Bezug zum Graphen aus `components/persona-sets/editor/`). Zwei Abschnitte tragen einen offenen Hinweis, weil der Vertrag die Felder nicht kennt: Haltung und Ziele sowie Sprache und Ton gehören in die Persona-Beschreibung; Herkunft und Quell-Entität setzt das System.
+- **Sperre nach dem ersten Lauf** serverseitig: `PersonaSetService.assert_editable` lehnt Eintragänderungen und das Löschen mit `409 persona_set_locked` ab. In der Oberfläche sind alle ändernden Bedienelemente bei gesperrtem Satz deaktiviert und nennen den Grund; der Ausweg ist „Duplizieren und bearbeiten" (Kopie ohne Sperre und ohne Läufe).
+- **KI-Entwurf** (`PersonaSetDraftPanel`, Endpunkt `POST /api/persona-sets/<id>/draft`): freier Brief, ein Knopf, der fertige Eintrag im Satz und der Beispielbeitrag als Vorschau („So könnte diese Persona schreiben") mit SIM-Markierung. Der Entwurf läuft als eigener Job `run_type="persona_draft"` in der `RunRegistry`, damit er im Budget-Ledger steht und in der Aktivität auftaucht. Herkunft, Längenbegrenzungen und die Form des Profils vergibt der Dienst, nicht das Modell und nicht der Aufrufer. Der Entwurf **fällt nicht** auf regelbasierte Ersatzprofile zurück, sondern antwortet `502 llm_unavailable`; die Oberfläche sagt dann „Der Anbieter war nicht erreichbar. Der Auftrag ist in Ordnung — ein neuer Versuch hilft."
+- **Lauf aus Satz** im Startdialog über „vorhandenen wählen“ und `POST /api/simulation/create-from-personas` mit `persona_set_id`, ohne Graph und ohne erneuten Prepare-Aufruf (Entscheidung des Maintainers vom 07.10.2026): Der Lauf bekommt eine Kopie der Personas, der Satz wird erst nach erfolgreicher Vorbereitung gesperrt. Der Simulationsstatus und sein Zod-Spiegel tragen den optionalen Rückverweis. Berichte gibt es für diese Läufe nicht (4.6 bleibt unverändert).
+
+**Geklärt:** Die Weiterleitungen der Etappe 7 sind nicht beide getan. `/ablage?filter=personasatz` führt über `shelfRedirect` auf die Personasatz-Bibliothek; `/ablage/personasatz/:objectId` kennt `shelfObjectGuard` weiterhin nicht und bleibt auf der alten Ablage-Ansicht (6.2, dort als offen markiert). Praktisch ist das folgenlos, weil die Ablage nach 11a keine Personasätze führt — es gibt also keine alten Links, die ins Leere liefern würden; die Regel bleibt trotzdem eine Lücke.
+
+**Bewusst nicht gebaut / offen:**
+
+- Keine Modellwahl je KI-Entwurf: Der Auftrag nimmt kein Modell an, der Entwurf läuft über die aktive LLM-Konfiguration. 4.4 verlangt Modell und Kostenhinweis am Knopf; das ist mit der Ein-Bestätigung-Konfiguration des Entwurfs nicht vereinbar und bleibt offen.
+- Keine Interview-Budget-Berechnung an den Persona-Karten im Satz. „Befragen" (4.4, im Lauf) lebt am Lauf und bucht auf dessen Job; im Satz gibt es keinen Lauf, dessen Budget man schätzen könnte.
+- `PersonaModel` bleibt unverändert; die Herkunft steht nur am Satz-Eintrag (und im Laufprofil als `persona_set_origin`, nicht im Modell).
+- Der Entwurf fällt nicht auf regelbasierte Ersatzprofile zurück (anders als die Persona-Erzeugung im Prepare-Pfad). Ein erfundener Entwurf, der als `ai_draft` auf der Kachel stünde, wäre schlimmer als eine sichtbare Fehlermeldung.
+- Freigabestatus und Haltung als eigene Felder gibt es nicht: Der Vertrag kennt weder ein Freigabe-Feld noch ein Haltungsfeld, deshalb fehlen der Filter „Freigabestatus" und die Mehrfachaktionen „Freigeben/Ablehnen" aus 4.4. Der Filter nach Rolle ersetzt die Rollenachse, nicht die Haltung; die Haltung steht in der Beschreibung.
+- Der Lauf aus einem Satz wird im Startdialog über „vorhandenen wählen“ ausgelöst, nicht über einen eigenen Startknopf am Satz oder an der Kachel. Der Reiter „Personas" am Lauf führt weiter auf die alte Personas-Ansicht statt auf den Satz.
+- Der Beispielbeitrag ist eine Vorschau, kein gespeicherter Zustand: Er trägt kein `origin` und wird nicht gespeichert; fehlt er in der Modellantwort, bleibt die Vorschau leer und wird das gesagt.
+- 4.4 nennt drei KI-Hilfen („Entwurf aus Stichworten", „Feld vorschlagen", „Aus Entität ableiten"). Gebaut ist nur der Entwurf aus Stichworten; die beiden anderen brauchen einen anderen Aufrufweg und sind offen.
+- Ein Satz lässt sich in **einem** Lauf verwenden; der Weg „in zwei Läufen verwenden" aus der Fertig-Bedingung von Abschnitt 8 führt über Duplizieren (die Sperre sitzt nach dem ersten Lauf). Das ist die bewusste Folge der Sperre, keine Lücke — aber die Formulierung der Fertig-Bedingung trifft den Stand nicht mehr.
+
+---
+
 ## 12. Offene Punkte
 
 | Punkt | Wer klärt | Wann |
@@ -764,5 +791,5 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 | Liefert `by-simulation` alle Berichtsfassungen? | Lead | Etappe 5 |
 | Trägt der Evidence-Vertrag schon Sprungziele je Beleg? | Lead | Etappe 5 |
 | Gibt es persistierte Standard-Budgets? | Lead | Etappe 3; geklärt: ja, seit #1799 als Settings-Abschnitt `budget` (siehe 11b) |
-| Roadmap-Eintrag für Etappen 7 und 8, ADR für „manuell" | Maintainer | vor Etappe 7 |
+| Roadmap-Eintrag für Etappen 7 und 8, ADR für „manuell" | Maintainer | Roadmap-Eintrag getragen (`ROADMAP.md`, vor `0.10.0-rc.1`, Freigabe am 07.10.2026); ADR für „manuell" steht mit Etappe 8 aus |
 | Ist gns3 bereits auf PostgreSQL umgestellt? | Lead | vor Etappe 7 |

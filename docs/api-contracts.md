@@ -117,6 +117,7 @@ Der aktuelle `ApiErrorCode`-Katalog enthält **26** Werte. Die Liste im Code ist
 - `persona_review_required`
 - `graph_build_in_progress`
 - `report_generate_in_progress`
+- `persona_set_locked` — Personasatz gesperrt, weil ein Lauf aus ihm entstanden ist (`409`, `/api/persona-sets`, #1807); `conflict` (`409`) steht dort für einen doppelten `username` im Satz
 
 ### Upload
 

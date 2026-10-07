@@ -20,12 +20,19 @@ from __future__ import annotations
 import csv
 import os
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, get_args
 
 from ..config import Config
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
+from ..contracts.persona_set_contract import PersonaOrigin
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+    PipelineDegradationReport,
+)
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 from .simulation_config_generator import (
@@ -53,11 +60,16 @@ _ALWAYS_PRESENT_DEFAULTS = {
     "interested_topics": [],
 }
 
+#: Gültige Werte von ``persona_set_origin`` (Quelle: ``PersonaOrigin``).
+_PERSONA_SET_ORIGINS = frozenset(get_args(PersonaOrigin))
+
 
 def prepare_from_personas(
     manager: "SimulationManager",
     simulation_id: str,
     personas: List[Dict[str, Any]],
+    persona_set_id: Optional[str] = None,
+    degradations: Optional[DegradationCollector] = None,
 ) -> "SimulationState":
     """Bereitet eine frisch angelegte Simulation aus Bibliotheks-Personas vor.
 
@@ -71,6 +83,15 @@ def prepare_from_personas(
         manager: Simulation-Manager, dessen Store/Status-Setter genutzt wird.
         simulation_id: ID einer Simulation im Status ``CREATED``.
         personas: Nicht-leere Liste von Bibliotheks-Personas (Dicts).
+        persona_set_id: Kennung des Personasatzes (#1807), aus dem die Liste
+            als Kopie stammt. Landet in den Metadaten des Prepare-Runs
+            (``persona_source="set"``); ohne Wert bleibt es bei ``"library"``.
+        degradations: Sammler des Aufrufers (wie im normalen Prepare-Pfad,
+            #1034). Tragen Personas ``generation_source="rule_based"``,
+            meldet dieser Pfad ``PERSONA_RULE_BASED_FALLBACK`` genau einmal
+            fuer die ganze Liste; der Befund steht zusaetzlich in den
+            Metadaten des Prepare-Runs (``degradations``). Ohne Sammler legt
+            die Funktion einen eigenen an, damit der Run-Eintrag nie fehlt.
 
     Raises:
         ValueError: bei leerer Personaliste, unbekannter Simulation oder
@@ -92,7 +113,7 @@ def prepare_from_personas(
 
     manager._set_status(state, SimulationStatus.PREPARING)
 
-    profiles = _translate_personas(personas)
+    profiles = _translate_personas(personas, from_set=persona_set_id is not None)
     manager._store.write_json(simulation_id, "reddit_profiles", profiles)
     _write_twitter_csv(manager._get_simulation_dir(simulation_id), profiles)
 
@@ -104,21 +125,70 @@ def prepare_from_personas(
     state.entity_types = sorted({p["persona_kind"] for p in profiles})
     state.config_generated = True
 
+    collector = degradations if degradations is not None else DegradationCollector()
+    _report_rule_based_fallback(profiles, collector, persona_set_id)
+
+    # Rueckverweis erst kurz vor READY setzen: ein gescheiterter Lauf verweist
+    # nicht auf einen Satz, den ``record_run`` nie gesperrt hat. Der Statuswechsel
+    # persistiert das Feld mit.
+    state.persona_set_id = persona_set_id
     manager._set_status(state, SimulationStatus.READY)
-    _register_run(state, len(profiles))
+    _register_run(state, len(profiles), persona_set_id, collector.report())
     return state
 
 
-def _translate_personas(personas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _report_rule_based_fallback(
+    profiles: List[Dict[str, Any]],
+    degradations: DegradationCollector,
+    persona_set_id: Optional[str],
+) -> None:
+    """Meldet regelbasierte Platzhalter einmal fuer die ganze Liste (#1029).
+
+    Gleicher Befundtyp, gleiche Schweregradregel und gleicher Wortlaut-Aufbau
+    wie ``oasis_profile_rule_based._report_persona_degradation``: sind alle
+    Personas Platzhalter, gibt es keine echte Stimme mehr (``BLOCKING``),
+    sonst ``WARNING``.
+    """
+    fallback = [p for p in profiles if p.get("generation_source") == "rule_based"]
+    if not fallback:
+        return
+    context: Dict[str, str | int | float] = {
+        "fallback_personas": len(fallback),
+        "total_personas": len(profiles),
+    }
+    if persona_set_id is not None:
+        context["persona_set_id"] = persona_set_id
+    degradations.record(
+        kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
+        severity=(
+            DegradationSeverity.BLOCKING
+            if len(fallback) == len(profiles)
+            else DegradationSeverity.WARNING
+        ),
+        detail=(
+            f"{len(fallback)} von {len(profiles)} Personas sind regelbasierte "
+            "Platzhalter und wurden nicht vom Modell erzeugt. "
+            "Ihre Beiträge tragen keine belastbaren Aussagen."
+        ),
+        context=context,
+    )
+
+
+def _translate_personas(
+    personas: List[Dict[str, Any]], *, from_set: bool = False
+) -> List[Dict[str, Any]]:
     """Übersetzt Bibliotheks-Personas ins OASIS-Profilformat.
 
     Vergibt fortlaufende ``user_id`` (ab 1) und dedupliziert Usernamen
     case-insensitiv — gleiches Muster wie ``add_simulation_profile``.
+
+    ``from_set``: Der Lauf stammt aus einem Personasatz (#1807). Dann tragen
+    ALLE Profile ``persona_set_origin`` (siehe ``_translate_persona``).
     """
     existing_names: set = set()
     profiles = []
     for index, persona in enumerate(personas, start=1):
-        profile = _translate_persona(persona, index, existing_names)
+        profile = _translate_persona(persona, index, existing_names, from_set=from_set)
         existing_names.add(profile["username"].lower())
         profiles.append(profile)
     return profiles
@@ -134,9 +204,21 @@ def _dedupe_username(username: str, existing_names: set) -> str:
 
 
 def _translate_persona(
-    persona: Dict[str, Any], user_id: int, existing_names: set
+    persona: Dict[str, Any],
+    user_id: int,
+    existing_names: set,
+    *,
+    from_set: bool = False,
 ) -> Dict[str, Any]:
-    """Schließt Feldlücken eines Bibliothekseintrags fürs Profilformat."""
+    """Schließt Feldlücken eines Bibliothekseintrags fürs Profilformat.
+
+    Bei ``from_set`` steht zusätzlich ``persona_set_origin`` im Profil: die
+    Herkunft aus dem Satz (``graph|manual|ai_draft|fallback``). Nur so bleibt
+    ein KI-Entwurf am Laufprofil erkennbar, denn ``generation_source`` kennt
+    kein ``ai_draft``. Ohne Satz fehlt der Schlüssel, die Profile bleiben
+    unverändert. Ein Profil aus einem Satz ohne gültige Herkunft ist ein
+    Programmfehler (``ValueError``), kein stiller Standardwert.
+    """
     username = _dedupe_username(
         str(persona.get("username") or f"user_{user_id}").strip(), existing_names
     )
@@ -165,10 +247,23 @@ def _translate_persona(
         "source_entity_type": persona.get("source_entity_type") or "persona_library",
         "persona_kind": persona.get("persona_kind") or "individual",
         "is_manual": bool(persona.get("is_manual", False)),
+        # Immer gesetzt (nie nur bei Fallback): ``_write_twitter_csv`` leitet die
+        # Spalten aus dem ersten Profil ab, ein spaeteres Profil mit
+        # zusaetzlichem Schluessel brachte den CSV-Writer zum Absturz.
+        "generation_source": (
+            "rule_based" if persona.get("generation_source") == "rule_based" else "llm"
+        ),
     }
     for key, default in _ALWAYS_PRESENT_DEFAULTS.items():
         value = persona.get(key)
         profile[key] = value if value not in (None, "") else default
+    if from_set:
+        origin = persona.get("persona_set_origin")
+        if origin not in _PERSONA_SET_ORIGINS:
+            raise ValueError(
+                f"Persona {username!r} aus einem Satz ohne gültige Herkunft: {origin!r}"
+            )
+        profile["persona_set_origin"] = origin
     return profile
 
 
@@ -254,13 +349,28 @@ def _build_config(state: "SimulationState", profile_count: int) -> Dict[str, Any
     return config
 
 
-def _register_run(state: "SimulationState", profile_count: int) -> None:
+def _register_run(
+    state: "SimulationState",
+    profile_count: int,
+    persona_set_id: Optional[str] = None,
+    degradation_report: Optional[PipelineDegradationReport] = None,
+) -> None:
+    from_set = persona_set_id is not None
+    source_metadata: Dict[str, Any] = {"persona_source": "set" if from_set else "library"}
+    if persona_set_id is not None:
+        source_metadata["persona_set_id"] = persona_set_id
+    if degradation_report:
+        source_metadata["degradations"] = degradation_report.model_dump(mode="json")
     RunRegistry().create_run(
         run_type="simulation_prepare",
         entity_id=state.simulation_id,
         status="completed",
         progress=100,
-        message=f"Simulation aus {profile_count} Bibliotheks-Personas vorbereitet",
+        message=(
+            f"Simulation aus {profile_count} Personas des Personasatzes vorbereitet"
+            if from_set
+            else f"Simulation aus {profile_count} Bibliotheks-Personas vorbereitet"
+        ),
         linked_ids={
             "simulation_id": state.simulation_id,
             "project_id": state.project_id,
@@ -272,7 +382,7 @@ def _register_run(state: "SimulationState", profile_count: int) -> None:
         # faellt die spaetere Routen-Aufloesung fuer diesen Run ausserhalb
         # eines gebundenen Kontexts auf den Operator zurueck.
         metadata={
-            "persona_source": "library",
+            **source_metadata,
             "persona_count": profile_count,
             **workspace_credential_metadata(),
         },

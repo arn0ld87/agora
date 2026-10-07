@@ -20,6 +20,29 @@ from app.contracts.branch_request_contract import BranchOverrides
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
+from app.contracts.persona_set_contract import (
+    PersonaDraftExamplePost,
+    PersonaDraftRequest,
+    PersonaDraftResponse,
+    CreateFromPersonasResponse,
+    PersonaSetCreate,
+    PersonaSetDuplicate,
+    PersonaSetDeleteResponse,
+    PersonaSetEntriesDelete,
+    PersonaSetEntriesDeleteResponse,
+    PersonaSetEntry,
+    PersonaSetEntryCreate,
+    PersonaSetEntryUpdate,
+    PersonaSetListResponse,
+    PersonaSetProfile,
+    PersonaSetQualityIssue,
+    PersonaSetQualityPersona,
+    PersonaSetQualityReport,
+    PersonaSetQualitySummary,
+    PersonaSetRecord,
+    PersonaSetSummary,
+    PersonaSetUpdate,
+)
 from app.contracts.persona_target_contract import PersonaTargetContract
 from app.contracts.prepare_status_contract import PrepareStatusResponse
 from app.contracts.readiness_contract import (
@@ -185,6 +208,28 @@ CONTRACTS: dict[str, type] = {
     "evidence-map-response.schema.json": EvidenceMapResponseModel,
     "persona.schema.json": PersonaModel,
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
+    # Personasaetze (Issue #1807, Etappe 7)
+    "persona-set-profile.schema.json": PersonaSetProfile,
+    "persona-set-entry.schema.json": PersonaSetEntry,
+    "persona-set-record.schema.json": PersonaSetRecord,
+    "persona-set-summary.schema.json": PersonaSetSummary,
+    "persona-set-create.schema.json": PersonaSetCreate,
+    "persona-set-update.schema.json": PersonaSetUpdate,
+    "persona-set-duplicate.schema.json": PersonaSetDuplicate,
+    "persona-set-entry-create.schema.json": PersonaSetEntryCreate,
+    "persona-set-entry-update.schema.json": PersonaSetEntryUpdate,
+    "persona-set-entries-delete.schema.json": PersonaSetEntriesDelete,
+    "persona-set-list-response.schema.json": PersonaSetListResponse,
+    "persona-set-delete-response.schema.json": PersonaSetDeleteResponse,
+    "persona-set-entries-delete-response.schema.json": PersonaSetEntriesDeleteResponse,
+    "persona-set-quality-issue.schema.json": PersonaSetQualityIssue,
+    "persona-set-quality-persona.schema.json": PersonaSetQualityPersona,
+    "persona-set-quality-summary.schema.json": PersonaSetQualitySummary,
+    "persona-set-quality-report.schema.json": PersonaSetQualityReport,
+    "persona-draft-request.schema.json": PersonaDraftRequest,
+    "persona-draft-example-post.schema.json": PersonaDraftExamplePost,
+    "persona-draft-response.schema.json": PersonaDraftResponse,
+    "create-from-personas-response.schema.json": CreateFromPersonasResponse,
     # Persona-Ziel für den Fortschrittszähler (Issue #1034)
     "persona-target.schema.json": PersonaTargetContract,
     # Status-Antworten mit message_key (Issue #1174, Muster aus #1458)

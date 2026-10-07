@@ -1,0 +1,274 @@
+{
+  "$defs": {
+    "PersonaDraftExamplePost": {
+      "additionalProperties": false,
+      "description": "Ein Beispielbeitrag der Persona, wie sie in einem Netz schreiben wuerde.\n\nTeil der Antwort, kein gespeicherter Zustand (#1807): der Beitrag dient als\nVorschau, damit der Maintainer die Stimme der Persona beurteilt, bevor der\nEintrag im Satz landet. Er traegt deshalb kein ``origin`` und wird nicht\ngespeichert \u2014 der Feed der Simulation erzeugt eigene Beitraege.",
+      "properties": {
+        "content": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "network": {
+          "default": "twitter",
+          "enum": [
+            "twitter",
+            "reddit"
+          ],
+          "title": "Network",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "title": "PersonaDraftExamplePost",
+      "type": "object"
+    },
+    "PersonaSetProfile": {
+      "additionalProperties": false,
+      "description": "Die Persona-Felder eines Satzeintrags.\n\nEntspricht der Feldliste der Persona-Bibliothek plus ``persona_kind``\n(Individual- vs. Kollektiv-Persona, #1246). Alles ausser ``username`` und\n``name`` ist optional bzw. hat einen Vorgabewert: ein KI-Entwurf oder ein\nhandgeschriebener Eintrag ist zunaechst unvollstaendig. Der Weg\n``create-from-personas`` fuellt Luecken beim Anlegen des Laufs.",
+      "properties": {
+        "activity_level": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Level"
+        },
+        "age": {
+          "anyOf": [
+            {
+              "maximum": 120,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age"
+        },
+        "bio": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Bio",
+          "type": "string"
+        },
+        "country": {
+          "anyOf": [
+            {
+              "maxLength": 2,
+              "minLength": 2,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country"
+        },
+        "gender": {
+          "anyOf": [
+            {
+              "enum": [
+                "male",
+                "female",
+                "nonbinary",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gender"
+        },
+        "interested_topics": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 15,
+          "title": "Interested Topics",
+          "type": "array"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 16,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "mbti": {
+          "anyOf": [
+            {
+              "enum": [
+                "INTJ",
+                "INTP",
+                "ENTJ",
+                "ENTP",
+                "INFJ",
+                "INFP",
+                "ENFJ",
+                "ENFP",
+                "ISTJ",
+                "ISFJ",
+                "ESTJ",
+                "ESFJ",
+                "ISTP",
+                "ISFP",
+                "ESTP",
+                "ESFP"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mbti"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "persona": {
+          "default": "",
+          "maxLength": 12000,
+          "title": "Persona",
+          "type": "string"
+        },
+        "persona_kind": {
+          "default": "individual",
+          "enum": [
+            "individual",
+            "collective"
+          ],
+          "title": "Persona Kind",
+          "type": "string"
+        },
+        "profession": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Profession"
+        },
+        "source_entity_type": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Entity Type"
+        },
+        "time_zone": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Zone"
+        },
+        "username": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Username",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "username",
+        "name"
+      ],
+      "title": "PersonaSetProfile",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/persona-draft-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort von ``POST /api/persona-sets/<set_id>/draft``.\n\n``origin`` steht hier immer auf ``\"ai_draft\"``: ein Entwurf, der anders\nmarkiert waere, verwechselte \u201evom Modell vorgeschlagen\" mit \u201evon Hand\ngesetzt\" \u2014 genau die Verwechslung, die die Herkunftsplakette (#4.1) in der\nOberflaeche verhindern soll. Der Dienst vergibt die Herkunft, nicht der\nAufrufer; ein Anfragetext kann sie nicht ausschalten.\n\n``profile`` ist ein vollstaendiges ``PersonaSetProfile``: der Dienst fuellt\ndie Luecken, statt dem Modell zu ueberlassen, was es nicht zu liefern\nbraucht. ``example_post`` fehlt, wenn das Modell keinen lieferte \u2014 die\nVorschau ist dann leer und die Oberflaeche sagt das.",
+  "properties": {
+    "example_post": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PersonaDraftExamplePost"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "origin": {
+      "const": "ai_draft",
+      "title": "Origin",
+      "type": "string"
+    },
+    "profile": {
+      "$ref": "#/$defs/PersonaSetProfile"
+    }
+  },
+  "required": [
+    "origin",
+    "profile"
+  ],
+  "title": "PersonaDraftResponse",
+  "type": "object"
+}

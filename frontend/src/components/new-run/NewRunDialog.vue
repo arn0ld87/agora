@@ -50,6 +50,7 @@ import { useSettingsWindowStore } from '@/stores/settingsWindow'
 import { useNewRunGraphs } from '@/composables/new-run/useNewRunGraphs'
 import { useNewRunBudgetDefaults } from '@/composables/new-run/useNewRunBudgetDefaults'
 import { useNewRunSubmit } from '@/composables/new-run/useNewRunSubmit'
+import { usePersonaSets } from '@/composables/personaSets/usePersonaSets'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -106,6 +107,23 @@ const documentRoles = ref<DocumentRole[]>([])
 const fileError = ref('')
 const graphsSource = useNewRunGraphs()
 const { graphs } = graphsSource
+
+// ---- Gruppe 3: Personasatz (#1807) ----
+// Der Lauf aus einem Satz geht ohne Graph. Ein eigener Modus, weil
+// „kein Graph waehlen" im Graph-Weg eine Abweichung waere und hier der
+// einzige Weg ist.
+type PersonaMode = 'generate' | 'set'
+const personaMode = ref<PersonaMode>('generate')
+const personaSets = usePersonaSets()
+const { sets: personaSetOptions } = personaSets
+const selectedPersonaSetId = ref('')
+
+const selectedPersonaSet = computed(() =>
+  personaSetOptions.value.find((s) => s.id === selectedPersonaSetId.value) ?? null,
+)
+// Ein gesperrter Satz taugt als Quelle: daraus darf immer wieder ein Lauf
+// entstehen — gesperrt ist nur das Bearbeiten der Personas.
+const personaSetUsable = computed(() => personaSetOptions.value.filter((s) => s.entry_count > 0))
 
 const selectedGraph = computed(() => graphs.value.find((g) => g.projectId === selectedProjectId.value) ?? null)
 const existingGraphs = computed(() => graphsSource.graphs.value.length > 0)
@@ -214,15 +232,27 @@ const contestedValid = computed(
 const agentsValid = computed(() => !useAgentCap.value || (Number.isInteger(maxAgents.value) && maxAgents.value >= MIN_AGENTS))
 const daysValid = computed(() => Number.isInteger(days.value) && days.value >= 1 && days.value <= MAX_SIMULATION_DAYS)
 const roundsValid = computed(() => Number.isInteger(rounds.value) && rounds.value >= MIN_ROUNDS && rounds.value <= MAX_ROUNDS)
-const questionMissing = computed(() => graphMode.value === 'new' && question.value.trim() === '')
+// Im Satz-Weg ist die Frage ebenfalls Pflicht: der Lauf bekommt keinen
+// Graphen, aber `simulation_requirement` verlangt der Endpunkt trotzdem.
+const questionMissing = computed(
+  () => (graphMode.value === 'new' || personaMode.value === 'set') && question.value.trim() === '',
+)
 
 /** Alle offenen Voraussetzungen als Klartext — nicht nur ein gesperrter Knopf. */
 const blockers = computed<string[]>(() => {
   const list: string[] = []
   if (graphMode.value === 'existing' && !selectedGraph.value) list.push(t('views.newRun.blockers.graph'))
-  if (graphMode.value === 'new') {
+  // Der Satz-Weg braucht keine Quelldatei: die Personas kommen aus dem Satz,
+  // und der Graph wird gar nicht gebaut. Ohne diese Ausnahme bliebe der
+  // Startknopf immer gesperrt, weil `graphMode` auf „new" steht.
+  const fromPersonaSet = personaMode.value === 'set'
+  if (graphMode.value === 'new' && !fromPersonaSet) {
     if (files.value.length === 0) list.push(t('views.newRun.blockers.files'))
     if (questionMissing.value) list.push(t('views.newRun.blockers.question'))
+  }
+  if (fromPersonaSet) {
+    if (questionMissing.value) list.push(t('views.newRun.blockers.question'))
+    if (!selectedPersonaSet.value) list.push(t('views.newRun.blockers.personaSet'))
   }
   if (!contestedValid.value) list.push(t('views.newRun.blockers.contested'))
   if (!agentsValid.value) list.push(t('views.newRun.blockers.agents'))
@@ -276,6 +306,20 @@ async function onStart(): Promise<void> {
   uploadError.value = ''
   writeLocal(STORAGE_LANG, language.value)
   applyModelOverride()
+  // Der Satz-Weg geht ohne Graph und ueber einen eigenen Endpunkt. Er kommt
+  // vor dem Graph-Zweig: er traegt weder Datei noch Graph und wuerde dort
+  // einen Lauf ohne Graph erzeugen, den es nicht gibt.
+  if (personaMode.value === 'set' && selectedPersonaSet.value) {
+    await submit.createFromPersonaSet({
+      personaSetId: selectedPersonaSet.value.id,
+      simulationRequirement: question.value.trim(),
+      language: language.value,
+      maxRounds: rounds.value,
+      simulationDays: days.value,
+      budget: budgetChanged.value ? budget.value : null,
+    })
+    return
+  }
   if (graphMode.value === 'existing') {
     const input = existingInput()
     if (input) await submit.createAndPrepare(input)
@@ -344,6 +388,9 @@ watch(
 
 onMounted(() => {
   void graphsSource.load(t('views.newRun.graph.loadError'))
+  // Die Satz-Auswahl braucht ihre Liste, sonst stuende das Feld leer, ohne
+  // dass der Nutzt den Unterschied zu „kein Satz vorhanden" erkennt.
+  void personaSets.reload()
   void budgetDefaults.load()
   if (!operatorAccess.value) {
     discardPersistedProfile()
@@ -413,13 +460,13 @@ const startLabel = computed(() =>
             <div class="nr__field">
               <label class="nr__label" :for="id('question')">
                 {{ t('views.newRun.question.label') }}
-                <span v-if="graphMode === 'new'" class="nr__required" aria-hidden="true">*</span>
+                <span v-if="graphMode === 'new' || personaMode === 'set'" class="nr__required" aria-hidden="true">*</span>
               </label>
               <textarea
                 :id="id('question')"
                 class="nr__textarea"
                 rows="3"
-                :required="graphMode === 'new'"
+                :required="graphMode === 'new' || personaMode === 'set'"
                 :readonly="graphMode === 'existing'"
                 :value="questionText"
                 :placeholder="t('dashboard.hero.requirementPlaceholder')"
@@ -527,18 +574,52 @@ const startLabel = computed(() =>
                 <p v-if="graphMode === 'new'" class="nr__hint">{{ t('views.newRun.personas.laterWithSource') }}</p>
               </div>
             </div>
-            <div class="nr__radio nr__radio--off">
+            <!-- Vor Etappe 7 stand hier ein dauerhaft deaktiviertes Feld mit
+                 dem Hinweis, der Satz komme spaeter. Jetzt waehlt es einen
+                 Satz aus der Bibliothek; der Lauf entsteht ohne Graph
+                 (Maintainer-Entscheid 07.10.). -->
+            <div class="nr__radio" :class="{ 'nr__radio--off': personaMode !== 'set' }">
               <input
-                :id="id('personas-existing')"
+                :id="id('personas-set')"
+                v-model="personaMode"
                 type="radio"
                 name="persona-mode"
-                value="existing"
-                disabled
-                :aria-describedby="id('personas-existing-why')"
+                value="set"
+                :disabled="busy"
+                :aria-describedby="id('personas-set-why')"
               />
               <div class="nr__radio-text">
-                <label :for="id('personas-existing')">{{ t('views.newRun.personas.existing') }}</label>
-                <p :id="id('personas-existing-why')" class="nr__hint">{{ t('views.newRun.personas.existingWhy') }}</p>
+                <label :for="id('personas-set')">{{ t('views.newRun.personas.set') }}</label>
+                <p :id="id('personas-set-why')" class="nr__hint">
+                  {{ t('views.newRun.personas.setWhy') }}
+                </p>
+                <template v-if="personaMode === 'set'">
+                  <label class="nr__label" :for="id('persona-set-picker')">
+                    {{ t('views.newRun.personas.chooseSet') }}
+                  </label>
+                  <select
+                    :id="id('persona-set-picker')"
+                    class="nr__select"
+                    v-model="selectedPersonaSetId"
+                    :disabled="busy || personaSets.loading.value"
+                    data-testid="new-run-persona-set"
+                  >
+                    <option value="">
+                      {{ personaSets.loading.value
+                        ? t('views.newRun.personas.loadingSets')
+                        : t('views.newRun.personas.noSetChosen') }}
+                    </option>
+                    <option v-for="opt in personaSetUsable" :key="opt.id" :value="opt.id">
+                      {{ opt.name }} ({{ t('views.newRun.personas.count', { n: opt.entry_count }) }})
+                    </option>
+                  </select>
+                  <p v-if="personaSetUsable.length === 0 && !personaSets.loading.value" class="nr__hint">
+                    {{ t('views.newRun.personas.noSetsYet') }}
+                  </p>
+                  <p v-if="selectedPersonaSet" class="nr__hint">
+                    {{ t('views.newRun.personas.noGraphNotice') }}
+                  </p>
+                </template>
               </div>
             </div>
           </fieldset>

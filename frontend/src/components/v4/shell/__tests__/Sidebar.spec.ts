@@ -229,8 +229,8 @@ describe('Sidebar', () => {
     const byLabel = Object.fromEntries(hrefs)
     expect(byLabel['▶Läufe']).toBe('/library/runs')
     expect(byLabel['◇Graphen']).toBe('/library/graphs')
-    // Personasätze haben bis Etappe 7 keine eigene Ansicht.
-    expect(byLabel['◎Personasätze']).toBe('/library/runs')
+    // Etappe 7 (#1807): eigene Personasatz-Bibliothek.
+    expect(byLabel['◎Personasätze']).toBe('/library/persona-sets')
     expect(byLabel['◌Läuft gerade']).toBe('/library/runs?view=running')
     expect(byLabel['!Braucht dich']).toBe('/library/runs?view=attention')
     expect(byLabel['≡Aktivität']).toBe('/activity/jobs')

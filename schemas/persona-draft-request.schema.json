@@ -1,0 +1,26 @@
+{
+  "$id": "https://alexle135.de/schemas/persona-draft-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Auftrag fuer den KI-Entwurf einer Persona.\n\n``brief`` beschreibt die Rolle in freien Worten (\u201eBetriebsratin aus Bremen,\nim Konflikt mit der Schichtplanung\"). Pflicht und leer geprueft: ohne Brief\nhat das Modell nichts, woran es sich entlangschreiben koennte, und der\nEntwurf waere dekorativ.\n\n``language`` steuert die Sprache von Bio, Freitext und Beispielbeitrag. Es\nist die Oberflaechensprache, nicht die Sprache der Simulation.",
+  "properties": {
+    "brief": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Brief",
+      "type": "string"
+    },
+    "language": {
+      "default": "de",
+      "maxLength": 16,
+      "minLength": 2,
+      "title": "Language",
+      "type": "string"
+    }
+  },
+  "required": [
+    "brief"
+  ],
+  "title": "PersonaDraftRequest",
+  "type": "object"
+}

@@ -53,6 +53,66 @@ def created_id(manager: SimulationManager) -> str:
 MINIMAL_PERSONA = {"username": "alice", "name": "Alice"}
 
 
+class TestPersonaSetOrigin:
+    """``persona_set_origin`` und Rückverweis bei einem Lauf aus einem Satz (#1807)."""
+
+    SET_PERSONAS = [
+        {"username": "alice", "persona_set_origin": "ai_draft"},
+        {"username": "bob", "persona_set_origin": "graph"},
+    ]
+
+    def test_set_run_writes_origin_on_every_profile_and_csv_row(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        persona_prepare_service.prepare_from_personas(
+            manager, created_id, self.SET_PERSONAS, persona_set_id="pset_1"
+        )
+
+        profiles = manager._store.read_json(created_id, "reddit_profiles", default=None)
+        assert [p["persona_set_origin"] for p in profiles] == ["ai_draft", "graph"]
+        csv_path = os.path.join(manager._get_simulation_dir(created_id), "twitter_profiles.csv")
+        with open(csv_path, encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        assert [r["persona_set_origin"] for r in rows] == ["ai_draft", "graph"]
+
+    def test_set_run_links_back_and_persists_the_link(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        state = persona_prepare_service.prepare_from_personas(
+            manager, created_id, self.SET_PERSONAS, persona_set_id="pset_1"
+        )
+
+        assert state.persona_set_id == "pset_1"
+        reloaded = SimulationManager(store=manager._store).get_simulation(created_id)
+        assert reloaded is not None
+        assert reloaded.persona_set_id == "pset_1"
+
+    def test_set_run_without_valid_origin_is_rejected_not_defaulted(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        with pytest.raises(ValueError, match="Herkunft"):
+            persona_prepare_service.prepare_from_personas(
+                manager, created_id, [{"username": "alice"}], persona_set_id="pset_1"
+            )
+
+        state = manager.get_simulation(created_id)
+        assert state is not None
+        assert state.persona_set_id is None
+
+    def test_run_without_set_ignores_a_smuggled_origin(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        persona_prepare_service.prepare_from_personas(
+            manager,
+            created_id,
+            [{"username": "alice", "persona_set_origin": "ai_draft"}],
+        )
+
+        profiles = manager._store.read_json(created_id, "reddit_profiles", default=None)
+        assert "persona_set_origin" not in profiles[0]
+        assert manager.get_simulation(created_id).persona_set_id is None
+
+
 class TestSuccessfulPrepare:
     def test_reaches_ready(self, manager: SimulationManager, created_id: str) -> None:
         state = persona_prepare_service.prepare_from_personas(

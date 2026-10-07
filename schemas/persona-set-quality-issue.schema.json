@@ -1,0 +1,40 @@
+{
+  "$id": "https://alexle135.de/schemas/persona-set-quality-issue.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ein Qualitaetshinweis (Code und Schwere wie ``PersonaQualityService``).",
+  "properties": {
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "detail": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
+    "severity": {
+      "enum": [
+        "error",
+        "warning",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "severity"
+  ],
+  "title": "PersonaSetQualityIssue",
+  "type": "object"
+}

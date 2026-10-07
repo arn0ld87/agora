@@ -557,6 +557,7 @@ def create_app(config_class=Config):
         onboarding_bp,
         auth_public_bp,
         workspaces_bp,
+        persona_sets_bp,
     )
     from .utils.api_responses import install_api_error_handlers
     from .utils.auth import install_blueprint_guard, log_auth_mode
@@ -575,6 +576,7 @@ def create_app(config_class=Config):
         runs_bp,
         status_bp,
         workspaces_bp,
+        persona_sets_bp,
     ):
         install_blueprint_guard(bp)
     # Prozessweiter Zustand (Provider-Keys, LLM-Profile, API-Keys, Logs,
@@ -597,6 +599,7 @@ def create_app(config_class=Config):
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(runs_bp, url_prefix='/api/runs')
     app.register_blueprint(status_bp, url_prefix='/api/status')
+    app.register_blueprint(persona_sets_bp, url_prefix='/api/persona-sets')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(llm_bp, url_prefix='/api/llm')

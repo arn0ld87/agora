@@ -53,6 +53,21 @@ describe('simulationStatusContract', () => {
     expect(parsed.interview_env_alive).toBe(true)
   })
 
+  it.each(['pset_aaaaaaaaaaaa', null])('parst den Personasatz-Rueckverweis %s', (personaSetId) => {
+    const parsed = SimulationStatusResponseSchema.parse({
+      ...backendPayload,
+      persona_set_id: personaSetId,
+    })
+    expect(parsed.persona_set_id).toBe(personaSetId)
+  })
+
+  it('weist einen nicht-textuellen Personasatz-Rueckverweis ab', () => {
+    expect(SimulationStatusResponseSchema.safeParse({
+      ...backendPayload,
+      persona_set_id: 42,
+    }).success).toBe(false)
+  })
+
   it('weist ein unbekanntes Feld ab', () => {
     const result = SimulationStatusResponseSchema.safeParse({
       ...backendPayload,

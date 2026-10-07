@@ -136,6 +136,7 @@ Sechs unabhängige Schalter steuern, ob einzelne Stores von Datei/SQLite auf Pos
 | `AGORA_SIMULATION_BACKEND` | `file` | `file`, `postgres` | `uploads/simulations/<simulation_id>/state.json` vs. PostgreSQL; `postgres` verlangt `AGORA_PROJECT_BACKEND=postgres` |
 | `AGORA_RUN_BACKEND` | `file` | `file`, `postgres` | `uploads/run_registry/<run_id>.json` vs. PostgreSQL; `postgres` verlangt `AGORA_SIMULATION_BACKEND=postgres` |
 | `AGORA_REPORT_BACKEND` | `file` | `file`, `postgres` | `uploads/reports/<report_id>/meta.json` vs. PostgreSQL; Report-Inhalte bleiben Dateien; `postgres` verlangt `AGORA_SIMULATION_BACKEND=postgres` |
+| `AGORA_PERSONA_SET_BACKEND` | `file` | `file`, `postgres` | Personasätze (#1807): `uploads/persona_sets/<set_id>.json` vs. PostgreSQL (`agora.persona_sets`); kein Fremdschlüssel, `postgres` verlangt nur `DATABASE_URL` |
 | `AGORA_LLM_PROFILE_BACKEND` | `sqlite` | `sqlite`, `postgres` | `instance/llm_profiles.db` vs. PostgreSQL |
 | `DATABASE_URL` 🔐 | leer, kein Default | `postgresql+psycopg://user:password@host:5432/dbname` | Pflicht, sobald einer der Schalter auf `postgres` steht |
 
