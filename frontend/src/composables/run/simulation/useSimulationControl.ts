@@ -1,7 +1,6 @@
 /**
  * Steuerung der Simulation am Lauf (#1801, Ticket D): Starten, Stoppen,
- * Pausieren, Fortsetzen, Abbrechen. Fachlich identisch zu `Step3Simulation.vue`
- * (gleiche Request-Felder, gleicher Modell-Resolver, Run-Override wird nach dem
+ * Pausieren, Fortsetzen, Abbrechen. Löst `Step3Simulation.vue` ab (#1801; gleiche Request-Felder, gleicher Modell-Resolver, Run-Override wird nach dem
  * Start verbraucht); die Startwerte kommen aus dem vorgemerkten Startdialog
  * (`readPendingRunParams`) und werden nach erfolgreichem Start entfernt.
  * Fehlertexte des Backends (auch Budget und Rate-Limit) bleiben unverändert

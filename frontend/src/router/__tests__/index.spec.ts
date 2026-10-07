@@ -54,8 +54,6 @@ vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepGraphBuildView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/SimulationLayout.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/StepSimulationView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepReportView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepInteractionView.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
@@ -70,12 +68,6 @@ vi.mock('../../views/Settings/WorkspaceProviderKeysView.vue', () => VIEW_STUB)
 vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsProfileView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/EmbeddingConfigurationsView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/StepSimulationFeedView.vue', () => VIEW_STUB)
-// Slice UI-2b (#1713): Diskurs/Strang/Runden/Protokoll-Kind-Routen.
-vi.mock('../../views/v4/steps/SimThreadsView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/SimThreadFocusView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/SimRoundsView.vue', () => VIEW_STUB)
-vi.mock('../../views/v4/steps/SimActionsView.vue', () => VIEW_STUB)
 vi.mock('../../views/shell/ShelfView.vue', () => VIEW_STUB)
 // Redesign PR 8: /runs und /v4/history sind reine Redirects auf die Ablage
 // (ShelfView); die abgeloesten RunsAppShellView.vue und HistoryView.vue sind
@@ -152,9 +144,9 @@ describe('Router – Routen-Resolution', () => {
     expect(router.currentRoute.value.params.projectId).toBe('project_abc')
   })
 
-  it('löst /v4/simulation/:simulationId mit param auf', async () => {
+  it('löst /v4/simulation/:simulationId auf den Feed am Lauf auf', async () => {
     await pushAndSettle('/v4/simulation/sim_abc')
-    expect(router.currentRoute.value.name).toBe('StepSimulation')
+    expect(router.currentRoute.value.name).toBe('RunSimulationFeed')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
   })
 
@@ -324,8 +316,8 @@ describe('Router – Redirects', () => {
 
   it.each([
     ['/process/project_42', 'StepGraphBuild', { projectId: 'project_42' }],
-    ['/simulation/simulation_42', 'StepEnvSetup', { projectId: 'simulation_42' }],
-    ['/simulation/simulation_42/start', 'StepSimulation', { simulationId: 'simulation_42' }],
+    ['/simulation/simulation_42', 'RunSimulationFeed', { simulationId: 'simulation_42' }],
+    ['/simulation/simulation_42/start', 'RunSimulationFeed', { simulationId: 'simulation_42' }],
     ['/report/report_42', 'StepReport', { reportId: 'report_42' }],
     ['/interaction/report_42', 'StepInteraction', { reportId: 'report_42' }],
   ])('leitet %s auf %s mit dokumentiertem Parameter-Mapping weiter', async (from, to, params) => {
@@ -429,26 +421,33 @@ describe('Router – Simulation als Reiter (Etappe 4, #1801)', () => {
     expect(router.currentRoute.value.query.claim).toBe('c1')
   })
 
-  it('Pipeline-Seite, alte Start-Adressen und Interviews bleiben unberührt', async () => {
-    await pushAndSettle('/v4/simulation/sim_1')
-    expect(router.currentRoute.value.name).toBe('StepSimulation')
-    await pushAndSettle('/simulation/sim_1/start')
-    expect(router.currentRoute.value.name).toBe('StepSimulation')
-    await pushAndSettle('/simulation/sim_1')
-    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
-    await pushAndSettle('/v4/simulation/sim_1/interviews')
-    expect(router.currentRoute.value.name).toBe('RunInterviewsLegacy')
+  it('alte Start-Adressen und die Pipeline-Seite führen auf den Feed, Query und Hash bleiben', async () => {
+    for (const path of ['/v4/simulation/sim_1', '/simulation/sim_1', '/simulation/sim_1/start']) {
+      await pushAndSettle(`${path}?projectId=p1&maxRounds=7#x`)
+      const route = router.currentRoute.value
+      expect(route.name, path).toBe('RunSimulationFeed')
+      expect(route.fullPath, path).toBe('/simulations/sim_1/simulation/feed?projectId=p1&maxRounds=7#x')
+    }
+  })
+
+  it('die Interviews-Übergangsadresse wird von keiner Weiterleitung verschluckt', async () => {
+    await pushAndSettle('/v4/simulation/sim_1/interviews?x=1')
+    const route = router.currentRoute.value
+    expect(route.name).toBe('RunInterviewsLegacy')
+    expect(route.params.simulationId).toBe('sim_1')
+    expect(route.fullPath).toBe('/v4/simulation/sim_1/interviews?x=1')
+  })
+
+  it('/v4/report/:id bleibt unberührt', async () => {
+    await pushAndSettle('/v4/report/report_1')
+    expect(router.currentRoute.value.name).toBe('StepReport')
   })
 })
 
 describe('Router – Struktur-Integrität', () => {
   it('kein Pfad ist doppelt registriert', () => {
-    // Fix #1713: SimulationLayout ist ein Layout-Parent mit einer Kind-Route
-    // auf leerem Pfad (StepSimulation) — vue-router registriert dafuer
-    // zwei Eintraege mit demselben resolvierten Pfad (Standardmuster fuer
-    // "Layout mit Default-Kind"). Nur navigierbare Blatt-Routen (ohne
-    // eigene Kinder) zaehlen fuer die Duplikatspruefung; der Layout-Parent
-    // selbst ist nie direkt das Navigationsziel.
+    // Nur navigierbare Blatt-Routen (ohne eigene Kinder) zählen; Layout-Eltern wie
+    // RunWorkspace und RunSimulation teilen ihren Pfad mit einer Kind-Route auf leerem Pfad.
     const paths = router
       .getRoutes()
       .filter((route) => !route.children || route.children.length === 0)
@@ -490,12 +489,8 @@ describe('Router – Struktur-Integrität', () => {
   // AppShellDemoView.vue, Agora2026View.vue, ActiveModelBadge.vue,
   // Workspace*-Familie — alle laut Filesystem-Check nicht mehr vorhanden).
   // Eigenes Timeout: dieser Test loest die Routen-Komponenten ECHT auf, statt
-  // nur den Router zu befragen. Fix #1713: `/live` ist jetzt ein reiner
-  // Redirect (kein `component` mehr), `views/shell/SimulationLiveView.vue`
-  // wird darum von diesem Test nicht mehr transformiert — die vormals nicht
-  // gestubbte View trug hier den groessten Anteil der gemessenen Laufzeit.
-  // Das erweiterte Timeout bleibt als Sicherheitsmarge fuer die verbleibenden
-  // echten Transforms.
+  // nur den Router zu befragen. Das erweiterte Timeout bleibt als
+  // Sicherheitsmarge fuer die echten Transforms.
   it('jede nicht-redirect Route liefert eine auflösbare Komponente (keine toten Legacy-Referenzen)', { timeout: 30_000 }, async () => {
     for (const route of router.getRoutes()) {
       if (route.redirect !== undefined) continue
@@ -533,11 +528,9 @@ describe('Router – Struktur-Integrität', () => {
       'SettingsWindow',
       'StepGraphBuild',
       'StepEnvSetup',
-      'StepSimulation',
       // Etappe 4 (#1801): Feed, Strang, Runden, Protokoll sind Weiterleitungen
       // (Redirects-Suite) und zaehlen nicht mehr als produktive Routen.
-      // Fix #1713 (Befund 6): /live ist jetzt ein Redirect (Ziel: SimRounds),
-      // keine eigene produktive Route mehr (siehe Redirects-Suite oben).
+      // /live ist ein Redirect auf die Runden-Ansicht (siehe Redirects-Suite oben).
       'StepReport',
       'StepInteraction',
       // Block B3: ShelfObject zeigt weiter auf ShelfView (Bericht und
@@ -572,9 +565,6 @@ describe('Router – Struktur-Integrität', () => {
 
     const istProduktiveRouten = router
       .getRoutes()
-      // Fix #1713: der SimulationLayout-Parent traegt selbst keinen Namen
-      // (nur seine Kind-Routen StepSimulation/StepSimulationFeed sind
-      // navigierbare Ziele) — er ist kein eigener Eintrag der SOLL-Liste.
       .filter((route) => route.redirect === undefined && route.name !== undefined)
       .map((route) => String(route.name))
       .sort()
@@ -590,8 +580,8 @@ describe('Router – Deep-Links (Legacy-Pfade)', () => {
 
   it.each([
     ['/process/project_42', 'StepGraphBuild'],
-    ['/simulation/simulation_42', 'StepEnvSetup'],
-    ['/simulation/simulation_42/start', 'StepSimulation'],
+    ['/simulation/simulation_42', 'RunSimulationFeed'],
+    ['/simulation/simulation_42/start', 'RunSimulationFeed'],
     ['/report/report_42', 'StepReport'],
     ['/interaction/report_42', 'StepInteraction'],
   ])('Legacy-Deep-Link %s landet deterministisch auf %s, KEIN NotFound', async (path, expected) => {
@@ -615,16 +605,11 @@ describe('Router – Deep-Links (Legacy-Pfade)', () => {
     expect(router.currentRoute.value.name).toBe('NotFound')
   })
 
-  it('ADR-0010-Seam: /simulation/:simulationId → StepEnvSetup mit Parameter-Umbenennung simulationId→projectId', async () => {
-    // Ungewöhnlicher Mapping-Seam (siehe docs/decisions/0010-vue-v4-route-consolidation.md):
-    // der Legacy-Pfadparameter heisst ":simulationId", landet aber unter dem
-    // Namen "projectId" im Ziel-Routen-Objekt — der WERT bleibt unverändert
-    // die Simulation-ID. ADR-0010 verlangt, dass dieser Seam explizit
-    // benannt und mit einem eigenen Test abgesichert wird.
+  it('/simulation/:simulationId trägt die Simulation-ID unverändert auf den Feed am Lauf (Etappe 4, ersetzt den ADR-0010-Seam auf StepEnvSetup)', async () => {
     await pushAndSettle('/simulation/sim_seam_check')
-    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
-    expect(router.currentRoute.value.params.projectId).toBe('sim_seam_check')
-    expect(router.currentRoute.value.params.simulationId).toBeUndefined()
+    expect(router.currentRoute.value.name).toBe('RunSimulationFeed')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_seam_check')
+    expect(router.currentRoute.value.params.projectId).toBeUndefined()
   })
 })
 
@@ -764,8 +749,6 @@ describe('Router – Etappe 2 Adressen (#1797)', () => {
     await pushAndSettle('/v4/interaction/report_abc')
     expect(router.currentRoute.value.name).toBe('StepInteraction')
     expect(router.currentRoute.value.params.reportId).toBe('report_abc')
-    await pushAndSettle('/v4/simulation/sim_abc')
-    expect(router.currentRoute.value.name).toBe('StepSimulation')
     await pushAndSettle('/process/project_42')
     expect(router.currentRoute.value.name).toBe('StepGraphBuild')
   })

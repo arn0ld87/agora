@@ -49,6 +49,7 @@ const control = useSimulationControl(() => idRef.value)
 
 const kind = state.stateKind
 const stopOpen = ref(false)
+const cancelOpen = ref(false)
 
 const ACTIVE_KINDS = new Set(['queued', 'running', 'paused'])
 const isActive = computed(() => ACTIVE_KINDS.has(kind.value))
@@ -126,6 +127,14 @@ async function doPause(): Promise<void> {
 }
 async function doResume(): Promise<void> {
   if (await control.resume()) {
+    await state.reload()
+    emit('changed')
+  }
+}
+async function doCancel(): Promise<void> {
+  const ok = await control.cancel()
+  cancelOpen.value = false
+  if (ok) {
     await state.reload()
     emit('changed')
   }
@@ -226,6 +235,43 @@ async function doStop(): Promise<void> {
                   @click="doStop"
                 >
                   {{ control.busy.value === 'stop' ? t('views.run.simHeader.stopping') : t('views.run.simHeader.stopConfirm') }}
+                </button>
+              </div>
+            </DialogContent>
+          </DialogPortal>
+        </DialogRoot>
+        <DialogRoot v-if="isActive" v-model:open="cancelOpen">
+          <DialogTrigger as-child>
+            <button
+              type="button"
+              class="sim-head__btn"
+              :disabled="control.busy.value !== null"
+              data-testid="sim-header-cancel"
+            >
+              {{ control.busy.value === 'cancel' ? t('views.run.simHeader.cancelling') : t('views.run.simHeader.cancel') }}
+            </button>
+          </DialogTrigger>
+          <DialogPortal>
+            <DialogOverlay class="sim-head__overlay" />
+            <DialogContent class="sim-head__dialog" data-testid="sim-header-cancel-dialog">
+              <DialogTitle class="sim-head__dialog-title">{{ t('views.run.simHeader.cancelTitle') }}</DialogTitle>
+              <DialogDescription class="sim-head__dialog-desc">
+                {{ t('views.run.simHeader.cancelDescription') }}
+              </DialogDescription>
+              <div class="sim-head__dialog-actions">
+                <DialogClose as-child>
+                  <button type="button" class="sim-head__btn" data-testid="sim-header-cancel-keep">
+                    {{ t('views.run.simHeader.cancelKeep') }}
+                  </button>
+                </DialogClose>
+                <button
+                  type="button"
+                  class="sim-head__btn sim-head__btn--primary"
+                  :disabled="control.busy.value !== null"
+                  data-testid="sim-header-cancel-confirm"
+                  @click="doCancel"
+                >
+                  {{ control.busy.value === 'cancel' ? t('views.run.simHeader.cancelling') : t('views.run.simHeader.cancelConfirm') }}
                 </button>
               </div>
             </DialogContent>

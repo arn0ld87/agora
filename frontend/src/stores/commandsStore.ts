@@ -149,7 +149,7 @@ export const useCommandsStore = defineStore('commands', () => {
             keywords: [run.run_id, run.entity_id, label, 'simulation', 'lauf', 'live', run.status],
             action: () => {
               router.push({
-                name: 'StepSimulation',
+                name: 'RunSimulationFeed',
                 params: { simulationId: run.entity_id },
               }).catch(() => {})
             },

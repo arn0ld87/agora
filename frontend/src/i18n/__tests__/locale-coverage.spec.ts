@@ -150,8 +150,7 @@ describe('locale-coverage', () => {
     expect(enKeys).toContain('step2.model.ollamaOption')
   })
 
-  // #1713 Befund 5 (Design-Abnahme): StepSimulationFeedView.vue,
-  // SimThreadsView.vue, SimActionsView.vue und SimRoundsView.vue setzten
+  // #1713 Befund 5 (Design-Abnahme): die früheren Simulationsansichten setzten
   // Fehlermeldungen als deutsches Literal statt ueber i18n. Diese Keys
   // muessen unter en tatsaechlich Englisch liefern, nicht nur existieren.
   it('feed.errors.snapshotFailed liefert unter en Englisch, nicht das deutsche Literal (#1713)', () => {

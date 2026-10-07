@@ -75,9 +75,9 @@ function makeRouter() {
       },
       { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: Stub },
       { path: '/v4/graph-build/:projectId', name: 'StepGraphBuild', component: Stub },
-      { path: '/v4/simulation/:simulationId', name: 'StepSimulation', component: Stub },
       { path: '/simulations/:simulationId/simulation/feed', name: 'RunSimulationFeed', component: Stub },
       { path: '/v4/report/:reportId', name: 'StepReport', component: Stub },
+      { path: '/report/:reportId', name: 'Report', component: Stub },
       { path: '/v4/simulation/:simulationId/interviews', name: 'RunInterviewsLegacy', component: Stub },
       { path: '/library/runs', name: 'LibraryRuns', component: Stub },
     ],
@@ -208,30 +208,28 @@ describe('RunOverviewView: Stufen', () => {
     expect(wrapper.get('[data-testid="stage-model-graph"]').text()).toContain('snap-graph_build')
   })
 
-  describe('Startparameter aus dem Startdialog (#1799)', () => {
+  describe('Startparameter aus dem Startdialog (#1799, #1801)', () => {
     beforeEach(() => window.sessionStorage.clear())
 
-    it('mit vorgemerktem Eintrag trägt der Startlink Runden und Tage', async () => {
+    it('der Startlink führt auf den Feed ohne Query; die Werte bleiben vorgemerkt und der Kopf liest sie selbst', async () => {
       writePendingRunParams('sim_1', { maxRounds: 10, simulationDays: 2, budget: null })
       arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
       const { wrapper } = await mountAt()
-      const href = wrapper.get('[data-testid="stage-next-simulation"]').attributes('href') ?? ''
-      expect(href.startsWith('/v4/simulation/sim_1?')).toBe(true)
-      expect(href).toContain('maxRounds=10')
-      expect(href).toContain('simulationDays=2')
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/simulations/sim_1/simulation/feed')
+      expect(window.sessionStorage.getItem(`${PENDING_RUN_PARAMS_PREFIX}sim_1`)).not.toBeNull()
     })
 
-    it('ohne Eintrag bleibt der Startlink ohne Query', async () => {
+    it('ohne Eintrag führt der Startlink ebenfalls auf den Feed', async () => {
       arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
       const { wrapper } = await mountAt()
-      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/v4/simulation/sim_1')
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/simulations/sim_1/simulation/feed')
     })
 
-    it('ein beschädigter Eintrag wird ignoriert', async () => {
+    it('ein beschädigter Eintrag ändert den Startlink nicht', async () => {
       window.sessionStorage.setItem(`${PENDING_RUN_PARAMS_PREFIX}sim_1`, '{"maxRounds":"viele"')
       arrange({ jobs: [runDetail('graph_build'), runDetail('simulation_prepare')] })
       const { wrapper } = await mountAt()
-      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/v4/simulation/sim_1')
+      expect(wrapper.get('[data-testid="stage-next-simulation"]').attributes('href')).toBe('/simulations/sim_1/simulation/feed')
     })
   })
 

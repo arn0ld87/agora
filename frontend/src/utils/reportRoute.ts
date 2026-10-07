@@ -60,7 +60,7 @@ export function buildInteractionRoute(
 /**
  * Sentinel-Wert fuer `reportId`, solange noch kein Report existiert.
  *
- * Issue #1023 (Befund B-26): `goReport()` in Step3Simulation.vue rief
+ * Issue #1023 (Befund B-26): `goReport()` der früheren Simulationsansicht (Step3Simulation) rief
  * bisher `generateReport()` direkt auf und startete damit den teuersten
  * Pipeline-Schritt ungefragt und mit dem Workspace-Default-Modell. Die
  * Report-Route verlangt aber zwingend einen `:reportId`-Pfad-Parameter —

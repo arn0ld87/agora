@@ -27,6 +27,7 @@ const h_ = await vi.hoisted(async () => {
     stop: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
+    cancel: vi.fn(),
     plannedModel: vi.fn(),
   }
   return { kind, state, control }
@@ -68,6 +69,7 @@ beforeEach(() => {
   h_.control.stop.mockReset()
   h_.control.pause.mockReset()
   h_.control.resume.mockReset()
+  h_.control.cancel.mockReset()
   h_.state.reload.mockReset()
   h_.state.adoptRunId.mockReset()
 })
@@ -172,6 +174,36 @@ describe('RunSimHeader', () => {
     ;(byId('sim-header-stop-cancel') as HTMLButtonElement).click()
     await flushPromises()
     expect(h_.control.stop).not.toHaveBeenCalled()
+  })
+
+  it('bricht den Job erst nach Bestätigung ab (cancelRun) und lädt neu', async () => {
+    h_.kind.value = 'running'
+    h_.control.cancel.mockResolvedValue(true)
+    const w = mountHeader()
+    ;(byId('sim-header-cancel') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(h_.control.cancel).not.toHaveBeenCalled()
+    expect(byId('sim-header-cancel-dialog')).not.toBeNull()
+
+    ;(byId('sim-header-cancel-confirm') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(h_.control.cancel).toHaveBeenCalledTimes(1)
+    expect(h_.control.stop).not.toHaveBeenCalled()
+    expect(h_.state.reload).toHaveBeenCalled()
+    expect(w.emitted('changed')).toHaveLength(1)
+  })
+
+  it('bricht den Abbruchdialog ab, ohne den Job abzubrechen; vor dem Start gibt es keinen Abbruch', async () => {
+    mountHeader()
+    expect(byId('sim-header-cancel')).toBeNull()
+    wrapper?.unmount()
+    h_.kind.value = 'running'
+    mountHeader()
+    ;(byId('sim-header-cancel') as HTMLButtonElement).click()
+    await flushPromises()
+    ;(byId('sim-header-cancel-keep') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(h_.control.cancel).not.toHaveBeenCalled()
   })
 
   it('nennt bei Stopp, Budgetabbruch und Neustart-Fehler den Grund', () => {

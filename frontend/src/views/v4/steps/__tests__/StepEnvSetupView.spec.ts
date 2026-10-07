@@ -22,7 +22,7 @@ describe('StepEnvSetupView — Navigation', () => {
     routerPush.mockClear()
   })
 
-  it('leitet next-step mit simulationId an StepSimulation weiter', async () => {
+  it('leitet next-step mit simulationId auf den Feed der Simulation weiter', async () => {
     const wrapper = mount(StepEnvSetupView, {
       props: { projectId: 'project_42' },
       global: {
@@ -47,9 +47,8 @@ describe('StepEnvSetupView — Navigation', () => {
 
     expect(routerPush).toHaveBeenCalledTimes(1)
     expect(routerPush).toHaveBeenCalledWith({
-      name: 'StepSimulation',
+      name: 'RunSimulationFeed',
       params: { simulationId: 'sim_x' },
-      query: { projectId: 'project_42' },
     })
   })
 

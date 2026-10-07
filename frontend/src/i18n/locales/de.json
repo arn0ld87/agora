@@ -493,8 +493,6 @@
   },
   "step3": {
     "kicker": "№ 03 — SIMULATION",
-    "title": "Lass die Welt laufen.",
-    "sub": "Agenten interagieren rundenbasiert auf der gewählten Plattform. Sie halluzinieren nicht — sondern nutzen Tool-Calls, um sich online zu informieren oder den Wissensgraphen abzufragen, bevor sie reagieren. Du beobachtest die Aktionen live.",
     "config": {
       "title": "Lauf-Parameter",
       "rounds": "Anzahl Runden",
@@ -506,83 +504,22 @@
     },
     "controls": {
       "start": "Simulation starten",
-      "starting": "Startet…",
-      "pause": "Pausieren",
-      "pauseHint": "Pausiert nach Ende der aktuellen Runde.",
-      "resume": "Fortsetzen",
-      "stop": "Stoppen",
-      "stopConfirm": "Simulation wirklich abbrechen? Bisherige Daten bleiben erhalten.",
-      "stopped": "Gestoppt.",
-      "cancel": "Abbrechen",
-      "cancelConfirm": "Simulation sanft abbrechen? Bereits abgeschlossene Stages bleiben als Teil-Report erhalten.",
-      "cancelled": "Abbruch angefordert.",
       "completed": "Abgeschlossen."
     },
     "status": {
-      "ready": "Bereit",
-      "running": "Läuft — Runde {current} / {total}",
-      "paused": "Pausiert nach Runde {current} / {total}",
-      "completed": "Abgeschlossen — {total} Runden",
-      "failed": "Fehlgeschlagen",
       "elapsed": "Dauer: {time}"
     },
-    "simClock": {
-      "tooltip": "Virtuelle Sim-Uhr (Agenten-Wallclock, Europe/Berlin)"
-    },
     "feed": {
-      "title": "Live-Feed",
-      "actions": "Aktionen: {count}",
       "posts": "Posts: {count}",
       "replies": "Antworten: {count}",
       "filter": "Filter",
       "all": "Alle",
       "posts_only": "Nur Posts",
       "replies_only": "Nur Antworten",
-      "empty": "Noch keine Aktivität.",
-      "unread": "kein neuer Beitrag | ein neuer Beitrag | {count} neue Beiträge",
-      "density": {
-        "label": "Dichte",
-        "comfort": "Komfort",
-        "compact": "Kompakt"
-      }
+      "unread": "kein neuer Beitrag | ein neuer Beitrag | {count} neue Beiträge"
     },
-    "toolPanel": {
-      "toggle": "Tool-Calls & Fehler",
-      "show": "Anzeigen (Strg+L)",
-      "hide": "Ausblenden (Strg+L)",
-      "unread": "kein neuer Fehler | ein neuer Fehler | {count} neue Fehler",
-      "filter": "Filter",
-      "filterAll": "Alle",
-      "filterErrors": "Nur Fehler",
-      "copyAsJson": "Als JSON kopieren",
-      "empty": "Warte auf Ausgabe…",
-      "noErrors": "Keine Fehler im Log."
-    },
-    "next": "Weiter zum Report →",
     "live": {
-      "title": "Simulation live",
-      "round": "Runde",
-      "elapsed": "vergangen",
-      "secPerRound": "s/Runde",
-      "roundAxis": "Rundenachse",
-      "roundAxisHint": "Rundenstatus: erledigt, laufend, geplant",
-      "now": "jetzt",
-      "lanes": {
-        "actors": "Akteure",
-        "reddit": "Reddit",
-        "twitter": "Twitter",
-        "system": "System und Ereignisse"
-      },
-      "actorsActive": "{count} aktiv",
-      "usage": {
-        "llmCalls": "LLM-Calls",
-        "tokens": "Tokens gesamt"
-      },
-      "events": {
-        "title": "Ereignisse",
-        "empty": "Noch keine Ereignisse."
-      },
-      "empty": "Noch keine Aktivität."
+      "now": "jetzt"
     }
   },
   "reportMode": {
@@ -1543,7 +1480,6 @@
     "projectFailed": "Projektverarbeitung fehlgeschlagen.",
     "pendingUploadMissing": "Keine vorbereiteten Dateien zum Erstellen des Projekts gefunden.",
     "personaGenFailed": "Persona-Generierung fehlgeschlagen.",
-    "simulationFailed": "Simulation fehlgeschlagen.",
     "reportFailed": "Bericht fehlgeschlagen.",
     "unknown": "Unbekannter Fehler."
   },
@@ -1700,66 +1636,17 @@
     "simBadge": "SIM",
     "activity": "Posts/min",
     "live": "Live",
-    "empty": "Noch keine Aktivität.",
-    "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
-    "pipeline": "Pipeline",
-    "feedTab": "Live-Feed",
-    "threadsTab": "Diskurs",
-    "roundsTab": "Runden",
     "actionsTab": "Protokoll",
     "resonanceBar": "Resonanz der letzten Beiträge (Zustimmung minus Widerspruch)",
     "threadsPlaceholder": "Noch keine Diskussionsstränge in diesem Lauf.",
-    "threadFocusPlaceholder": "Dieser Strang ist noch nicht verfügbar.",
     "roundsPlaceholder": "Noch keine Runden gestartet.",
     "actionsPlaceholder": "Noch keine Aktionen protokolliert.",
-    "noPosts": "Noch keine Beiträge in diesem Lauf.",
-    "noPostsHint": "Ein Blick in die Runden-Ansicht zeigt, ob die Simulation bereits läuft.",
-    "replyTo": "Antwort an @{name}",
-    "replyToUnknown": "Antwort auf früheren Beitrag",
-    "quoteMissing": "Zitat nicht mehr auffindbar",
-    "repostedBy": "@{name} hat geteilt",
-    "repostSourceMissing": "Bezug nicht erfasst",
     "parentThreadMissing": "Übergeordneter Beitrag nicht erfasst",
-    "newItems": "{count} neue Beiträge",
-    "streamLost": "Verbindung verloren — versuche Reconnect",
     "errors": {
       "snapshotFailed": "Snapshot-Ladefehler"
     },
-    "degradation": {
-      "snapshot_missing": "Anfangsbestand konnte nicht geladen werden.",
-      "stream_lost": "Live-Verbindung verloren.",
-      "legacy_run": "Älterer Lauf ohne vollständige Diskurs-Daten."
-    },
-    "scope": {
-      "platform": "Plattform",
-      "platformAll": "Alle",
-      "round": "Runde",
-      "roundAll": "Alle Runden",
-      "persona": "Persona",
-      "personaAll": "Alle Personas",
-      "search": "Suche",
-      "searchPlaceholder": "Beiträge durchsuchen…",
-      "noPersonas": "Noch keine Personen im Feed"
-    },
-    "threadList": {
-      "replies": "{count} Antworten",
-      "reposts": "{count} Reposts",
-      "quotes": "{count} Zitate",
-      "empty": "Noch keine Diskussionsstränge.",
-      "emptyFiltered": "Kein Strang passt zu den aktuellen Filtern."
-    },
-    "threadTree": {
-      "orphan": "Übergeordneter Beitrag nicht erfasst",
-      "loading": "Strang wird geladen…"
-    },
     "rounds": {
-      "empty": "Noch keine Runden gestartet",
-      "error": "Runden konnten nicht geladen werden.",
-      "retry": "Erneut versuchen"
-    },
-    "roundsList": {
-      "roundLabel": "Runde {round}",
-      "noActions": "Keine Aktionen in dieser Runde."
+      "error": "Runden konnten nicht geladen werden."
     },
     "actionType": {
       "CREATE_POST": "Beiträge",
@@ -1795,20 +1682,7 @@
       "noTarget": "—",
       "noPayload": "—",
       "loadError": "Protokoll konnte nicht geladen werden."
-    },
-    "header": {
-      "round": "Runde {current}/{total}",
-      "roundUnknown": "Runde —",
-      "posts": "{count} Beiträge",
-      "streamConnecting": "Verbinde…",
-      "streamOpen": "Live",
-      "streamReconnecting": "Verbindung wird wiederhergestellt…",
-      "streamClosed": "Verbindung geschlossen",
-      "streamEnded": "Lauf beendet"
     }
-  },
-  "observability": {
-    "viewTrace": "Trace anzeigen ({id}…)"
   },
   "modelPicker": {
     "loading": "Lade Modelle…",
@@ -2292,8 +2166,7 @@
         },
         "headerSlotLabel": "Kopf der Simulation",
         "diagnostics": {
-          "title": "Diagnose",
-          "pending": "Folgt in dieser Etappe."
+          "title": "Diagnose"
         }
       },
       "simRounds": {
@@ -2566,6 +2439,12 @@
         "stopDescription": "Die laufende Simulation wird beendet. Bereits erzeugte Beiträge bleiben erhalten; der Lauf zählt als gestoppt, nicht als fertig.",
         "stopConfirm": "Simulation stoppen",
         "stopCancel": "Weiterlaufen lassen",
+        "cancel": "Job abbrechen",
+        "cancelling": "Wird abgebrochen …",
+        "cancelTitle": "Simulationsjob abbrechen?",
+        "cancelDescription": "Bricht den Job im Auftragsregister sanft ab, auch wenn Stoppen ihn nicht beendet. Bereits abgeschlossene Stufen und erzeugte Beiträge bleiben erhalten.",
+        "cancelConfirm": "Job abbrechen",
+        "cancelKeep": "Nicht abbrechen",
         "reasonStopped": "Gestoppt: {reason}",
         "reasonBudget": "Abgebrochen wegen Budget: {reason}",
         "reasonFailed": "Fehlgeschlagen: {reason}",
@@ -2829,7 +2708,6 @@
       "subtitle": "Wissensgraph aus hochgeladenen Dokumenten aufbauen"
     },
     "stepSimulation": {
-      "title": "Simulation",
       "subtitle": "Multi-Agent-Simulationslauf starten und beobachten"
     },
     "stepSimulationFeed": {

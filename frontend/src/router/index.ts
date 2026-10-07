@@ -153,12 +153,12 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/simulation/:simulationId',
     name: 'Simulation',
-    redirect: (to) => ({ name: 'StepEnvSetup', params: { projectId: String(to.params.simulationId) } }),
+    redirect: simulationFeedRedirect,
   },
   {
     path: '/simulation/:simulationId/start',
     name: 'SimulationRun',
-    redirect: (to) => ({ name: 'StepSimulation', params: { simulationId: String(to.params.simulationId) } }),
+    redirect: simulationFeedRedirect,
   },
   {
     path: '/report/:reportId',
@@ -184,37 +184,19 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/steps/StepEnvSetupView.vue'),
     props: true,
   },
-  // Fix #1713 (Befund 2): Pipeline und Feed sind echte Kind-Routen eines
-  // gemeinsamen Layouts (Kopf, Breadcrumbs, Tabs) statt eines internen
-  // `v-if`, das den Feed-Tab nie navigierbar machte. Die Routennamen
-  // StepSimulation/StepSimulationFeed bleiben erhalten — jeder bestehende
-  // Link (useShelf.ts, reportRoute.ts, Deep-Links) funktioniert unveraendert.
-  {
-    path: '/v4/simulation/:simulationId',
-    component: () => import('../views/v4/steps/SimulationLayout.vue'),
-    props: true,
-    children: [
-      {
-        path: '',
-        name: 'StepSimulation',
-        component: () => import('../views/v4/steps/StepSimulationView.vue'),
-        props: true,
-      },
-      // Etappe 4 (#1801, Bauplan §6.2): Feed, Strang, Runden und Protokoll sind
-      // Unterreiter am Lauf (/simulations/:id/simulation/…). Die alten Namen
-      // bleiben als Weiterleitungen bestehen; Query und Hash bleiben erhalten.
-      { path: 'feed', name: 'StepSimulationFeed', redirect: simulationFeedRedirect },
-      { path: 'threads', name: 'SimThreads', redirect: simulationFeedRedirect },
-      { path: 'thread/:postId', name: 'SimThreadFocus', redirect: simulationPostRedirect },
-      { path: 'rounds', name: 'SimRounds', redirect: simulationRoundsRedirect },
-      { path: 'actions', name: 'SimActions', redirect: simulationRoundsRedirect },
-    ],
-  },
-  // Redesign PR 7 (Audit §5 "Simulation live") legte ein eigenstaendiges
-  // Vollbild-Instrument an, das nie an die Tab-Navigation angeschlossen
-  // wurde (Befund 6, verwaiste Route). Slice UI-2b (#1713): Ziel ist jetzt
-  // die Runden-Ansicht (naeher am urspruenglichen Zweck der Live-Route als
-  // der Feed) — SimulationLiveView.vue bleibt als Komponente erhalten.
+  // Etappe 4 (#1801, Bauplan §6.2): Die Simulation ist ein Reiter am Lauf
+  // (/simulations/:id/simulation/…). Die alten Namen bleiben als Weiterleitungen
+  // bestehen; Query und Hash bleiben erhalten. Die Übergangsadresse
+  // `/v4/simulation/:id/interviews` (RunInterviewsLegacy) ist eine eigene Route
+  // weiter unten und von diesen Einträgen nicht betroffen.
+  { path: '/v4/simulation/:simulationId', name: 'StepSimulation', redirect: simulationFeedRedirect },
+  { path: '/v4/simulation/:simulationId/feed', name: 'StepSimulationFeed', redirect: simulationFeedRedirect },
+  { path: '/v4/simulation/:simulationId/threads', name: 'SimThreads', redirect: simulationFeedRedirect },
+  { path: '/v4/simulation/:simulationId/thread/:postId', name: 'SimThreadFocus', redirect: simulationPostRedirect },
+  { path: '/v4/simulation/:simulationId/rounds', name: 'SimRounds', redirect: simulationRoundsRedirect },
+  { path: '/v4/simulation/:simulationId/actions', name: 'SimActions', redirect: simulationRoundsRedirect },
+  // `/live` zeigte ein Vollbild-Instrument ohne Anschluss an die Tab-Navigation;
+  // das Ziel ist die Runden-Ansicht.
   {
     path: '/v4/simulation/:simulationId/live',
     redirect: simulationRoundsRedirect,

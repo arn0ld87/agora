@@ -216,6 +216,15 @@ describe('useRunFeed', () => {
     expect(hoisted.page).toHaveBeenCalledTimes(2)
   })
 
+  it('startet den Strom vor dem Snapshot-Abruf (#1009: nichts fällt zwischen beiden durch)', async () => {
+    const scope = effectScope()
+    const feed = scope.run(() => useRunFeed('sim-1', { immediate: false }))!
+    await feed.start()
+    const streamAt = hoisted.start.mock.invocationCallOrder[0]
+    const snapshotAt = hoisted.page.mock.invocationCallOrder[0]
+    expect(streamAt).toBeLessThan(snapshotAt)
+  })
+
   it('räumt beim Scope-Ende auf und schließt den Strom', async () => {
     const { scope } = setup()
     await flush()

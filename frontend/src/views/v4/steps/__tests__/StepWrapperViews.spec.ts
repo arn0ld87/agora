@@ -177,7 +177,7 @@ const router = createRouter({
     { path: '/settings', name: 'Settings', component: stubComp },
     { path: '/v4/graph-build/:projectId', name: 'StepGraphBuild', component: stubComp },
     { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: stubComp },
-    { path: '/v4/simulation/:simulationId', name: 'StepSimulation', component: stubComp },
+    { path: '/simulations/:simulationId/simulation/feed', name: 'RunSimulationFeed', component: stubComp },
     { path: '/v4/report/:reportId', name: 'StepReport', component: stubComp },
     { path: '/v4/interaction/:reportId', name: 'StepInteraction', component: stubComp },
   ],
@@ -200,7 +200,6 @@ async function mountView<T extends object>(
         // Step-Komponenten als Stubs — ihre Inhalte sind Folge-Slice
         Step1GraphBuild: { template: '<div class="stub-step1" />' },
         Step2EnvSetup: { template: '<div class="stub-step2" />' },
-        Step3Simulation: { template: '<div class="stub-step3" />' },
         Step4Report: { template: '<div class="stub-step4" />' },
         Step5Interaction: { template: '<div class="stub-step5" />' },
         // Sidebar stub (Slice F, nicht angefasst)
@@ -266,11 +265,6 @@ describe('StepEnvSetupView', () => {
     expect(stepper.props('currentStep')).toBe(2)
   })
 })
-
-// Fix #1713: AppShell/PipelineStepper/Breadcrumbs sind aus StepSimulationView
-// in SimulationLayout.vue gewandert (gemeinsame Huelle fuer Pipeline- und
-// Feed-Tab) — die aequivalente Abdeckung liegt jetzt in
-// SimulationLayout.spec.ts.
 
 describe('StepReportView', () => {
   beforeEach(() => { lsMock.clear(); setActivePinia(createPinia()) })

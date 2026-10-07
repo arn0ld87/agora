@@ -5,11 +5,13 @@
  * erst in der Übersicht des Laufs. Damit Tage, Runden und Budget dort ankommen,
  * liegen sie bis dahin in der sessionStorage (tab-lokal, überlebt einen Reload),
  * je `simulationId`. Gelesen wird zod-validiert; ein beschädigter Eintrag gilt
- * als nicht vorhanden. Die Query-Form kommt aus `contracts/runParamsQuery`.
+ * als nicht vorhanden. Die Steuerung der Simulation (`useSimulationControl`) liest die
+ * Werte beim Start und räumt sie danach ab; auch der Weg über die Personas-Ansicht
+ * (`StepEnvSetupView`) legt sie hier ab.
  */
 import { z } from 'zod'
 import { RunBudgetConfigSchema } from '@/contracts/runBudgetContract'
-import { MAX_SIMULATION_DAYS, toRunParamsQuery } from '@/contracts/runParamsQuery'
+import { MAX_SIMULATION_DAYS } from '@/contracts/runParamsQuery'
 
 export const PENDING_RUN_PARAMS_PREFIX = 'agora.newRun.pendingParams.'
 
@@ -65,10 +67,4 @@ export function clearPendingRunParams(simulationId: string): void {
   } catch {
     /* nichts zu räumen */
   }
-}
-
-/** Fertige Route-Query (`maxRounds`, `simulationDays`, `budget`) für die Übersicht des Laufs. */
-export function pendingRunParamsQuery(simulationId: string): Record<string, string> {
-  const params = readPendingRunParams(simulationId)
-  return params ? toRunParamsQuery(params) : {}
 }

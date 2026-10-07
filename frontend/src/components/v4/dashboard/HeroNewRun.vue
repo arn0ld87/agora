@@ -105,8 +105,8 @@ function removeLocal(key: string): void {
  * sondern aus dem Kanon (routing/defaults.global via useEffectiveModelSelection)
  * — damit der Dashboard-Start dieselbe Auswahl wie Settings zeigt. Ein
  * Dashboard-Pick ist ein transienter Run-Override als voller AiModelRef in der sessionStorage-Senke
- * `agora.run.aiModelRefOverride` (store/runModelOverride), die Step3Simulation
- * beim Sim-Start vorrangig vor dem Kanon als `ai_model_ref` sendet.
+ * `agora.run.aiModelRefOverride` (store/runModelOverride), die die Steuerung der
+ * Simulation (useSimulationControl) beim Sim-Start vorrangig vor dem Kanon als `ai_model_ref` sendet.
  * Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route` wird
  * NICHT mehr gelesen und beim Mount defensiv entfernt.
  */
@@ -145,7 +145,7 @@ const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
 
 // ---- Issue #764: optionale Run-Budgets + Preflight-Schätzung ----
 // Das Budget wandert über die Route-Query (contracts/runParamsQuery) zu
-// Step3Simulation, die es beim Sim-Start als `budget` an
+// die Steuerung der Simulation (useSimulationControl, via pendingRunParams), die es beim Sim-Start als `budget` an
 // /api/simulation/start durchreicht. Nicht über den pendingUpload-Store: den
 // leert Schritt 1 nach dem Upload, das Budget kam nie an (Issue #1234). Die
 // Preflight-Schätzung ist rein informativ (is_estimate=true) und wird per
@@ -346,7 +346,7 @@ async function startSimulation() {
       clearRunModelOverride()
     } else {
       // Voller AiModelRef (inkl. provider_connection_id) als transienter
-      // Run-Override: Step3Simulation sendet ihn beim Sim-Start vorrangig
+      // Run-Override: die Steuerung der Simulation sendet ihn beim Sim-Start vorrangig
       // vor dem Kanon als autoritatives ai_model_ref. Nur bei explizitem
       // Picker-Pick — der Kanon-Initialwert vom Mount wird nicht eingefroren.
       if (hasExplicitPick.value && selectedModel.value) {

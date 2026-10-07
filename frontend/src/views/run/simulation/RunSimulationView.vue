@@ -3,15 +3,13 @@
  * Simulation als Reiter am Lauf (Etappe 4, #1801, Bauplan 4.5): Hülle mit den
  * Unterreitern Feed · Runden · Diagnose, dem Simulationskopf und der Kind-Ansicht.
  */
-import { computed, onBeforeUnmount } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import RunSimHeader from '@/components/run/simulation/RunSimHeader.vue'
 import { usePersonasReady } from '@/composables/run/simulation/usePersonasReady'
 import { provideSimulationRunState } from '@/composables/run/simulation/useSimulationRunStateContext'
 import { useRunWorkspaceContext } from '@/composables/run/useRunWorkspace'
-import { clearSimFeed } from '@/composables/useSimFeed'
-import { clearSimClock } from '@/composables/useSimClock'
 
 const props = defineProps<{ simulationId: string }>()
 const { t } = useI18n()
@@ -50,13 +48,6 @@ const activeKey = computed<SubTabKey | null>(() => {
     default:
       return null
   }
-})
-
-// Verlassen der gesamten Simulation (nicht der Wechsel zwischen Unterreitern):
-// Feed- und Uhr-Speicher des Laufs freigeben (Regression von #1007, Fix #1713).
-onBeforeUnmount(() => {
-  clearSimFeed(props.simulationId)
-  clearSimClock(props.simulationId)
 })
 </script>
 

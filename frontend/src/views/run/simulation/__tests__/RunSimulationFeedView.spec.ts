@@ -268,6 +268,12 @@ describe('RunSimulationFeedView', () => {
     expect(w.find('[data-testid="notice-stream"]').exists()).toBe(true)
   })
 
+  it('meldet bei der Erstverbindung (connecting) keinen Streamabbruch', async () => {
+    hoisted.streamState.value = 'connecting'
+    const { w } = await mountAt(BASE)
+    expect(w.find('[data-testid="notice-stream"]').exists()).toBe(false)
+  })
+
   it('zeigt Laden, Leerergebnis durch Filter und leeres Netzwerk', async () => {
     hoisted.posts.value = []
     hoisted.loading.value = true
