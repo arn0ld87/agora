@@ -2,7 +2,9 @@
 
 Only the SimulationArtifactStore adapter (``services/artifact_store.py``) and
 the Run-Registry file adapter ``services/file_run_store.py`` (#1579; the I/O
-moved there out of ``run_registry.py``) are allowed consumers. The smoke test fails fast if anything else starts
+moved there out of ``run_registry.py``) and the personaset file adapter
+``services/file_persona_set_store.py`` (#1807, behind PersonaSetRepository)
+are allowed consumers. The smoke test fails fast if anything else starts
 calling ``utils.json_io`` directly again.
 """
 
@@ -23,6 +25,9 @@ ALLOWED = {
     # Ablageverzeichnis, eigenes Nebenlaeufigkeitsmodell. run_registry.py
     # selbst importiert json_io seitdem nicht mehr.
     REPO_ROOT / "app" / "services" / "file_run_store.py",
+    # Personasatz-Dateiadapter hinter dem PersonaSetRepository-Port (#1807).
+    # Domain-Service und API duerfen weiterhin kein json_io importieren.
+    REPO_ROOT / "app" / "services" / "file_persona_set_store.py",
 }
 
 
@@ -57,9 +62,18 @@ def test_no_json_io_imports_in_services_or_api():
         if _imports_json_io(path):
             offenders.append(str(path.relative_to(REPO_ROOT)))
     assert not offenders, (
-        "json_io must only be consumed by the SimulationArtifactStore adapter. "
+        "json_io must only be consumed by explicitly allowlisted file adapters. "
         "Offenders: " + ", ".join(offenders)
     )
+
+
+def test_persona_set_file_adapter_is_an_explicit_port_boundary():
+    """The file adapter is allowed, never its domain service or API consumer."""
+    adapter = REPO_ROOT / "app" / "services" / "file_persona_set_store.py"
+    assert adapter in ALLOWED
+    assert _imports_json_io(adapter)
+    assert REPO_ROOT / "app" / "services" / "persona_set_service.py" not in ALLOWED
+    assert REPO_ROOT / "app" / "api" / "persona_sets.py" not in ALLOWED
 
 
 @pytest.mark.parametrize("path", sorted(ALLOWED))

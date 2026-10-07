@@ -35,7 +35,7 @@ logger = get_logger('agora.persona_sets.file_store')
 
 #: Die Satzkennung ist zugleich der Dateiname. Erlaubt ist nur, was ein
 #: Dateiname unbedenklich tragen kann; ``join_within`` bleibt die zweite Schranke.
-_SAFE_ID = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+_SAFE_ID = re.compile(r'[A-Za-z0-9_-]{1,64}')
 
 #: Gemeinsam fuer alle Adapterinstanzen: die Fabrik baut je Aufruf eine neue.
 _WRITE_LOCK = threading.RLock()
@@ -55,7 +55,7 @@ class FilePersonaSetRepository:
 
     def _path(self, set_id: str) -> Optional[str]:
         """Dateipfad des Satzes oder ``None``, wenn die Kennung kein Dateiname sein darf."""
-        if not _SAFE_ID.match(set_id):
+        if not _SAFE_ID.fullmatch(set_id):
             return None
         return join_within(self.storage_root, f'{set_id}.json')
 

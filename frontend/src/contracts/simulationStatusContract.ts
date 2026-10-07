@@ -49,6 +49,7 @@ export const SimulationStatusResponseSchema = z
     branch_name: z.string().nullable().optional(),
     error: z.string().nullable().optional(),
     persona_floor: z.number().int().nullable().optional(),
+    persona_set_id: z.string().nullable().optional(),
     root_simulation_id: z.string().nullable().optional(),
     source_simulation_id: z.string().nullable().optional(),
     run_instructions: z.record(z.string(), z.unknown()).nullable().optional(),

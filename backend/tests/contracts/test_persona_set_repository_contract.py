@@ -306,6 +306,14 @@ def test_invalid_ids_never_reach_the_file_system(repo: FilePersonaSetRepository,
     assert not root.exists()
 
 
+@pytest.mark.parametrize('bad_id', ['pset_valid\n', 'pset_valid\r\n'])
+def test_trailing_newline_ids_are_rejected_before_io(repo: FilePersonaSetRepository, root: Path, bad_id: str):
+    assert repo._path(bad_id) is None
+    with pytest.raises(ValueError):
+        repo.save(_record(bad_id))
+    assert not root.exists()
+
+
 def test_corrupt_file_is_an_error_on_get_but_does_not_break_the_list(
     repo: FilePersonaSetRepository, root: Path
 ):

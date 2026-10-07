@@ -1,0 +1,1 @@
+- Personasätze: Der strikte Frontend-Vertrag akzeptiert den Rückverweis `persona_set_id` am Simulationsstatus. Die Kennungsvalidierung des Dateiadapters weist auch nachgestellte Zeilenumbrüche ab; der Architektur-Guard kennt den Dateiadapter hinter dem Personasatz-Repository-Port, während direktes JSON-I/O in Dienst und API verboten bleibt.
