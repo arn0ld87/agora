@@ -29,12 +29,12 @@ from ..config import Config
 from ..contracts.persona_set_contract import PersonaSetRecord
 from ..utils.json_io import write_json_atomic
 from ..utils.logger import get_logger
-from ..utils.validation import join_within
 
 logger = get_logger('agora.persona_sets.file_store')
 
 #: Die Satzkennung ist zugleich der Dateiname. Erlaubt ist nur, was ein
-#: Dateiname unbedenklich tragen kann; ``join_within`` bleibt die zweite Schranke.
+#: Dateiname unbedenklich tragen kann; ``_path`` prueft zusaetzlich, dass der
+#: zusammengesetzte Pfad unter dem Speicherverzeichnis bleibt.
 _SAFE_ID = re.compile(r'[A-Za-z0-9_-]{1,64}')
 
 #: Gemeinsam fuer alle Adapterinstanzen: die Fabrik baut je Aufruf eine neue.
@@ -54,18 +54,35 @@ class FilePersonaSetRepository:
     # --- Pfade ------------------------------------------------------------
 
     def _path(self, set_id: str) -> Optional[str]:
-        """Dateipfad des Satzes oder ``None``, wenn die Kennung kein Dateiname sein darf."""
+        """Dateipfad des Satzes oder ``None``, wenn die Kennung kein Dateiname sein darf.
+
+        Alle Schranken stehen bewusst in dieser Methode und bewachen genau den
+        Wert, den sie zurueckgibt. ``CodeQL py/path-injection`` erkennt einen
+        Basispfad-Waechter nur, wenn er diesen Wert direkt kontrolliert; eine
+        Pruefung in einer Hilfsfunktion wertet die Analyse nicht aus und meldet
+        die Aufrufer als Pfad-Injection.
+        """
         if not _SAFE_ID.fullmatch(set_id):
             return None
-        # ``basename`` ist nach dieser Pruefung ein No-op: die Kennung darf kein
-        # Trennzeichen tragen. Es steht trotzdem als letzter Schritt vor dem
-        # Zusammenbau, damit der Dateiname ausschliesslich aus einem Basisnamen
-        # besteht, den ``join_within`` unter das Speicherverzeichnis haengt.
-        # Ohne ihn sieht die statische Analyse (CodeQL py/path-injection) die
-        # Kennung weiterhin als Pfadanteil und meldet die Aufrufer als
-        # "uncontrolled data used in path expression".
+
         filename = os.path.basename(f'{set_id}.json')
-        return join_within(self.storage_root, filename)
+        base = os.path.normpath(self.storage_root)
+        path = os.path.normpath(os.path.join(base, filename))
+        if not path.startswith(base):
+            raise ValueError(
+                f'Path traversal attempt detected: {filename!r} does not stay '
+                'inside its storage root'
+            )
+        # Zweite Schranke gegen Symlinks: ``normpath`` loest keine Links auf,
+        # ``realpath`` schon (#1669). Die Kennungsregex verbietet bereits jedes
+        # Trennzeichen; diese Pruefung deckt den Fall ab, dass das
+        # Speicherverzeichnis selbst auf ein anderes Ziel zeigt.
+        if not os.path.realpath(path).startswith(os.path.realpath(base) + os.sep):
+            raise ValueError(
+                f'Path traversal attempt detected: {filename!r} resolves '
+                'outside its storage root'
+            )
+        return path
 
     # --- Port -------------------------------------------------------------
 

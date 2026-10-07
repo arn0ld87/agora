@@ -340,6 +340,24 @@ def test_resolved_path_never_leaves_the_storage_root(
     assert Path(repo._require_path('pset_ok')).parent == root
 
 
+def test_file_symlink_out_of_the_root_is_rejected(
+    repo: FilePersonaSetRepository, root: Path
+):
+    """Die Kennungsregex reicht gegen einen vorbereiteten Symlink nicht aus.
+
+    Sie verbietet jedes Trennzeichen, aber nicht, dass ``pset_link.json`` schon
+    im Verzeichnis liegt und nach aussen zeigt. ``normpath`` loest keine Links
+    auf; diese Schranke muss die Analyse deshalb weiterhin passieren.
+    """
+    root.mkdir(parents=True)
+    outside = root.parent / 'ausserhalb.json'
+    outside.write_text('{}', encoding='utf-8')
+    (root / 'pset_link.json').symlink_to(outside)
+
+    with pytest.raises(ValueError):
+        repo._path('pset_link')
+
+
 def test_corrupt_file_is_an_error_on_get_but_does_not_break_the_list(
     repo: FilePersonaSetRepository, root: Path
 ):
