@@ -57,7 +57,15 @@ class FilePersonaSetRepository:
         """Dateipfad des Satzes oder ``None``, wenn die Kennung kein Dateiname sein darf."""
         if not _SAFE_ID.fullmatch(set_id):
             return None
-        return join_within(self.storage_root, f'{set_id}.json')
+        # ``basename`` ist nach dieser Pruefung ein No-op: die Kennung darf kein
+        # Trennzeichen tragen. Es steht trotzdem als letzter Schritt vor dem
+        # Zusammenbau, damit der Dateiname ausschliesslich aus einem Basisnamen
+        # besteht, den ``join_within`` unter das Speicherverzeichnis haengt.
+        # Ohne ihn sieht die statische Analyse (CodeQL py/path-injection) die
+        # Kennung weiterhin als Pfadanteil und meldet die Aufrufer als
+        # "uncontrolled data used in path expression".
+        filename = os.path.basename(f'{set_id}.json')
+        return join_within(self.storage_root, filename)
 
     # --- Port -------------------------------------------------------------
 

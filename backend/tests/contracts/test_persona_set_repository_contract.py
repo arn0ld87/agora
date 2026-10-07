@@ -314,6 +314,32 @@ def test_trailing_newline_ids_are_rejected_before_io(repo: FilePersonaSetReposit
     assert not root.exists()
 
 
+@pytest.mark.parametrize('set_id', ['_pset_', 'pset_-_', '--', 'A' * 64])
+def test_valid_edge_ids_keep_their_file_name(
+    repo: FilePersonaSetRepository, root: Path, set_id: str
+):
+    """Der Basename-Schritt darf gueltige Kennungen nicht umformen.
+
+    ``werkzeug.secure_filename`` scheidet dafuer aus: es schneidet fuehrende
+    und schliessende ``.``/``_`` ab. Aus ``_pset_`` wuerde ``pset`` — Datei und
+    Kennung liefen auseinander, und der Satz waere nach dem Schreiben nicht
+    mehr auffindbar.
+    """
+    repo.save(_record(set_id))
+
+    assert (root / f'{set_id}.json').is_file()
+    assert repo.get(set_id) is not None
+    assert repo.delete(set_id) is True
+
+
+def test_resolved_path_never_leaves_the_storage_root(
+    repo: FilePersonaSetRepository, root: Path
+):
+    for bad in ('../escape', 'a/b', '.hidden', '..', 'x/../y', 'a\\b'):
+        assert repo._path(bad) is None
+    assert Path(repo._require_path('pset_ok')).parent == root
+
+
 def test_corrupt_file_is_an_error_on_get_but_does_not_break_the_list(
     repo: FilePersonaSetRepository, root: Path
 ):
