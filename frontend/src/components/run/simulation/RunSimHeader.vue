@@ -55,7 +55,16 @@ const ACTIVE_KINDS = new Set(['queued', 'running', 'paused'])
 const isActive = computed(() => ACTIVE_KINDS.has(kind.value))
 const canPause = computed(() => kind.value === 'running')
 const canResume = computed(() => kind.value === 'paused')
-const canStart = computed(() => kind.value === 'notStarted')
+// Nach Stopp, Budgetabbruch oder Fehlschlag nimmt das Backend einen neuen
+// Start an (es setzt die vorbereitete Simulation auf „bereit" zurück). Ein
+// abgeschlossener Lauf wird hier bewusst nicht neu gestartet.
+const RESTARTABLE_KINDS = new Set(['stopped', 'budget', 'failed'])
+const canRestart = computed(() => RESTARTABLE_KINDS.has(kind.value))
+const canStart = computed(() => kind.value === 'notStarted' || canRestart.value)
+const startLabel = computed(() => {
+  if (control.busy.value === 'start') return t('views.run.simHeader.starting')
+  return canRestart.value ? t('views.run.simHeader.restart') : t('views.run.simHeader.start')
+})
 const blocked = computed(() => canStart.value && !props.personasReady)
 
 const roundText = computed(() => {
@@ -181,7 +190,7 @@ async function doStop(): Promise<void> {
           data-testid="sim-header-start"
           @click="doStart"
         >
-          {{ control.busy.value === 'start' ? t('views.run.simHeader.starting') : t('views.run.simHeader.start') }}
+          {{ startLabel }}
         </button>
         <button
           v-if="canPause"

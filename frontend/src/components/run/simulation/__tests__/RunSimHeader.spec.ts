@@ -206,6 +206,26 @@ describe('RunSimHeader', () => {
     expect(h_.control.cancel).not.toHaveBeenCalled()
   })
 
+  it.each(['stopped', 'budget', 'failed'] as const)(
+    'bietet nach %s „Erneut starten" an und startet darüber neu',
+    async (kindValue) => {
+      h_.kind.value = kindValue
+      h_.control.start.mockResolvedValue({ runId: 'run_neu' })
+      mountHeader()
+      const btn = byId('sim-header-start') as HTMLButtonElement | null
+      expect(btn?.textContent).toContain('Erneut starten')
+      btn!.click()
+      await flushPromises()
+      expect(h_.control.start).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('bietet nach einem abgeschlossenen Lauf keinen Neustart an', () => {
+    h_.kind.value = 'done'
+    mountHeader()
+    expect(byId('sim-header-start')).toBeNull()
+  })
+
   it('nennt bei Stopp, Budgetabbruch und Neustart-Fehler den Grund', () => {
     h_.kind.value = 'budget'
     h_.state.terminationReason.value = 'budget_cost'
