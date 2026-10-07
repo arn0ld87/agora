@@ -314,7 +314,7 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
 
         // Ein Eintrag je Abschnitt: `report-outline-item-<n>`.
         const outlineItems = page.getByTestId(
-          new RegExp(`^${RunReportTestId.outlineItemPrefix}\\d+\$`),
+          new RegExp(`^${RunReportTestId.outlineItemPrefix}\\d+$`),
         );
 
         // ===================================================================
