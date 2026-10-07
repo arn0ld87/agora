@@ -135,7 +135,10 @@ test.describe('Fensterrouten-Navigation · Graph-Build aus dem Startdialog', () 
 
       // Nach der Upload-Response ersetzt useGraphBuildPipeline.initialize die
       // Platzhalter-Route /v4/graph-build/new durch die echte project_id.
-      await expect(page).toHaveURL(/\/v4\/graph-build\/[0-9a-f][0-9a-f-]{7,}/, {
+      // Projektkennungen sind backend-seitig ``proj_<12 Hexstellen>``
+      // (backend/app/repositories/project_repository.py; PROJ_ID_PATTERN in
+      // backend/app/utils/validation.py) — „new" als Projekt-ID matcht nicht.
+      await expect(page).toHaveURL(/\/v4\/graph-build\/proj_[a-f0-9]{12}/, {
         timeout: 60_000,
       });
 
