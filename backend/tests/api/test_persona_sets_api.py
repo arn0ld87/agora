@@ -77,6 +77,24 @@ def _lock(set_id: str, simulation_id: str = "sim_1"):
 # --- Saetze ---------------------------------------------------------------
 
 
+def test_liste_schluckt_importfehler_nicht(client, monkeypatch):
+    """Storage-/Permission-Fehler des Altbestand-Imports erreichen den Aufrufer."""
+    from app.services.persona_set_service import PersonaSetService
+
+    def _boom(self):
+        raise PermissionError("Ablage nicht beschreibbar")
+
+    monkeypatch.setattr(PersonaSetService, "ensure_legacy_import", _boom)
+
+    res = client.get("/api/persona-sets")
+
+    assert res.status_code == 500
+    body = res.get_json()
+    assert body["success"] is False
+    assert body["code"] == "internal_error"
+    assert "sets" not in (body.get("data") or {})
+
+
 def test_create_und_get_roundtrip(client):
     res = client.post(
         "/api/persona-sets", json={"name": "Pflege", "description": "Gutachten"}

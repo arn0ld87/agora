@@ -18,7 +18,7 @@ Zugriffsschutz wie die alten Persona-Bibliotheks-Endpunkte
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Type, TypeVar
+from typing import Any, Callable
 
 from flask import Blueprint, request
 from pydantic import BaseModel, ValidationError
@@ -45,16 +45,10 @@ from ..services.persona_set_service import (
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.auth import operator_only
-from ..utils.logger import get_logger
-
-logger = get_logger("agora.api.persona_sets")
 
 persona_sets_bp = Blueprint("persona_sets", __name__)
 
-_M = TypeVar("_M", bound=BaseModel)
-
-
-def _parse(model: Type[_M]) -> _M:
+def _parse[M: BaseModel](model: type[M]) -> M:
     """Liest den JSON-Body als ``model``; ``ValidationError`` faengt ``_view`` ab."""
     return model.model_validate(request.get_json(silent=True) or {})
 
@@ -118,10 +112,9 @@ def _view(log_prefix: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]
 def list_persona_sets():
     """Alle Saetze als Kacheln. Uebernimmt beim ersten Aufruf den Altbestand."""
     service = PersonaSetService()
-    try:
-        service.ensure_legacy_import()
-    except Exception:  # noqa: BLE001 — Liste bleibt lesbar; Fehler steht im Log
-        logger.exception("persona_set.legacy_import failed; listing without it")
+    # Kein pauschales Fangen: Storage-/Permission-Fehler beim Import duerfen
+    # nicht verschwinden, sondern laufen ueber ``handle_api_errors`` (500-Envelope).
+    service.ensure_legacy_import()
     sets = service.list_sets()
     response = PersonaSetListResponse(count=len(sets), sets=sets)
     return json_success(response.model_dump(mode="json"))
