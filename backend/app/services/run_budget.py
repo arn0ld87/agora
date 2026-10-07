@@ -48,6 +48,10 @@ DIMENSION_TO_REASON: dict[str, TerminationReason] = {
     "calls": "budget_calls",
 }
 
+# Endzustaende eines Jobs (Spiegel von ``RunRegistry.update_run``: dort wird
+# ``completed_at`` nur in diesen Status gesetzt, sonst geraeumt).
+_TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "stopped"})
+
 _DIMENSION_LABELS = {
     "tokens": "Tokenbudget",
     "cost": "Kostenbudget",
@@ -353,10 +357,15 @@ class RunBudgetEnforcer:
         run_id: str,
         config: RunBudgetConfig,
         started_at_epoch: Optional[float] = None,
+        ended_at_epoch: Optional[float] = None,
     ):
         self.run_id = run_id
         self.config = config
         self._started_at_epoch = started_at_epoch
+        # Endzeitpunkt eines beendeten Jobs (#1805): ab dann zaehlt als
+        # verstrichene Zeit die Laufdauer, nicht die Wanduhr. ``None`` fuer
+        # laufende Jobs -- dort aendert sich nichts.
+        self._ended_at_epoch = ended_at_epoch
 
     @classmethod
     def for_run(cls, run_id: str) -> Optional["RunBudgetEnforcer"]:
@@ -367,10 +376,14 @@ class RunBudgetEnforcer:
         if config is None:
             return None
         manifest = RunRegistry().get_run(run_id) or {}
+        ended_at = None
+        if RunRegistry.canonical_status(manifest.get("status")) in _TERMINAL_RUN_STATUSES:
+            ended_at = _parse_started_epoch(manifest.get("completed_at"))
         return cls(
             run_id=run_id,
             config=config,
             started_at_epoch=_parse_started_epoch(manifest.get("started_at")),
+            ended_at_epoch=ended_at,
         )
 
     # -- Verbrauch -----------------------------------------------------------
@@ -412,9 +425,18 @@ class RunBudgetEnforcer:
         return max(0, max_calls - consumed_calls - in_flight)
 
     def _elapsed_seconds(self) -> Optional[float]:
+        """Verstrichene Laufzeit; bei beendetem Job am Endzeitpunkt gedeckelt.
+
+        Ein Interview nach Laufende (#1805) bucht auf den ``simulation_run``-
+        Job. Mit der Wanduhr als Obergrenze lehnte jedes spaete Interview
+        einen regulaer im Limit beendeten Lauf ab und schriebe eine harte
+        Zeit-Warnung ins Manifest. Die Zeitdimension misst daher Start bis
+        Ende; Token-, Kosten- und Aufruf-Limits gelten unveraendert weiter.
+        """
         if self._started_at_epoch is None:
             return None
-        return max(0.0, time.time() - self._started_at_epoch)
+        end = self._ended_at_epoch if self._ended_at_epoch is not None else time.time()
+        return max(0.0, end - self._started_at_epoch)
 
     def _observed(self, consumed: UsageMetrics) -> dict[str, Optional[int]]:
         elapsed = self._elapsed_seconds()
