@@ -346,6 +346,8 @@ describe('AiModelPicker (Slice 5.1, isolated)', () => {
     // Ohne Popper hängt die Liste statisch am Ende von <body> und liegt im
     // modalen Einstellungsfenster (Scroll-Sperre) unterhalb des sichtbaren Bereichs.
     expect(aiModelPickerSource).toMatch(/<ComboboxContent[^>]*position="popper"/)
+    // Immer unter dem Feld, kein Umklappen (Tab-Reihenfolge, Gate #1088).
+    expect(aiModelPickerSource).toMatch(/<ComboboxContent[^>]*side="bottom"[^>]*:avoid-collisions="false"/)
     // Klasse sitzt im Popper-Modus auf einem inneren div ohne scoped-Attribut.
     expect(aiModelPickerSource).toMatch(/:global\(\.ai-model-picker__content\)\s*\{[^}]*z-index:\s*(\d+)/)
     const z = Number(/:global\(\.ai-model-picker__content\)\s*\{[^}]*z-index:\s*(\d+)/.exec(aiModelPickerSource)?.[1])

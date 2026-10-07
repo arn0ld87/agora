@@ -3,7 +3,8 @@ import { useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-const labelId = useId()
+const sliderId = useId()
+const numberId = useId()
 const hintId = useId()
 
 defineProps({
@@ -26,10 +27,12 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
         :disabled="isPreparing"
         @change="emit('update:useAgentCap', ($event.target as HTMLInputElement).checked)"
       />
-      <span :id="labelId">{{ t('step2.agentCap.label') }}</span>
+      <span>{{ t('step2.agentCap.label') }}</span>
     </label>
     <div v-if="useAgentCap" class="agent-cap-slider">
+      <label :for="sliderId" class="sr-only">{{ t('step2.agentCap.sliderLabel') }}</label>
       <input
+        :id="sliderId"
         type="range"
         :value="maxAgents"
         min="10"
@@ -37,11 +40,12 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
         step="5"
         :disabled="isPreparing"
         :title="t('step2.agentCap.minimumHint')"
-        :aria-labelledby="labelId"
         :aria-describedby="hintId"
         @input="emit('update:maxAgents', Number(($event.target as HTMLInputElement).value))"
       />
+      <label :for="numberId" class="sr-only">{{ t('step2.agentCap.numberLabel') }}</label>
       <input
+        :id="numberId"
         type="number"
         :value="maxAgents"
         min="10"
@@ -49,7 +53,6 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
         :disabled="isPreparing"
         class="agent-cap-number"
         :title="t('step2.agentCap.minimumHint')"
-        :aria-labelledby="labelId"
         :aria-describedby="hintId"
         @input="emit('update:maxAgents', Number(($event.target as HTMLInputElement).value))"
       />
