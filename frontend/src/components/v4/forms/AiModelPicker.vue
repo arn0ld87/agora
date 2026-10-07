@@ -76,6 +76,15 @@ const emit = defineEmits<{
 
 const { models: discoveredModels, providers, loading, error, refresh: refreshDiscovery } = useAvailableModels()
 const operatorAccess = useOperatorAccess()
+/**
+ * Liste öffnet per Klick auf das Feld, per Trigger und per Pfeiltaste — nicht
+ * mehr beim bloßen Fokussieren (`open-on-focus`). Sonst springt der Fokus beim
+ * Durchtabben jedes Pickers sofort in das Suchfeld der Liste (eigener Portal-Knoten
+ * am Seitenende); im scrollenden Einstellungsfenster verschieben sich diese
+ * Suchfelder mit dem Scrollen von Picker zu Picker, die Tab-Reihenfolge springt
+ * scheinbar nach oben (#1797).
+ */
+const open = ref(false)
 const customProviderId = ref('')
 const customModelId = ref('')
 const customProvider = computed(() => providers.value.find((provider) =>
@@ -313,7 +322,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
     <ComboboxRoot
       :model-value="selectedId ?? ''"
       :disabled="disabled"
-      :open-on-focus="true"
+      v-model:open="open"
       @update:model-value="onUpdate"
     >
       <ComboboxAnchor class="ai-model-picker__anchor">
@@ -326,6 +335,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
           spellcheck="false"
           :data-testid="testIds.input"
           :aria-label="placeholderText"
+          @click="open = true"
         />
         <ComboboxTrigger class="ai-model-picker__trigger" :aria-label="placeholderText" tabindex="-1">
           <span aria-hidden="true">▾</span>
