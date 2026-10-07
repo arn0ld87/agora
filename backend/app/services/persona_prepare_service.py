@@ -24,8 +24,14 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..config import Config
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
+from ..contracts.pipeline_degradation_contract import (
+    DegradationKind,
+    DegradationSeverity,
+    PipelineDegradationReport,
+)
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
 from .simulation_config_generator import (
@@ -59,6 +65,7 @@ def prepare_from_personas(
     simulation_id: str,
     personas: List[Dict[str, Any]],
     persona_set_id: Optional[str] = None,
+    degradations: Optional[DegradationCollector] = None,
 ) -> "SimulationState":
     """Bereitet eine frisch angelegte Simulation aus Bibliotheks-Personas vor.
 
@@ -75,6 +82,12 @@ def prepare_from_personas(
         persona_set_id: Kennung des Personasatzes (#1807), aus dem die Liste
             als Kopie stammt. Landet in den Metadaten des Prepare-Runs
             (``persona_source="set"``); ohne Wert bleibt es bei ``"library"``.
+        degradations: Sammler des Aufrufers (wie im normalen Prepare-Pfad,
+            #1034). Tragen Personas ``generation_source="rule_based"``,
+            meldet dieser Pfad ``PERSONA_RULE_BASED_FALLBACK`` genau einmal
+            fuer die ganze Liste; der Befund steht zusaetzlich in den
+            Metadaten des Prepare-Runs (``degradations``). Ohne Sammler legt
+            die Funktion einen eigenen an, damit der Run-Eintrag nie fehlt.
 
     Raises:
         ValueError: bei leerer Personaliste, unbekannter Simulation oder
@@ -108,9 +121,49 @@ def prepare_from_personas(
     state.entity_types = sorted({p["persona_kind"] for p in profiles})
     state.config_generated = True
 
+    collector = degradations if degradations is not None else DegradationCollector()
+    _report_rule_based_fallback(profiles, collector, persona_set_id)
+
     manager._set_status(state, SimulationStatus.READY)
-    _register_run(state, len(profiles), persona_set_id)
+    _register_run(state, len(profiles), persona_set_id, collector.report())
     return state
+
+
+def _report_rule_based_fallback(
+    profiles: List[Dict[str, Any]],
+    degradations: DegradationCollector,
+    persona_set_id: Optional[str],
+) -> None:
+    """Meldet regelbasierte Platzhalter einmal fuer die ganze Liste (#1029).
+
+    Gleicher Befundtyp, gleiche Schweregradregel und gleicher Wortlaut-Aufbau
+    wie ``oasis_profile_rule_based._report_persona_degradation``: sind alle
+    Personas Platzhalter, gibt es keine echte Stimme mehr (``BLOCKING``),
+    sonst ``WARNING``.
+    """
+    fallback = [p for p in profiles if p.get("generation_source") == "rule_based"]
+    if not fallback:
+        return
+    context: Dict[str, str | int | float] = {
+        "fallback_personas": len(fallback),
+        "total_personas": len(profiles),
+    }
+    if persona_set_id is not None:
+        context["persona_set_id"] = persona_set_id
+    degradations.record(
+        kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
+        severity=(
+            DegradationSeverity.BLOCKING
+            if len(fallback) == len(profiles)
+            else DegradationSeverity.WARNING
+        ),
+        detail=(
+            f"{len(fallback)} von {len(profiles)} Personas sind regelbasierte "
+            "Platzhalter und wurden nicht vom Modell erzeugt. "
+            "Ihre Beiträge tragen keine belastbaren Aussagen."
+        ),
+        context=context,
+    )
 
 
 def _translate_personas(personas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -169,6 +222,12 @@ def _translate_persona(
         "source_entity_type": persona.get("source_entity_type") or "persona_library",
         "persona_kind": persona.get("persona_kind") or "individual",
         "is_manual": bool(persona.get("is_manual", False)),
+        # Immer gesetzt (nie nur bei Fallback): ``_write_twitter_csv`` leitet die
+        # Spalten aus dem ersten Profil ab, ein spaeteres Profil mit
+        # zusaetzlichem Schluessel brachte den CSV-Writer zum Absturz.
+        "generation_source": (
+            "rule_based" if persona.get("generation_source") == "rule_based" else "llm"
+        ),
     }
     for key, default in _ALWAYS_PRESENT_DEFAULTS.items():
         value = persona.get(key)
@@ -262,11 +321,14 @@ def _register_run(
     state: "SimulationState",
     profile_count: int,
     persona_set_id: Optional[str] = None,
+    degradation_report: Optional[PipelineDegradationReport] = None,
 ) -> None:
     from_set = persona_set_id is not None
     source_metadata: Dict[str, Any] = {"persona_source": "set" if from_set else "library"}
     if persona_set_id is not None:
         source_metadata["persona_set_id"] = persona_set_id
+    if degradation_report:
+        source_metadata["degradations"] = degradation_report.model_dump(mode="json")
     RunRegistry().create_run(
         run_type="simulation_prepare",
         entity_id=state.simulation_id,

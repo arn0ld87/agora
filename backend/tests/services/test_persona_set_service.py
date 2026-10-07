@@ -302,6 +302,25 @@ def test_snapshot_profiles_liefert_kopien_im_prepare_format(service):
     assert service.get_set(record.id).entries[0].profile.username == "anna"
 
 
+def test_snapshot_profiles_markiert_fallback_als_rule_based(service):
+    record = service.create_set(PersonaSetCreate(name="S"))
+    service.add_entry(record.id, _entry("anna", origin="manual"))
+    service.add_entry(record.id, _entry("bernd", origin="fallback"))
+    service.add_entry(record.id, _entry("clara", origin="graph"))
+    service.add_entry(record.id, _entry("dirk", origin="ai_draft"))
+
+    anna, bernd, clara, dirk = service.snapshot_profiles(record.id)
+
+    assert bernd["generation_source"] == "rule_based"
+    assert bernd["is_manual"] is False
+    assert anna["is_manual"] is True
+    # Nur der Fallback traegt die Marke; die uebrigen bleiben unveraendert
+    # (``PersonaModel`` kennt fuer ``ai_draft`` kein eigenes Feld).
+    assert "generation_source" not in anna
+    assert "generation_source" not in clara
+    assert "generation_source" not in dirk
+
+
 def test_snapshot_profiles_leerer_satz_wirft_empty(service):
     record = service.create_set(PersonaSetCreate(name="Leer"))
 

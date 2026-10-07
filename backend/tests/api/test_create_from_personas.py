@@ -320,6 +320,78 @@ def test_persona_set_id_muss_nichtleerer_text_sein(set_env, bad):
     assert res.status_code == 400
 
 
+def _add_entry(client, set_id, username, origin):
+    res = client.post(
+        f"/api/persona-sets/{set_id}/entries",
+        json={
+            "origin": origin,
+            "profile": {
+                "username": username,
+                "name": username.title(),
+                "persona": f"Persona von {username}.",
+            },
+        },
+    )
+    assert res.status_code == 201
+
+
+def test_lauf_aus_satz_mit_fallback_meldet_die_degradation(set_env):
+    from app.services.run_registry import RunRegistry
+
+    client = _set_client()
+    set_id = _make_set(client, usernames=("anna",))
+    _add_entry(client, set_id, "bernd", "fallback")
+
+    res = _run_from_set(client, set_id)
+
+    assert res.status_code == 201
+    data = res.get_json()["data"]
+    # Marke im Laufprofil: dieselbe wie im normalen Prepare-Pfad.
+    profiles = set_env._store.read_json(data["simulation_id"], "reddit_profiles", default=None)
+    assert [(p["username"], p["generation_source"]) for p in profiles] == [
+        ("anna", "llm"),
+        ("bernd", "rule_based"),
+    ]
+    # Degradation in der Antwort ...
+    events = data["degradations"]["events"]
+    assert [e["kind"] for e in events] == ["persona_rule_based_fallback"]
+    assert events[0]["severity"] == "warning"
+    assert events[0]["context"]["fallback_personas"] == 1
+    assert events[0]["context"]["total_personas"] == 2
+    # ... und in den Metadaten des Prepare-Runs.
+    run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", data["simulation_id"], run_type="simulation_prepare"
+    )
+    assert run["metadata"]["degradations"]["events"][0]["kind"] == "persona_rule_based_fallback"
+
+
+def test_lauf_aus_satz_nur_mit_fallback_ist_blocking(set_env):
+    client = _set_client()
+    set_id = _make_set(client, usernames=())
+    _add_entry(client, set_id, "anna", "fallback")
+
+    data = _run_from_set(client, set_id).get_json()["data"]
+
+    assert data["degradations"]["events"][0]["severity"] == "blocking"
+
+
+def test_lauf_aus_satz_ohne_fallback_meldet_keine_degradation(set_env):
+    from app.services.run_registry import RunRegistry
+
+    client = _set_client()
+    set_id = _make_set(client)
+
+    data = _run_from_set(client, set_id).get_json()["data"]
+
+    assert data["degradations"]["events"] == []
+    profiles = set_env._store.read_json(data["simulation_id"], "reddit_profiles", default=None)
+    assert {p["generation_source"] for p in profiles} == {"llm"}
+    run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", data["simulation_id"], run_type="simulation_prepare"
+    )
+    assert "degradations" not in run["metadata"]
+
+
 def test_scheitert_das_anlegen_wird_der_satz_nicht_gesperrt(set_env):
     client = _set_client()
     set_id = _make_set(client)

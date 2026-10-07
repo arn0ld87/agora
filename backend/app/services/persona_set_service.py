@@ -358,9 +358,16 @@ class PersonaSetService:
         Gibt frische Dicts zurueck: der Lauf haengt nicht am Satz. Ein leerer
         Satz ist ``PersonaSetEmpty``.
 
-        Die Herkunft ``fallback`` steht im Satz, nicht im Lauf: das
-        Profilformat von OASIS (``PersonaModel``) kennt kein Feld dafuer und
-        bleibt unveraendert.
+        Herkunft und Laufprofil:
+
+        * ``manual`` setzt ``is_manual=True``.
+        * ``fallback`` (regelbasierter Ersatz, Degradation) setzt
+          ``generation_source="rule_based"``: das ist dasselbe Feld, das der
+          normale Prepare-Pfad fuer Fallback-Personas schreibt und an dem die
+          Oberflaeche den Marker und der Bericht die Degradation erkennen.
+        * ``ai_draft`` und ``graph`` bleiben unveraendert: ``PersonaModel``
+          kennt fuer KI-Entwuerfe kein eigenes Feld, und ``generation_source``
+          kennt nur ``llm`` (Vorgabe) und ``rule_based``.
         """
         record = self.get_set(set_id)
         if not record.entries:
@@ -373,6 +380,8 @@ class PersonaSetService:
                 persona.get("source_entity_type") or "persona_set"
             )
             persona["is_manual"] = entry.origin == "manual"
+            if entry.origin == "fallback":
+                persona["generation_source"] = "rule_based"
             snapshot.append(persona)
         return snapshot
 

@@ -13,6 +13,7 @@ from ..contracts.model_preset_contract import AvailableModelsResponse, ModelPres
 from ..contracts.simulation_status_contract import SimulationStatusResponse
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
+from ..services.degradation_collector import DegradationCollector
 from ..services.persona_library import PersonaLibrary
 from ..services.persona_prepare_service import prepare_from_personas
 from ..services.persona_set_service import (
@@ -348,8 +349,16 @@ def create_simulation_from_personas():
             "persona_count": len(personas),
         }, status=201)
 
+    # Gleiches Muster wie ``run_prepare`` (#1034): der Sammler gehoert dem
+    # Aufrufer, damit Befunde (regelbasierte Fallback-Personas, #1807) in der
+    # Antwort stehen. Leere Liste heisst: nichts ist still ausgefallen.
+    degradations = DegradationCollector()
     prepare_from_personas(
-        manager, state.simulation_id, personas, persona_set_id=persona_set_id
+        manager,
+        state.simulation_id,
+        personas,
+        persona_set_id=persona_set_id,
+        degradations=degradations,
     )
     # Erst jetzt sperren: ein gescheitertes Anlegen laesst den Satz offen.
     persona_set_service.record_run(persona_set_id, state.simulation_id)
@@ -358,6 +367,7 @@ def create_simulation_from_personas():
         "project_id": project.project_id,
         "persona_count": len(personas),
         "persona_set_id": persona_set_id,
+        "degradations": degradations.report().model_dump(mode="json"),
     }, status=201)
 
 
