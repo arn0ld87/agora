@@ -386,11 +386,13 @@ def interview_all_agents(
     timeout: float = 180.0,
     *,
     run_state_dir: str,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Interview all agents in a simulation using the same prompt.
 
     Reads agent IDs from the ``simulation_config`` artifact and delegates to
-    :func:`interview_agents_batch`.
+    :func:`interview_agents_batch`. ``run_id`` (Budget-Guard/Ledger) wird
+    unveraendert an den Batch durchgereicht.
 
     Raises:
         ValueError: Simulation / config missing, or no agents in config.
@@ -439,6 +441,7 @@ def interview_all_agents(
         platform=platform,
         timeout=timeout,
         run_state_dir=run_state_dir,
+        run_id=run_id,
     )
 
 

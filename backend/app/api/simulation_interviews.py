@@ -2,15 +2,82 @@
 Interview-related simulation API routes split from the main module.
 """
 
+import functools
+from typing import Callable, Optional
+
 from flask import jsonify, request
 
 from . import simulation_bp
 from ..contracts.interview_envelope_contract import InterviewEnvelope
+from ..services.run_budget import BudgetExceededError
+from ..services.run_registry import RunRegistry
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger, optimize_interview_prompt
+
+
+def _resolve_budget_run_id(simulation_id: str) -> Optional[str]:
+    """``run_id`` des ``simulation_run``-Jobs, dem ein UI-Interview zugerechnet wird.
+
+    Gleiches Aufloesungsmuster wie ``api/runs.py::_get_run_by_run_or_simulation_id``
+    und ``SimulationRunner._registry_sync``: ``linked_ids.simulation_id`` plus
+    ``run_type="simulation_run"``. Das Interview laeuft damit gegen Budget-Guard
+    und Ledger der Simulation (#1805, Variante A).
+
+    Altbestand ohne Job bleibt unbudgetiert wie bisher, aber nicht still: die
+    Luecke wird als strukturierte Warnung protokolliert. Registry-Fehler werden
+    bewusst nicht geschluckt — sonst liefe ein Interview unbemerkt am Budget vorbei.
+    """
+    run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", simulation_id, run_type="simulation_run"
+    )
+    run_id = run.get("run_id") if run else None
+    if not run_id:
+        logger.warning(
+            "interview_unbudgeted simulation_id=%s reason=no_simulation_run",
+            simulation_id,
+        )
+        return None
+    return str(run_id)
+
+
+def _budget_exceeded_response(exc: BudgetExceededError):
+    """Budgetabbruch als harter, strukturierter Fehler (HTTP 409).
+
+    Nie ``success: true`` und kein Fallback-Text: ein erreichtes hartes Budget
+    ist das Ende der Interviews dieser Simulation, keine freundliche Antwort.
+    """
+    return json_error(
+        ApiErrorCode.BUDGET_EXCEEDED,
+        status=409,
+        message=str(exc),
+        extra={
+            "termination_reason": exc.termination_reason,
+            "dimension": exc.dimension,
+            "observed": exc.observed,
+            "threshold": exc.threshold,
+        },
+    )
+
+
+def _budget_exceeded_as_conflict(view: Callable) -> Callable:
+    """Wandelt ``BudgetExceededError`` eines Interview-Endpunkts in HTTP 409.
+
+    Muss INNERHALB von ``handle_api_errors`` stehen: dessen ``RuntimeError``-Zweig
+    machte daraus sonst ein generisches 500.
+    """
+
+    @functools.wraps(view)
+    def wrapper(*args, **kwargs):
+        try:
+            return view(*args, **kwargs)
+        except BudgetExceededError as exc:
+            logger.warning("interview_budget_exceeded %s", exc)
+            return _budget_exceeded_response(exc)
+
+    return wrapper
 
 
 def _require_simulation_id(simulation_id):
@@ -121,6 +188,7 @@ def _echo_result(result: dict):
 
 @simulation_bp.route('/interview', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="InterviewFailed")
+@_budget_exceeded_as_conflict
 def interview_agent():
     """Interview a single agent."""
     data = request.get_json() or {}
@@ -161,12 +229,14 @@ def interview_agent():
         prompt=optimized_prompt,
         platform=platform,
         timeout=timeout,
+        run_id=_resolve_budget_run_id(simulation_id),
     )
     return _echo_result(result)
 
 
 @simulation_bp.route('/interview/batch', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="BatchInterviewFailed")
+@_budget_exceeded_as_conflict
 def interview_agents_batch():
     """Interview multiple agents in one request."""
     data = request.get_json() or {}
@@ -223,12 +293,14 @@ def interview_agents_batch():
         interviews=optimized_interviews,
         platform=platform,
         timeout=timeout,
+        run_id=_resolve_budget_run_id(simulation_id),
     )
     return _echo_result(result)
 
 
 @simulation_bp.route('/interview/all', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="GlobalInterviewFailed")
+@_budget_exceeded_as_conflict
 def interview_all_agents():
     """Interview all agents with a shared prompt."""
     data = request.get_json() or {}
@@ -262,6 +334,7 @@ def interview_all_agents():
         prompt=optimized_prompt,
         platform=platform,
         timeout=timeout,
+        run_id=_resolve_budget_run_id(simulation_id),
     )
     return _echo_result(result)
 

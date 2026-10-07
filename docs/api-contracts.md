@@ -76,7 +76,7 @@ Regeln:
 
 ## ApiErrorCode-Katalog
 
-Der aktuelle `ApiErrorCode`-Katalog enthält **24** Werte. Die Liste im Code ist die SSoT:
+Der aktuelle `ApiErrorCode`-Katalog enthält **26** Werte. Die Liste im Code ist die SSoT:
 
 ### Anfrage/Validierung
 
@@ -97,6 +97,10 @@ Der aktuelle `ApiErrorCode`-Katalog enthält **24** Werte. Die Liste im Code ist
 - `rate_limited`
 - `timeout`
 
+### Budget
+
+- `budget_exceeded` — hartes Run-Budget erreicht (`409`, Interview-Endpunkte seit #1805; zusätzliche Felder `termination_reason`, `dimension`, `observed`, `threshold` im Fehler-Envelope)
+
 ### Infrastruktur
 
 - `service_unavailable`
@@ -112,6 +116,7 @@ Der aktuelle `ApiErrorCode`-Katalog enthält **24** Werte. Die Liste im Code ist
 - `simulation_prepare_in_progress`
 - `persona_review_required`
 - `graph_build_in_progress`
+- `report_generate_in_progress`
 
 ### Upload
 
