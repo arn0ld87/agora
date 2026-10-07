@@ -27,7 +27,7 @@ export function isProgressLine(line: string): boolean {
 }
 
 /** Text vor dem Prozentwert; gleiche Beschriftung = gleicher Balken. */
-function progressLabel(line: string): string {
+export function progressLabel(line: string): string {
   const state = lastCarriageReturnState(line)
   const idx = state.search(/\d+%\|/)
   return idx > 0 ? state.slice(0, idx).trim() : ''
