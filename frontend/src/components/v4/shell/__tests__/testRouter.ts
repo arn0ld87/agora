@@ -21,6 +21,9 @@ const BASE_ROUTES: RouteRecordRaw[] = [
   { path: '/library/runs',           name: 'LibraryRuns',         component: stub },
   { path: '/library/runs/new',       name: 'NewRun',              component: stub },
   { path: '/library/graphs',         name: 'LibraryGraphs',       component: stub },
+  // Etappe 7 (#1807): Personasaetze (Seitenleiste fuehrt auf die Bibliothek).
+  { path: '/library/persona-sets',   name: 'LibraryPersonaSets',  component: stub },
+  { path: '/persona-sets/:setId',    name: 'PersonaSet',          component: stub },
   { path: '/simulations/:simulationId', name: 'RunOverview',      component: stub },
   { path: '/graphs/:projectId',      name: 'GraphLibraryDetail',  component: stub },
   { path: '/compare/:simulationId?', name: 'Compare',             component: stub },

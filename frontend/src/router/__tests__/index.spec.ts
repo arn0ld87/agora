@@ -231,8 +231,8 @@ describe('Router – Redirects', () => {
     ['/ablage?filter=lauf', '/library/runs'],
     ['/ablage?filter=bericht', '/library/runs?view=with-report'],
     ['/ablage?filter=graph', '/library/graphs'],
-    // Personasaetze haben bis Etappe 7 keine eigene Ansicht.
-    ['/ablage?filter=personasatz', '/library/runs'],
+    // Etappe 7 (#1807): Personasaetze haben eine eigene Bibliothek.
+    ['/ablage?filter=personasatz', '/library/persona-sets'],
     ['/ablage?filter=jobs', '/activity/jobs'],
     ['/ablage?filter=unbekannt', '/library/runs'],
     ['/v4/history', '/activity/jobs'],

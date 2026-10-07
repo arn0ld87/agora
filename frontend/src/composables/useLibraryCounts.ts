@@ -1,6 +1,7 @@
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import { listPersonaSets } from '../api/personaSets'
 import { onListInvalidated } from '../realtime/listInvalidation'
 import { useShellStore, type ShelfSnapshot } from '../stores/shell'
 import { useOperatorAccess } from './useOperatorAccess'
@@ -80,8 +81,13 @@ function needsAttention(lauf: ShelfObject, incompleteSimulations: Set<string>): 
 }
 
 /** Reine Ableitung der Zaehler — getrennt vom Composable, damit sie testbar ist. */
-export function deriveLibraryCounts(snapshot: ShelfSnapshot | null): LibraryCounts {
-  if (!snapshot) return UNKNOWN
+export function deriveLibraryCounts(
+  snapshot: ShelfSnapshot | null,
+  personaSetCount: number | null = null,
+): LibraryCounts {
+  // Personasaetze kommen aus `GET /api/persona-sets`, nicht aus der Ablage
+  // (die alten Vorlagen-Zeilen `kind: 'personasatz'` zaehlen nicht mit).
+  if (!snapshot) return { ...UNKNOWN, personasaetze: personaSetCount }
   const missing = (...sources: ShelfSource[]): boolean => sources.some((s) => snapshot.unavailable.includes(s))
   const runs = laeufe(snapshot.objects)
 
@@ -95,7 +101,7 @@ export function deriveLibraryCounts(snapshot: ShelfSnapshot | null): LibraryCoun
     laeufe: missing('runs') ? null : runs.length,
     // Graphen sind nur Projekte OHNE Lauf — dafuer braucht die Zahl beide Quellen.
     graphen: missing('runs', 'projects') ? null : snapshot.objects.filter((o) => o.kind === 'graph').length,
-    personasaetze: missing('templates') ? null : snapshot.objects.filter((o) => o.kind === 'personasatz').length,
+    personasaetze: personaSetCount,
     laeuft: missing('runs')
       ? null
       : runs.filter((o) => {
@@ -134,20 +140,51 @@ export function useLibraryCounts() {
   // Ansichten, die den Stand selbst laden und im Shell-Store veroeffentlichen.
   const onShelf = computed(() => route.name === 'LibraryRuns' || route.name === 'ShelfObject')
 
-  const counts = computed(() => deriveLibraryCounts(shell.shelfSnapshot))
+  const counts = computed(() => deriveLibraryCounts(shell.shelfSnapshot, shell.personaSetCount))
 
-  /** Eine Quelle fehlt wirklich (nicht: die Persona-Bibliothek fehlt ohne Betreiber-Zugang by design). */
-  const loadFailed = computed(() =>
-    (shell.shelfSnapshot?.unavailable ?? []).some((s) => s !== 'templates' || operatorAccess.value),
+  /**
+   * Eine Quelle fehlt wirklich (nicht: die Persona-Bibliothek fehlt ohne
+   * Betreiber-Zugang by design) oder die Personasaetze liessen sich nicht laden.
+   */
+  const loadFailed = computed(
+    () =>
+      shell.personaSetCountFailed ||
+      (shell.shelfSnapshot?.unavailable ?? []).some((s) => s !== 'templates' || operatorAccess.value),
   )
 
   async function load(): Promise<void> {
+    await Promise.all([loadShelf(), loadPersonaSets()])
+  }
+
+  async function loadShelf(): Promise<void> {
     await shelf.reload()
     shell.shelfSnapshot = { objects: shelf.objects.value, unavailable: shelf.unavailableSources.value }
   }
 
+  async function loadPersonaSets(): Promise<void> {
+    try {
+      shell.personaSetCount = (await listPersonaSets()).count
+      shell.personaSetCountFailed = false
+    } catch {
+      shell.personaSetCount = null
+      shell.personaSetCountFailed = true
+    }
+  }
+
+  // Die Personasatz-Bibliothek laedt und veroeffentlicht den Stand selbst.
+  const onPersonaSets = computed(() => route.name === 'LibraryPersonaSets')
+  const setsPolling = usePolling(loadPersonaSets, COUNTS_POLL_MS)
+  watch(
+    onPersonaSets,
+    (on) => {
+      if (on) setsPolling.stop()
+      else void setsPolling.start({ immediate: true })
+    },
+    { immediate: true },
+  )
+
   // Auf der Bibliothek bzw. Ablage laedt die Ansicht und veroeffentlicht den Stand; sonst laden wir.
-  const polling = usePolling(load, COUNTS_POLL_MS)
+  const polling = usePolling(loadShelf, COUNTS_POLL_MS)
   watch(
     onShelf,
     (on) => {
@@ -158,7 +195,7 @@ export function useLibraryCounts() {
   )
 
   onListInvalidated(['projects', 'runs', 'reports'], () => {
-    if (!onShelf.value) void load()
+    if (!onShelf.value) void loadShelf()
   })
 
   const compareSimulationId = computed(() => latestSimulationId(shell.shelfSnapshot))

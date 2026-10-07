@@ -2814,7 +2814,53 @@
       "retry": "Try again",
       "library": {
         "empty": "No persona sets yet.",
-        "count": "{n} persona sets"
+        "count": "{n} persona sets",
+        "list": "Persona sets",
+        "new": "New persona set",
+        "searchLabel": "Search persona sets by name",
+        "searchPlaceholder": "Search names …",
+        "noMatches": "No persona set matches “{query}”.",
+        "matches": "Showing {n} of {total} persona sets",
+        "personasOne": "1 persona",
+        "personas": "{n} personas",
+        "stateEditable": "Editable",
+        "stateLocked": "Locked",
+        "usageNone": "Not used in any run yet",
+        "usageOne": "Used in 1 run",
+        "usage": "Used in {n} runs",
+        "updated": "Changed {date}",
+        "open": "Open",
+        "duplicate": "Duplicate",
+        "duplicateName": "{name} (copy)",
+        "delete": "Delete",
+        "deleteLockedReason": "Locked: a run was created from this persona set. It cannot be deleted, only duplicated.",
+        "importedNote": "Collection set “Importiert” (id pset_importiert): holds the personas carried over from the former template library.",
+        "tileActions": "Actions for {name}",
+        "create": {
+          "title": "New persona set",
+          "description": "An empty set. You add personas inside the set afterwards.",
+          "nameLabel": "Name",
+          "descriptionLabel": "Description (optional)",
+          "nameRequired": "Please enter a name.",
+          "nameTooLong": "The name may be at most {max} characters long.",
+          "descriptionTooLong": "The description may be at most {max} characters long.",
+          "submit": "Create",
+          "submitting": "Creating …",
+          "cancel": "Cancel"
+        },
+        "remove": {
+          "title": "Delete persona set?",
+          "body": "“{name}” will be deleted permanently. This cannot be undone.",
+          "confirm": "Delete permanently",
+          "cancel": "Cancel"
+        },
+        "messages": {
+          "created": "Persona set “{name}” created.",
+          "duplicated": "Persona set “{name}” duplicated.",
+          "deleted": "Persona set “{name}” deleted.",
+          "locked": "This persona set is locked because a run was created from it. It cannot be deleted, but it can be duplicated.",
+          "actionFailed": "The action failed: {error}"
+        }
       },
       "detail": {
         "title": "Persona set",

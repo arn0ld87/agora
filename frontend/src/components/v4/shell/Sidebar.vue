@@ -173,7 +173,9 @@ const onRunsSection = computed(
     shelfObjectKind.value === 'bericht',
 )
 
-const onActivitySection = computed(() => route.path === '/activity' || route.path.startsWith('/activity/'))
+const onPersonaSetsSection = computed(() => route.name === 'LibraryPersonaSets' || route.name === 'PersonaSet')
+
+const onActivitySection =computed(() => route.path === '/activity' || route.path.startsWith('/activity/'))
 
 /**
  * Seitenleiste laut Bauplan 3.1. Jeder Eintrag fuehrt auf eine Adresse der
@@ -181,8 +183,8 @@ const onActivitySection = computed(() => route.path === '/activity' || route.pat
  *  - Laeufe → Bibliothek → Laeufe; ein geoeffneter Lauf (`/simulations/…`)
  *    markiert „Laeufe“. Graphen → Graphen-Bibliothek, `/graphs/:projectId`
  *    markiert „Graphen“.
- *  - Personasaetze → bis Etappe 7 die Laeufe-Bibliothek; nie selbst als aktiv
- *    markiert (ausser auf der alten Personasatz-Objektansicht).
+ *  - Personasaetze → Personasatz-Bibliothek (Etappe 7); `/persona-sets/:setId`
+ *    und die alte Personasatz-Objektansicht markieren sie ebenfalls.
  *  - Laeuft gerade / Braucht dich → Laeufe mit `?view=running` bzw.
  *    `?view=attention`.
  *  - Vergleich → Vergleichsansicht, mit dem juengsten Lauf mit Simulation
@@ -196,7 +198,7 @@ const navGroups = computed<NavGroup[]>(() => [
     items: [
       { id: 'runs', glyph: '▶', label: t('sidebar.nav.runs'), to: { name: 'LibraryRuns' }, count: counts.value.laeufe, current: onRunsSection.value },
       { id: 'graphs', glyph: '◇', label: t('sidebar.nav.graphs'), to: { name: 'LibraryGraphs' }, count: counts.value.graphen, current: route.name === 'LibraryGraphs' || route.name === 'GraphLibraryDetail' || shelfObjectKind.value === 'graph' },
-      { id: 'personas', glyph: '◎', label: t('sidebar.nav.personas'), to: { name: 'LibraryRuns' }, count: counts.value.personasaetze, current: shelfObjectKind.value === 'personasatz' },
+      { id: 'personas', glyph: '◎', label: t('sidebar.nav.personas'), to: { name: 'LibraryPersonaSets' }, count: counts.value.personasaetze, current: onPersonaSetsSection.value || shelfObjectKind.value === 'personasatz' },
     ],
   },
   {

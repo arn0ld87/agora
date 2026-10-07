@@ -2814,7 +2814,53 @@
       "retry": "Erneut versuchen",
       "library": {
         "empty": "Noch keine Personasätze vorhanden.",
-        "count": "{n} Personasätze"
+        "count": "{n} Personasätze",
+        "list": "Personasätze",
+        "new": "Neuer Personasatz",
+        "searchLabel": "Personasätze nach Namen durchsuchen",
+        "searchPlaceholder": "Namen suchen …",
+        "noMatches": "Kein Personasatz passt zu „{query}“.",
+        "matches": "{n} von {total} Personasätzen angezeigt",
+        "personasOne": "1 Persona",
+        "personas": "{n} Personas",
+        "stateEditable": "Bearbeitbar",
+        "stateLocked": "Gesperrt",
+        "usageNone": "Noch in keinem Lauf verwendet",
+        "usageOne": "In 1 Lauf verwendet",
+        "usage": "In {n} Läufen verwendet",
+        "updated": "Geändert {date}",
+        "open": "Öffnen",
+        "duplicate": "Duplizieren",
+        "duplicateName": "{name} (Kopie)",
+        "delete": "Löschen",
+        "deleteLockedReason": "Gesperrt: Aus diesem Personasatz ist ein Lauf entstanden. Er lässt sich nicht löschen, nur duplizieren.",
+        "importedNote": "Sammelsatz „Importiert“ (Kennung pset_importiert): enthält die Personas, die aus der früheren Vorlagen-Bibliothek übernommen wurden.",
+        "tileActions": "Aktionen für {name}",
+        "create": {
+          "title": "Neuer Personasatz",
+          "description": "Ein leerer Satz. Personas fügst du danach im Satz hinzu.",
+          "nameLabel": "Name",
+          "descriptionLabel": "Beschreibung (optional)",
+          "nameRequired": "Bitte einen Namen eingeben.",
+          "nameTooLong": "Der Name darf höchstens {max} Zeichen lang sein.",
+          "descriptionTooLong": "Die Beschreibung darf höchstens {max} Zeichen lang sein.",
+          "submit": "Anlegen",
+          "submitting": "Wird angelegt …",
+          "cancel": "Abbrechen"
+        },
+        "remove": {
+          "title": "Personasatz löschen?",
+          "body": "„{name}“ wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.",
+          "confirm": "Endgültig löschen",
+          "cancel": "Abbrechen"
+        },
+        "messages": {
+          "created": "Personasatz „{name}“ angelegt.",
+          "duplicated": "Personasatz „{name}“ dupliziert.",
+          "deleted": "Personasatz „{name}“ gelöscht.",
+          "locked": "Dieser Personasatz ist gesperrt, weil ein Lauf daraus entstanden ist. Löschen ist nicht möglich, duplizieren schon.",
+          "actionFailed": "Die Aktion ist fehlgeschlagen: {error}"
+        }
       },
       "detail": {
         "title": "Personasatz",

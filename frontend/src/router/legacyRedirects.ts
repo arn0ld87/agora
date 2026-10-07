@@ -25,7 +25,7 @@ function withoutFilter(query: LocationQuery): LocationQuery {
 
 /**
  * `/ablage?filter=…` → Bibliothek bzw. Aktivitaet.
- * Personasaetze haben bis Etappe 7 keine eigene Ansicht und fuehren auf die Laeufe.
+ * `?filter=personasatz` fuehrt seit Etappe 7 auf die Personasatz-Bibliothek.
  */
 export function shelfRedirect(to: { query: LocationQuery }): RouteLocationAsRelativeGeneric {
   const filter = typeof to.query.filter === 'string' ? to.query.filter : ''
@@ -37,8 +37,11 @@ export function shelfRedirect(to: { query: LocationQuery }): RouteLocationAsRela
       return { name: 'LibraryGraphs', query }
     case 'jobs':
       return { name: 'ActivityJobs', query }
+    case 'personasatz':
+      // Etappe 7 (#1807): die Personasatz-Bibliothek.
+      return { name: 'LibraryPersonaSets', query }
     default:
-      // alle, lauf, personasatz (bis Etappe 7) und unbekannte Werte
+      // alle, lauf und unbekannte Werte
       return { name: 'LibraryRuns', query }
   }
 }
