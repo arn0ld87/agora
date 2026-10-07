@@ -71,11 +71,21 @@ const shellProps = computed(() => (withShell.value ? { demoFrame: !showStaticPre
   <component :is="withShell ? AppShell : Passthrough" v-bind="shellProps">
     <router-view v-slot="{ Component }" :route="shownRoute">
       <!-- :duration ist Pflicht, nicht Kosmetik. Ohne explizite Dauer wartet Vue
-           bei mode="out-in" auf ein transitionend-Event. In einem Hintergrund-Tab
-           laesst Chrome CSS-Transitions gar nicht erst laufen, das Event bleibt
-           aus und die leave-Phase endet nie: die URL wechselt, der alte View
-           bleibt stehen. Mit :duration nutzt Vue einen Timer statt des Events. -->
-      <transition name="fade" mode="out-in" :duration="TRANSITION_DURATION">
+           auf ein transitionend-Event. In einem Hintergrund-Tab laesst Chrome
+           CSS-Transitions gar nicht erst laufen, das Event bleibt aus und die
+           leave-Phase endet nie: die URL wechselt, der alte View bleibt stehen.
+           Mit :duration nutzt Vue einen Timer statt des Events.
+           Bewusst KEIN mode="out-in": Beim Verlassen einer Fensterroute
+           (Startdialog, Einstellungen; meta.windowOverBackground) ruft Vue in
+           afterLeave instance.update() und patcht dabei den Mehrfach-Root-Baum
+           der App; prevTree.el ist null und es wirft "Cannot read properties of
+           null (reading 'parentNode')". Die Transition haengt im Leave-Zustand:
+           die URL wechselt, der neue View mountet nie. "Graph bauen" aus dem
+           Startdialog endete so in einer leeren Seite, ohne dass die Pipeline
+           auch nur einen API-Call startete. Ohne mode blenden alter und neuer
+           View kurz ueberlappend ueber (Kreuzblende statt nacheinander); die
+           App-Huelle bleibt stehen, nur der Inhaltsbereich wechselt. -->
+      <transition name="fade" :duration="TRANSITION_DURATION">
         <DemoPreviewStaticView v-if="showStaticPreview" />
         <component :is="Component" v-else />
       </transition>
