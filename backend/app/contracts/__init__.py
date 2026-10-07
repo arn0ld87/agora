@@ -70,6 +70,18 @@ from .graph_diff import (
     NodePropertyShift,
 )
 from .persona_entity_context import EntityRelationship, PersonaEntityContext
+from .persona_set_contract import (
+    PersonaOrigin,
+    PersonaSetCreate,
+    PersonaSetDuplicate,
+    PersonaSetEntry,
+    PersonaSetEntryCreate,
+    PersonaSetEntryUpdate,
+    PersonaSetProfile,
+    PersonaSetRecord,
+    PersonaSetSummary,
+    PersonaSetUpdate,
+)
 from .post_event_contract import (
     Platform,
     PostCreatedEvent,
@@ -263,6 +275,16 @@ __all__ = [
     "SimRoundSummary",
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
+    "PersonaOrigin",
+    "PersonaSetCreate",
+    "PersonaSetDuplicate",
+    "PersonaSetEntry",
+    "PersonaSetEntryCreate",
+    "PersonaSetEntryUpdate",
+    "PersonaSetProfile",
+    "PersonaSetRecord",
+    "PersonaSetSummary",
+    "PersonaSetUpdate",
     "PersonaTargetContract",
     "PrepareMessageKey",
     "PrepareStatusResponse",
