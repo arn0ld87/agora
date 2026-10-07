@@ -53,6 +53,30 @@ def sanitize_label(value: Any) -> Optional[str]:
     return normalized
 
 
+# Herkunftsmerkmal (ADR-0022 §1): ``origin`` und ``origin_changed_at`` an
+# Knoten und Kanten. Fehlt ``origin``, gilt das Element als extrahiert
+# (Bestand); Altgraphen werden nicht nachgerüstet.
+ORIGIN_MANUAL = "manual"
+ORIGIN_EDITED = "edited"
+_KNOWN_ORIGINS = frozenset({ORIGIN_MANUAL, ORIGIN_EDITED})
+
+
+def provenance_dict(props: Dict[str, Any], *, episode_count: int) -> Dict[str, Any]:
+    """Herkunftsobjekt (Form von ``GraphProvenanceInfo``) aus Neo4j-Properties.
+
+    Ein unbekannter ``origin``-Wert wird wie ein fehlender behandelt, damit
+    ein beschädigter Wert die Leseantwort nicht bricht.
+    """
+    origin = props.get("origin")
+    if origin not in _KNOWN_ORIGINS:
+        origin = None
+    return {
+        "origin": origin,
+        "changed_at": props.get("origin_changed_at") if origin else None,
+        "episode_count": episode_count,
+    }
+
+
 def _safe_attributes(props: Dict[str, Any]) -> Dict[str, Any]:
     """Robuster JSON-Parser für ``attributes_json`` (verworfen aus props)."""
     attrs_json = props.pop("attributes_json", "{}")
@@ -75,9 +99,11 @@ def node_to_dict(node: Any, labels: List[str]) -> Dict[str, Any]:
         "uuid": props.get("uuid", ""),
         "name": props.get("name", ""),
         "labels": [lbl for lbl in labels if lbl != "Entity"] if labels else [],
+        "entity_type": props.get("entity_type"),
         "summary": props.get("summary", ""),
         "attributes": attributes,
         "created_at": props.get("created_at"),
+        "provenance": provenance_dict(props, episode_count=0),
     }
 
 
@@ -108,11 +134,15 @@ def edge_to_dict(rel: Any, source_uuid: str, target_uuid: str) -> Dict[str, Any]
         "valid_to_round": props.get("valid_to_round"),
         "reinforced_count": props.get("reinforced_count", 1),
         "episode_ids": episode_ids,
+        "provenance": provenance_dict(props, episode_count=len(episode_ids or [])),
     }
 
 
 __all__ = [
     "node_to_dict",
     "edge_to_dict",
+    "provenance_dict",
     "sanitize_label",
+    "ORIGIN_MANUAL",
+    "ORIGIN_EDITED",
 ]

@@ -1,0 +1,29 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-entity-merge.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Quell-Entit\u00e4ten in eine Ziel-Entit\u00e4t zusammenf\u00fchren.",
+  "properties": {
+    "source_uuids": {
+      "items": {
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Source Uuids",
+      "type": "array"
+    },
+    "target_uuid": {
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "title": "Target Uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "target_uuid",
+    "source_uuids"
+  ],
+  "title": "EntityMerge",
+  "type": "object"
+}

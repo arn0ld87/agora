@@ -348,6 +348,22 @@
           "title": "Evidence Id",
           "type": "string"
         },
+        "graph_origin": {
+          "anyOf": [
+            {
+              "enum": [
+                "manual",
+                "edited"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Origin"
+        },
         "origin_node_uuids": {
           "anyOf": [
             {

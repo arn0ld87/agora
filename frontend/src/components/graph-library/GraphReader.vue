@@ -3,7 +3,9 @@
  * GraphReader (#1797, Etappe 2): lesende Graph-Ansicht fuer Lauf und Bibliothek.
  * Dreispaltig nach Bauplan 4.3: links Suche, Typfilter und Entitaetenliste,
  * Mitte Netz oder Tabelle, rechts Detail der Auswahl. Unter 1024 px stapelt
- * sich alles in dieser Reihenfolge einspaltig. Bearbeiten ist Etappe 8.
+ * sich alles in dieser Reihenfolge einspaltig. Das Bearbeiten hat Etappe 8
+ * (`GraphEditView`); dieser Leser zeigt nur noch die Herkunftsmarken, damit
+ * eine Handkante auch im Lauf erkennbar bleibt (ADR-0022 §5).
  *
  * `?entity=` (uuid oder Name) und `?edge=` (uuid) waehlen und zentrieren das Ziel.
  */
@@ -20,6 +22,8 @@ import {
   type GraphData,
   type ReaderModel,
 } from '@/composables/graph-library/graphReaderModel'
+import GraphOriginMark from '@/components/graph-edit/GraphOriginMark.vue'
+import { originOf } from '@/components/graph-edit/graphOrigin'
 import GraphReaderDetail from './GraphReaderDetail.vue'
 import GraphReaderTable, { type TableTab } from './GraphReaderTable.vue'
 
@@ -272,6 +276,7 @@ const viewOptions = ['net', 'table'] as const
                 <span aria-hidden="true" class="gr__mark">{{ entity.id === selectedEntityId ? '›' : '' }}</span>
                 <span aria-hidden="true" class="gr__glyph">{{ glyphByType.get(entity.type) }}</span>
                 <span class="gr__itemname">{{ entity.name }}</span>
+                <GraphOriginMark v-if="originOf(entity.raw)" :origin="originOf(entity.raw)" />
               </button>
             </li>
           </ul>
@@ -316,6 +321,7 @@ const viewOptions = ['net', 'table'] as const
           :types="model.types"
           :selected-entity-id="selectedEntityId"
           :selected-edge-id="selectedEdgeId"
+          show-origin
           @select-entity="(id: string) => selectEntity(id)"
           @select-edge="(id: string) => selectEdge(id)"
         />

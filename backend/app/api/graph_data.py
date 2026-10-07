@@ -14,6 +14,8 @@ from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.graph_diff_helpers import build_pydantic_graph_diff
 from ..utils.scopes import require_scope
 from ..services.graph_export import GraphExportService
+from ..services.graph_lock import GraphLockedError, ensure_graph_unlocked
+from .graph_guard import graph_locked_response
 
 def _task_visible(metadata: object) -> bool:
     """Tasks leben im Prozessspeicher, ohne Workspace. Ein Supabase-Nutzer
@@ -152,6 +154,13 @@ def delete_graph(graph_id: str):
     """Delete graph"""
     if not validate_graph_id(graph_id):
         return json_error(ApiErrorCode.INVALID_ID, status=400)
+
+    # ADR-0022 §6: ein Graph, den eine Simulation verwendet, ändert sich
+    # nicht mehr, auch nicht durch Löschen.
+    try:
+        ensure_graph_unlocked(graph_id)
+    except GraphLockedError as exc:
+        return graph_locked_response(exc)
 
     builder = get_container().graph_builder()
     builder.delete_graph(graph_id)

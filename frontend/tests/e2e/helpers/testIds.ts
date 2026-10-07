@@ -18,6 +18,7 @@
  */
 export {
   AiModelPickerTestId,
+  GraphEditTestId,
   LlmRoutingTestId,
   RunReportTestId,
 } from '../../../src/contracts/testIds'

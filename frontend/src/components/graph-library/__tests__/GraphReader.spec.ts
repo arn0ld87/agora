@@ -148,6 +148,23 @@ describe('GraphReader', () => {
     expect(focusSpy).not.toHaveBeenCalled()
   })
 
+  it('zeigt die Herkunftsmarke auch im Lauf, ohne Schreibwege anzubieten', async () => {
+    const data = graphFixture()
+    data.nodes[0]!.provenance = { origin: 'manual', changed_at: '2026-10-07', episode_count: 0 }
+    data.edges[0]!.provenance = { origin: 'edited', changed_at: '2026-10-07', episode_count: 2 }
+    const router = makeRouter()
+    await router.push('/graphs/proj_1')
+    await router.isReady()
+    const wrapper = mount(GraphReader, {
+      props: { model: buildReaderModel(data), graphData: data },
+      global: { plugins: [makeI18n(), router], stubs: { GraphCanvas: CanvasStub } },
+    })
+    await flushPromises()
+    // Der Lauf liest nur; die Marke muss trotzdem stehen (ADR-0022 §5).
+    expect(wrapper.find('[data-entity-id="n1"] [data-testid="graph-edit-origin-manual"]').exists()).toBe(true)
+    expect(wrapper.find('[data-entity-id="n2"] [data-testid="graph-edit-origin-manual"]').exists()).toBe(false)
+  })
+
   it('bietet weder Bearbeiten noch Löschen noch Zusammenführen an', async () => {
     const wrapper = await mountReader({ entity: 'n1' })
     const labels = wrapper.findAll('button').map((b) => b.text())

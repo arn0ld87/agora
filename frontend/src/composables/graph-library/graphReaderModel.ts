@@ -13,11 +13,28 @@ import { z } from 'zod'
 
 const TimestampSchema = z.union([z.string(), z.number()]).nullish()
 
+/**
+ * Herkunftsmerkmal (#1808, ADR-0022) in der Leseantwort. Optional: Altgraphen
+ * und Antworten ohne Feld bleiben gueltig; `origin: null` heisst „extrahiert“.
+ * Der Zeitpunkt ist hier locker gelesen (Text oder Zahl), die strenge Form
+ * steht in `contracts/graphEditContract`.
+ */
+export const GraphProvenanceSchema = z
+  .object({
+    origin: z.enum(['manual', 'edited']).nullish(),
+    changed_at: TimestampSchema,
+    episode_count: z.number().int().nonnegative().nullish(),
+  })
+  .passthrough()
+export type GraphProvenance = z.infer<typeof GraphProvenanceSchema>
+
 export const GraphNodeSchema = z
   .object({
     uuid: z.string().min(1),
     name: z.string().nullish(),
     labels: z.array(z.string()).nullish(),
+    entity_type: z.string().nullish(),
+    provenance: GraphProvenanceSchema.nullish(),
     summary: z.string().nullish(),
     attributes: z.record(z.string(), z.unknown()).nullish(),
     created_at: TimestampSchema,
@@ -34,6 +51,7 @@ export const GraphEdgeSchema = z
     source_node_name: z.string().nullish(),
     target_node_name: z.string().nullish(),
     episode_ids: z.array(z.unknown()).nullish(),
+    provenance: GraphProvenanceSchema.nullish(),
     created_at: TimestampSchema,
   })
   .passthrough()
@@ -113,13 +131,17 @@ function stamp(value: string | number | null | undefined): string | null {
 }
 
 function aliasesOf(attributes: Record<string, unknown> | null | undefined): string[] {
-  const raw = attributes?.['aliases'] ?? attributes?.['alias']
+  const raw = attributes?.['aliases'] ?? attributes?.['alias'] ?? attributes?.['_agora_aliases']
   if (Array.isArray(raw)) return raw.filter((a): a is string => typeof a === 'string' && a.length > 0)
   if (typeof raw === 'string' && raw.length > 0) return [raw]
   return []
 }
 
-export function typeOfNode(labels: readonly string[] | null | undefined): string {
+export function typeOfNode(
+  labels?: readonly string[] | null,
+  entityType?: string | null,
+): string {
+  if (entityType && entityType.trim()) return entityType.trim()
   return labels?.find((label) => label !== 'Entity') || 'Entity'
 }
 
@@ -150,7 +172,7 @@ export function buildReaderModel(data: GraphData): ReaderModel {
   const entities: ReaderEntity[] = data.nodes.map((node) => ({
     id: node.uuid,
     name: node.name || node.uuid,
-    type: typeOfNode(node.labels),
+    type: typeOfNode(node.labels, (node as { entity_type?: string | null }).entity_type),
     summary: node.summary || '',
     aliases: aliasesOf(node.attributes),
     createdAt: stamp(node.created_at),

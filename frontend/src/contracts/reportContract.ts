@@ -118,6 +118,8 @@ const EvidenceSourceSchema = z.object({
   // ADR-0002 Anker 3 (Sub-Slice M11.7b). Default "inferred": unbekannte
   // Herkunft ist abgeleitet, nicht belegt. Spiegelt den Backend-Default.
   source_kind: EvidenceSourceKindSchema.default("inferred"),
+  // ADR-0022: Handarbeit bleibt Graph-Evidence, niemals ein Dokumentfakt.
+  graph_origin: z.enum(["manual", "edited"]).nullable().optional(),
   persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
   // Issue #1778 (Schritt 1.2): Stimme — Schlüssel der Persona, von der der
   // Beleg stammt ("agent:<agent_id>"). Null bei Belegen ohne Persona
@@ -138,6 +140,8 @@ const validateEvidenceSource = (
     type: string;
     source_kind: string;
     persona_stakeholder_group?: string | null;
+    graph_origin?: "manual" | "edited" | null;
+    source_id_anchor?: string | null;
   },
   ctx: z.RefinementCtx,
 ) => {
@@ -147,6 +151,21 @@ const validateEvidenceSource = (
       code: z.ZodIssueCode.custom,
       message: `EvidenceType '${value.type}' nur im audit_trail erlaubt, nicht in evidence.`,
     });
+  }
+  // Spiegelt _reject_graph_origin_as_document_fact im Backend (ADR-0022).
+  if (value.graph_origin != null) {
+    if (value.source_kind !== "graph_relation") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "graph_origin verlangt source_kind=graph_relation.",
+      });
+    }
+    if (value.source_id_anchor?.startsWith("seed_doc:")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Handarbeit im Graphen darf keinen seed_doc:-Anker tragen.",
+      });
+    }
   }
   // ADR-0002 Anker 3 (Sub-Slice M11.7b): agent_quote braucht Stakeholder-Gruppe.
   if (value.source_kind === "agent_quote" && !value.persona_stakeholder_group) {

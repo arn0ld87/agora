@@ -29,6 +29,7 @@ from app.services.graph.graph_dtos import (
     NodeInfo,
     PanoramaResult,
     SearchResult,
+    origin_marker,
     provenance_at,
 )
 import app.services.graph.graph_reader as _reader
@@ -203,9 +204,7 @@ def insight_forge(
         for index, fact in enumerate(search_result.facts):
             if fact not in seen_facts:
                 all_facts.append(fact)
-                all_fact_provenance.append(
-                    provenance_at(search_result.fact_provenance, index)
-                )
+                all_fact_provenance.append(provenance_at(search_result.fact_provenance, index))
                 seen_facts.add(fact)
         all_edges.extend(search_result.edges)
 
@@ -221,9 +220,7 @@ def insight_forge(
     for index, fact in enumerate(main_search.facts):
         if fact not in seen_facts:
             all_facts.append(fact)
-            all_fact_provenance.append(
-                provenance_at(main_search.fact_provenance, index)
-            )
+            all_fact_provenance.append(provenance_at(main_search.fact_provenance, index))
             seen_facts.add(fact)
 
     result.semantic_facts = all_facts
@@ -256,9 +253,7 @@ def insight_forge(
                     (la for la in node.labels if la not in ["Entity", "Node"]),
                     "Entity",
                 )
-                related_facts = [
-                    f for f in all_facts if node.name.lower() in f.lower()
-                ]
+                related_facts = [f for f in all_facts if node.name.lower() in f.lower()]
                 entity_insights.append(
                     {
                         "uuid": node.uuid,
@@ -266,6 +261,10 @@ def insight_forge(
                         "type": entity_type,
                         "summary": node.summary,
                         "related_facts": related_facts,
+                        # ADR-0022 §2: eine von Hand angelegte oder bearbeitete
+                        # Entität hat eine von Hand eingegebene Summary. Ohne die
+                        # Marke erschiene sie wie ein extrahierter Knoten.
+                        "graph_origin": node.graph_origin,
                     }
                 )
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
@@ -277,6 +276,8 @@ def insight_forge(
 
     # Step 4: Build relationship chains
     relationship_chains: List[str] = []
+    chain_provenance: List[Optional[Dict[str, Any]]] = []
+    seen_chains: set[str] = set()
     for edge_data in all_edges:
         if isinstance(edge_data, dict):
             source_uuid = edge_data.get("source_node_uuid", "")
@@ -284,19 +285,22 @@ def insight_forge(
             relation_name = edge_data.get("name", "")
 
             source_name = (
-                node_map.get(source_uuid, NodeInfo("", "", [], "", {})).name
-                or source_uuid[:8]
+                node_map.get(source_uuid, NodeInfo("", "", [], "", {})).name or source_uuid[:8]
             )
             target_name = (
-                node_map.get(target_uuid, NodeInfo("", "", [], "", {})).name
-                or target_uuid[:8]
+                node_map.get(target_uuid, NodeInfo("", "", [], "", {})).name or target_uuid[:8]
             )
 
             chain = f"{source_name} --[{relation_name}]--> {target_name}"
-            if chain not in relationship_chains:
+            if chain not in seen_chains:
+                seen_chains.add(chain)
                 relationship_chains.append(chain)
+                # Die Kette ist die Darstellung dieser einen Kante und erbt
+                # deren Herkunft (ADR-0022 §2).
+                chain_provenance.append(origin_marker(edge_data))
 
     result.relationship_chains = relationship_chains
+    result.relationship_chains_provenance = chain_provenance
     result.total_relationships = len(relationship_chains)
 
     logger.info(
@@ -366,11 +370,16 @@ def panorama_search(
         if not edge.fact:
             continue
 
-        provenance = (
-            {"document_id": edge.document_id, "chunk_id": edge.chunk_id}
-            if edge.document_id is not None
-            else None
-        )
+        # ADR-0022 §2: die Marke geht dem Dokumentanker vor. Eine Handeingabe
+        # hat keine Stelle im Dokument, und der geänderte Text einer
+        # bearbeiteten Beziehung stand dort nie.
+        provenance: Optional[Dict[str, Any]]
+        if edge.graph_origin is not None:
+            provenance = {"graph_origin": edge.graph_origin}
+        elif edge.document_id is not None:
+            provenance = {"document_id": edge.document_id, "chunk_id": edge.chunk_id}
+        else:
+            provenance = None
         is_historical = edge.is_expired or edge.is_invalid
 
         if is_historical:
@@ -408,9 +417,7 @@ def panorama_search(
     result.active_facts = [fact for fact, _ in top_active]
     result.active_facts_provenance = [provenance for _, provenance in top_active]
     result.historical_facts = [fact for fact, _ in top_historical]
-    result.historical_facts_provenance = [
-        provenance for _, provenance in top_historical
-    ]
+    result.historical_facts_provenance = [provenance for _, provenance in top_historical]
     result.active_count = len(active_entries)
     result.historical_count = len(historical_entries)
 

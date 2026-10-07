@@ -85,7 +85,9 @@ useShellBreadcrumbs(crumbs)
       :project="project"
       :model="model"
       :graph-data="graphData"
+      editable
       @retry="reload"
+      @changed="reload"
     />
 
     <section class="gld__runs" :aria-label="t('views.graphLibrary.detail.runsTitle')">

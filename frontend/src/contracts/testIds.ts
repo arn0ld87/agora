@@ -218,3 +218,72 @@ export const PersonaSetTestId = {
 } as const
 
 export type PersonaSetTestId = (typeof PersonaSetTestId)[keyof typeof PersonaSetTestId]
+
+/**
+ * GraphEditTestId — Selektoren der bearbeitbaren Graph-Ansicht (Etappe 8,
+ * #1808, ADR-0022).
+ *
+ * Zwei Klassen, weil das Projekt ein Accessibility-Gate hat: die Herkunfts-
+ * marke traegt Text UND Symbol (`markManual`/`markEdited`), eine Sperre ist
+ * ein sichtbares Band mit Begruendung (`lockBanner`), nicht nur ein
+ * deaktivierter Knopf. Die Fehlerbender (`error*`) tragen ihre Art im
+ * Test-Id, damit 409 und 503 im Test unterscheidbar bleiben.
+ */
+export const GraphEditTestId = {
+  root: 'graph-edit',
+  lockBanner: 'graph-edit-lock',
+  lockBadge: 'graph-edit-lock-badge',
+  lockUsedBy: 'graph-edit-lock-used-by',
+  // Ausweg aus der Sperre: der Kopierauftrag laeuft als Hintergrundjob, deshalb
+  // getrennte Ids fuer Zustand (`duplicateState`, mit `data-status`) und Ziel
+  // (`duplicateOpen`) — ein `completed` ohne Ziel waere eine leere Behauptung.
+  duplicateName: 'graph-edit-duplicate-name',
+  duplicateStart: 'graph-edit-duplicate-start',
+  duplicateState: 'graph-edit-duplicate-state',
+  duplicateOpen: 'graph-edit-duplicate-open',
+  duplicateError: 'graph-edit-duplicate-error',
+  error: 'graph-edit-error',
+  errorLocked: 'graph-edit-error-locked',
+  errorConflict: 'graph-edit-error-conflict',
+  errorMigrationRunning: 'graph-edit-error-migration-running',
+  errorEmbeddingFailed: 'graph-edit-error-embedding-failed',
+  errorInvalidInput: 'graph-edit-error-invalid-input',
+  errorOther: 'graph-edit-error-other',
+  originMark: 'graph-edit-origin',
+  markManual: 'graph-edit-origin-manual',
+  markEdited: 'graph-edit-origin-edited',
+  markExtracted: 'graph-edit-origin-extracted',
+  toolbar: 'graph-edit-toolbar',
+  createEntity: 'graph-edit-create-entity',
+  createRelation: 'graph-edit-create-relation',
+  mergeOpen: 'graph-edit-merge-open',
+  notice: 'graph-edit-notice',
+  viewToggle: 'graph-edit-view-toggle',
+  viewNet: 'graph-edit-view-net',
+  viewTable: 'graph-edit-view-table',
+  net: 'graph-edit-net',
+  table: 'graph-edit-table',
+  entityForm: 'graph-edit-entity-form',
+  entityName: 'graph-edit-entity-name',
+  entityType: 'graph-edit-entity-type',
+  entitySummary: 'graph-edit-entity-summary',
+  entityAliases: 'graph-edit-entity-aliases',
+  entitySubmit: 'graph-edit-entity-submit',
+  entityCancel: 'graph-edit-entity-cancel',
+  relationForm: 'graph-edit-relation-form',
+  relationSource: 'graph-edit-relation-source',
+  relationTarget: 'graph-edit-relation-target',
+  relationName: 'graph-edit-relation-name',
+  relationFact: 'graph-edit-relation-fact',
+  relationSubmit: 'graph-edit-relation-submit',
+  relationCancel: 'graph-edit-relation-cancel',
+  entityDelete: 'graph-edit-entity-delete',
+  entityDeleteConfirm: 'graph-edit-entity-delete-confirm',
+  relationDelete: 'graph-edit-relation-delete',
+  relationDeleteConfirm: 'graph-edit-relation-delete-confirm',
+  mergePanel: 'graph-edit-merge',
+  mergeSource: 'graph-edit-merge-source',
+  mergeSubmit: 'graph-edit-merge-submit',
+} as const
+
+export type GraphEditTestId = (typeof GraphEditTestId)[keyof typeof GraphEditTestId]

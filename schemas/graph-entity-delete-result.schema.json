@@ -1,0 +1,24 @@
+{
+  "$id": "https://alexle135.de/schemas/graph-entity-delete-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ergebnis eines L\u00f6schens einer Entit\u00e4t samt ihrer Beziehungen.",
+  "properties": {
+    "removed_relation_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Removed Relation Count",
+      "type": "integer"
+    },
+    "uuid": {
+      "minLength": 1,
+      "title": "Uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "uuid"
+  ],
+  "title": "EntityDeleteResult",
+  "type": "object"
+}

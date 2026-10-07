@@ -27,6 +27,49 @@ def provenance_at(
     return None
 
 
+#: Zulaessige Werte des Herkunftsmerkmals eines Graph-Elements (ADR-0022 §1).
+#: Gespiegelt in ``app.storage.neo4j_mappings._KNOWN_ORIGINS`` und
+#: ``app.contracts.graph_edit_contract.GraphOrigin``. Ein unbekannter Wert gilt
+#: wie ein fehlender: er erfindet keine Handarbeit und bricht die Leseantwort
+#: nicht.
+KNOWN_GRAPH_ORIGINS = frozenset({"manual", "edited"})
+
+
+def graph_origin_of(item: Dict[str, Any]) -> Optional[str]:
+    """Herkunftsmarke eines Knotens oder einer Kante — oder ``None``.
+
+    Drei Formen, weil drei Leser unterschiedliche Shapes sehen: die
+    Hybrid-Suche liefert rohe Neo4j-Properties mit ``origin`` auf oberster
+    Ebene, ``get_all_edges``/``get_all_nodes`` die Form von
+    ``edge_to_dict``/``node_to_dict`` mit ``provenance.origin``, und die
+    Suchfunktionen projizieren die Marke bereits als ``graph_origin`` in ihr
+    Ergebnis.
+    """
+    provenance = item.get("provenance")
+    candidates = (
+        item.get("graph_origin"),
+        item.get("origin"),
+        provenance.get("origin") if isinstance(provenance, dict) else None,
+    )
+    for candidate in candidates:
+        if candidate in KNOWN_GRAPH_ORIGINS:
+            return str(candidate)
+    return None
+
+
+def origin_marker(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Proveniance-Platzhalter eines von Hand erzeugten Elements (ADR-0022 §2).
+
+    Der Platzhalter traegt die Herkunftsmarke statt eines Dokumentankers: eine
+    Handeingabe hat keine Stelle im Dokument, und der geaenderte Text einer
+    bearbeiteten Beziehung stand dort nie. Fuer extrahierte Elemente — auch
+    fuer Altgraphen ohne Merkmal — kommt ``None`` zurueck, damit deren
+    Payload unveraendert bleibt.
+    """
+    origin = graph_origin_of(item)
+    return {"graph_origin": origin} if origin is not None else None
+
+
 @dataclass
 class SearchResult:
     """Search Result"""
@@ -92,14 +135,24 @@ class NodeInfo:
     summary: str
     attributes: Dict[str, Any]
 
+    # ADR-0022 §1: Herkunftsmarke eines von Hand angelegten oder bearbeiteten
+    # Elements. Ihre Summary ist von Hand eingegebener Text und kein
+    # Dokumentfakt. ``None`` bei extrahierten Elementen (Bestand).
+    graph_origin: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "uuid": self.uuid,
             "name": self.name,
             "labels": self.labels,
             "summary": self.summary,
             "attributes": self.attributes
         }
+        # Nur bei tatsaechlicher Handarbeit — extrahierte Knoten liefern
+        # denselben Payload wie vor ADR-0022.
+        if self.graph_origin is not None:
+            payload["graph_origin"] = self.graph_origin
+        return payload
 
     def to_text(self) -> str:
         """Convert to text format"""
@@ -127,6 +180,11 @@ class EdgeInfo:
     # die Episode keinem Dokument zugeordnet werden konnte.
     document_id: Optional[str] = None
     chunk_id: Optional[int] = None
+    # ADR-0022 §1/§2: Herkunftsmarke eines von Hand angelegten oder
+    # bearbeiteten Elements. Sie ersetzt den Dokumentanker: der geaenderte
+    # Text einer bearbeiteten Beziehung stand nie im Dokument. ``None`` bei
+    # extrahierten Beziehungen (Bestand).
+    graph_origin: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -145,6 +203,8 @@ class EdgeInfo:
         if self.document_id is not None:
             payload["document_id"] = self.document_id
             payload["chunk_id"] = self.chunk_id
+        if self.graph_origin is not None:
+            payload["graph_origin"] = self.graph_origin
         return payload
 
     def to_text(self, include_temporal: bool = False) -> str:
@@ -199,6 +259,14 @@ class InsightForgeResult:
         default_factory=list
     )
 
+    # Positionsparallel zu ``relationship_chains``. Eine Kette ist die
+    # Darstellung einer Kante und erbt deren Herkunft — sonst verliehe die
+    # Darstellung einem von Hand angelegten Satz den Anker der extrahierten
+    # Kante, aus der er entstanden ist (ADR-0022 §2).
+    relationship_chains_provenance: List[Optional[Dict[str, Any]]] = field(
+        default_factory=list
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "query": self.query,
@@ -213,6 +281,8 @@ class InsightForgeResult:
         }
         if any(self.semantic_facts_provenance):
             payload["semantic_facts_provenance"] = self.semantic_facts_provenance
+        if any(self.relationship_chains_provenance):
+            payload["relationship_chains_provenance"] = self.relationship_chains_provenance
         return payload
 
     def to_text(self) -> str:

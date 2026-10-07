@@ -26,6 +26,15 @@ import {
 } from './helpers/accessibility';
 import { checkTabOrder } from './helpers/tabOrder';
 import { LlmRoutingTestId } from './helpers/testIds';
+import { GraphEditTestId } from './helpers/testIds';
+import { assertLockStateIsVisibleAndNamesWayOut } from './helpers/accessibility';
+import {
+  ORIGIN_FIXTURE_EDGE_IDS,
+  ORIGIN_FIXTURE_NODE_IDS,
+  assertOriginMarkIsTextPlusSymbol,
+  assertOriginStandsAtElement,
+  stubGraphDataWithOrigin,
+} from './helpers/graphEdit';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
 import { triggerGraphBuild, pollGraphReady } from './helpers/graph';
@@ -438,6 +447,130 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
 
     test('Graph der Bibliothek passes accessibility gates', async ({ page }) => {
       await checkAccessibilityGate(page, `/graphs/${projectId}`);
+    });
+  });
+
+  // Etappe 8 (#1808, ADR-0022): der Graph-Leser MIT Bearbeitungsspalte.
+  // Der obige Lauf deckt Struktur, Fokus und Kontrast ab, sagt aber nichts
+  // darueber, dass eine Handaenderung als solche erkennbar ist und der
+  // Sperrzustand einen bedienbaren Ausweg nennt — genau die beiden Zusagen aus
+  // ADR-0022 §5 und §6. Beide sind im Bestand unsichtbar: sie fallen nur dann
+  // auf, wenn ein Element wirklich `origin: manual` traegt und wirklich
+  // gesperrt ist.
+  test.describe('Graph mit Bearbeitungsspalte (Etappe 8, #1808)', () => {
+    let editProjectId = '';
+    let editGraphId = '';
+    let editSimulationId = '';
+
+    test.beforeAll(async () => {
+      // Wie im Block darueber: der Build im Stub-Modus braucht Zeit, der
+      // Playwright-Default von 30 s gilt fuer beforeAll-Hooks nicht.
+      test.setTimeout(180_000);
+
+      const baseURL = process.env.AGORA_E2E_BASE_URL ?? 'http://127.0.0.1:80';
+      const headers = authHeader();
+      const apiCtx = await request.newContext({ baseURL });
+      try {
+        await assertStubModeActive(apiCtx, baseURL);
+
+        const ontologyData = await uploadMarkdown(
+          apiCtx,
+          A11Y_SMOKE_MARKDOWN_BODY,
+          'e2e-golden-gate-a11y-graph-edit.md',
+          baseURL,
+          headers,
+        );
+        editProjectId = ontologyData.project_id as string;
+        if (!editProjectId) {
+          throw new Error(`project_id fehlt in Ontology-Response: ${JSON.stringify(ontologyData)}`);
+        }
+
+        const { task_id } = await triggerGraphBuild(apiCtx, editProjectId, baseURL, headers);
+        const taskResult = await pollGraphReady(apiCtx, task_id, baseURL, headers);
+        const builtGraphId = (taskResult?.result as Record<string, unknown> | null)?.graph_id as
+          | string
+          | undefined;
+        if (!builtGraphId) {
+          throw new Error(`graph_id fehlt im Task-Result: ${JSON.stringify(taskResult)}`);
+        }
+        editGraphId = builtGraphId;
+
+        // Eine Simulation auf genau diesem Projekt — nur so ist der Graph nach
+        // der abgeleiteten Sperre (ADR-0022 §6) gesperrt und der Sperrfall
+        // ueberhaupt pruefbar. Ohne sie waere der Graph bearbeitbar und das
+        // Gate pruefte einen Zustand, den es nicht gibt.
+        const simRes = await apiCtx.post(`${baseURL}/api/simulation/create`, {
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          data: { project_id: editProjectId, graph_id: editGraphId },
+        });
+        if (!simRes.ok()) {
+          throw new Error(
+            `POST /api/simulation/create fehlgeschlagen (${simRes.status()}): ${await simRes.text()}`,
+          );
+        }
+        editSimulationId = ((await simRes.json())?.data?.simulation_id ?? '') as string;
+        if (!editSimulationId) {
+          throw new Error('Setup für das Bearbeitungs-Gate lieferte keine simulation_id.');
+        }
+      } finally {
+        await apiCtx.dispose();
+      }
+    });
+
+    test('Herkunftsmarke ist Text plus Symbol, Sperrzustand nennt den Ausweg', async ({ page }) => {
+      // Der Stub-Build liefert keine Knoten (NER leer) und die Stub-Ontologie
+      // keine Entity-Typen, mit denen sich eine Handentitaet anlegen liesse —
+      // ohne diese Attrappe gaebe es keine einzige Marke und das Gate pruefte
+      // nichts. Projekt und Sperrzustand kommen unveraendert aus dem Stack.
+      await stubGraphDataWithOrigin(page, editGraphId);
+
+      await checkAccessibilityGate(page, `/graphs/${editProjectId}`);
+
+      // 1. Sperrzustand: sichtbar, begruendet, mit bedienbarem Ausweg.
+      await assertLockStateIsVisibleAndNamesWayOut(page, { usedById: editSimulationId });
+
+      // 2. Herkunftsmarke: Text UND Symbol. `markManual` traegt das Wort
+      //    „manuell“, `markEdited` das Wort „bearbeitet“ — nicht nur eine
+      //    Hintergrundfarbe.
+      await assertOriginMarkIsTextPlusSymbol(page, `[data-testid="${GraphEditTestId.markManual}"]`, 'manuell');
+      await assertOriginMarkIsTextPlusSymbol(page, `[data-testid="${GraphEditTestId.markEdited}"]`, 'bearbeitet');
+
+      // 3. Die Herkunft steht am Element: an der Listenzeile der Handentitaet,
+      //    am extrahierten Gegenstueck nicht.
+      await assertOriginStandsAtElement(page, {
+        id: ORIGIN_FIXTURE_NODE_IDS.manual,
+        counterpartId: ORIGIN_FIXTURE_NODE_IDS.extracted,
+        kind: 'entity',
+        markTestId: GraphEditTestId.markManual,
+      });
+
+      // 3a. In der Tabelle traegt das extrahierte Element ausdruecklich die
+      //     Marke „extrahiert“ — nicht dieselbe wie die Handentitaet. Ohne das
+      //     waere die Marke nicht unterscheidbar, sondern nur konstant
+      //     vorhanden (ADR-0022 §5).
+      await page.getByTestId(GraphEditTestId.viewTable).click();
+      await expect(page.getByTestId(GraphEditTestId.table)).toBeVisible();
+      await expect(
+        page.locator(`tr[data-entity-id="${ORIGIN_FIXTURE_NODE_IDS.extracted}"] [data-testid="${GraphEditTestId.markExtracted}"]`),
+      ).toHaveCount(1);
+      await assertOriginMarkIsTextPlusSymbol(
+        page,
+        `tr[data-entity-id="${ORIGIN_FIXTURE_NODE_IDS.extracted}"] [data-testid="${GraphEditTestId.markExtracted}"]`,
+        'extrahiert',
+      );;
+
+      // 4. Und dieselbe Aussage an der Beziehung in der Tabelle. Das Netz
+      //    (Canvas) traegt die gestrichelte Kante, die liest der Screenreader
+      //    nicht — die Tabelle ist die textliche Fassung desselben Graphen.
+      await page.getByTestId(GraphEditTestId.viewTable).click();
+      await expect(page.getByTestId(GraphEditTestId.table)).toBeVisible();
+      await page.locator('#grt-tab-relations').click();
+      await assertOriginStandsAtElement(page, {
+        id: ORIGIN_FIXTURE_EDGE_IDS.manual,
+        counterpartId: ORIGIN_FIXTURE_EDGE_IDS.extracted,
+        kind: 'edge',
+        markTestId: GraphEditTestId.markEdited,
+      });
     });
   });
 

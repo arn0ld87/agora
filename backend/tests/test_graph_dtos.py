@@ -19,17 +19,25 @@ def _sample_storage_dict() -> dict:
                 "uuid": "uuid-node-1",
                 "name": "Alice",
                 "labels": ["Person"],
+                "entity_type": "Person",
                 "summary": "A protagonist.",
                 "attributes": {"age": 30, "role": "lead"},
                 "created_at": "2026-05-01T10:00:00",
+                "provenance": {"origin": None, "changed_at": None, "episode_count": 0},
             },
             {
                 "uuid": "uuid-node-2",
                 "name": "Bob",
                 "labels": [],
+                "entity_type": None,
                 "summary": "",
                 "attributes": {},
                 "created_at": None,
+                "provenance": {
+                    "origin": "manual",
+                    "changed_at": "2026-10-07T10:00:00+00:00",
+                    "episode_count": 0,
+                },
             },
         ],
         "edges": [
@@ -53,6 +61,11 @@ def _sample_storage_dict() -> dict:
                 "source_node_name": "Alice",
                 "target_node_name": "Bob",
                 "episodes": ["ep-1", "ep-2"],
+                "provenance": {
+                    "origin": "edited",
+                    "changed_at": "2026-10-07T10:05:00+00:00",
+                    "episode_count": 2,
+                },
             }
         ],
         "node_count": 2,
@@ -138,3 +151,28 @@ def test_graph_data_dto_count_fallback_to_list_length() -> None:
     })
     assert dto.node_count == 1
     assert dto.edge_count == 0
+
+
+def test_dto_without_provenance_reads_as_extracted() -> None:
+    """Storage-Dicts ohne Herkunftsmerkmal (Altgraph) gelten als extrahiert (#1808)."""
+    node = GraphNodeDTO.from_dict({"uuid": "u1", "name": "n1"})
+    assert node.to_dict()["provenance"] == {
+        "origin": None,
+        "changed_at": None,
+        "episode_count": 0,
+    }
+    assert node.to_dict()["entity_type"] is None
+
+    edge = GraphEdgeDTO.from_dict({
+        "uuid": "e1",
+        "name": "rel",
+        "fact": "f",
+        "source_node_uuid": "s",
+        "target_node_uuid": "t",
+        "episode_ids": ["ep-a", "ep-b"],
+    })
+    assert edge.to_dict()["provenance"] == {
+        "origin": None,
+        "changed_at": None,
+        "episode_count": 2,
+    }

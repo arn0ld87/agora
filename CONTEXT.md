@@ -42,7 +42,9 @@ Ein benannter Satz synthetischer Personas in der Bibliothek. Ein Lauf bekommt ei
 
 ### Graph
 
-Das aus Quellen extrahierte Wissensumfeld: Entitäten, Relationen, Quellenfragmente und Vektoren in Neo4j.
+Das aus Quellen extrahierte Wissensumfeld: Entitäten, Relationen, Quellenfragmente und Vektoren in Neo4j. Elemente können vor der ersten Simulation von Hand ergänzt oder bearbeitet werden; ihre Herkunft steht dann als `origin="manual"` beziehungsweise `origin="edited"` am Graph-Element. Ohne Herkunftsfeld gilt das Element als extrahiert.
+
+Im Evidence-Vertrag bleibt Handarbeit `source_kind="graph_relation"` und trägt zusätzlich `graph_origin`. Sie darf weder als Dokumentfakt noch über einen `seed_doc:`-Anker ausgegeben werden und zählt für keine Confidence-Stufe. Ursprüngliche Quellen bleiben nachvollziehbar, geben einer bearbeiteten Beziehung aber keinen Dokumentanker zurück. Andere gültige Belege können einen Claim weiterhin hoch tragen ([ADR-0022](docs/decisions/0022-manuelle-herkunft-im-graphen.md)); die fünf Hartanker aus ADR-0002 bleiben unverändert.
 
 ### Projekt
 
@@ -120,7 +122,7 @@ Aktuelle Lifecycle-Härtungen:
 - Startup-Reconciliation prüft stale `pending`/`processing`/`paused` Runs gegen den persistierten Prozesszustand (#1476).
 - `post_fork` führt die Reconciliation auch nach einem Gunicorn-Worker-Replacement aus (#1476).
 
-Bekannte Grenze: Prepare-, Report- und Graph-Build-Jobs laufen noch in daemonisierten Threads des Webprozesses. Bei einem regulären Shutdown (SIGTERM, nicht SIGKILL) markiert ein `atexit`-Hook (`app/services/sim/process_shutdown.py`, registriert in `post_worker_init`) die zu diesem Worker-Prozess gehörenden In-Process-Jobs (`simulation_prepare`, `report_generate`, `graph_build`, `ontology_generate`) noch im selben Lauf ehrlich als `failed/process_restart` — anhand von Worker-Token und PID, damit nur eigene Jobs markiert werden, nicht die anderer Worker. Das läuft bewusst außerhalb des Signalkontexts (der SIGTERM-Handler setzt nur ein Flag), weil `gevent.signal.signal()` den echten CPython-Signalkontext liefert, in dem ein `threading.Lock` nach `patch_all()` als kooperatives Semaphore blockieren könnte. Ein `SIGKILL` nach Ablauf des `graceful_timeout` überspringt den Hook; dafür bleibt die Startup-Reconciliation (#1476) der Mechanismus. Ein persistierter, automatisch fortsetzbarer Zwischenstand entsteht in keinem der beiden Pfade — vollständige Crash-/Restart-Recovery bleibt an einer Job-Queue mit eigenen Workern (#1472).
+Bekannte Grenze: Prepare-, Report-, Graph-Build- und Graph-Kopier-Jobs laufen noch in daemonisierten Threads des Webprozesses. Bei einem regulären Shutdown (SIGTERM, nicht SIGKILL) markiert ein `atexit`-Hook (`app/services/sim/process_shutdown.py`, registriert in `post_worker_init`) die zu diesem Worker-Prozess gehörenden In-Process-Jobs (`simulation_prepare`, `report_generate`, `graph_build`, `ontology_generate`, `graph_duplicate`) noch im selben Lauf ehrlich als `failed/process_restart` — anhand von Worker-Token und PID, damit nur eigene Jobs markiert werden, nicht die anderer Worker. Das läuft bewusst außerhalb des Signalkontexts (der SIGTERM-Handler setzt nur ein Flag), weil `gevent.signal.signal()` den echten CPython-Signalkontext liefert, in dem ein `threading.Lock` nach `patch_all()` als kooperatives Semaphore blockieren könnte. Ein `SIGKILL` nach Ablauf des `graceful_timeout` überspringt den Hook; dafür bleibt die Startup-Reconciliation (#1476) der Mechanismus. Ein persistierter, automatisch fortsetzbarer Zwischenstand entsteht in keinem der beiden Pfade — vollständige Crash-/Restart-Recovery bleibt an einer Job-Queue mit eigenen Workern (#1472).
 
 ### Phase 4 — Report
 

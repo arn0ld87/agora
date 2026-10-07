@@ -2,6 +2,9 @@ import type { ElementHandle, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { checkTabOrder } from './tabOrder';
+import { GraphEditTestId } from '../../../src/contracts/testIds';
+// `GraphEditTestId` kommt bewusst relativ aus `src/contracts/testIds` (siehe
+// Kommentar in ./testIds.ts): `tsconfig.playwright.json` kennt keinen `@/`-Alias.
 
 /**
  * Slice 7.2 — Accessibility-Gate Helper.
@@ -464,3 +467,46 @@ export function assertRouteNotHijacked(intendedRoute: string, actualUrl: string)
   );
 }
 
+// ---------------------------------------------------------------------------
+// Etappe 8 (#1808, ADR-0022) — Sperrzustand am Graph-Leser
+// ---------------------------------------------------------------------------
+
+/**
+ * Sperrband: sichtbar, mit Rolle `status`/`alert`, und es **nennt den Ausweg**
+ * als Bedienelement. Nur ein beschrifteter Knopf zaehlt als Ausweg — ein
+ * deaktivierter Knopf waere an dieser Stelle durchgerutscht, weil die
+ * Sperrzustand-Pruefung der Etappen 2 bis 6 nie einen gesperrten Graphen gesehen
+ * hat (dort laeuft nie eine Simulation, also ist der Graph bearbeitbar).
+ *
+ * `usedById` ist die Simulation, die den Graphen verwendet; sie muss im Band
+ * stehen. Ohne sie waere der Zustand nicht begruendet, nur behauptet.
+ */
+export async function assertLockStateIsVisibleAndNamesWayOut(
+  page: Page,
+  options: { usedById: string },
+): Promise<void> {
+  const banner = page.getByTestId(GraphEditTestId.lockBanner);
+  await expect(banner).toBeVisible();
+
+  const role = await banner.getAttribute('role');
+  expect(['status', 'alert']).toContain(role);
+
+  const badge = page.getByTestId(GraphEditTestId.lockBadge);
+  await expect(badge).toBeVisible();
+  const badgeText = ((await badge.innerText()) ?? '').trim();
+  expect(badgeText.length, 'Sperrzustand ohne Text').toBeGreaterThan(0);
+
+  // Die nutzenden Laeufe stehen im Band, nicht nur in einem Tooltip.
+  await expect(page.getByTestId(GraphEditTestId.lockUsedBy)).toContainText(options.usedById);
+
+  // Der Ausweg ist ein beschrifteter Knopf, kein Wort im Nebensatz.
+  const start = page.getByTestId(GraphEditTestId.duplicateStart);
+  await expect(start).toBeVisible();
+  const label = ((await start.innerText()) ?? '').trim();
+  expect(label.length, 'Ausweg-Knopf ohne Beschriftung').toBeGreaterThan(0);
+
+  // Und er ist per Tastatur bedienbar — ein `<div>` mit Klick-Handler waere
+  // fuer das Gate nicht erreichbar.
+  await start.focus();
+  await expect(start).toBeFocused();
+}

@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Mapping, Optional, Sequence, Union
 
 from pydantic import (
     BaseModel,
@@ -120,6 +120,58 @@ SIMULATION_SOURCE_KINDS: frozenset[EvidenceSourceKind] = frozenset({
 #: Bewusst nur der Präfix statt des vollen Formats: auch ein deformierter
 #: ``seed_doc:``-Anker auf einer Persona-Aussage darf nicht durchgehen.
 SEED_DOC_ANCHOR_PREFIX = "seed_doc:"
+
+#: Herkunftsmarke für Evidence aus von Hand angelegten (``manual``) oder
+#: bearbeiteten (``edited``) Graph-Elementen (ADR-0022 §3). Bewusst ein eigenes
+#: Feld neben ``source_kind`` und kein neuer Wert in ``EvidenceSourceKind``:
+#: Anker 3 aus ADR-0002 bleibt geschlossen. Die Werte entsprechen der
+#: Graph-Eigenschaft ``origin`` (``app.storage.neo4j_mappings.ORIGIN_*``) und
+#: ``graph_edit_contract.GraphOrigin``; fehlt das Feld, gilt die Evidence als
+#: nicht von Hand erzeugt.
+EvidenceGraphOrigin = Literal["manual", "edited"]
+
+
+def _reject_graph_origin_as_document_fact(
+    graph_origin: Optional[str],
+    source_kind: "EvidenceSourceKind",
+    source_id_anchor: Optional[str],
+) -> None:
+    """ADR-0022 §2/§3: Handarbeit ist nie ein Dokumentfakt.
+
+    Eine manuelle Beziehung hat keine Quelle im Dokument, und der geänderte
+    Text einer bearbeiteten Beziehung stand so nie darin. Beides bleibt
+    ``graph_relation`` und trägt keinen ``seed_doc:``-Anker — sonst täuschte
+    der Record genau die Prüfbarkeit vor, die ADR-0013 ausschließt.
+    """
+    if graph_origin is None:
+        return
+    if source_kind != EvidenceSourceKind.graph_relation:
+        raise ValueError(
+            f"graph_origin={graph_origin} verlangt source_kind=graph_relation, "
+            f"nicht {source_kind.value}: von Hand angelegte oder bearbeitete "
+            "Graph-Evidence ist kein Dokumentfakt und keine Stimme (ADR-0022)."
+        )
+    if source_id_anchor and source_id_anchor.startswith(SEED_DOC_ANCHOR_PREFIX):
+        raise ValueError(
+            f"graph_origin={graph_origin} darf keinen seed_doc:-Anker tragen: "
+            "für Handarbeit im Graphen gibt es keine Dokumentstelle (ADR-0022)."
+        )
+
+
+def counts_for_confidence(item: Any) -> bool:
+    """``False`` für Evidence aus Handarbeit im Graphen (ADR-0022 §4).
+
+    Solche Evidence bleibt im Bericht sichtbar, zählt aber für keine
+    Confidence-Stufe.
+
+    Nimmt Contract-Modelle *und* die rohen Evidence-Dicts des Schreibpfads
+    entgegen: der Validator urteilt über Modelle, die Confidence-Berechnung
+    über Dicts. Beide müssen dieselbe Frage beantworten, sonst hinge die
+    Stufe an zwei verschiedenen Regeln.
+    """
+    if isinstance(item, Mapping):
+        return item.get("graph_origin") is None
+    return getattr(item, "graph_origin", None) is None
 
 
 class EntailmentVerdict(str, Enum):
@@ -252,6 +304,17 @@ class EvidenceItemModel(BaseModel):
     # Erwartungstext stuetzen keinen Claim (``classify_evidence``), bleiben
     # aber als Kontext sichtbar. ``None`` = unbekannt/Altbestand.
     document_role: Optional[DocumentRole] = None
+    # ADR-0022 (#1808): Herkunft aus Handarbeit im Graphen. ``None`` =
+    # extrahiert bzw. Altbestand. Gesetzt zählt das Item für keine
+    # Confidence-Stufe (``ReportClaimModel.graph_origin_carries_no_confidence``).
+    graph_origin: Optional[EvidenceGraphOrigin] = None
+
+    @model_validator(mode="after")
+    def graph_origin_is_never_a_document_fact(self) -> "EvidenceItemModel":
+        _reject_graph_origin_as_document_fact(
+            self.graph_origin, self.source_kind, self.source_id_anchor
+        )
+        return self
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceItemModel":
@@ -335,6 +398,8 @@ class EvidenceRecordModel(BaseModel):
     )
     # Issue #1240, siehe EvidenceItemModel.
     document_role: Optional[DocumentRole] = None
+    # ADR-0022 (#1808), siehe EvidenceItemModel.
+    graph_origin: Optional[EvidenceGraphOrigin] = None
     #: Sprungkennung zum Beitrag im Feed (Issue #1804, Etappe 5), Format wie
     #: ``GET /api/simulation/<id>/feed-snapshot``: ``<platform>:<id>`` bzw.
     #: ``<platform>:comment:<id>``. Wird nur beim Ausliefern aus ``raw`` und
@@ -368,6 +433,13 @@ class EvidenceRecordModel(BaseModel):
         if bad:
             raise ValueError(f"origin_node_uuids enthaelt Nicht-UUIDs: {bad[:3]}")
         return value
+
+    @model_validator(mode="after")
+    def graph_origin_is_never_a_document_fact(self) -> "EvidenceRecordModel":
+        _reject_graph_origin_as_document_fact(
+            self.graph_origin, self.source_kind, self.source_id_anchor
+        )
+        return self
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceRecordModel":
@@ -658,6 +730,51 @@ class ReportClaimModel(BaseModel):
                 f"seed_corpus (ADR-0002 Stufe agent_grounded). "
                 f"Gefunden: agent_quote={has_agent_quote}, "
                 f"seed_corpus={has_seed_corpus}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def graph_origin_carries_no_confidence(self) -> "ReportClaimModel":
+        # ADR-0022 §4 (#1808): Evidence aus von Hand angelegten oder
+        # bearbeiteten Graph-Elementen zählt für keine Confidence-Stufe. Ein
+        # Claim darf sein Label behalten, wenn er die bestehenden Regeln auch
+        # OHNE diese Evidence erfüllt — er darf es nie DURCH sie erreichen.
+        #
+        # Zusätzlicher Validator neben den ADR-0002-Ankern 4 und 5, die
+        # textlich unverändert bleiben. Geprüft wird nicht mit einer zweiten,
+        # gespiegelten Regelmenge, sondern mit denselben Validatoren: der Claim
+        # wird ohne die Handarbeits-Evidence noch einmal validiert. Die
+        # Rekursion endet sofort, weil die Kopie keine solche Evidence trägt.
+        if self.confidence_label in (ConfidenceLabel.speculative, ConfidenceLabel.low):
+            return self
+        counted = [e for e in self.evidence if counts_for_confidence(e)]
+        if len(counted) == len(self.evidence):
+            return self
+        excluded = len(self.evidence) - len(counted)
+        try:
+            without_hand_made = ReportClaimModel(
+                claim_id=self.claim_id,
+                claim_text=self.claim_text,
+                confidence_label=self.confidence_label,
+                confidence_score=self.confidence_score,
+                evidence=counted,
+                claim_type=self.claim_type,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' wird nur mit manueller "
+                f"oder bearbeiteter Graph-Evidence erreicht ({excluded} Item(s) "
+                "mit graph_origin). Solche Evidence zählt für keine "
+                f"Confidence-Stufe (ADR-0022). Ohne sie: {exc}"
+            ) from exc
+        if without_hand_made.confidence_label != self.confidence_label:
+            # ``verified_needs_strong_match`` stuft Bestand ohne Entailment
+            # beim Laden auf ``high`` ab. Trägt nur die Handarbeit das
+            # SUPPORTED-Urteil, ist ``verified`` ohne sie nicht gedeckt.
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' ist ohne die manuelle "
+                "oder bearbeitete Graph-Evidence nur als "
+                f"'{without_hand_made.confidence_label.value}' gedeckt (ADR-0022)."
             )
         return self
 
@@ -1137,6 +1254,177 @@ class EvidenceCoverageEntry(BaseModel):
         return self
 
 
+def _reject_mismatched_index_keys(index: "Mapping[str, EvidenceRecordModel]") -> None:
+    """Der Schluessel des ``evidence_index`` IST die kanonische Evidence-ID.
+
+    Zwei Schreibweisen derselben Evidence wuerden beim Roundtrip still
+    auseinanderlaufen: die eine Stelle loest ueber den Key auf, die andere
+    ueber das Feld.
+    """
+    mismatched = sorted(key for key, record in index.items() if key != record.evidence_id)
+    if mismatched:
+        raise ValueError(
+            "evidence_index-Key stimmt nicht mit evidence_id ueberein: " + ", ".join(mismatched)
+        )
+
+
+def _reject_unknown_global_refs(refs: "Sequence[str]", known_ids: set[str]) -> None:
+    unknown = sorted(set(refs) - known_ids)
+    if unknown:
+        raise ValueError(
+            "global_evidence_refs enthalten unbekannte Evidence: " + ", ".join(unknown)
+        )
+
+
+def _validate_claim_bindings(
+    section: ReportSectionModel,
+    claim: IndexedReportClaimModel,
+    known_ids: set[str],
+    index: "Mapping[str, EvidenceRecordModel]",
+) -> None:
+    """Alle Regeln, die an einem Claim haengen, in dieser Reihenfolge.
+
+    Die Reihenfolge ist Teil des Verhaltens: die medium-Regel und die
+    Stakeholder-Regel melden vor der ADR-0022-Begruendung, weil ihre
+    Bedingungen breiter greifen. Eine Umstellung macht Fehlermeldungen
+    ununterscheidbar.
+    """
+    unknown = sorted({binding.evidence_id for binding in claim.evidence} - known_ids)
+    if unknown:
+        raise ValueError(
+            f"Section {section.section_index} Claim {claim.claim_id} "
+            "referenziert unbekannte Evidence: "
+            + ", ".join(unknown)
+        )
+
+    resolved = [(binding, index[binding.evidence_id]) for binding in claim.evidence]
+    if claim.confidence_label in (ConfidenceLabel.high, ConfidenceLabel.verified):
+        _require_two_supporting_groups(section, claim, resolved)
+        _reject_inferred_evidence(section, claim, resolved)
+    elif claim.confidence_label == ConfidenceLabel.medium:
+        _require_quote_and_seed(section, claim, resolved)
+    _reject_label_resting_on_hand_work(section, claim, resolved)
+
+
+def _require_two_supporting_groups(
+    section: ReportSectionModel,
+    claim: IndexedReportClaimModel,
+    resolved: "Sequence[tuple[ClaimEvidenceBindingModel, EvidenceRecordModel]]",
+) -> None:
+    """ADR-0002 Anker 4: zwei *stuetzende* Rollenfamilien, nicht zwei Zitate.
+
+    Issue #1248 Folgefehler (Review B7): dieser Validator zaehlte bisher den
+    rohen ``persona_stakeholder_group``-Wert, waehrend Schreibpfad
+    (``auto_downgrade_unsupported_high_claims``) und der Hartanker
+    ``cross_stakeholder_for_high`` ueber ``_role_family_key`` normalisieren.
+    Persistierte Altbestaende umgehen den Schreibpfad, sodass "Buerger" und
+    "buerger " hier als zwei Gruppen zaehlten, obwohl sie eine Rolle sind.
+    Verschaerfung von ADR-0002 Anker 4, keine Schwaechung: die Zahl
+    unterscheidbarer Gruppen kann dadurch nur sinken.
+    """
+    groups = {
+        _role_family_key(record)
+        for binding, record in resolved
+        if binding.supports_claim
+        and record.source_kind == EvidenceSourceKind.agent_quote
+        and record.persona_stakeholder_group
+    }
+    if len(groups) < 2:
+        raise ValueError(
+            f"Section {section.section_index} Claim {claim.claim_id}: "
+            "high/verified verlangt zwei stuetzende Stakeholder-Gruppen."
+        )
+
+
+def _reject_inferred_evidence(
+    section: ReportSectionModel,
+    claim: IndexedReportClaimModel,
+    resolved: "Sequence[tuple[ClaimEvidenceBindingModel, EvidenceRecordModel]]",
+) -> None:
+    if any(record.source_kind == EvidenceSourceKind.inferred for _, record in resolved):
+        raise ValueError(
+            f"Section {section.section_index} Claim {claim.claim_id}: "
+            "inferred Evidence ist fuer high/verified unzulaessig."
+        )
+
+
+def _require_quote_and_seed(
+    section: ReportSectionModel,
+    claim: IndexedReportClaimModel,
+    resolved: "Sequence[tuple[ClaimEvidenceBindingModel, EvidenceRecordModel]]",
+) -> None:
+    """``medium`` verlangt eine simulierte Stimme *und* einen Dokumentfakt.
+
+    Nur ``source_kind`` reicht beim Zitat nicht: ohne ``quote``-Feld traegt der
+    Record keinen Wortlaut, den eine Persona tatsaechlich geaussert haette.
+    """
+    has_agent_quote = any(
+        record.source_kind == EvidenceSourceKind.agent_quote and record.quote
+        for _, record in resolved
+    )
+    has_seed = any(
+        record.source_kind == EvidenceSourceKind.seed_corpus for _, record in resolved
+    )
+    if not (has_agent_quote and has_seed):
+        raise ValueError(
+            f"Section {section.section_index} Claim {claim.claim_id}: "
+            "medium verlangt agent_quote und seed_corpus."
+        )
+
+
+def _reject_label_resting_on_hand_work(
+    section: ReportSectionModel,
+    claim: IndexedReportClaimModel,
+    resolved: "Sequence[tuple[ClaimEvidenceBindingModel, EvidenceRecordModel]]",
+) -> None:
+    """ADR-0022 §4 (#1808): Handarbeit im Graphen zaehlt fuer keine Stufe.
+
+    Die Kompositionsregeln fragen ausschliesslich nach ``agent_quote`` /
+    ``seed_corpus`` — beides kann ein Record mit ``graph_origin`` nicht sein
+    (``graph_origin_is_never_a_document_fact``). Offen bleiben die
+    Binding-Regeln aus ``IndexedReportClaimModel``, die den Record nicht
+    kennen: sie muessen auch ohne die Handarbeit halten. Diese zusaetzliche
+    Pruefung laesst die bestehenden unveraendert; ohne ``graph_origin`` im
+    Index greift sie nie.
+
+    ``speculative``/``low`` bleiben ausgenommen: dort ist die Handevidence
+    sichtbar, aber nie labelerhebend.
+    """
+    if claim.confidence_label in (ConfidenceLabel.speculative, ConfidenceLabel.low):
+        return
+    counted = [binding for binding, record in resolved if counts_for_confidence(record)]
+    if len(counted) == len(resolved):
+        return
+    reason = _hand_work_reason(claim, counted)
+    if reason is not None:
+        raise ValueError(
+            f"Section {section.section_index} Claim {claim.claim_id}: "
+            f"Label '{claim.confidence_label.value}' wird nur mit "
+            "manueller oder bearbeiteter Graph-Evidence erreicht "
+            f"({reason}); sie zaehlt fuer keine Confidence-Stufe "
+            "(ADR-0022)."
+        )
+
+
+def _hand_work_reason(
+    claim: IndexedReportClaimModel,
+    counted: "Sequence[ClaimEvidenceBindingModel]",
+) -> Optional[str]:
+    """Welche Binding-Schwelle erreicht nur die Handevidence — oder keine."""
+    if not counted:
+        return "ausschliesslich solche Evidence gebunden"
+    if claim.confidence_label in (
+        ConfidenceLabel.high,
+        ConfidenceLabel.verified,
+    ) and not any(binding.supports_claim for binding in counted):
+        return "supports_claim=True nur an solcher Evidence"
+    if claim.confidence_label == ConfidenceLabel.verified and not any(
+        (binding.match_score or 0.0) >= 0.85 for binding in counted
+    ):
+        return "match_score >= 0.85 nur an solcher Evidence"
+    return None
+
+
 class EvidenceMapModel(BaseModel):
     """Persistierte Evidence-Map. Ablöse für die rohen Dicts in report_agent.py."""
     model_config = _STRICT
@@ -1165,89 +1453,12 @@ class EvidenceMapModel(BaseModel):
     @model_validator(mode="after")
     def validate_evidence_cross_references(self) -> "EvidenceMapModel":
         known_ids = set(self.evidence_index)
-        mismatched = [
-            key
-            for key, record in self.evidence_index.items()
-            if key != record.evidence_id
-        ]
-        if mismatched:
-            raise ValueError(
-                "evidence_index-Key stimmt nicht mit evidence_id ueberein: "
-                + ", ".join(sorted(mismatched))
-            )
-
+        _reject_mismatched_index_keys(self.evidence_index)
         _reject_dangling_ledger_refs(self.evidence_coverage_ledger, known_ids)
-
-        unknown_global = sorted(set(self.global_evidence_refs) - known_ids)
-        if unknown_global:
-            raise ValueError(
-                "global_evidence_refs enthalten unbekannte Evidence: "
-                + ", ".join(unknown_global)
-            )
-
+        _reject_unknown_global_refs(self.global_evidence_refs, known_ids)
         for section in self.sections:
             for claim in section.claims:
-                unknown = sorted(
-                    {binding.evidence_id for binding in claim.evidence} - known_ids
-                )
-                if unknown:
-                    raise ValueError(
-                        f"Section {section.section_index} Claim {claim.claim_id} "
-                        "referenziert unbekannte Evidence: "
-                        + ", ".join(unknown)
-                    )
-
-                resolved = [
-                    (binding, self.evidence_index[binding.evidence_id])
-                    for binding in claim.evidence
-                ]
-                if claim.confidence_label in (ConfidenceLabel.high, ConfidenceLabel.verified):
-                    # Issue #1248 Folgefehler (Review B7): dieser Validator
-                    # zaehlte bisher den rohen persona_stakeholder_group-Wert,
-                    # waehrend Schreibpfad (auto_downgrade_unsupported_high_claims)
-                    # und der Hartanker cross_stakeholder_for_high ueber
-                    # _role_family_key normalisieren. Persistierte Altbestaende
-                    # umgehen den Schreibpfad, sodass "Buerger" und "buerger "
-                    # hier als zwei Gruppen zaehlten, obwohl sie eine Rolle
-                    # sind. Verschaerfung von ADR-0002 Anker 4, keine
-                    # Schwaechung: die Zahl unterscheidbarer Gruppen kann
-                    # dadurch nur sinken.
-                    groups = {
-                        _role_family_key(record)
-                        for binding, record in resolved
-                        if binding.supports_claim
-                        and record.source_kind == EvidenceSourceKind.agent_quote
-                        and record.persona_stakeholder_group
-                    }
-                    if len(groups) < 2:
-                        raise ValueError(
-                            f"Section {section.section_index} Claim {claim.claim_id}: "
-                            "high/verified verlangt zwei "
-                            "stuetzende Stakeholder-Gruppen."
-                        )
-                    if any(
-                        record.source_kind == EvidenceSourceKind.inferred
-                        for _, record in resolved
-                    ):
-                        raise ValueError(
-                            f"Section {section.section_index} Claim {claim.claim_id}: "
-                            "inferred Evidence ist fuer "
-                            "high/verified unzulaessig."
-                        )
-                if claim.confidence_label == ConfidenceLabel.medium:
-                    has_agent_quote = any(
-                        record.source_kind == EvidenceSourceKind.agent_quote and record.quote
-                        for _, record in resolved
-                    )
-                    has_seed = any(
-                        record.source_kind == EvidenceSourceKind.seed_corpus
-                        for _, record in resolved
-                    )
-                    if not (has_agent_quote and has_seed):
-                        raise ValueError(
-                            f"Section {section.section_index} Claim {claim.claim_id}: "
-                            "medium verlangt agent_quote und seed_corpus."
-                        )
+                _validate_claim_bindings(section, claim, known_ids, self.evidence_index)
         return self
 
 

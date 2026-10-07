@@ -1859,6 +1859,95 @@
     }
   },
   "views": {
+    "graphEdit": {
+      "lock": {
+        "title": "Graph locked",
+        "unknown": "Checking lock state",
+        "editable": "Editable",
+        "locked": "Locked: a simulation uses this graph. Create an independent copy to edit it.",
+        "usedBy": "Used by",
+        "simulation": "Simulation {id}",
+        "checkFailed": "The lock state could not be determined.",
+        "reload": "Reload lock state"
+      },
+      "errors": {
+        "locked": "The graph is locked because a simulation uses it. Nothing was changed.",
+        "conflict": "The change conflicts with an existing element. Nothing was changed.",
+        "migrationRunning": "An embedding migration is running; the graph is temporarily not editable.",
+        "embeddingFailed": "The embedding could not be computed. Nothing was changed.",
+        "invalidInput": "The input is invalid.",
+        "other": "The change failed."
+      },
+      "duplicate": {
+        "nameLabel": "Name of the copy",
+        "start": "Create copy",
+        "running": "The copy is being created …",
+        "done": "The copy is ready — open it",
+        "failed": "The copy was not created.",
+        "error": {
+          "buildRunning": "The graph is currently being built. The copy can be created after the build.",
+          "migrationRunning": "An embedding migration is running; the copy path is currently unavailable.",
+          "unavailable": "The copy path is currently unavailable.",
+          "invalidInput": "The name of the copy is invalid.",
+          "other": "The copy could not be created."
+        }
+      },
+      "origin": {
+        "manual": "manual",
+        "edited": "edited",
+        "extracted": "extracted",
+        "changedAt": "Changed on {date}"
+      },
+      "view": {
+        "label": "Edit graph",
+        "net": "Network",
+        "table": "Table",
+        "legend": "Dashed edge: created or changed by hand.",
+        "readonly": "The graph of this run cannot be changed. An independent copy can be edited.",
+        "notEditable": "This graph is locked and cannot be edited.",
+        "busy": "Saving …",
+        "done": "Saved.",
+        "dismissError": "Dismiss notice",
+        "entity": {
+          "createTitle": "Create entity",
+          "editTitle": "Edit entity",
+          "name": "Name",
+          "type": "Type",
+          "summary": "Description",
+          "aliases": "Aliases (comma separated)",
+          "submitCreate": "Create entity",
+          "submitSave": "Save changes",
+          "cancel": "Cancel",
+          "delete": "Delete entity",
+          "deleteConfirm": "Delete the entity and its relations?",
+          "selectPrompt": "Choose an entity or create a new one.",
+          "deleted": "Entity deleted, {n} relations removed."
+        },
+        "relation": {
+          "createTitle": "Create relation",
+          "editTitle": "Edit relation",
+          "source": "From",
+          "target": "To",
+          "name": "Kind",
+          "fact": "Sentence",
+          "submitCreate": "Create relation",
+          "submitSave": "Save changes",
+          "cancel": "Cancel",
+          "delete": "Delete relation",
+          "deleteConfirm": "Delete the relation?",
+          "deleted": "Relation deleted."
+        },
+        "merge": {
+          "open": "Open merge",
+          "title": "Merge entities",
+          "hint": "The chosen entity stays; the marked ones are resolved into it.",
+          "source": "Entities to resolve",
+          "submit": "Merge",
+          "needSource": "Choose at least one entity to resolve.",
+          "result": "Merged: {n} relations rewired, {d} removed."
+        }
+      }
+    },
     "newRun": {
       "title": "New run",
       "close": "Close dialog",

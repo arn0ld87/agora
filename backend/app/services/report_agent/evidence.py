@@ -11,9 +11,11 @@ if TYPE_CHECKING:  # pragma: no cover — nur fuer die Typannotation
 from pydantic import ValidationError
 
 from ...contracts import EvidenceRecordModel
-from ...contracts.report_contract import SEED_DOC_ANCHOR_PREFIX
+from ...contracts.report_contract import SEED_DOC_ANCHOR_PREFIX, counts_for_confidence
+from ..confidence_calculator import _count_independent_sources
 from ..evidence_identity import build_evidence_id
 from ..evidence_migrations import normalize_persisted_evidence_map
+from ..graph.graph_dtos import graph_origin_of
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel
 
 
@@ -54,6 +56,18 @@ def document_role_of(
         return None
     document_id = str(provenance.get("document_id") or "").strip()
     return document_roles.get(document_id) if document_id else None
+
+
+def provenance_graph_origin(provenance: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Herkunftsmarke einer Retrieval-Provenance — oder ``None`` (ADR-0022 §2).
+
+    ``None`` bei fehlender Provenance und bei extrahierten Elementen: der Fakt
+    bleibt dann ein gewöhnlicher Graph-Fakt. Ein unbekannter Markenwert gilt wie
+    ein fehlender (``graph_origin_of`` filtert ihn).
+    """
+    if not isinstance(provenance, dict):
+        return None
+    return graph_origin_of(provenance)
 
 
 def build_seed_document_anchor(provenance: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -170,14 +184,16 @@ def record_evidence_item(
     return target
 
 
-_CLAIM_RELATIVE_FIELDS = frozenset({
-    "match_score",
-    "retrieval_score",
-    "entailment",
-    "entailment_reason",
-    "supports_claim",
-    "contradicts_claim",
-})
+_CLAIM_RELATIVE_FIELDS = frozenset(
+    {
+        "match_score",
+        "retrieval_score",
+        "entailment",
+        "entailment_reason",
+        "supports_claim",
+        "contradicts_claim",
+    }
+)
 
 
 def register_evidence_record(
@@ -201,16 +217,14 @@ def register_evidence_record(
             ledger.dropped(item, "missing_producer_key")
         return None
     source_kind = normalize_source_kind(item)
-    payload = {
-        key: value
-        for key, value in item.items()
-        if key not in _CLAIM_RELATIVE_FIELDS
-    }
-    payload.update({
-        "evidence_id": build_evidence_id(scope_id, source_kind, producer_key),
-        "producer_key": producer_key,
-        "source_kind": source_kind,
-    })
+    payload = {key: value for key, value in item.items() if key not in _CLAIM_RELATIVE_FIELDS}
+    payload.update(
+        {
+            "evidence_id": build_evidence_id(scope_id, source_kind, producer_key),
+            "producer_key": producer_key,
+            "source_kind": source_kind,
+        }
+    )
     # Issue #1300: Ein seed_doc:-Anker auf Interview-Evidence ist eine
     # erfundene Dokumentherkunft — der Contract-Validator
     # ``agent_quote_rejects_seed_doc_anchor`` lehnt sie hart ab. An dieser
@@ -219,9 +233,8 @@ def register_evidence_record(
     # ganzer Record verloren zu gehen (dieselbe Defensive-Linie wie
     # ``_filter_placeholder_items``). Der Schreibpfad für echte
     # Dokumentfakten (``_graph_fact_item`` -> seed_corpus) bleibt unberührt.
-    if (
-        source_kind == "agent_quote"
-        and str(payload.get("source_id_anchor") or "").startswith(SEED_DOC_ANCHOR_PREFIX)
+    if source_kind == "agent_quote" and str(payload.get("source_id_anchor") or "").startswith(
+        SEED_DOC_ANCHOR_PREFIX
     ):
         payload.pop("source_id_anchor", None)
     record = EvidenceRecordModel.model_validate(payload).model_dump(mode="json")
@@ -294,7 +307,12 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
         # Issue #1248 (CodeRabbit PR #1260): Auffangtypen bezeichnen keine
         # Rollenfamilie. Spiegelt ``report_contract._GENERIC_ENTITY_TYPES``.
         if family_key and family_key not in {
-            "person", "organization", "entity", "node", "unknown", "other",
+            "person",
+            "organization",
+            "entity",
+            "node",
+            "unknown",
+            "other",
         }:
             groups.add(f"family:{family_key}")
             continue
@@ -323,6 +341,11 @@ def has_agent_grounded_evidence(
     ausschließlich über die Records; ohne diese Auflösung könnte ein Claim hier
     als agent_grounded gelten und dort trotzdem durchfallen — genau der
     Report-Abbruch, den der Aufrufer verhindern will.
+
+    ADR-0022 §4: Evidence aus Handarbeit im Graphen zählt auch hier nicht. Eine
+    von Hand angelegte oder bearbeitete Beziehung ist weder eine Stimme noch ein
+    Korpusbeleg — sie kann den agent_grounded-Nachweis nicht liefern, auch wenn
+    ihr Record sonst auf ``seed_corpus`` oder ``agent_quote`` fiele.
     """
     has_agent_quote = False
     has_seed_corpus = False
@@ -332,12 +355,85 @@ def has_agent_grounded_evidence(
             continue
         record = index.get(str(entry.get("evidence_id") or ""))
         source = record if isinstance(record, dict) else entry
+        if not counts_for_confidence(source):
+            continue
         sk = source.get("source_kind")
         if sk == "agent_quote" and source.get("quote"):
             has_agent_quote = True
         elif sk == "seed_corpus":
             has_seed_corpus = True
     return has_agent_quote and has_seed_corpus
+
+
+def _resolved_evidence(
+    evidence: List[Dict[str, Any]], evidence_index: Optional[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Claim-Bindings auf ihre kanonischen Records auflösen (ab Schema v3).
+
+    Herkunft und Quellenmetadaten stehen am Record; Match und Entailment
+    bleiben claim-relative Binding-Felder. Nur diese dürfen den Record
+    ergänzen, damit Inline-Metadaten keine kanonische Herkunft überschreiben.
+    """
+    index = evidence_index or {}
+    resolved: List[Dict[str, Any]] = []
+    for entry in evidence or []:
+        if not isinstance(entry, dict):
+            continue
+        record = index.get(str(entry.get("evidence_id") or ""))
+        if isinstance(record, dict):
+            resolved.append(
+                dict(record)
+                | {key: value for key, value in entry.items() if key in _CLAIM_RELATIVE_FIELDS}
+            )
+        else:
+            resolved.append(entry)
+    return resolved
+
+
+#: Schwelle für ``verified``. Gespiegelt in ``confidence_calculator``
+#: (``_compute_confidence_with_penalties``).
+_VERIFIED_STRONG_MATCH = 0.85
+
+
+def _verified_reachable(evidence: List[Dict[str, Any]]) -> bool:
+    """Trägt diese Evidence die Stufe ``verified`` auch ohne Handarbeit?
+
+    ``verified`` verlangt beides: einen starken Match (>= 0.85) und mindestens
+    zwei unabhängige Quellen.
+    """
+    has_strong_match = any(
+        float(entry.get("match_score") or 0.0) >= _VERIFIED_STRONG_MATCH
+        for entry in evidence
+        if "match_score" in entry
+    )
+    return has_strong_match and _count_independent_sources(evidence) >= 2
+
+
+def _hand_work_downgrade_target(
+    claim: Dict[str, Any], *, evidence_index: Optional[Dict[str, Any]]
+) -> Optional[str]:
+    """Zielstufe, falls das Label nur mit Handarbeit zustande käme (ADR-0022 §4).
+
+    Nur ``verified`` kann das. Die Stufe verlangt einen starken Match *und* zwei
+    unabhängige Quellen, und eine Handeingabe im Graphen liefert von beidem: sie
+    ist eine eigene Quelle und trägt einen Retrieval-Score. Ein Claim, der sie
+    nur deshalb ``verified`` ist, darf sie nicht als Begründung tragen.
+
+    ``high`` kann nicht daran hängen: Anker 4 aus ADR-0002 verlangt zwei
+    Rollenfamilien unter ``agent_quote``, und ein ``graph_relation``-Item ist
+    strukturell keine Stimme. Diese Regel ist damit *zusätzlich* und lässt
+    Anker 4 und 5 unangetastet.
+
+    Ohne Handarbeits-Evidence kommt ``None`` zurück — Bestandsreports bleiben
+    byte-gleich. Herabgestuft wird, nicht abgebrochen: der Claim bleibt sichtbar.
+    """
+    if claim.get("confidence_label") != "verified":
+        return None
+    resolved = _resolved_evidence(claim.get("evidence") or [], evidence_index)
+    counted = [entry for entry in resolved if counts_for_confidence(entry)]
+    if len(counted) == len(resolved):
+        return None
+    return None if _verified_reachable(counted) else "high"
 
 
 TEXT_CONFIDENCE_DOWNGRADE_EVENT = "text_confidence_downgraded"
@@ -376,8 +472,7 @@ def _record_text_confidence_downgrade(
     if not isinstance(trail, list):
         trail = []
     if any(
-        isinstance(entry, dict)
-        and entry.get("event") == TEXT_CONFIDENCE_DOWNGRADE_EVENT
+        isinstance(entry, dict) and entry.get("event") == TEXT_CONFIDENCE_DOWNGRADE_EVENT
         for entry in trail
     ):
         return
@@ -402,10 +497,7 @@ def text_confidence_label_of(claim: Dict[str, Any]) -> str | None:
     if not isinstance(trail, list):
         return None
     for entry in trail:
-        if (
-            isinstance(entry, dict)
-            and entry.get("event") == TEXT_CONFIDENCE_DOWNGRADE_EVENT
-        ):
+        if isinstance(entry, dict) and entry.get("event") == TEXT_CONFIDENCE_DOWNGRADE_EVENT:
             label = entry.get("text_confidence_label")
             return str(label) if label else None
     return None
@@ -470,6 +562,7 @@ def downgrade_medium_without_agent_grounded(
 def auto_downgrade_unsupported_high_claims(
     claims: List[Dict[str, Any]],
     *,
+    evidence_index: Optional[Dict[str, Any]] = None,
     logger: Any = None,
 ) -> List[Dict[str, Any]]:
     """Senkt ``confidence_label`` von ``high``/``verified`` ab, wenn die
@@ -482,9 +575,16 @@ def auto_downgrade_unsupported_high_claims(
     den nachfolgenden ``medium``-Validator und vermeidet gerade den harten
     Report-Abbruch, den diese Funktion verhindern soll.
 
-    Der Validator selbst bleibt strikt (ADR-0002 verbietet Schwächung);
-    diese Funktion liefert ihm nur ehrlich downgrade'te Daten, statt
-    ihn mit unrealistischen Labels zu konfrontieren.
+    Zusätzlich greift ADR-0022 §4: erreicht ein ``verified``-Claim die Stufe
+    nur mit Handarbeit im Graphen, sinkt er auf ``high`` — siehe
+    ``_hand_work_downgrade_target``. Beide Prüfungen sind *zusätzliche*; die
+    Validatoren aus ADR-0002 (Anker 4 und 5) bleiben unverändert streng, und
+    diese Funktion liefert ihnen nur ehrlich downgrade'te Daten, statt sie mit
+    unrealistischen Labels zu konfrontieren.
+
+    ``evidence_index`` ist die kanonische Evidence-Map des Reports. Ohne sie
+    sieht diese Funktion im Schreibpfad nur die Bindings der Claims und kann
+    die ADR-0022-Regel nicht anwenden.
     """
     downgraded: List[Dict[str, Any]] = []
     for raw in claims:
@@ -494,21 +594,47 @@ def auto_downgrade_unsupported_high_claims(
         item = dict(raw)
         label = item.get("confidence_label")
         if label in ("high", "verified"):
-            groups = _count_supporting_stakeholder_groups(item.get("evidence") or [])
+            groups = _count_supporting_stakeholder_groups(
+                _resolved_evidence(item.get("evidence") or [], evidence_index)
+            )
             if groups < 2:
                 evidence = item.get("evidence") or []
-                target = "medium" if has_agent_grounded_evidence(evidence) else "low"
+                target = (
+                    "medium"
+                    if has_agent_grounded_evidence(evidence, evidence_index=evidence_index)
+                    else "low"
+                )
                 claim_id = item.get("claim_id", "<no-id>")
                 if logger is not None:
                     logger.warning(
                         "auto_downgrade_unsupported_high_claims: %s '%s' → '%s' "
                         "(nur %d stützende Stakeholder-Gruppe(n), 2 erforderlich; "
                         "agent_grounded=%s)",
-                        claim_id, label, target, groups,
+                        claim_id,
+                        label,
+                        target,
+                        groups,
                         target == "medium",
                     )
                 item["confidence_label"] = target
                 _record_text_confidence_downgrade(item, from_label=label, to_label=target)
+            else:
+                hand_work_target = _hand_work_downgrade_target(item, evidence_index=evidence_index)
+                if hand_work_target is not None:
+                    claim_id = item.get("claim_id", "<no-id>")
+                    if logger is not None:
+                        logger.warning(
+                            "auto_downgrade_unsupported_high_claims: %s '%s' → '%s' "
+                            "(Stufe nur mit manueller oder bearbeiteter "
+                            "Graph-Evidence gedeckt, ADR-0022)",
+                            claim_id,
+                            label,
+                            hand_work_target,
+                        )
+                    item["confidence_label"] = hand_work_target
+                    _record_text_confidence_downgrade(
+                        item, from_label=label, to_label=hand_work_target
+                    )
         downgraded.append(item)
     return downgraded
 
@@ -516,6 +642,7 @@ def auto_downgrade_unsupported_high_claims(
 def normalize_claims_for_contract(
     claims: List[Dict[str, Any]],
     *,
+    evidence_index: Optional[Dict[str, Any]] = None,
     logger: Any = None,
 ) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
@@ -525,7 +652,9 @@ def normalize_claims_for_contract(
         item.pop("confidence", None)
         item.pop("evidence_items", None)
         normalized.append(item)
-    return auto_downgrade_unsupported_high_claims(normalized, logger=logger)
+    return auto_downgrade_unsupported_high_claims(
+        normalized, evidence_index=evidence_index, logger=logger
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -651,19 +780,23 @@ def validate_quote_anchors(
                 unbound_refs.append(seed_anchor)
 
         if reasons:
-            invalid_quotes.append({
-                "raw": raw_tag,
-                "persona_id": persona_id,
-                "seed_anchor": seed_anchor,
-                "text": text,
-                "reason": "; ".join(reasons),
-            })
+            invalid_quotes.append(
+                {
+                    "raw": raw_tag,
+                    "persona_id": persona_id,
+                    "seed_anchor": seed_anchor,
+                    "text": text,
+                    "reason": "; ".join(reasons),
+                }
+            )
         else:
-            valid_quotes.append({
-                "persona_id": persona_id,
-                "seed_anchor": seed_anchor,
-                "text": text,
-            })
+            valid_quotes.append(
+                {
+                    "persona_id": persona_id,
+                    "seed_anchor": seed_anchor,
+                    "text": text,
+                }
+            )
 
     # valid=True wenn keine Invalid-Quotes und keine ungebundenen Refs vorhanden.
     # Sections ohne Quotes → valid=True (Aufrufer entscheidet ob Pflicht).
@@ -715,7 +848,9 @@ def _filter_placeholder_items(
     if dropped and logger is not None:
         logger.warning(
             "normalize_sections_for_contract: %d %s mit leerem/Platzhalter-%s entfernt",
-            dropped, item_kind, text_field,
+            dropped,
+            item_kind,
+            text_field,
         )
     return keep
 
@@ -723,15 +858,20 @@ def _filter_placeholder_items(
 def normalize_sections_for_contract(
     sections: List[Dict[str, Any]],
     *,
+    evidence_index: Optional[Dict[str, Any]] = None,
     logger: Any = None,
 ) -> List[Dict[str, Any]]:
     normalized_sections: List[Dict[str, Any]] = []
     for section in sections:
         item = {k: v for k, v in dict(section).items() if k != "schema_version"}
         item["section_title"] = (item.get("section_title") or "Recovered section").strip()
-        summary = (item.get("section_summary") or item.get("section_title") or "Recovered summary").strip()
+        summary = (
+            item.get("section_summary") or item.get("section_title") or "Recovered summary"
+        ).strip()
         item["section_summary"] = summary or "Recovered summary"
-        item["claims"] = normalize_claims_for_contract(item.get("claims") or [], logger=logger)
+        item["claims"] = normalize_claims_for_contract(
+            item.get("claims") or [], evidence_index=evidence_index, logger=logger
+        )
         item["hypotheses"] = _filter_placeholder_items(
             list(item.get("hypotheses") or []),
             "hypothesis_text",
@@ -840,13 +980,9 @@ def degrade_sections_for_violations(
             # Cross-Record-Validatoren hängen ihre Fehler an die EvidenceMap
             # selbst. Den betroffenen Claim transportieren sie deshalb stabil
             # im Fehlertext (``Claim <id>: ...``), nicht im ``loc``-Pfad.
-            section_claim_match = re.search(
-                r"\bSection ([^ ]+) Claim ([^:]+):", detail
-            )
+            section_claim_match = re.search(r"\bSection ([^ ]+) Claim ([^:]+):", detail)
             claim_match = re.search(r"\bClaim ([^:]+):", detail)
-            target_section = (
-                section_claim_match.group(1) if section_claim_match else None
-            )
+            target_section = section_claim_match.group(1) if section_claim_match else None
             if section_claim_match:
                 target_id = section_claim_match.group(2)
             elif claim_match:
@@ -876,13 +1012,15 @@ def degrade_sections_for_violations(
                                 to_label="low",
                             )
                             claim["confidence_label"] = "low"
-                            _log_violation({
-                                "section_index": fallback_section.get("section_index", 0),
-                                "claim_id": target_id,
-                                "violation": violation_type,
-                                "action": "downgraded_to_low",
-                                "detail": detail,
-                            })
+                            _log_violation(
+                                {
+                                    "section_index": fallback_section.get("section_index", 0),
+                                    "claim_id": target_id,
+                                    "violation": violation_type,
+                                    "action": "downgraded_to_low",
+                                    "detail": detail,
+                                }
+                            )
                         targeted = True
                         break
                     if targeted:
@@ -919,13 +1057,15 @@ def degrade_sections_for_violations(
                     to_label="low",
                 )
                 claim["confidence_label"] = "low"
-                _log_violation({
-                    "section_index": section_index_value,
-                    "claim_id": claim_id,
-                    "violation": violation_type,
-                    "action": "downgraded_to_low",
-                    "detail": detail,
-                })
+                _log_violation(
+                    {
+                        "section_index": section_index_value,
+                        "claim_id": claim_id,
+                        "violation": violation_type,
+                        "action": "downgraded_to_low",
+                        "detail": detail,
+                    }
+                )
                 continue
 
             claims_to_remove.setdefault(si, set()).add(ci)
@@ -936,7 +1076,11 @@ def degrade_sections_for_violations(
                 existing_ids = _collect_existing_hypothesis_ids(section)
                 new_id = _next_hypothesis_id(existing_ids)
                 hypothesis_text = stripped_text[:_MAX_HYPOTHESIS_FIELD_LEN]
-                rationale = detail.strip() if len(detail.strip()) >= _MIN_HYPOTHESIS_TEXT_LEN else _FALLBACK_RATIONALE
+                rationale = (
+                    detail.strip()
+                    if len(detail.strip()) >= _MIN_HYPOTHESIS_TEXT_LEN
+                    else _FALLBACK_RATIONALE
+                )
                 rationale = rationale[:_MAX_HYPOTHESIS_FIELD_LEN]
                 new_hypothesis = {
                     "hypothesis_id": new_id,
@@ -944,21 +1088,25 @@ def degrade_sections_for_violations(
                     "rationale": rationale,
                 }
                 section.setdefault("hypotheses", []).append(new_hypothesis)
-                _log_violation({
-                    "section_index": section_index_value,
-                    "claim_id": claim_id,
-                    "violation": violation_type,
-                    "action": "moved_to_hypotheses",
-                    "detail": detail,
-                })
+                _log_violation(
+                    {
+                        "section_index": section_index_value,
+                        "claim_id": claim_id,
+                        "violation": violation_type,
+                        "action": "moved_to_hypotheses",
+                        "detail": detail,
+                    }
+                )
             else:
-                _log_violation({
-                    "section_index": section_index_value,
-                    "claim_id": claim_id,
-                    "violation": violation_type,
-                    "action": "dropped",
-                    "detail": detail,
-                })
+                _log_violation(
+                    {
+                        "section_index": section_index_value,
+                        "claim_id": claim_id,
+                        "violation": violation_type,
+                        "action": "dropped",
+                        "detail": detail,
+                    }
+                )
 
         elif kind in ("hypotheses", "hypotheses_appendix"):
             hi = loc[3]
@@ -974,13 +1122,15 @@ def degrade_sections_for_violations(
             if isinstance(hyp_entry, dict):
                 hyp_id = str(hyp_entry.get("hypothesis_id") or "")
             hyps_to_remove.setdefault(key, set()).add(hi)
-            _log_violation({
-                "section_index": section_index_value,
-                "claim_id": hyp_id,
-                "violation": violation_type,
-                "action": "dropped",
-                "detail": detail,
-            })
+            _log_violation(
+                {
+                    "section_index": section_index_value,
+                    "claim_id": hyp_id,
+                    "violation": violation_type,
+                    "action": "dropped",
+                    "detail": detail,
+                }
+            )
         # Alles andere: keine bekannte Regel, Section bleibt unverändert.
 
     for si, indices in claims_to_remove.items():

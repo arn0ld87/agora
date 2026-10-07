@@ -146,6 +146,26 @@ class TestSeedFactCarriesProvenance:
         assert result.facts[2].startswith("[Preis]")
         assert provenance_at(result.fact_provenance, 2) is None
 
+    def test_scope_edges_ignores_node_summaries(self) -> None:
+        """Eine Kanten-Suche liefert keine Entity-Summary als Fakt.
+
+        Der Storage antwortet je nach Implementierung mit beiden Listen; der
+        ``scope`` entscheidet, was in die Antwort gehört. Sonst erschiene in
+        ``insight_forge`` (das mit ``scope="edges"`` sucht) eine aggregierte
+        Summary als Fakt ohne jeden Kantenbezug.
+        """
+        storage = _FakeStorage(
+            edges=[_edge("e1", "Fakt A", ["ep-1"])],
+            nodes=[{"uuid": "n1", "name": "Preis", "summary": "Zusammenfassung"}],
+            provenance={"ep-1": {"document_id": "doc-a", "chunk_id": 0}},
+        )
+
+        result = search_graph("g1", "q", storage=storage, llm=None, scope="edges")
+
+        assert result.facts == ["Fakt A"]
+        assert result.nodes == []
+        assert result.fact_provenance == [{"document_id": "doc-a", "chunk_id": 0}]
+
     def test_provenance_is_fetched_in_a_single_lookup(self) -> None:
         storage = _FakeStorage(
             edges=[

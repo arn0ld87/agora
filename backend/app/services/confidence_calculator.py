@@ -47,6 +47,23 @@ from __future__ import annotations
 import statistics
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.contracts.report_contract import counts_for_confidence
+
+
+def _drop_hand_made(evidence: List[Dict]) -> List[Dict]:
+    """ADR-0022 §4: Handarbeit im Graphen zählt für keine Confidence-Stufe.
+
+    Gefiltert wird *vor* dem Formelnteil, nicht danach: die Komponenten
+    (Relevanz, Quellengüte, Spezifität, Konsens, Widerspruchs-Penalty) dürfen
+    eine Handeingabe weder heben noch senken — sonst hinge die Stufe an einer
+    Zahl, die es nicht gibt. Die Evidence selbst bleibt im Bericht sichtbar;
+    nur ihre Wirkung auf den Score entfällt.
+
+    Ohne ``graph_origin`` ist die Liste unverändert, damit Bestandsreports
+    byte-gleich bleiben.
+    """
+    return [item for item in evidence if counts_for_confidence(item)]
+
 # MAI-14: Schwellwerte für Sentiment-Contradiction-Heuristik.
 _CONTRADICTION_PENALTY_AMOUNT: float = 0.2
 _CONTRADICTION_STD_THRESHOLD: float = 0.6
@@ -238,6 +255,7 @@ def _compute_confidence_with_penalties(
     """
     applied_penalties: List[str] = []
 
+    evidence = _drop_hand_made(evidence)
     if not evidence:
         return 0.15, "speculative", applied_penalties
 
@@ -404,7 +422,7 @@ def compute_confidence_breakdown(evidence: List[Dict]) -> Dict[str, float]:
         Wie breit tragen unabhängige simulierte Stakeholder-Gruppen die
         Aussage. Eine einzelne Persona bleibt hier niedrig.
     """
-    supporting, contradicting, related = partition_by_entailment(evidence)
+    supporting, contradicting, related = partition_by_entailment(_drop_hand_made(evidence))
     if not supporting:
         return {
             "source_fidelity": 0.0,
@@ -498,5 +516,6 @@ __all__ = [
     "compute_confidence_breakdown",
     "compute_claim_confidence",
     "partition_by_entailment",
+    "_count_independent_sources",
     "_has_contradiction",
 ]
