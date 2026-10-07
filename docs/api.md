@@ -276,6 +276,38 @@ Transportklassen:
 
 Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
+### Personasätze — `/api/persona-sets` (#1807)
+
+Ein Personasatz ist eine benannte Sammlung synthetischer Personas, aus der mehrere Läufe entstehen können. Dünne HTTP-Schicht über `services/persona_set_service.py` (`backend/app/api/persona_sets.py`); Anfragen und Antworten laufen über die Modelle aus `backend/app/contracts/persona_set_contract.py` (`schemas/persona-set-*.schema.json`). Zugriff wie die Persona-Bibliothek: Blueprint-Guard plus Operator.
+
+| Methode und Pfad | Body | Antwort |
+|---|---|---|
+| `GET /api/persona-sets` | – | `200` `{count, sets[]}` (`PersonaSetListResponse`, Kacheln `PersonaSetSummary` ohne Einträge, neuester Satz zuerst) |
+| `POST /api/persona-sets` | `{name, description?, graph_id?, project_id?}` | `201` `PersonaSetRecord` (leer, ungesperrt) |
+| `GET /api/persona-sets/<id>` | – | `200` `PersonaSetRecord` mit allen Einträgen |
+| `PATCH /api/persona-sets/<id>` | `{name?, description?}`, mindestens ein Feld | `200` `PersonaSetRecord`; auch bei gesperrtem Satz erlaubt |
+| `DELETE /api/persona-sets/<id>` | – | `200` `{removed: <id>}` |
+| `POST /api/persona-sets/<id>/duplicate` | `{name}` | `201` `PersonaSetRecord`: Kopie mit neuen Kennungen, ohne Sperre und ohne Läufe; auch bei gesperrtem Quellsatz erlaubt |
+| `GET /api/persona-sets/<id>/quality` | – | `200` `PersonaSetQualityReport` (reine Heuristik, kein LLM-Aufruf, Hinweise sperren nichts) |
+| `POST /api/persona-sets/<id>/entries` | `{origin, profile, source_entity_uuid?}` | `201` `PersonaSetEntry` (Server vergibt `entry_id` und Zeitstempel) |
+| `POST /api/persona-sets/<id>/entries/delete` | `{entry_ids[]}`, mindestens eine Kennung | `200` `{removed_entry_ids[], set}`; alles oder nichts, doppelte Kennungen zählen einmal |
+| `PATCH /api/persona-sets/<id>/entries/<entry_id>` | `{origin?, profile?}`, mindestens ein Feld | `200` `PersonaSetEntry`; `profile` ersetzt das Profil als Ganzes |
+| `DELETE /api/persona-sets/<id>/entries/<entry_id>` | – | `200` `{removed_entry_ids: [<entry_id>], set}` |
+
+`origin` ist `graph`, `manual`, `ai_draft` oder `fallback`; sie steht am Eintrag, nicht am Profil. `username` ist je Satz eindeutig, ohne Beachtung der Groß-/Kleinschreibung. Unbekannte Felder in einem Body werden abgelehnt.
+
+Fehlercodes (Envelope `{success: false, code, error}`):
+
+- `400 validation_failed`: Body verletzt den Vertrag (Antwort trägt `errors[]`); außerdem ein Lauf aus einem Satz ohne Einträge.
+- `404 not_found`: unbekannter Satz oder Eintrag (bei `entries/delete` reicht eine unbekannte Kennung, dann ändert sich nichts).
+- `409 persona_set_locked`: der Satz ist gesperrt, weil ein Lauf aus ihm entstanden ist. Gesperrt sind Einträge hinzufügen, ändern, löschen und das Löschen des Satzes; Name und Beschreibung bleiben änderbar, Duplizieren bleibt möglich.
+- `409 conflict`: der `username` kommt im Satz schon vor.
+- `500 internal_error`: unerwarteter Fehler, etwa eine nicht beschreibbare Ablage; Details nur im Log.
+
+**Altbestand.** Der erste `GET /api/persona-sets` übernimmt die Vorlagen der alten Persona-Bibliothek (`uploads/simulations/_persona_library/`) einmalig in den Sammelsatz „Importiert“ (`pset_importiert`). Ein Marker verhindert, dass ein gelöschter Sammelsatz beim nächsten Aufruf wiederkehrt. Schlägt der Import fehl (Ablage nicht les- oder beschreibbar), antwortet die Liste mit `500 internal_error` statt ohne den Altbestand weiterzumachen.
+
+**Lauf aus Satz.** `POST /api/simulation/create-from-personas` nimmt `persona_set_id` als Quelle der Personas (genau eine von `persona_set_id`, `template_ids`, `personas`, sonst `400 validation_failed`; unbekannter Satz `404 not_found`; Satz ohne Einträge `400`). Der Lauf erhält eine Kopie der Personas; erst nach erfolgreicher Vorbereitung wird der Satz gesperrt und der Lauf in `used_by_simulation_ids` vermerkt, bei einem gescheiterten Anlegen bleibt der Satz bearbeitbar. Die Antwort `201` trägt `simulation_id`, `project_id`, `persona_count`, `persona_set_id` und `degradations` (`PipelineDegradationReport`). Einträge mit Herkunft `fallback` stehen im Laufprofil mit `generation_source="rule_based"`, und der Lauf meldet einmal `persona_rule_based_fallback` (`warning`, bei ausschließlich regelbasierten Personas `blocking`), auch in den Metadaten des Prepare-Runs (`metadata.degradations`). Ein leerer `events`-Eintrag heißt: nichts ist ausgefallen. Die `persona_set_id` steht in den Metadaten des Prepare-Runs (`persona_source="set"`).
+
 ### Settings — `/api/settings`
 
 - Settings lesen/schreiben
