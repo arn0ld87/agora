@@ -78,7 +78,7 @@ function makeRouter() {
       { path: '/simulations/:simulationId/simulation/feed', name: 'RunSimulationFeed', component: Stub },
       { path: '/v4/report/:reportId', name: 'StepReport', component: Stub },
       { path: '/report/:reportId', name: 'Report', component: Stub },
-      { path: '/v4/simulation/:simulationId/interviews', name: 'RunInterviewsLegacy', component: Stub },
+      { path: '/simulations/:simulationId/interviews/:conversationId?', name: 'RunInterviews', component: Stub },
       { path: '/library/runs', name: 'LibraryRuns', component: Stub },
     ],
   })
@@ -163,7 +163,7 @@ describe('RunWorkspaceView: Reiter', () => {
     expect(href('personas')).toBe('/v4/env-setup/proj_1')
     expect(href('simulation')).toBe('/simulations/sim_1/simulation/feed')
     expect(href('report')).toBe('/v4/report/report_1')
-    expect(href('interviews')).toBe('/v4/simulation/sim_1/interviews')
+    expect(href('interviews')).toBe('/simulations/sim_1/interviews')
     const current = wrapper.findAll('[aria-current="page"]').filter((e) => e.attributes('data-testid')?.startsWith('run-tab-'))
     expect(current).toHaveLength(1)
     expect(current[0]!.attributes('data-testid')).toBe('run-tab-overview')
@@ -191,7 +191,7 @@ describe('RunWorkspaceView: Reiter', () => {
     }
     expect(wrapper.get('[data-testid="run-tab-personas"]').text()).toContain('lässt sich nicht auflösen')
     expect(wrapper.get('[data-testid="run-tab-report"]').text()).toContain('noch keinen Bericht')
-    expect(wrapper.get('[data-testid="run-tab-interviews"]').attributes('href')).toBe('/v4/simulation/sim_1/interviews')
+    expect(wrapper.get('[data-testid="run-tab-interviews"]').attributes('href')).toBe('/simulations/sim_1/interviews')
   })
 })
 

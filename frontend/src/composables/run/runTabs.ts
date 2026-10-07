@@ -1,8 +1,9 @@
 /**
  * Reiter des Lauf-Arbeitsbereichs (Bauplan 6.2, "Zwischen Etappe 2 und ...").
  * Ziele sind Route-Namen mit Params, nie zusammengebaute Pfade. Bis zur
- * Etappe der jeweiligen Zeile führen Personas, Simulation, Bericht und
- * Interviews auf die bestehenden Ansichten.
+ * Etappe der jeweiligen Zeile führen Personas und Bericht auf die
+ * bestehenden Ansichten; Simulation und Interviews sind seit Etappe 4 und 6
+ * eigene Kind-Routen des Arbeitsbereichs.
  */
 import type { RouteTarget } from './runStageState'
 
@@ -35,6 +36,6 @@ export function deriveRunTabs(input: RunTabInput): RunTab[] {
     latestReportId
       ? { key: 'report', to: { name: 'StepReport', params: { reportId: latestReportId } }, disabledReason: null }
       : { key: 'report', to: null, disabledReason: 'noReport' },
-    { key: 'interviews', to: { name: 'RunInterviewsLegacy', params: { simulationId } }, disabledReason: null },
+    { key: 'interviews', to: { name: 'RunInterviews', params: { simulationId } }, disabledReason: null },
   ]
 }

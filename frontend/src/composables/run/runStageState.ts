@@ -250,7 +250,7 @@ function nextStepFor(
       return enabled('start', reportReadyTarget(data))
     }
     case 'interviews':
-      return enabled('view', target('RunInterviewsLegacy', { simulationId: data.simulationId }))
+      return enabled('view', target('RunInterviews', { simulationId: data.simulationId }))
   }
 }
 

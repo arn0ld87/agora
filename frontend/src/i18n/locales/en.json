@@ -2307,6 +2307,52 @@
         "resume": "Resume",
         "view": "View"
       },
+      "interviews": {
+        "loading": "Loading interviews …",
+        "retry": "Reload",
+        "unavailable": "Interviews are not available for this run.",
+        "notRun": "Interviews are available once the simulation has finished. Earlier history stays readable.",
+        "noAnswer": "No answer received.",
+        "sending": "Asking …",
+        "budgetExceeded": "Budget exhausted, the question was not answered.",
+        "agentFallback": "Agent {n}",
+        "list": {
+          "aria": "Conversations",
+          "heading": "Conversations",
+          "empty": "No conversation yet",
+          "group": "Group: {question}"
+        },
+        "new": {
+          "title": "New conversation",
+          "label": "Persona",
+          "placeholder": "Choose a persona",
+          "open": "Open conversation"
+        },
+        "group": {
+          "title": "Group question",
+          "personas": "Choose personas",
+          "question": "Question for everyone",
+          "send": "Ask the group",
+          "large": "Asking {n} personas at once may exceed the backend deadline. Some answers can be missing.",
+          "summary": "{asked} asked, {answered} answered, {failed} failed"
+        },
+        "pane": {
+          "aria": "Conversation",
+          "choose": "Choose a conversation from the list.",
+          "none": "No conversation yet",
+          "with": "Conversation with {name}",
+          "noTurns": "No questions to this persona yet.",
+          "you": "You:",
+          "badge": "SIM · Interview",
+          "groupTitle": "Group question",
+          "groupGone": "This group question only exists in the session where it was asked.",
+          "inputLabel": "Question to the persona",
+          "model": "Run model: {model}",
+          "modelUnknown": "Run model: unknown",
+          "send": "Ask",
+          "notRun": "Questions are only possible once the simulation has finished."
+        }
+      },
       "simFeed": {
         "ariaLabel": "Simulation feed",
         "network": {

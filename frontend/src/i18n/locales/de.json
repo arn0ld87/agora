@@ -2307,6 +2307,52 @@
         "resume": "Fortsetzen",
         "view": "Ansehen"
       },
+      "interviews": {
+        "loading": "Interviews werden geladen …",
+        "retry": "Erneut laden",
+        "unavailable": "Interviews sind für diesen Lauf nicht verfügbar.",
+        "notRun": "Interviews sind nutzbar, sobald die Simulation abgeschlossen ist. Der bisherige Verlauf bleibt einsehbar.",
+        "noAnswer": "Keine Antwort erhalten.",
+        "sending": "Wird gefragt …",
+        "budgetExceeded": "Budget erschöpft, die Frage wurde nicht beantwortet.",
+        "agentFallback": "Agent {n}",
+        "list": {
+          "aria": "Gespräche",
+          "heading": "Gespräche",
+          "empty": "Noch kein Gespräch",
+          "group": "Gruppe: {question}"
+        },
+        "new": {
+          "title": "Neues Gespräch",
+          "label": "Persona",
+          "placeholder": "Persona wählen",
+          "open": "Gespräch öffnen"
+        },
+        "group": {
+          "title": "Gruppenfrage",
+          "personas": "Personas auswählen",
+          "question": "Frage an alle",
+          "send": "Gruppenfrage stellen",
+          "large": "{n} Personas auf einmal können die Frist des Backends überschreiten. Einzelne Antworten können fehlen.",
+          "summary": "{asked} gefragt, {answered} beantwortet, {failed} fehlgeschlagen"
+        },
+        "pane": {
+          "aria": "Gespräch",
+          "choose": "Gespräch aus der Liste wählen.",
+          "none": "Noch kein Gespräch",
+          "with": "Gespräch mit {name}",
+          "noTurns": "Noch keine Fragen an diese Persona.",
+          "you": "Du:",
+          "badge": "SIM · Interview",
+          "groupTitle": "Gruppenfrage",
+          "groupGone": "Diese Gruppenfrage gibt es nur in der Sitzung, in der sie gestellt wurde.",
+          "inputLabel": "Frage an die Persona",
+          "model": "Modell des Laufs: {model}",
+          "modelUnknown": "Modell des Laufs: unbekannt",
+          "send": "Fragen",
+          "notRun": "Fragen sind erst nach abgeschlossener Simulation möglich."
+        }
+      },
       "simFeed": {
         "ariaLabel": "Feed der Simulation",
         "network": {

@@ -35,6 +35,7 @@ import {
   type GroupConversation,
   type GroupRecord,
   type InterviewTurn,
+  stripInterviewPrefix,
   type PersonaConversation,
   type SessionTurn,
 } from './conversations'
@@ -136,9 +137,19 @@ export function useRunInterviews(
       const rows = await getInterviewHistory(id, { limit: HISTORY_LIMIT })
       if (mine !== token) return
       history.value = rows
-      // Der Verlauf ist maßgeblich: beantwortete Sitzungszüge stehen jetzt dort;
-      // fehlgeschlagene tauchen im Verlauf nie auf und bleiben sichtbar.
-      sessionTurns.value = sessionTurns.value.filter((s) => s.turn.error)
+      // Der Verlauf ist maßgeblich: ein Sitzungszug fällt weg, sobald er dort steht.
+      // Fehlgeschlagene Züge tauchen im Verlauf nie auf und bleiben sichtbar; eine
+      // Antwort, die der Verlauf (noch) nicht enthält, geht ebenfalls nicht verloren.
+      sessionTurns.value = sessionTurns.value.filter(
+        (s) =>
+          s.turn.error ||
+          !rows.some(
+            (r) =>
+              r.agent_id === s.agentId &&
+              stripInterviewPrefix(r.prompt) === s.turn.question &&
+              (r.response ?? null) === s.turn.answer,
+          ),
+      )
     } catch (err) {
       if (mine !== token) return
       if (!markUnavailable(err)) error.value = interviewErrorMessage(err, t)
@@ -232,6 +243,8 @@ export function useRunInterviews(
     const a = res.answers[0]
     // Optimistisch anhängen; der Nachladen unten ersetzt beantwortete Züge durch den Verlauf.
     sessionTurns.value = [...sessionTurns.value, { agentId, turn: turnOf(question, a) }]
+    // Ein Fehler dieser einen Antwort bleibt neben dem Eingabefeld stehen, nicht nur im Verlauf.
+    if (a.error && !sendError.value) sendError.value = a.error
     if (!a.error) await reload()
     const status: AskStatus = a.error ? (res.status === 'answered' ? 'failed' : res.status) : 'answered'
     return { status, answer: a.answer, error: a.error }
