@@ -2350,7 +2350,8 @@
           "explain": "The run has reached its budget. The question was not answered or stored; further questions are rejected while the budget is exhausted.",
           "reason": "Termination reason: {reason}",
           "figures": "{dimension}: {observed} of {threshold}",
-          "dimensionUnknown": "Limit"
+          "dimensionUnknown": "Limit",
+          "persisted": "{n} answer(s) were stored before the run stopped and appear in the history."
         },
         "pane": {
           "aria": "Conversation",

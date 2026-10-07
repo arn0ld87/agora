@@ -32,6 +32,9 @@ const figures = computed(() => {
       {{ t('views.run.interviews.budget.reason', { reason: detail.reason }) }}
     </p>
     <p v-if="figures" class="bnotice__text" data-testid="budget-figures">{{ figures }}</p>
+    <p v-if="detail && detail.persistedCount > 0" class="bnotice__text" data-testid="budget-persisted">
+      {{ t('views.run.interviews.budget.persisted', { n: detail.persistedCount }) }}
+    </p>
     <p v-if="detail?.message" class="bnotice__text bnotice__text--muted" data-testid="budget-message">{{ detail.message }}</p>
   </section>
 </template>

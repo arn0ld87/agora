@@ -135,6 +135,7 @@ describe('useRunInterviews', () => {
           dimension: 'tokens',
           observed: 12000,
           threshold: 10000,
+          persisted_count: 1,
         },
       }),
     )
@@ -146,6 +147,7 @@ describe('useRunInterviews', () => {
       dimension: 'tokens',
       observed: 12000,
       threshold: 10000,
+      persistedCount: 1,
     })
   })
 

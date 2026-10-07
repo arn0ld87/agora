@@ -25,7 +25,7 @@ import { z } from 'zod'
 import { askPersonas, getInterviewHistory, type InterviewAnswer } from '@/api/interviews'
 import { getSimulationConfig } from '@/api/simulation'
 import { isApiError } from '@/api/envelope'
-import type { InterviewHistoryItem } from '@/contracts/interviewContract'
+import { InterviewBudgetExceededSchema, type InterviewHistoryItem } from '@/contracts/interviewContract'
 import { interviewErrorMessage } from '@/utils/interviewErrorMessage'
 import { readEnvelope } from '../simulation/simulationEnvelope'
 import {
@@ -69,30 +69,22 @@ export interface GroupOutcome {
 const ConfigDataSchema = z.object({ llm_model: z.string().nullish() }).passthrough()
 
 /**
- * Felder des 409-Envelopes `budget_exceeded` (flach im Body, siehe
- * `_budget_exceeded_as_conflict` im Backend). Alles optional: fehlt etwas,
- * zeigt die Oberfläche nur die Meldung, nie geratene Zahlen.
+ * 409-Body `budget_exceeded` nach Vertrag (`InterviewBudgetExceededSchema`).
+ * Verletzt eine Antwort den Vertrag, zeigt die Oberfläche nur die Meldung,
+ * nie geratene Zahlen.
  */
-const BudgetBodySchema = z
-  .object({
-    error: z.string().nullish(),
-    termination_reason: z.string().nullish(),
-    dimension: z.string().nullish(),
-    observed: z.number().nullish(),
-    threshold: z.number().nullish(),
-  })
-  .passthrough()
-
 export interface BudgetDetail {
   message: string
   reason: string | null
   dimension: string | null
   observed: number | null
   threshold: number | null
+  /** Vor dem Abbruch gespeicherte Antworten dieses Aufrufs; sie stehen im Verlauf. */
+  persistedCount: number
 }
 
 function budgetDetailOf(err: unknown, message: string): BudgetDetail {
-  const parsed = isApiError(err) ? BudgetBodySchema.safeParse(err.originalResponse) : null
+  const parsed = isApiError(err) ? InterviewBudgetExceededSchema.safeParse(err.originalResponse) : null
   const body = parsed?.success ? parsed.data : null
   return {
     message,
@@ -100,6 +92,7 @@ function budgetDetailOf(err: unknown, message: string): BudgetDetail {
     dimension: body?.dimension ?? null,
     observed: body?.observed ?? null,
     threshold: body?.threshold ?? null,
+    persistedCount: body?.persisted_count ?? 0,
   }
 }
 
@@ -267,6 +260,8 @@ export function useRunInterviews(
       const budget = isBudgetFailure(err)
       budgetExceeded.value = budget
       budgetDetail.value = budget ? budgetDetailOf(err, message) : null
+      // Vor dem Abbruch gespeicherte Antworten sind verbucht und gehören in den Verlauf.
+      if (budgetDetail.value && budgetDetail.value.persistedCount > 0) void reload()
       sendError.value = budget
         ? `${t('views.run.interviews.budgetExceeded')} ${message}`
         : interviewErrorMessage(err, t)

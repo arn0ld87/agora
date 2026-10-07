@@ -2350,7 +2350,8 @@
           "explain": "Der Lauf hat sein Budget erreicht. Die Frage wurde nicht beantwortet und nicht gespeichert; weitere Fragen werden abgelehnt, solange das Budget erschöpft ist.",
           "reason": "Abbruchgrund: {reason}",
           "figures": "{dimension}: {observed} von {threshold}",
-          "dimensionUnknown": "Grenze"
+          "dimensionUnknown": "Grenze",
+          "persisted": "{n} Antwort(en) wurden vor dem Abbruch gespeichert und stehen im Verlauf."
         },
         "pane": {
           "aria": "Gespräch",
