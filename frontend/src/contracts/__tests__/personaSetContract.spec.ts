@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   CreateFromPersonasRequestSchema,
+  PersonaDraftRequestSchema,
+  PersonaDraftResponseSchema,
   PersonaOriginSchema,
   PersonaSetCreateSchema,
   PersonaSetEntriesDeleteResponseSchema,
@@ -149,5 +151,50 @@ describe('personaSetContract: Anfragen', () => {
       CreateFromPersonasRequestSchema.safeParse({ simulation_requirement: 'x', persona_set_id: 's1', personas: [] }).success,
     ).toBe(true)
     expect(CreateFromPersonasRequestSchema.safeParse({ simulation_requirement: 'x', persona_set_id: ' ' }).success).toBe(false)
+  })
+
+  describe('KI-Entwurf', () => {
+    it('verlangt einen getrimmten Brief und setzt die Sprache auf „de"', () => {
+      expect(PersonaDraftRequestSchema.parse({ brief: '  Bremen ' }).brief).toBe('Bremen')
+      expect(PersonaDraftRequestSchema.parse({ brief: 'Bremen' }).language).toBe('de')
+      expect(PersonaDraftRequestSchema.safeParse({ brief: '   ' }).success).toBe(false)
+      expect(PersonaDraftRequestSchema.safeParse({}).success).toBe(false)
+    })
+
+    it('lässt die Herkunft nicht wählbar', () => {
+      const profile = { username: 'karla', name: 'Karla' }
+      expect(
+        PersonaDraftResponseSchema.safeParse({ origin: 'ai_draft', profile, example_post: null }).success,
+      ).toBe(true)
+      expect(
+        PersonaDraftResponseSchema.safeParse({ origin: 'manual', profile, example_post: null }).success,
+      ).toBe(false)
+    })
+
+    it('unterscheidet „kein Beispielbeitrag" von einem leeren Beitrag', () => {
+      const profile = { username: 'karla', name: 'Karla' }
+      expect(
+        PersonaDraftResponseSchema.parse({ origin: 'ai_draft', profile, example_post: null }).example_post,
+      ).toBeNull()
+      expect(
+        PersonaDraftResponseSchema.safeParse({
+          origin: 'ai_draft',
+          profile,
+          example_post: { content: '', network: 'twitter' },
+        }).success,
+      ).toBe(false)
+    })
+
+    it('kennt nur die zwei Netze mit einem Feed', () => {
+      const profile = { username: 'karla', name: 'Karla' }
+      const post = (network: string) => ({
+        origin: 'ai_draft',
+        profile,
+        example_post: { content: 'x', network },
+      })
+      expect(PersonaDraftResponseSchema.safeParse(post('twitter')).success).toBe(true)
+      expect(PersonaDraftResponseSchema.safeParse(post('reddit')).success).toBe(true)
+      expect(PersonaDraftResponseSchema.safeParse(post('mastodon')).success).toBe(false)
+    })
   })
 })

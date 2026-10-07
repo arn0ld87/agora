@@ -230,7 +230,13 @@ describe('PersonaSetView', () => {
     await add.trigger('click')
     await wrapper.get(`[data-testid="${Id.editorName}"]`).setValue('Neu')
     await wrapper.get(`[data-testid="${Id.editorUsername}"]`).setValue('neu')
-    await wrapper.get('form').trigger('submit')
+    // Das Formular des Editors gezielt, nicht das erste im Dokument: die
+    // Entwurfs-Ecke (#1807, E7-F3) brachte ein zweites Formular mit, und ein
+    // `get('form')` hinge fortan an der Reihenfolge im Baum. Der Dialog hängt
+    // per Teleport am Body, deshalb wird er dort gesucht.
+    const editorForm = document.body.querySelector<HTMLFormElement>(`[data-testid="${Id.editor}"] form`)
+    expect(editorForm).not.toBeNull()
+    editorForm!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await flushPromises()
     expect(api.addPersonaSetEntry).toHaveBeenCalledTimes(1)
     const [setId, body] = api.addPersonaSetEntry.mock.calls[0]

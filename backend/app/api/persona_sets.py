@@ -24,6 +24,9 @@ from flask import Blueprint, request
 from pydantic import BaseModel, ValidationError
 
 from ..contracts.persona_set_contract import (
+    PersonaDraftExamplePost,
+    PersonaDraftRequest,
+    PersonaDraftResponse,
     PersonaSetCreate,
     PersonaSetDeleteResponse,
     PersonaSetDuplicate,
@@ -32,7 +35,12 @@ from ..contracts.persona_set_contract import (
     PersonaSetEntryCreate,
     PersonaSetEntryUpdate,
     PersonaSetListResponse,
+    PersonaSetProfile,
     PersonaSetUpdate,
+)
+from ..services.persona_set_draft_service import (
+    PersonaDraftError,
+    draft_persona_entry,
 )
 from ..services.persona_set_service import (
     PersonaSetConflict,
@@ -99,6 +107,15 @@ def _view(log_prefix: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]
                     ApiErrorCode.VALIDATION_FAILED,
                     status=400,
                     message=f"Persona set {exc} has no personas",
+                )
+            except PersonaDraftError as exc:
+                # 502, nicht 500 und nicht 400: der Auftrag war gueltig, der
+                # Anbieter war es nicht. Die Oberflaeche unterscheidet daran
+                # „Brief pruefen" von „Anbieter nicht erreichbar" (#1807).
+                return json_error(
+                    ApiErrorCode.LLM_UNAVAILABLE,
+                    status=502,
+                    message=str(exc),
                 )
 
         return handle_api_errors(log_prefix=log_prefix)(mapped)
@@ -206,3 +223,46 @@ def delete_persona_set_entry(set_id: str, entry_id: str):
         removed_entry_ids=[entry_id], set=summary
     )
     return json_success(response.model_dump(mode="json"))
+
+
+@persona_sets_bp.route("/<set_id>/draft", methods=["POST"])
+@operator_only
+@_view("Failed to draft persona set entry")
+def draft_persona_set_entry(set_id: str):
+    """KI-Entwurf einer Persona, direkt als Eintrag in den Satz.
+
+    Die Sperrpruefung laeuft **vor** dem Modell: sonst wuerde ein gesperrter
+    Satz Tokens fuer einen Entwurf burns, der danach mit 409 abgelehnt wird.
+    Der Entwurf selbst haengt an keinem Satz, deshalb steht danach keine
+    zweite Pruefung.
+    """
+    service = PersonaSetService()
+    service.assert_editable(set_id)
+
+    request_body = _parse(PersonaDraftRequest)
+    draft = draft_persona_entry(
+        set_id=set_id,
+        brief=request_body.brief,
+        language=request_body.language,
+    )
+
+    # Die Herkunft vergibt dieser Endpunkt, nicht der Aufrufer: ein Entwurf,
+    # der anders markiert waere, verwechselte „vom Modell vorgeschlagen" mit
+    # „von Hand gesetzt".
+    entry = service.add_entry(
+        set_id,
+        PersonaSetEntryCreate(
+            origin="ai_draft",
+            profile=PersonaSetProfile.model_validate(draft["profile"]),
+        ),
+    )
+    response = PersonaDraftResponse(
+        origin="ai_draft",
+        profile=entry.profile,
+        example_post=(
+            PersonaDraftExamplePost.model_validate(draft["example_post"])
+            if draft.get("example_post")
+            else None
+        ),
+    )
+    return json_success(response.model_dump(mode="json"), status=201)

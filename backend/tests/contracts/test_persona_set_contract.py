@@ -7,6 +7,8 @@ verlustfreie Serialisierung — die Persistenz-Adapter verlassen sich darauf.
 
 from __future__ import annotations
 
+from typing import get_args
+
 import json
 from typing import Any
 
@@ -15,6 +17,8 @@ from pydantic import ValidationError
 
 from app.contracts.persona_contract import PersonaModel
 from app.contracts.persona_set_contract import (
+    PersonaDraftRequest,
+    PersonaDraftResponse,
     PERSONA_SET_MAX_ENTRIES,
     PERSONA_SET_NAME_MAX_LENGTH,
     PERSONA_SET_SCHEMA_VERSION,
@@ -322,3 +326,42 @@ def test_entry_create_carries_no_server_assigned_fields():
     fields = set(PersonaSetEntryCreate.model_fields)
 
     assert fields == {'origin', 'profile', 'source_entity_uuid'}
+
+
+# --- KI-Entwurf (Slice 7c) -------------------------------------------------
+
+
+def test_draft_request_requires_a_trimmed_brief():
+    """Ohne Beschreibung der Rolle entwirft das Modell irgendeine Persona."""
+    assert PersonaDraftRequest(brief='Betriebsratin').brief == 'Betriebsratin'
+    assert PersonaDraftRequest(brief='  Bremen  ').brief == 'Bremen'
+    with pytest.raises(ValidationError):
+        PersonaDraftRequest(brief='   ')
+
+
+def test_draft_request_language_defaults_to_the_surface_language():
+    assert PersonaDraftRequest(brief='x').language == 'de'
+
+
+def test_draft_response_origin_is_not_choosable():
+    """Die Herkunft steht hier nicht zur Wahl: wer den Entwurf als ``manual``
+    ausgibt, verwechselt „vom Modell vorgeschlagen" mit „von Hand gesetzt"."""
+    fields = set(PersonaDraftResponse.model_fields)
+
+    assert fields == {'origin', 'profile', 'example_post'}
+    # Zwei getrennt erzeugte ``Literal``-Objekte sind nicht identisch, nur
+    # gleich — deshalb wird der Wert verglichen, nicht das Objekt.
+    assert get_args(PersonaDraftResponse.model_fields['origin'].annotation) == ('ai_draft',)
+    with pytest.raises(ValidationError):
+        PersonaDraftResponse(origin='manual', profile=_profile())
+
+
+def test_draft_response_keeps_a_missing_example_post_distinguishable():
+    """Ohne Beispielbeitrag bleibt die Vorschau leer. Der Unterschied zu einem
+    leeren Beitrag darf nicht wegfallen — sonst zeigte die Oberflaeche eine
+    leere Flaeche und wuerde das als „noch nicht geladen" lesen."""
+    without = PersonaDraftResponse(origin='ai_draft', profile=_profile())
+
+    assert without.example_post is None
+    dumped = without.model_dump(mode='json')
+    assert 'example_post' in dumped

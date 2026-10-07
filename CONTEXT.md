@@ -38,7 +38,7 @@ Das lesbare Ergebnis eines Laufs. Ein Bericht besitzt einen eigenen Status und k
 
 ### Personasatz
 
-Eine Sammlung synthetischer Personas. Personas können vor einer Simulation geprüft, verändert oder verworfen werden.
+Ein benannter Satz synthetischer Personas in der Bibliothek. Ein Lauf bekommt eine Kopie (Schnappschuss); nach dem ersten Lauf aus diesem Satz ist der Satz gesperrt, der Ausweg ist Duplizieren. Jeder Eintrag trägt seine Herkunft: `graph`, `manual`, `ai_draft` oder `fallback`.
 
 ### Graph
 

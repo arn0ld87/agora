@@ -559,6 +559,22 @@ class PersonaSetService:
             },
         )
 
+    def assert_editable(self, set_id: str) -> PersonaSetRecord:
+        """Prueft die Sperre, ohne zu schreiben.
+
+        Der KI-Entwurf (``POST /api/persona-sets/<id>/draft``) braucht das vor
+        dem Modellaufruf: sonst wuerde ein gesperrter Satz Tokens fuer einen
+        Entwurf burns, der erst danach mit ``PersonaSetLocked`` abgelehnt wird.
+        Es gibt bewusst keinen Umweg ueber ``update_set`` — der wuerde einen
+        Schreibvorgang vortaeuschen, den es nicht gibt, und einen leeren
+        Update-Aufruf als Sperrpruefung tarnen.
+
+        Gibt den Satz zurueck, damit der Aufrufer ihn nicht zweimal liest.
+        """
+        record = self.get_set(set_id)
+        self._ensure_unlocked(record)
+        return record
+
     # --- intern ------------------------------------------------------------
 
     @staticmethod
@@ -651,6 +667,96 @@ class _Mapper:
         return value or None
 
 
+# Die folgenden Helfer beantworten je eine Frage: "Ist dieser Wert aus dem
+# Altbestand brauchbar, und wenn nicht, welche Warnung bleibt stehen?" Sie sind
+# aus `_map_legacy_template` herausgezogen, weil die Funktion sonst die
+# Komplexitaetsgrenze des Gates (#MAI-17) reisst. Verhalten unveraendert.
+
+
+def _legacy_age(raw: Any, m: "_Mapper") -> Optional[int]:
+    """Alter 0..120. Ein Wert ausserhalb bleibt weg und wird gemeldet."""
+    if raw in (None, ""):
+        return None
+    try:
+        candidate = int(str(raw).strip())
+    except ValueError:
+        candidate = -1
+    if isinstance(raw, bool) or not 0 <= candidate <= 120:
+        m.warn("age", "not_in_0_120", raw)
+        return None
+    return candidate
+
+
+def _legacy_gender(raw: Any, m: "_Mapper") -> Optional[str]:
+    """Geschlecht nur aus dem Vokabular, nie geraten."""
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, str) and raw.strip().lower() in _GENDERS:
+        return raw.strip().lower()
+    m.warn("gender", "not_in_vocabulary", raw)
+    return None
+
+
+def _legacy_mbti(raw: Any, m: "_Mapper") -> Optional[str]:
+    """MBTI aus den 16 Typen. „INTX" faellt weg statt durchzukommen."""
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, str) and raw.strip().upper() in _MBTI:
+        return raw.strip().upper()
+    m.warn("mbti", "not_a_valid_type", raw)
+    return None
+
+
+def _legacy_country(raw: Any, m: "_Mapper") -> Optional[str]:
+    """Laenderkuerzel. Ein Name wird aufgeloest und die Aufloesung gemeldet."""
+    if raw in (None, ""):
+        return None
+    text = raw.strip() if isinstance(raw, str) else ""
+    if len(text) == 2 and text.isalpha():
+        return text.upper()
+    if text.lower() in _COUNTRY_NAMES:
+        m.warn("country", "mapped_name_to_code", raw)
+        return _COUNTRY_NAMES[text.lower()]
+    m.warn("country", "not_an_iso_2_code", raw)
+    return None
+
+
+def _legacy_topics(raw: Any, m: "_Mapper") -> List[str]:
+    """Interessen: eine Liste, auf 15 gekuerzt. Keine Liste ist kein Fehler."""
+    if not isinstance(raw, list):
+        if raw not in (None, ""):
+            m.warn("interested_topics", "not_a_list", raw)
+        return []
+    topics = [str(t).strip() for t in raw if str(t).strip()]
+    if len(topics) > 15:
+        m.warn("interested_topics", "truncated_to_15", len(topics))
+        return topics[:15]
+    return topics
+
+
+def _legacy_activity(raw: Any, m: "_Mapper") -> Optional[float]:
+    """Aktivitaet 0..1. ``bool`` ist keine Zahl, auch wenn Python sie duldet."""
+    if raw in (None, ""):
+        return None
+    if (
+        isinstance(raw, (int, float))
+        and not isinstance(raw, bool)
+        and 0.0 <= float(raw) <= 1.0
+    ):
+        return float(raw)
+    m.warn("activity_level", "not_in_0_1", raw)
+    return None
+
+
+def _legacy_persona_kind(raw: Any, m: "_Mapper") -> str:
+    """Individual ist der Vorgang; ein unbekannter Wert faellt darauf zurueck."""
+    if raw in ("individual", "collective"):
+        return raw
+    if raw not in (None, ""):
+        m.warn("persona_kind", "unknown_value", raw)
+    return "individual"
+
+
 def _map_legacy_template(
     template: Dict[str, Any], taken_usernames: set[str]
 ) -> Optional[tuple[PersonaSetProfile, PersonaOrigin, Optional[str], str, int]]:
@@ -684,74 +790,13 @@ def _map_legacy_template(
     if username != base:
         m.warn("username", "renamed_duplicate", base)
 
-    age: Optional[int] = None
-    raw_age = template.get("age")
-    if raw_age not in (None, ""):
-        try:
-            candidate = int(str(raw_age).strip())
-        except ValueError:
-            candidate = -1
-        if isinstance(raw_age, bool) or not 0 <= candidate <= 120:
-            m.warn("age", "not_in_0_120", raw_age)
-        else:
-            age = candidate
-
-    gender: Optional[str] = None
-    raw_gender = template.get("gender")
-    if raw_gender not in (None, ""):
-        if isinstance(raw_gender, str) and raw_gender.strip().lower() in _GENDERS:
-            gender = raw_gender.strip().lower()
-        else:
-            m.warn("gender", "not_in_vocabulary", raw_gender)
-
-    mbti: Optional[str] = None
-    raw_mbti = template.get("mbti")
-    if raw_mbti not in (None, ""):
-        if isinstance(raw_mbti, str) and raw_mbti.strip().upper() in _MBTI:
-            mbti = raw_mbti.strip().upper()
-        else:
-            m.warn("mbti", "not_a_valid_type", raw_mbti)
-
-    country: Optional[str] = None
-    raw_country = template.get("country")
-    if raw_country not in (None, ""):
-        text = raw_country.strip() if isinstance(raw_country, str) else ""
-        if len(text) == 2 and text.isalpha():
-            country = text.upper()
-        elif text.lower() in _COUNTRY_NAMES:
-            country = _COUNTRY_NAMES[text.lower()]
-            m.warn("country", "mapped_name_to_code", raw_country)
-        else:
-            m.warn("country", "not_an_iso_2_code", raw_country)
-
-    topics: List[str] = []
-    raw_topics = template.get("interested_topics")
-    if isinstance(raw_topics, list):
-        topics = [str(t).strip() for t in raw_topics if str(t).strip()]
-        if len(topics) > 15:
-            m.warn("interested_topics", "truncated_to_15", len(topics))
-            topics = topics[:15]
-    elif raw_topics not in (None, ""):
-        m.warn("interested_topics", "not_a_list", raw_topics)
-
-    activity: Optional[float] = None
-    raw_activity = template.get("activity_level")
-    if raw_activity not in (None, ""):
-        if (
-            isinstance(raw_activity, (int, float))
-            and not isinstance(raw_activity, bool)
-            and 0.0 <= float(raw_activity) <= 1.0
-        ):
-            activity = float(raw_activity)
-        else:
-            m.warn("activity_level", "not_in_0_1", raw_activity)
-
-    kind = template.get("persona_kind")
-    persona_kind = "individual"
-    if kind in ("individual", "collective"):
-        persona_kind = kind
-    elif kind not in (None, ""):
-        m.warn("persona_kind", "unknown_value", kind)
+    age = _legacy_age(template.get("age"), m)
+    gender = _legacy_gender(template.get("gender"), m)
+    mbti = _legacy_mbti(template.get("mbti"), m)
+    country = _legacy_country(template.get("country"), m)
+    topics = _legacy_topics(template.get("interested_topics"), m)
+    activity = _legacy_activity(template.get("activity_level"), m)
+    persona_kind = _legacy_persona_kind(template.get("persona_kind"), m)
 
     source_uuid = m.text(template.get("source_entity_uuid"), "source_entity_uuid", 128)
 

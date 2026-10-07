@@ -249,3 +249,54 @@ export const PersonaSetEntriesDeleteSchema = z
   })
   .strict()
 export type PersonaSetEntriesDelete = z.input<typeof PersonaSetEntriesDeleteSchema>
+
+// --- KI-Entwurf (Slice 7c) ---------------------------------------------------
+
+export const PERSONA_DRAFT_BRIEF_MAX_LENGTH = 2000
+
+/** Netzwerk des Beispielbeitrags. Nur Twitter und Reddit tragen einen Feed. */
+export const DraftNetworkSchema = z.enum(['twitter', 'reddit'])
+export type DraftNetwork = z.infer<typeof DraftNetworkSchema>
+
+/**
+ * Auftrag an das Modell. `brief` ist Pflicht und getrimmt: ohne Beschreibung
+ * der Rolle entwirft das Modell irgendeine Persona, und der Vorschlag wäre
+ * nicht als Entwurf *dieses* Auftrags erkennbar.
+ */
+export const PersonaDraftRequestSchema = z
+  .object({
+    brief: z.string().trim().min(1).max(PERSONA_DRAFT_BRIEF_MAX_LENGTH),
+    language: z.string().min(2).max(16).default('de'),
+  })
+  .strict()
+export type PersonaDraftRequest = z.input<typeof PersonaDraftRequestSchema>
+
+/**
+ * Der Beispielbeitrag ist Antwort, kein gespeicherter Zustand: er dient als
+ * Vorschau der Stimme und wird nicht im Satz abgelegt. Fehlt er, bleibt die
+ * Vorschau leer — der Dienst erfindet keinen.
+ */
+export const PersonaDraftExamplePostSchema = z
+  .object({
+    content: z.string().min(1).max(500),
+    network: DraftNetworkSchema.default('twitter'),
+  })
+  .strict()
+export type PersonaDraftExamplePost = z.infer<typeof PersonaDraftExamplePostSchema>
+
+/**
+ * Antwort von `POST /api/persona-sets/<id>/draft`.
+ *
+ * `origin` ist fest `ai_draft` und nicht `PersonaOrigin`: die Herkunft steht
+ * hier nicht zur Wahl. Wer den Entwurf als `manual` ausgibt, verwechselt
+ * „vom Modell vorgeschlagen" mit „von Hand gesetzt" — genau die Verwechslung,
+ * die die Herkunftsplakette verhindern soll.
+ */
+export const PersonaDraftResponseSchema = z
+  .object({
+    origin: z.literal('ai_draft'),
+    profile: PersonaSetProfileSchema,
+    example_post: PersonaDraftExamplePostSchema.nullable().default(null),
+  })
+  .strict()
+export type PersonaDraftResponse = z.infer<typeof PersonaDraftResponseSchema>

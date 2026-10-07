@@ -12,6 +12,7 @@ import {
   addPersonaSetEntry,
   deletePersonaSetEntries,
   deletePersonaSetEntry,
+  draftPersonaSetEntry,
   getPersonaSet,
   getPersonaSetQuality,
   isPersonaSetConflictError,
@@ -22,6 +23,8 @@ import {
 import { ApiError } from '@/api/envelope'
 import { describeError } from '@/composables/run/simulation/simulationEnvelope'
 import type {
+  PersonaDraftExamplePost,
+  PersonaDraftResponse,
   PersonaSetEntry,
   PersonaSetEntryCreate,
   PersonaSetEntryUpdate,
@@ -40,6 +43,21 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
   const conflictError = ref(false)
   const lockedByServer = ref(false)
   const busy = ref(false)
+
+  /** Der zuletzt erzeugte Beispielbeitrag, getrennt vom Eintrag.
+   *
+   *  Er gehoert nicht zum Satz (der Feed der Simulation erzeugt eigene
+   *  Beitraege), wird aber angezeigt, damit die Stimme der Persona
+   *  beurteilbar ist, bevor der Eintrag bleibt. Nach dem Bearbeiten oder
+   *  Loeschen des Eintrags faellt er weg — sonst gehoerte der Beitrag zu
+   *  einer Persona, die es nicht mehr gibt.
+   */
+  const draftExample = ref<PersonaDraftExamplePost | null>(null)
+  /** Der Eintrag, den der letzte Entwurf angelegt hat (fuer den Fokus). */
+  const draftEntryId = ref<string | null>(null)
+  const drafting = ref(false)
+  /** 502 `llm_unavailable`: der Anbieter war schuld, nicht der Brief. */
+  const draftProviderError = ref(false)
 
   const quality = ref<PersonaSetQualityReport | null>(null)
   const qualityLoading = ref(false)
@@ -111,6 +129,7 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
 
   async function updateEntry(entryId: string, body: PersonaSetEntryUpdate): Promise<PersonaSetEntry | null> {
     const entry = await act(() => updatePersonaSetEntry(toValue(setId), entryId, body))
+    if (entry && draftEntryId.value === entryId) clearDraftExample()
     if (entry && record.value) {
       record.value = {
         ...record.value,
@@ -122,6 +141,7 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
 
   async function deleteEntry(entryId: string): Promise<boolean> {
     const res = await act(() => deletePersonaSetEntry(toValue(setId), entryId))
+    if (res && draftEntryId.value === entryId) clearDraftExample()
     if (res && record.value) removeLocal(res.removed_entry_ids)
     return res !== null
   }
@@ -139,6 +159,63 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
     record.value = { ...record.value, entries: record.value.entries.filter((e) => !gone.has(e.entry_id)) }
   }
 
+  /**
+   * KI-Entwurf: legt einen Eintrag mit `origin="ai_draft"` an.
+   *
+   * Zwei Zustaende statt einem: `drafting` (laeuft) und `draftProviderError`
+   * (502). Die Oberflaeche muss dazwischen unterscheiden koennen — ein nicht
+   * erreichbarer Anbieter und ein zu kurzer Brief brauchen verschiedene
+   * Handlungen, und beide kommen als "Fehler" aus demselben Aufruf.
+   *
+   * Gibt die Antwort zurueck oder `null`. Der Eintrag wird lokal eingefuegt,
+   * damit die Liste ohne zweiten Abruf den neuen Eintrag zeigt; die Vorschau
+   * mit dem Beispielbeitrag bleibt bis zum Bearbeiten oder Loeschen stehen.
+   */
+  async function draft(brief: string, language = 'de'): Promise<PersonaDraftResponse | null> {
+    drafting.value = true
+    actionError.value = null
+    draftProviderError.value = false
+    try {
+      const response = await draftPersonaSetEntry(toValue(setId), { brief, language })
+      const entry: PersonaSetEntry = {
+        entry_id: '',
+        origin: 'ai_draft',
+        profile: response.profile,
+        created_at: '',
+        updated_at: '',
+        source_entity_uuid: null,
+      }
+      // Der Server vergibt entry_id und Zeitstempel; statt sie zu raten,
+      // wird der Satz einmal neu geladen. Ein erfundener Eintrag ohne Kennung
+      // waere beim naechsten Bearbeiten nicht adressierbar.
+      await load()
+      const created = entries.value[entries.value.length - 1]
+      draftExample.value = response.example_post
+      draftEntryId.value = created?.entry_id ?? null
+      return { ...response, profile: (created ?? entry).profile }
+    } catch (err) {
+      actionError.value = describeError(err)
+      draftProviderError.value = err instanceof ApiError && err.status === 502
+      if (isPersonaSetLockedError(err)) {
+        // Ein gesperrter Satz lehnt den Entwurf ab, ohne das Modell zu rufen.
+        lockedByServer.value = true
+        const message = actionError.value
+        await load()
+        lockedByServer.value = true
+        actionError.value = message
+      }
+      return null
+    } finally {
+      drafting.value = false
+    }
+  }
+
+  /** Verwirft die Vorschau des letzten Entwurfs. */
+  function clearDraftExample(): void {
+    draftExample.value = null
+    draftEntryId.value = null
+  }
+
   /** Name/Beschreibung ändern; bleibt auch bei gesperrtem Satz erlaubt. */
   async function updateMeta(body: PersonaSetUpdate): Promise<boolean> {
     const updated = await act(() => updatePersonaSet(toValue(setId), body))
@@ -153,6 +230,8 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
       qualityError.value = null
       actionError.value = null
       conflictError.value = false
+      clearDraftExample()
+      draftProviderError.value = false
     },
   )
 
@@ -169,8 +248,14 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
     quality,
     qualityLoading,
     qualityError,
+    draftExample,
+    draftEntryId,
+    drafting,
+    draftProviderError,
     load,
     loadQuality,
+    draft,
+    clearDraftExample,
     addEntry,
     updateEntry,
     deleteEntry,

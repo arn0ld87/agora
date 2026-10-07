@@ -1890,7 +1890,15 @@
         "generate": "Erzeugen lassen",
         "existing": "Vorhandenen wählen",
         "existingWhy": "Kommt mit den Personasätzen in der Bibliothek.",
-        "laterWithSource": "Bei einer neuen Quelle stellst du die Obergrenze bei der Vorbereitung ein."
+        "laterWithSource": "Bei einer neuen Quelle stellst du die Obergrenze bei der Vorbereitung ein.",
+        "set": "Aus einem Personasatz",
+        "setWhy": "Der Lauf bekommt die Personas des Satzes als Kopie. Ohne Graph, ohne Bericht.",
+        "chooseSet": "Personasatz",
+        "noSetChosen": "Bitte wählen",
+        "loadingSets": "wird geladen …",
+        "count": "{n} Personas",
+        "noSetsYet": "Es gibt noch keinen Satz mit Personas. In der Bibliothek anlegen.",
+        "noGraphNotice": "Der Lauf entsteht ohne Graph. Der Graph-Reiter zeigt dann einen Leerzustand."
       },
       "models": {
         "legend": "Modelle",
@@ -1913,7 +1921,8 @@
         "contested": "Die Streitfrage braucht 10 bis 300 Zeichen oder bleibt leer.",
         "agents": "Die Obergrenze der Personas beträgt mindestens 10.",
         "days": "Die Zahl der Tage liegt zwischen 1 und 365.",
-        "rounds": "Die Zahl der Runden liegt zwischen 3 und 30."
+        "rounds": "Die Zahl der Runden liegt zwischen 3 und 30.",
+        "personaSet": "Bitte einen Personasatz wählen."
       },
       "actions": {
         "cancel": "Abbrechen",
@@ -1931,7 +1940,10 @@
         "createShape": "Die Antwort beim Anlegen des Laufs war unvollständig.",
         "prepare": "Die Vorbereitung konnte nicht gestartet werden.",
         "prepareAfterCreate": "Der Lauf {id} wurde angelegt, die Vorbereitung ist aber fehlgeschlagen: {message}",
-        "openCreated": "Zum angelegten Lauf"
+        "openCreated": "Zum angelegten Lauf",
+        "createFromPersonaSet": "Der Lauf aus dem Personasatz konnte nicht angelegt werden.",
+        "noPersonaSet": "Bitte einen Personasatz wählen.",
+        "noRequirement": "Bitte eine Fragestellung angeben — sie trägt den Lauf auch ohne Graph."
       }
     },
     "settingsWindow": {
@@ -1953,9 +1965,26 @@
       "appearance": {
         "groupTheme": "Farbschema",
         "groupText": "Dichte und Schrift",
-        "theme": { "label": "Darstellung", "hint": "System folgt der Einstellung deines Geräts.", "system": "System", "light": "Hell", "dark": "Dunkel" },
-        "density": { "label": "Dichte", "hint": "Kompakt rückt Seitenleiste und Kopfzeile enger zusammen.", "comfortable": "Komfort", "compact": "Kompakt" },
-        "fontSize": { "label": "Schriftgröße", "hint": "Wirkt auf Fließtext, Überschriften und Hilfetexte der Oberfläche.", "small": "Klein", "normal": "Normal", "large": "Groß" },
+        "theme": {
+          "label": "Darstellung",
+          "hint": "System folgt der Einstellung deines Geräts.",
+          "system": "System",
+          "light": "Hell",
+          "dark": "Dunkel"
+        },
+        "density": {
+          "label": "Dichte",
+          "hint": "Kompakt rückt Seitenleiste und Kopfzeile enger zusammen.",
+          "comfortable": "Komfort",
+          "compact": "Kompakt"
+        },
+        "fontSize": {
+          "label": "Schriftgröße",
+          "hint": "Wirkt auf Fließtext, Überschriften und Hilfetexte der Oberfläche.",
+          "small": "Klein",
+          "normal": "Normal",
+          "large": "Groß"
+        },
         "local": "Diese Auswahl gilt nur für diesen Browser."
       },
       "system": {
@@ -1964,14 +1993,41 @@
         "loading": "Zustand wird geprüft…",
         "loadError": "Der Systemzustand konnte nicht abgerufen werden.",
         "retry": "Erneut prüfen",
-        "state": { "ok": "In Ordnung", "down": "Nicht erreichbar", "unknown": "Unbekannt", "skipped": "Nicht geprüft" },
-        "backend": { "label": "Backend", "hint": "Anwendungsserver dieser Instanz." },
-        "neo4j": { "label": "Neo4j", "hint": "Graphdatenbank für Quellen und Entitäten." },
-        "ollama": { "label": "Ollama", "hint": "Lokaler Modelldienst.", "skipped": "Der aktive Anbieter ist {provider}; Ollama wird nicht geprüft." },
-        "disk": { "label": "Speicher für Uploads", "free": "{free} frei", "used": "{pct} % belegt" },
-        "version": { "label": "Version", "unknown": "unbekannt" },
+        "state": {
+          "ok": "In Ordnung",
+          "down": "Nicht erreichbar",
+          "unknown": "Unbekannt",
+          "skipped": "Nicht geprüft"
+        },
+        "backend": {
+          "label": "Backend",
+          "hint": "Anwendungsserver dieser Instanz."
+        },
+        "neo4j": {
+          "label": "Neo4j",
+          "hint": "Graphdatenbank für Quellen und Entitäten."
+        },
+        "ollama": {
+          "label": "Ollama",
+          "hint": "Lokaler Modelldienst.",
+          "skipped": "Der aktive Anbieter ist {provider}; Ollama wird nicht geprüft."
+        },
+        "disk": {
+          "label": "Speicher für Uploads",
+          "free": "{free} frei",
+          "used": "{pct} % belegt"
+        },
+        "version": {
+          "label": "Version",
+          "unknown": "unbekannt"
+        },
         "unreported": "Redis und PostgreSQL meldet das Backend derzeit nicht; ihr Zustand ist hier nicht sichtbar.",
-        "console": { "label": "Konsole", "hint": "Zeigt das Protokoll des Backends.", "open": "Konsole öffnen", "unavailable": "Nur für Betreiber." }
+        "console": {
+          "label": "Konsole",
+          "hint": "Zeigt das Protokoll des Backends.",
+          "open": "Konsole öffnen",
+          "unavailable": "Nur für Betreiber."
+        }
       },
       "budgets": {
         "intro": "Diese Standardgrenzen gelten nur für neue Läufe ohne eigenes Budget. Ein im Startdialog gesetztes Budget ersetzt die Standardgrenzen vollständig.",
@@ -1980,11 +2036,31 @@
         "groupEnforcement": "Durchsetzung",
         "loading": "Budgets werden geladen…",
         "loadError": "Die Budgets konnten nicht geladen werden.",
-        "tokens": { "label": "Tokens", "hint": "Höchstzahl der Tokens je Lauf." },
-        "cost": { "label": "Kosten in US-Dollar", "hint": "Höchstkosten je Lauf, z. B. 12,50." },
-        "duration": { "label": "Laufzeit", "hint": "Höchstdauer je Lauf.", "unit": "Einheit", "minutes": "Minuten", "hours": "Stunden" },
-        "calls": { "label": "Modellaufrufe", "hint": "Höchstzahl der Aufrufe an das Sprachmodell je Lauf." },
-        "enforcement": { "label": "Durchsetzung", "hint": "Hart beendet den Lauf bei Überschreitung, weich warnt nur.", "hard": "Hart (Lauf endet)", "soft": "Weich (nur Warnung)" },
+        "tokens": {
+          "label": "Tokens",
+          "hint": "Höchstzahl der Tokens je Lauf."
+        },
+        "cost": {
+          "label": "Kosten in US-Dollar",
+          "hint": "Höchstkosten je Lauf, z. B. 12,50."
+        },
+        "duration": {
+          "label": "Laufzeit",
+          "hint": "Höchstdauer je Lauf.",
+          "unit": "Einheit",
+          "minutes": "Minuten",
+          "hours": "Stunden"
+        },
+        "calls": {
+          "label": "Modellaufrufe",
+          "hint": "Höchstzahl der Aufrufe an das Sprachmodell je Lauf."
+        },
+        "enforcement": {
+          "label": "Durchsetzung",
+          "hint": "Hart beendet den Lauf bei Überschreitung, weich warnt nur.",
+          "hard": "Hart (Lauf endet)",
+          "soft": "Weich (nur Warnung)"
+        },
         "invalidNumber": "Bitte eine Zahl größer oder gleich 0 eingeben.",
         "invalidInteger": "Bitte eine ganze Zahl größer oder gleich 0 eingeben.",
         "save": "Speichern",
@@ -2748,8 +2824,12 @@
             "title": "Unbelegte Aussagen im Text",
             "item": "Abschnitt {n}: {text} ({verdict}: {reason})"
           },
-          "gate": { "title": "Gate-Entscheidungen" },
-          "degradation": { "title": "Abgestufte Claims" }
+          "gate": {
+            "title": "Gate-Entscheidungen"
+          },
+          "degradation": {
+            "title": "Abgestufte Claims"
+          }
         },
         "export": {
           "trigger": "Exportieren",
@@ -2847,7 +2927,9 @@
           "invalid": "Ungültiger Wert."
         },
         "sections": {
-          "identity": { "label": "Identität" },
+          "identity": {
+            "label": "Identität"
+          },
           "stance": {
             "label": "Haltung und Ziele",
             "note": "Der Vertrag hat kein eigenes Feld für Haltung oder Ziele. Beides gehört in die Persona-Beschreibung."
@@ -2856,36 +2938,92 @@
             "label": "Sprache und Ton",
             "note": "Der Vertrag hat kein eigenes Feld für Ton oder Stil. Hier lässt sich nur die Sprache festlegen; den Ton beschreibt die Persona-Beschreibung."
           },
-          "activity": { "label": "Aktivität" },
+          "activity": {
+            "label": "Aktivität"
+          },
           "graph": {
             "label": "Bezug zum Graphen",
             "note": "Herkunft und Quell-Entität setzt das System; sie lassen sich hier nicht ändern."
           }
         },
         "fields": {
-          "name": { "label": "Name" },
-          "username": { "label": "Benutzername", "hint": "Eindeutig im Personasatz." },
-          "persona_kind": { "label": "Art" },
-          "profession": { "label": "Rolle oder Beruf" },
-          "age": { "label": "Alter", "hint": "Ganze Zahl von 0 bis {max}, leer = nicht angegeben." },
+          "name": {
+            "label": "Name"
+          },
+          "username": {
+            "label": "Benutzername",
+            "hint": "Eindeutig im Personasatz."
+          },
+          "persona_kind": {
+            "label": "Art"
+          },
+          "profession": {
+            "label": "Rolle oder Beruf"
+          },
+          "age": {
+            "label": "Alter",
+            "hint": "Ganze Zahl von 0 bis {max}, leer = nicht angegeben."
+          },
           "gender": {
             "label": "Geschlecht",
             "unset": "Nicht angegeben",
-            "options": { "male": "männlich", "female": "weiblich", "nonbinary": "nichtbinär", "other": "anderes" }
+            "options": {
+              "male": "männlich",
+              "female": "weiblich",
+              "nonbinary": "nichtbinär",
+              "other": "anderes"
+            }
           },
-          "country": { "label": "Land", "hint": "Zweibuchstabiger Ländercode, zum Beispiel DE." },
-          "location": { "label": "Ort" },
-          "bio": { "label": "Kurzprofil", "hint": "{n} von {max} Zeichen." },
-          "verified": { "label": "Verifiziert", "hint": "Markiert die Persona als verifiziert." },
-          "persona": { "label": "Persona-Beschreibung", "hint": "Hintergrund, Haltung, Ziele und Ton in Fließtext. {n} von {max} Zeichen." },
-          "interested_topics": { "label": "Interessen", "hint": "Ein Thema pro Zeile, höchstens {max}." },
-          "mbti": { "label": "MBTI-Typ", "unset": "Nicht angegeben" },
-          "language": { "label": "Sprache", "hint": "Sprachcode, zum Beispiel de oder en." },
-          "activity_level": { "label": "Aktivitätsniveau", "hint": "Zahl von 0 bis 1, leer = nicht angegeben." },
-          "time_zone": { "label": "Zeitzone", "hint": "Zum Beispiel Europe/Berlin." },
-          "source_entity_type": { "label": "Typ der Quell-Entität", "hint": "Entitätstyp im Graphen, aus dem die Persona stammt." },
-          "origin": { "label": "Herkunft" },
-          "source_entity_uuid": { "label": "Quell-Entität (UUID)", "none": "Keine Verknüpfung mit dem Graphen." }
+          "country": {
+            "label": "Land",
+            "hint": "Zweibuchstabiger Ländercode, zum Beispiel DE."
+          },
+          "location": {
+            "label": "Ort"
+          },
+          "bio": {
+            "label": "Kurzprofil",
+            "hint": "{n} von {max} Zeichen."
+          },
+          "verified": {
+            "label": "Verifiziert",
+            "hint": "Markiert die Persona als verifiziert."
+          },
+          "persona": {
+            "label": "Persona-Beschreibung",
+            "hint": "Hintergrund, Haltung, Ziele und Ton in Fließtext. {n} von {max} Zeichen."
+          },
+          "interested_topics": {
+            "label": "Interessen",
+            "hint": "Ein Thema pro Zeile, höchstens {max}."
+          },
+          "mbti": {
+            "label": "MBTI-Typ",
+            "unset": "Nicht angegeben"
+          },
+          "language": {
+            "label": "Sprache",
+            "hint": "Sprachcode, zum Beispiel de oder en."
+          },
+          "activity_level": {
+            "label": "Aktivitätsniveau",
+            "hint": "Zahl von 0 bis 1, leer = nicht angegeben."
+          },
+          "time_zone": {
+            "label": "Zeitzone",
+            "hint": "Zum Beispiel Europe/Berlin."
+          },
+          "source_entity_type": {
+            "label": "Typ der Quell-Entität",
+            "hint": "Entitätstyp im Graphen, aus dem die Persona stammt."
+          },
+          "origin": {
+            "label": "Herkunft"
+          },
+          "source_entity_uuid": {
+            "label": "Quell-Entität (UUID)",
+            "none": "Keine Verknüpfung mit dem Graphen."
+          }
         }
       },
       "library": {
@@ -3030,6 +3168,17 @@
           "deleted": "{n} Personas gelöscht.",
           "saved": "{name} gespeichert.",
           "renamed": "Personasatz aktualisiert."
+        },
+        "draft": {
+          "title": "Entwurf mit KI",
+          "brief": "Welche Rolle soll die Persona haben?",
+          "briefPlaceholder": "z. B. Betriebsratin aus Bremen, im Konflikt mit der Schichtplanung",
+          "submit": "Entwurf erzeugen",
+          "running": "Entwurf läuft …",
+          "locked": "Ein gesperrter Personasatz nimmt keine Entwürfe auf. Zum Ändern den Satz duplizieren.",
+          "providerError": "Der Anbieter war nicht erreichbar. Der Auftrag ist in Ordnung — ein neuer Versuch hilft.",
+          "previewLabel": "So könnte diese Persona schreiben",
+          "dismiss": "Vorschau schließen"
         }
       },
       "run": {
@@ -3513,22 +3662,22 @@
       "tokenLabel": "Zugangstoken",
       "tokenHint": "Das Token ist der Wert von AGORA_AUTH_TOKEN deiner Installation.",
       "tokenInvalid": "Das Token wurde abgelehnt. Bitte prüfe den Wert."
-  },
-  "workspaceProviderKeys": {
-    "title": "Eigene Anbieter-Keys",
-    "description": "Keys gelten nur für den aktiven Workspace. Agora zeigt gespeicherte Keys nicht erneut an.",
-    "keyLabel": "API-Key für {provider}",
-    "configured": "Key gespeichert",
-    "missing": "Kein Key gespeichert",
-    "save": "Key speichern",
-    "delete": "Key löschen",
-    "saved": "Key gespeichert.",
-    "deleted": "Key gelöscht.",
-    "readOnly": "Nur Owner und Admins können Keys ändern.",
-    "loadError": "Keys konnten nicht geladen werden.",
-    "saveError": "Key konnte nicht gespeichert werden.",
-    "deleteError": "Key konnte nicht gelöscht werden."
-  },
+    },
+    "workspaceProviderKeys": {
+      "title": "Eigene Anbieter-Keys",
+      "description": "Keys gelten nur für den aktiven Workspace. Agora zeigt gespeicherte Keys nicht erneut an.",
+      "keyLabel": "API-Key für {provider}",
+      "configured": "Key gespeichert",
+      "missing": "Kein Key gespeichert",
+      "save": "Key speichern",
+      "delete": "Key löschen",
+      "saved": "Key gespeichert.",
+      "deleted": "Key gelöscht.",
+      "readOnly": "Nur Owner und Admins können Keys ändern.",
+      "loadError": "Keys konnten nicht geladen werden.",
+      "saveError": "Key konnte nicht gespeichert werden.",
+      "deleteError": "Key konnte nicht gelöscht werden."
+    },
     "register": {
       "title": "Konto erstellen",
       "emailLabel": "E-Mail-Adresse",

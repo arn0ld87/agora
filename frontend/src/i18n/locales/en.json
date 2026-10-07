@@ -1890,7 +1890,15 @@
         "generate": "Generate",
         "existing": "Choose an existing one",
         "existingWhy": "Arrives with persona sets in the library.",
-        "laterWithSource": "With a new source you set the upper limit during preparation."
+        "laterWithSource": "With a new source you set the upper limit during preparation.",
+        "set": "From a persona set",
+        "setWhy": "The run gets the personas of the set as a copy. Without graph, without report.",
+        "chooseSet": "Persona set",
+        "noSetChosen": "Please choose",
+        "loadingSets": "loading …",
+        "count": "{n} personas",
+        "noSetsYet": "There is no set with personas yet. Create one in the library.",
+        "noGraphNotice": "The run is created without a graph. The graph tab then shows an empty state."
       },
       "models": {
         "legend": "Models",
@@ -1913,7 +1921,8 @@
         "contested": "The contested question needs 10 to 300 characters or stays empty.",
         "agents": "The persona upper limit is at least 10.",
         "days": "The number of days is between 1 and 365.",
-        "rounds": "The number of rounds is between 3 and 30."
+        "rounds": "The number of rounds is between 3 and 30.",
+        "personaSet": "Please choose a persona set."
       },
       "actions": {
         "cancel": "Cancel",
@@ -1931,7 +1940,10 @@
         "createShape": "The response when creating the run was incomplete.",
         "prepare": "Preparation could not be started.",
         "prepareAfterCreate": "Run {id} was created, but preparation failed: {message}",
-        "openCreated": "Go to the created run"
+        "openCreated": "Go to the created run",
+        "createFromPersonaSet": "The run from the persona set could not be created.",
+        "noPersonaSet": "Please choose a persona set.",
+        "noRequirement": "Please provide a question — it names the run even without a graph."
       }
     },
     "settingsWindow": {
@@ -1953,9 +1965,26 @@
       "appearance": {
         "groupTheme": "Color scheme",
         "groupText": "Density and type",
-        "theme": { "label": "Appearance", "hint": "System follows your device setting.", "system": "System", "light": "Light", "dark": "Dark" },
-        "density": { "label": "Density", "hint": "Compact tightens the sidebar and the top bar.", "comfortable": "Comfortable", "compact": "Compact" },
-        "fontSize": { "label": "Font size", "hint": "Affects body text, headings and hint text of the interface.", "small": "Small", "normal": "Normal", "large": "Large" },
+        "theme": {
+          "label": "Appearance",
+          "hint": "System follows your device setting.",
+          "system": "System",
+          "light": "Light",
+          "dark": "Dark"
+        },
+        "density": {
+          "label": "Density",
+          "hint": "Compact tightens the sidebar and the top bar.",
+          "comfortable": "Comfortable",
+          "compact": "Compact"
+        },
+        "fontSize": {
+          "label": "Font size",
+          "hint": "Affects body text, headings and hint text of the interface.",
+          "small": "Small",
+          "normal": "Normal",
+          "large": "Large"
+        },
         "local": "This choice applies to this browser only."
       },
       "system": {
@@ -1964,14 +1993,41 @@
         "loading": "Checking status…",
         "loadError": "The system status could not be retrieved.",
         "retry": "Check again",
-        "state": { "ok": "OK", "down": "Unreachable", "unknown": "Unknown", "skipped": "Not checked" },
-        "backend": { "label": "Backend", "hint": "Application server of this instance." },
-        "neo4j": { "label": "Neo4j", "hint": "Graph database for sources and entities." },
-        "ollama": { "label": "Ollama", "hint": "Local model service.", "skipped": "The active provider is {provider}; Ollama is not checked." },
-        "disk": { "label": "Upload storage", "free": "{free} free", "used": "{pct} % used" },
-        "version": { "label": "Version", "unknown": "unknown" },
+        "state": {
+          "ok": "OK",
+          "down": "Unreachable",
+          "unknown": "Unknown",
+          "skipped": "Not checked"
+        },
+        "backend": {
+          "label": "Backend",
+          "hint": "Application server of this instance."
+        },
+        "neo4j": {
+          "label": "Neo4j",
+          "hint": "Graph database for sources and entities."
+        },
+        "ollama": {
+          "label": "Ollama",
+          "hint": "Local model service.",
+          "skipped": "The active provider is {provider}; Ollama is not checked."
+        },
+        "disk": {
+          "label": "Upload storage",
+          "free": "{free} free",
+          "used": "{pct} % used"
+        },
+        "version": {
+          "label": "Version",
+          "unknown": "unknown"
+        },
         "unreported": "The backend does not currently report Redis and PostgreSQL; their state is not visible here.",
-        "console": { "label": "Console", "hint": "Shows the backend log.", "open": "Open console", "unavailable": "Operator only." }
+        "console": {
+          "label": "Console",
+          "hint": "Shows the backend log.",
+          "open": "Open console",
+          "unavailable": "Operator only."
+        }
       },
       "budgets": {
         "intro": "These default limits apply only to new runs without a budget of their own. A budget set in the start dialog replaces the default limits entirely.",
@@ -1980,11 +2036,31 @@
         "groupEnforcement": "Enforcement",
         "loading": "Loading budgets…",
         "loadError": "The budgets could not be loaded.",
-        "tokens": { "label": "Tokens", "hint": "Maximum number of tokens per run." },
-        "cost": { "label": "Cost in US dollars", "hint": "Maximum cost per run, e.g. 12.50." },
-        "duration": { "label": "Duration", "hint": "Maximum duration per run.", "unit": "Unit", "minutes": "Minutes", "hours": "Hours" },
-        "calls": { "label": "Model calls", "hint": "Maximum number of calls to the language model per run." },
-        "enforcement": { "label": "Enforcement", "hint": "Hard ends the run when exceeded, soft only warns.", "hard": "Hard (run ends)", "soft": "Soft (warning only)" },
+        "tokens": {
+          "label": "Tokens",
+          "hint": "Maximum number of tokens per run."
+        },
+        "cost": {
+          "label": "Cost in US dollars",
+          "hint": "Maximum cost per run, e.g. 12.50."
+        },
+        "duration": {
+          "label": "Duration",
+          "hint": "Maximum duration per run.",
+          "unit": "Unit",
+          "minutes": "Minutes",
+          "hours": "Hours"
+        },
+        "calls": {
+          "label": "Model calls",
+          "hint": "Maximum number of calls to the language model per run."
+        },
+        "enforcement": {
+          "label": "Enforcement",
+          "hint": "Hard ends the run when exceeded, soft only warns.",
+          "hard": "Hard (run ends)",
+          "soft": "Soft (warning only)"
+        },
         "invalidNumber": "Enter a number greater than or equal to 0.",
         "invalidInteger": "Enter a whole number greater than or equal to 0.",
         "save": "Save",
@@ -2748,8 +2824,12 @@
             "title": "Unsupported statements in the text",
             "item": "Section {n}: {text} ({verdict}: {reason})"
           },
-          "gate": { "title": "Gate decisions" },
-          "degradation": { "title": "Downgraded claims" }
+          "gate": {
+            "title": "Gate decisions"
+          },
+          "degradation": {
+            "title": "Downgraded claims"
+          }
         },
         "export": {
           "trigger": "Export",
@@ -2847,7 +2927,9 @@
           "invalid": "Invalid value."
         },
         "sections": {
-          "identity": { "label": "Identity" },
+          "identity": {
+            "label": "Identity"
+          },
           "stance": {
             "label": "Stance and goals",
             "note": "The contract has no dedicated field for stance or goals. Put both in the persona description."
@@ -2856,36 +2938,92 @@
             "label": "Language and tone",
             "note": "The contract has no dedicated field for tone or style. Only the language can be set here; describe the tone in the persona description."
           },
-          "activity": { "label": "Activity" },
+          "activity": {
+            "label": "Activity"
+          },
           "graph": {
             "label": "Link to the graph",
             "note": "The system sets origin and source entity; they cannot be changed here."
           }
         },
         "fields": {
-          "name": { "label": "Name" },
-          "username": { "label": "Username", "hint": "Unique within the persona set." },
-          "persona_kind": { "label": "Kind" },
-          "profession": { "label": "Role or profession" },
-          "age": { "label": "Age", "hint": "Whole number from 0 to {max}, empty = not specified." },
+          "name": {
+            "label": "Name"
+          },
+          "username": {
+            "label": "Username",
+            "hint": "Unique within the persona set."
+          },
+          "persona_kind": {
+            "label": "Kind"
+          },
+          "profession": {
+            "label": "Role or profession"
+          },
+          "age": {
+            "label": "Age",
+            "hint": "Whole number from 0 to {max}, empty = not specified."
+          },
           "gender": {
             "label": "Gender",
             "unset": "Not specified",
-            "options": { "male": "male", "female": "female", "nonbinary": "non-binary", "other": "other" }
+            "options": {
+              "male": "male",
+              "female": "female",
+              "nonbinary": "non-binary",
+              "other": "other"
+            }
           },
-          "country": { "label": "Country", "hint": "Two-letter country code, for example DE." },
-          "location": { "label": "Location" },
-          "bio": { "label": "Short profile", "hint": "{n} of {max} characters." },
-          "verified": { "label": "Verified", "hint": "Marks the persona as verified." },
-          "persona": { "label": "Persona description", "hint": "Background, stance, goals and tone as prose. {n} of {max} characters." },
-          "interested_topics": { "label": "Interests", "hint": "One topic per line, at most {max}." },
-          "mbti": { "label": "MBTI type", "unset": "Not specified" },
-          "language": { "label": "Language", "hint": "Language code, for example de or en." },
-          "activity_level": { "label": "Activity level", "hint": "Number from 0 to 1, empty = not specified." },
-          "time_zone": { "label": "Time zone", "hint": "For example Europe/Berlin." },
-          "source_entity_type": { "label": "Source entity type", "hint": "Entity type in the graph the persona comes from." },
-          "origin": { "label": "Origin" },
-          "source_entity_uuid": { "label": "Source entity (UUID)", "none": "Not linked to the graph." }
+          "country": {
+            "label": "Country",
+            "hint": "Two-letter country code, for example DE."
+          },
+          "location": {
+            "label": "Location"
+          },
+          "bio": {
+            "label": "Short profile",
+            "hint": "{n} of {max} characters."
+          },
+          "verified": {
+            "label": "Verified",
+            "hint": "Marks the persona as verified."
+          },
+          "persona": {
+            "label": "Persona description",
+            "hint": "Background, stance, goals and tone as prose. {n} of {max} characters."
+          },
+          "interested_topics": {
+            "label": "Interests",
+            "hint": "One topic per line, at most {max}."
+          },
+          "mbti": {
+            "label": "MBTI type",
+            "unset": "Not specified"
+          },
+          "language": {
+            "label": "Language",
+            "hint": "Language code, for example de or en."
+          },
+          "activity_level": {
+            "label": "Activity level",
+            "hint": "Number from 0 to 1, empty = not specified."
+          },
+          "time_zone": {
+            "label": "Time zone",
+            "hint": "For example Europe/Berlin."
+          },
+          "source_entity_type": {
+            "label": "Source entity type",
+            "hint": "Entity type in the graph the persona comes from."
+          },
+          "origin": {
+            "label": "Origin"
+          },
+          "source_entity_uuid": {
+            "label": "Source entity (UUID)",
+            "none": "Not linked to the graph."
+          }
         }
       },
       "library": {
@@ -3030,6 +3168,17 @@
           "deleted": "{n} personas deleted.",
           "saved": "{name} saved.",
           "renamed": "Persona set updated."
+        },
+        "draft": {
+          "title": "Draft with AI",
+          "brief": "What role should the persona have?",
+          "briefPlaceholder": "e.g. works council member from Bremen, in conflict over shift planning",
+          "submit": "Generate draft",
+          "running": "Draft running …",
+          "locked": "A locked persona set takes no drafts. Duplicate the set to change it.",
+          "providerError": "The provider was unreachable. The request is fine — another attempt helps.",
+          "previewLabel": "How this persona might write",
+          "dismiss": "Close preview"
         }
       },
       "run": {
@@ -3513,22 +3662,22 @@
       "tokenLabel": "Access token",
       "tokenHint": "The token is the AGORA_AUTH_TOKEN value of your installation.",
       "tokenInvalid": "The token was rejected. Please check the value."
-  },
-  "workspaceProviderKeys": {
-    "title": "Your provider keys",
-    "description": "Keys apply only to the active workspace. Agora does not display stored keys again.",
-    "keyLabel": "API key for {provider}",
-    "configured": "Key saved",
-    "missing": "No key saved",
-    "save": "Save key",
-    "delete": "Delete key",
-    "saved": "Key saved.",
-    "deleted": "Key deleted.",
-    "readOnly": "Only owners and admins can change keys.",
-    "loadError": "Keys could not be loaded.",
-    "saveError": "Key could not be saved.",
-    "deleteError": "Key could not be deleted."
-  },
+    },
+    "workspaceProviderKeys": {
+      "title": "Your provider keys",
+      "description": "Keys apply only to the active workspace. Agora does not display stored keys again.",
+      "keyLabel": "API key for {provider}",
+      "configured": "Key saved",
+      "missing": "No key saved",
+      "save": "Save key",
+      "delete": "Delete key",
+      "saved": "Key saved.",
+      "deleted": "Key deleted.",
+      "readOnly": "Only owners and admins can change keys.",
+      "loadError": "Keys could not be loaded.",
+      "saveError": "Key could not be saved.",
+      "deleteError": "Key could not be deleted."
+    },
     "register": {
       "title": "Create account",
       "emailLabel": "Email address",

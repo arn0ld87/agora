@@ -57,4 +57,12 @@ export const PersonaSetDetailTestId = {
   editorConfirm: 'persona-editor-confirm',
   editorConfirmKeep: 'persona-editor-confirm-keep',
   editorConfirmDiscard: 'persona-editor-confirm-discard',
+  draft: 'persona-set-draft',
+  draftBrief: 'persona-set-draft-brief',
+  draftSubmit: 'persona-set-draft-submit',
+  draftLocked: 'persona-set-draft-locked',
+  draftProviderError: 'persona-set-draft-provider-error',
+  draftActionError: 'persona-set-draft-action-error',
+  draftPreview: 'persona-set-draft-preview',
+  draftDismiss: 'persona-set-draft-dismiss',
 } as const

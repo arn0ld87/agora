@@ -12,6 +12,7 @@ import { useRouter } from 'vue-router'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PersonaCard from '@/components/persona-sets/PersonaCard.vue'
 import PersonaEditorDialog from '@/components/persona-sets/PersonaEditorDialog.vue'
+import PersonaSetDraftPanel from '@/components/persona-sets/PersonaSetDraftPanel.vue'
 import PersonaSetFilters from '@/components/persona-sets/PersonaSetFilters.vue'
 import PersonaSetHeader from '@/components/persona-sets/PersonaSetHeader.vue'
 import PersonaSetQualitySummary from '@/components/persona-sets/PersonaSetQualitySummary.vue'
@@ -29,7 +30,9 @@ const router = useRouter()
 const {
   record, loading, error, notFound, isLocked, entries, actionError, conflictError, busy,
   quality, qualityLoading, qualityError,
-  load, loadQuality, addEntry, updateEntry, deleteEntries, updateMeta,
+  draftExample, drafting, draftProviderError,
+  load, loadQuality, draft, clearDraftExample,
+  addEntry, updateEntry, deleteEntries, updateMeta,
 } = usePersonaSet(() => props.setId)
 const filters = usePersonaSetFilters(entries)
 
@@ -174,6 +177,16 @@ async function duplicate(): Promise<void> {
       <p v-else-if="actionError" role="alert" :data-testid="Id.actionError">{{ actionError }}</p>
 
       <PersonaSetQualitySummary :report="quality" :loading="qualityLoading" :error="qualityError" @retry="loadQuality" />
+
+      <PersonaSetDraftPanel
+        :drafting="drafting"
+        :provider-error="draftProviderError"
+        :action-error="draftProviderError ? null : actionError"
+        :example="draftExample"
+        :locked="isLocked"
+        @draft="draft"
+        @dismiss="clearDraftExample"
+      />
 
       <p v-if="entries.length === 0" :data-testid="PersonaSetTestId.empty">
         {{ t('views.personaSets.detail.empty') }}

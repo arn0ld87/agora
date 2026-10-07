@@ -8,6 +8,10 @@
  *   nur Name/Beschreibung sind änderbar, sonst bleibt Duplizieren.
  *   -> `PersonaSetLockedError`.
  * - `409 conflict`: `username` kommt im Satz schon vor -> `PersonaSetConflictError`.
+ * - `502 llm_unavailable`: der KI-Entwurf ist gescheitert. Der Auftrag war
+ *   gueltig, der Anbieter nicht — die Oberflaeche unterscheidet daran
+ *   „Brief pruefen" von „Anbieter nicht erreichbar" und bleibt beim
+ *   `ApiError` des Response-Interceptors (`api/index.ts`).
  * - `404 not_found`, `400 validation_failed` und alles andere bleiben der
  *   `ApiError` des Response-Interceptors (`api/index.ts`).
  */
@@ -15,6 +19,8 @@ import service from './index'
 import { ApiError } from './envelope'
 import { readEnvelope } from '@/composables/run/simulation/simulationEnvelope'
 import {
+  PersonaDraftRequestSchema,
+  PersonaDraftResponseSchema,
   PersonaSetCreateSchema,
   PersonaSetDeleteResponseSchema,
   PersonaSetDuplicateSchema,
@@ -27,6 +33,8 @@ import {
   PersonaSetQualityReportSchema,
   PersonaSetRecordSchema,
   PersonaSetUpdateSchema,
+  type PersonaDraftRequest,
+  type PersonaDraftResponse,
   type PersonaSetCreate,
   type PersonaSetDeleteResponse,
   type PersonaSetDuplicate,
@@ -164,4 +172,26 @@ export async function deletePersonaSetEntries(
   const payload = PersonaSetEntriesDeleteSchema.parse({ entry_ids: [...entryIds] })
   const raw = await send(() => service.post(`${base(setId)}/entries/delete`, payload))
   return readEnvelope(raw, PersonaSetEntriesDeleteResponseSchema, 'persona-sets/entries/delete-many')
+}
+
+/**
+ * KI-Entwurf einer Persona. Der Endpunkt legt den Eintrag direkt an — der
+ * Aufrufer entscheidet also **vorher**, ob er einen Entwurf will, und kann ihn
+ * danach wie jeden anderen Eintrag bearbeiten oder loeschen.
+ *
+ * Ein gesperrter Satz lehnt den Aufruf mit `409 persona_set_locked` ab, ohne
+ * das Modell zu rufen: der Dienst prueft die Sperre vor dem Aufruf.
+ */
+export async function draftPersonaSetEntry(
+  setId: string,
+  body: PersonaDraftRequest,
+): Promise<PersonaDraftResponse> {
+  const parsed = PersonaDraftRequestSchema.parse(body)
+  const raw = await send(() =>
+    service.post(`${base(setId)}/draft`, {
+      brief: parsed.brief,
+      language: parsed.language ?? 'de',
+    }),
+  )
+  return readEnvelope(raw, PersonaDraftResponseSchema, `persona-draft ${setId}`)
 }

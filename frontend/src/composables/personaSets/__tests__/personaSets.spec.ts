@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   updatePersonaSetEntry: vi.fn(),
   deletePersonaSetEntry: vi.fn(),
   deletePersonaSetEntries: vi.fn(),
+  draftPersonaSetEntry: vi.fn(),
 }))
 
 vi.mock('@/api/personaSets', async () => {
@@ -19,6 +20,7 @@ vi.mock('@/api/personaSets', async () => {
   return { ...actual, ...api }
 })
 
+import { ApiError } from '@/api/envelope'
 import { PersonaSetConflictError, PersonaSetLockedError } from '@/api/personaSets'
 import { usePersonaSet } from '../usePersonaSet'
 import { usePersonaSets } from '../usePersonaSets'
@@ -28,8 +30,8 @@ const summary = (id: string) => ({
   id, name: id, description: '', graph_id: null, project_id: null, entry_count: 0,
   locked: false, locked_at: null, usage_count: 0, created_at: TS, updated_at: TS, schema_version: 1 as const,
 })
-const entry = (id: string) => ({
-  entry_id: id, origin: 'manual' as const, source_entity_uuid: null, created_at: TS, updated_at: TS,
+const entry = (id: string, origin: 'manual' | 'ai_draft' = 'manual') => ({
+  entry_id: id, origin, source_entity_uuid: null, created_at: TS, updated_at: TS,
   profile: {
     username: id, name: id, bio: '', persona: '', age: null, gender: null, mbti: null, country: null,
     profession: null, interested_topics: [], source_entity_type: null, persona_kind: 'individual' as const,
@@ -177,5 +179,113 @@ describe('usePersonaSet', () => {
     api.updatePersonaSet.mockResolvedValue({ ...record([], '2026-10-07T11:00:00'), name: 'Neu' })
     expect(await s.updateMeta({ name: 'Neu' })).toBe(true)
     expect(s.record.value?.name).toBe('Neu')
+  })
+
+  describe('KI-Entwurf', () => {
+    const draftResponse = (example_post: unknown = {
+      content: 'Die Schichtplanung muss mit dem Betriebsrat abgestimmt sein.',
+      network: 'twitter',
+    }) => ({
+      origin: 'ai_draft' as const,
+      profile: { ...entry('e9').profile, username: 'KarlaBrandt', name: 'Karla Brandt' },
+      example_post,
+    })
+
+    it('legt den Entwurf an und zeigt die Vorschau', async () => {
+      api.draftPersonaSetEntry.mockResolvedValue(draftResponse())
+      api.getPersonaSet.mockResolvedValue(record([entry('e1'), entry('e9', 'ai_draft')]))
+      const s = usePersonaSet('s1')
+      await s.load()
+
+      const res = await s.draft('Betriebsratin aus Bremen')
+
+      expect(res?.origin).toBe('ai_draft')
+      expect(s.entries.value.at(-1)?.origin).toBe('ai_draft')
+      expect(s.draftEntryId.value).toBe('e9')
+      expect(s.draftExample.value?.network).toBe('twitter')
+    })
+
+    it('unterscheidet einen nicht erreichbaren Anbieter vom eigenen Fehler', async () => {
+      // 502 heißt: der Brief war gueltig, der Anbieter nicht. Die Oberflaeche
+      // muss dazwischen unterscheiden koennen — beide kommen als Fehler aus
+      // demselben Aufruf, aber mit anderen Handlungen.
+      api.draftPersonaSetEntry.mockRejectedValue(
+        new ApiError({ message: 'provider returned 503', status: 502, code: 'llm_unavailable' }),
+      )
+      api.getPersonaSet.mockResolvedValue(record())
+      const s = usePersonaSet('s1')
+      await s.load()
+
+      expect(await s.draft('Bremen')).toBeNull()
+
+      expect(s.draftProviderError.value).toBe(true)
+      expect(s.actionError.value).toBeTruthy()
+      expect(s.drafting.value).toBe(false)
+    })
+
+    it('meldet einen gesperrten Satz als gesperrt, nicht als Anbieterfehler', async () => {
+      api.draftPersonaSetEntry.mockRejectedValue(new PersonaSetLockedError('gesperrt'))
+      api.getPersonaSet.mockResolvedValue(record([], '2026-10-07T11:00:00'))
+      const s = usePersonaSet('s1')
+      await s.load()
+
+      expect(await s.draft('Bremen')).toBeNull()
+
+      expect(s.isLocked.value).toBe(true)
+      expect(s.draftProviderError.value).toBe(false)
+      expect(s.actionError.value).toBeTruthy()
+    })
+
+    it('laesst die Vorschau leer, wenn das Modell keinen Beitrag liefert', async () => {
+      api.draftPersonaSetEntry.mockResolvedValue(draftResponse(null))
+      api.getPersonaSet.mockResolvedValue(record([entry('e9', 'ai_draft')]))
+      const s = usePersonaSet('s1')
+      await s.load()
+
+      await s.draft('Bremen')
+
+      expect(s.draftExample.value).toBeNull()
+      expect(s.entries.value).toHaveLength(1)
+    })
+
+    it('verwirft die Vorschau, wenn der Eintrag geloescht wird', async () => {
+      // Der Beispielbeitrag gehoert zu einem Eintrag. Bleibt er nach dem
+      // Loeschen stehen, gehoerte er zu einer Persona, die es nicht mehr gibt.
+      api.draftPersonaSetEntry.mockResolvedValue(draftResponse())
+      api.getPersonaSet.mockResolvedValue(record([entry('e9', 'ai_draft')]))
+      const s = usePersonaSet('s1')
+      await s.load()
+      await s.draft('Bremen')
+      expect(s.draftExample.value).not.toBeNull()
+
+      api.deletePersonaSetEntry.mockResolvedValue({
+        removed_entry_ids: ['e9'],
+        set: {
+          id: 's1', name: 'Satz', description: '', graph_id: null, project_id: null,
+          entry_count: 0, locked: false, locked_at: null, usage_count: 0,
+          created_at: TS, updated_at: TS, schema_version: 1 as const,
+        },
+      })
+      await s.deleteEntry('e9')
+
+      expect(s.draftExample.value).toBeNull()
+      expect(s.draftEntryId.value).toBeNull()
+    })
+
+    it('bricht nicht ab, wenn der Server die Liste nach dem Entwurf neu laedt', async () => {
+      // Der Server vergibt entry_id; sie zu raten waere ein Eintrag, den man
+      // nicht adressieren kann. Ein Fehler beim Nachladen darf den Entwurf
+      // nicht als gescheitert ausgeben.
+      api.draftPersonaSetEntry.mockResolvedValue(draftResponse())
+      api.getPersonaSet.mockResolvedValueOnce(record())
+      api.getPersonaSet.mockRejectedValueOnce(new Error('Netz weg'))
+      const s = usePersonaSet('s1')
+      await s.load()
+
+      const res = await s.draft('Bremen')
+
+      expect(res?.origin).toBe('ai_draft')
+      expect(s.draftExample.value).not.toBeNull()
+    })
   })
 })

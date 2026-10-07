@@ -408,3 +408,82 @@ class PersonaSetQualityReport(BaseModel):
     summary: PersonaSetQualitySummary
     global_issues: list[PersonaSetQualityIssue]
     personas: list[PersonaSetQualityPersona]
+
+
+#: Obergrenze des Auftrags an das Modell. Ein Brief ist eine Beschreibung einer
+#: Rolle, keine Anleitung fuer eine Persona Menge; laenger loest das Modell nur
+#: mit Fuelltext.
+PERSONA_DRAFT_BRIEF_MAX_LENGTH = 2000
+
+#: Laengen der Felder, die das Modell zurueckgibt. Sie sind enger als im Profil,
+#: weil der Entwurf zuerst ein Vorschlag ist und die Oberflaeche danach fragt:
+#: ein Entwurf, der den Editor sprengt, ist unbrauchbar, egal wie gut er klingt.
+PERSONA_DRAFT_BIO_MAX_LENGTH = 500
+PERSONA_DRAFT_PERSONA_MAX_LENGTH = 2000
+PERSONA_DRAFT_EXAMPLE_POST_MAX_LENGTH = 500
+
+DraftNetwork = Literal["twitter", "reddit"]
+
+
+class PersonaDraftRequest(BaseModel):
+    """Auftrag fuer den KI-Entwurf einer Persona.
+
+    ``brief`` beschreibt die Rolle in freien Worten („Betriebsratin aus Bremen,
+    im Konflikt mit der Schichtplanung"). Pflicht und leer geprueft: ohne Brief
+    hat das Modell nichts, woran es sich entlangschreiben koennte, und der
+    Entwurf waere dekorativ.
+
+    ``language`` steuert die Sprache von Bio, Freitext und Beispielbeitrag. Es
+    ist die Oberflaechensprache, nicht die Sprache der Simulation.
+    """
+
+    model_config = _STRICT
+
+    brief: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=PERSONA_DRAFT_BRIEF_MAX_LENGTH,
+        ),
+    ]
+    language: str = Field(default="de", min_length=2, max_length=16)
+
+
+class PersonaDraftExamplePost(BaseModel):
+    """Ein Beispielbeitrag der Persona, wie sie in einem Netz schreiben wuerde.
+
+    Teil der Antwort, kein gespeicherter Zustand (#1807): der Beitrag dient als
+    Vorschau, damit der Maintainer die Stimme der Persona beurteilt, bevor der
+    Eintrag im Satz landet. Er traegt deshalb kein ``origin`` und wird nicht
+    gespeichert — der Feed der Simulation erzeugt eigene Beitraege.
+    """
+
+    model_config = _STRICT
+
+    content: str = Field(
+        min_length=1, max_length=PERSONA_DRAFT_EXAMPLE_POST_MAX_LENGTH
+    )
+    network: DraftNetwork = "twitter"
+
+
+class PersonaDraftResponse(BaseModel):
+    """Antwort von ``POST /api/persona-sets/<set_id>/draft``.
+
+    ``origin`` steht hier immer auf ``"ai_draft"``: ein Entwurf, der anders
+    markiert waere, verwechselte „vom Modell vorgeschlagen" mit „von Hand
+    gesetzt" — genau die Verwechslung, die die Herkunftsplakette (#4.1) in der
+    Oberflaeche verhindern soll. Der Dienst vergibt die Herkunft, nicht der
+    Aufrufer; ein Anfragetext kann sie nicht ausschalten.
+
+    ``profile`` ist ein vollstaendiges ``PersonaSetProfile``: der Dienst fuellt
+    die Luecken, statt dem Modell zu ueberlassen, was es nicht zu liefern
+    braucht. ``example_post`` fehlt, wenn das Modell keinen lieferte — die
+    Vorschau ist dann leer und die Oberflaeche sagt das.
+    """
+
+    model_config = _STRICT
+
+    origin: Literal["ai_draft"]
+    profile: PersonaSetProfile
+    example_post: Optional[PersonaDraftExamplePost] = None
