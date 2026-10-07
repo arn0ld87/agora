@@ -21,6 +21,7 @@ from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.persona_set_contract import (
+    CreateFromPersonasResponse,
     PersonaSetCreate,
     PersonaSetDuplicate,
     PersonaSetDeleteResponse,
@@ -222,6 +223,7 @@ CONTRACTS: dict[str, type] = {
     "persona-set-quality-persona.schema.json": PersonaSetQualityPersona,
     "persona-set-quality-summary.schema.json": PersonaSetQualitySummary,
     "persona-set-quality-report.schema.json": PersonaSetQualityReport,
+    "create-from-personas-response.schema.json": CreateFromPersonasResponse,
     # Persona-Ziel für den Fortschrittszähler (Issue #1034)
     "persona-target.schema.json": PersonaTargetContract,
     # Status-Antworten mit message_key (Issue #1174, Muster aus #1458)

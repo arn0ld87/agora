@@ -105,6 +105,12 @@ class SimulationRecord(BaseModel):
     # ``None`` = Legacy-State ohne Wert.
     persona_floor: Optional[int] = None
 
+    # Rueckverweis auf den Personasatz, aus dem der Lauf angelegt wurde
+    # (#1807, ``create-from-personas``). ``None`` = Lauf ohne Satz und
+    # Altbestand. ``to_dict`` laesst den Schluessel dann aus, damit ``state.json``
+    # und die Metadaten-Zeilen eines Laufs ohne Satz byte-identisch bleiben.
+    persona_set_id: Optional[str] = None
+
     def to_dict(self) -> dict[str, Any]:
         """Serialisiert fuer ``state.json``.
 
@@ -112,6 +118,12 @@ class SimulationRecord(BaseModel):
         Reihenfolge entsprechen ``SimulationState.to_dict()``, damit eine
         bestehende Ablage nach dem Umbau identisch aussieht.
         """
+        data = self._base_dict()
+        if self.persona_set_id is not None:
+            data['persona_set_id'] = self.persona_set_id
+        return data
+
+    def _base_dict(self) -> dict[str, Any]:
         return {
             'simulation_id': self.simulation_id,
             'project_id': self.project_id,

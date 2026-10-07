@@ -321,6 +321,27 @@ def test_snapshot_profiles_markiert_fallback_als_rule_based(service):
     assert "generation_source" not in dirk
 
 
+def test_snapshot_profiles_traegt_die_herkunft_jeder_persona(service):
+    record = service.create_set(PersonaSetCreate(name="S"))
+    for username, origin in (
+        ("anna", "manual"),
+        ("bernd", "fallback"),
+        ("clara", "graph"),
+        ("dirk", "ai_draft"),
+    ):
+        service.add_entry(record.id, _entry(username, origin=origin))
+
+    snapshot = service.snapshot_profiles(record.id)
+
+    # ``ai_draft`` ist nur hier erkennbar; ``generation_source`` kennt es nicht.
+    assert [p["persona_set_origin"] for p in snapshot] == [
+        "manual",
+        "fallback",
+        "graph",
+        "ai_draft",
+    ]
+
+
 def test_snapshot_profiles_leerer_satz_wirft_empty(service):
     record = service.create_set(PersonaSetCreate(name="Leer"))
 

@@ -20,10 +20,11 @@ from __future__ import annotations
 import csv
 import os
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, get_args
 
 from ..config import Config
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
+from ..contracts.persona_set_contract import PersonaOrigin
 from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
@@ -58,6 +59,9 @@ _ALWAYS_PRESENT_DEFAULTS = {
     "profession": "",
     "interested_topics": [],
 }
+
+#: Gültige Werte von ``persona_set_origin`` (Quelle: ``PersonaOrigin``).
+_PERSONA_SET_ORIGINS = frozenset(get_args(PersonaOrigin))
 
 
 def prepare_from_personas(
@@ -109,7 +113,7 @@ def prepare_from_personas(
 
     manager._set_status(state, SimulationStatus.PREPARING)
 
-    profiles = _translate_personas(personas)
+    profiles = _translate_personas(personas, from_set=persona_set_id is not None)
     manager._store.write_json(simulation_id, "reddit_profiles", profiles)
     _write_twitter_csv(manager._get_simulation_dir(simulation_id), profiles)
 
@@ -124,6 +128,10 @@ def prepare_from_personas(
     collector = degradations if degradations is not None else DegradationCollector()
     _report_rule_based_fallback(profiles, collector, persona_set_id)
 
+    # Rueckverweis erst kurz vor READY setzen: ein gescheiterter Lauf verweist
+    # nicht auf einen Satz, den ``record_run`` nie gesperrt hat. Der Statuswechsel
+    # persistiert das Feld mit.
+    state.persona_set_id = persona_set_id
     manager._set_status(state, SimulationStatus.READY)
     _register_run(state, len(profiles), persona_set_id, collector.report())
     return state
@@ -166,16 +174,21 @@ def _report_rule_based_fallback(
     )
 
 
-def _translate_personas(personas: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _translate_personas(
+    personas: List[Dict[str, Any]], *, from_set: bool = False
+) -> List[Dict[str, Any]]:
     """Übersetzt Bibliotheks-Personas ins OASIS-Profilformat.
 
     Vergibt fortlaufende ``user_id`` (ab 1) und dedupliziert Usernamen
     case-insensitiv — gleiches Muster wie ``add_simulation_profile``.
+
+    ``from_set``: Der Lauf stammt aus einem Personasatz (#1807). Dann tragen
+    ALLE Profile ``persona_set_origin`` (siehe ``_translate_persona``).
     """
     existing_names: set = set()
     profiles = []
     for index, persona in enumerate(personas, start=1):
-        profile = _translate_persona(persona, index, existing_names)
+        profile = _translate_persona(persona, index, existing_names, from_set=from_set)
         existing_names.add(profile["username"].lower())
         profiles.append(profile)
     return profiles
@@ -191,9 +204,21 @@ def _dedupe_username(username: str, existing_names: set) -> str:
 
 
 def _translate_persona(
-    persona: Dict[str, Any], user_id: int, existing_names: set
+    persona: Dict[str, Any],
+    user_id: int,
+    existing_names: set,
+    *,
+    from_set: bool = False,
 ) -> Dict[str, Any]:
-    """Schließt Feldlücken eines Bibliothekseintrags fürs Profilformat."""
+    """Schließt Feldlücken eines Bibliothekseintrags fürs Profilformat.
+
+    Bei ``from_set`` steht zusätzlich ``persona_set_origin`` im Profil: die
+    Herkunft aus dem Satz (``graph|manual|ai_draft|fallback``). Nur so bleibt
+    ein KI-Entwurf am Laufprofil erkennbar, denn ``generation_source`` kennt
+    kein ``ai_draft``. Ohne Satz fehlt der Schlüssel, die Profile bleiben
+    unverändert. Ein Profil aus einem Satz ohne gültige Herkunft ist ein
+    Programmfehler (``ValueError``), kein stiller Standardwert.
+    """
     username = _dedupe_username(
         str(persona.get("username") or f"user_{user_id}").strip(), existing_names
     )
@@ -232,6 +257,13 @@ def _translate_persona(
     for key, default in _ALWAYS_PRESENT_DEFAULTS.items():
         value = persona.get(key)
         profile[key] = value if value not in (None, "") else default
+    if from_set:
+        origin = persona.get("persona_set_origin")
+        if origin not in _PERSONA_SET_ORIGINS:
+            raise ValueError(
+                f"Persona {username!r} aus einem Satz ohne gültige Herkunft: {origin!r}"
+            )
+        profile["persona_set_origin"] = origin
     return profile
 
 

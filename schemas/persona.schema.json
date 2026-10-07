@@ -185,6 +185,24 @@
       "default": "individual",
       "title": "Persona Kind"
     },
+    "persona_set_origin": {
+      "anyOf": [
+        {
+          "enum": [
+            "graph",
+            "manual",
+            "ai_draft",
+            "fallback"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona Set Origin"
+    },
     "profession": {
       "anyOf": [
         {

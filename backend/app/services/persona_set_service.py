@@ -365,9 +365,14 @@ class PersonaSetService:
           ``generation_source="rule_based"``: das ist dasselbe Feld, das der
           normale Prepare-Pfad fuer Fallback-Personas schreibt und an dem die
           Oberflaeche den Marker und der Bericht die Degradation erkennen.
-        * ``ai_draft`` und ``graph`` bleiben unveraendert: ``PersonaModel``
-          kennt fuer KI-Entwuerfe kein eigenes Feld, und ``generation_source``
-          kennt nur ``llm`` (Vorgabe) und ``rule_based``.
+        * ``ai_draft`` und ``graph`` lassen ``generation_source`` und
+          ``is_manual`` unveraendert: ``generation_source`` kennt nur ``llm``
+          (Vorgabe) und ``rule_based``.
+        * Jede Persona traegt ``persona_set_origin`` (``graph|manual|ai_draft|
+          fallback``). Das ist die einzige Stelle, an der ein KI-Entwurf im
+          Laufprofil erkennbar bleibt. Das Feld steht bei allen Eintraegen,
+          nie nur bei einigen: der CSV-Schreiber leitet die Spalten aus dem
+          ersten Profil ab.
         """
         record = self.get_set(set_id)
         if not record.entries:
@@ -380,6 +385,7 @@ class PersonaSetService:
                 persona.get("source_entity_type") or "persona_set"
             )
             persona["is_manual"] = entry.origin == "manual"
+            persona["persona_set_origin"] = entry.origin
             if entry.origin == "fallback":
                 persona["generation_source"] = "rule_based"
             snapshot.append(persona)

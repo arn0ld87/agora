@@ -10,6 +10,7 @@ from opentelemetry import trace
 from . import simulation_bp
 from ..config import Config
 from ..contracts.model_preset_contract import AvailableModelsResponse, ModelPreset
+from ..contracts.persona_set_contract import CreateFromPersonasResponse
 from ..contracts.simulation_status_contract import SimulationStatusResponse
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
@@ -279,8 +280,10 @@ def create_simulation_from_personas():
     Aus einem Personasatz erhaelt der Lauf eine **Kopie** der Personas. Erst
     nach erfolgreicher Vorbereitung wird der Satz gesperrt und der Lauf in
     ``used_by_simulation_ids`` vermerkt; scheitert das Anlegen, bleibt der Satz
-    unveraendert bearbeitbar. Die ``persona_set_id`` steht zusaetzlich in den
-    Metadaten des Prepare-Runs (``persona_source="set"``).
+    unveraendert bearbeitbar. Die ``persona_set_id`` steht am Simulationszustand
+    (Rueckverweis, ``GET /api/simulation/<id>``) und in den Metadaten des
+    Prepare-Runs (``persona_source="set"``). Die 201-Antwort ist
+    ``CreateFromPersonasResponse``.
     """
     data = request.get_json() or {}
 
@@ -343,11 +346,14 @@ def create_simulation_from_personas():
 
     if persona_set_service is None or persona_set_id is None:
         prepare_from_personas(manager, state.simulation_id, personas)
-        return json_success({
-            "simulation_id": state.simulation_id,
-            "project_id": project.project_id,
-            "persona_count": len(personas),
-        }, status=201)
+        return json_success(
+            CreateFromPersonasResponse(
+                simulation_id=state.simulation_id,
+                project_id=project.project_id,
+                persona_count=len(personas),
+            ).model_dump(mode="json"),
+            status=201,
+        )
 
     # Gleiches Muster wie ``run_prepare`` (#1034): der Sammler gehoert dem
     # Aufrufer, damit Befunde (regelbasierte Fallback-Personas, #1807) in der
@@ -362,13 +368,16 @@ def create_simulation_from_personas():
     )
     # Erst jetzt sperren: ein gescheitertes Anlegen laesst den Satz offen.
     persona_set_service.record_run(persona_set_id, state.simulation_id)
-    return json_success({
-        "simulation_id": state.simulation_id,
-        "project_id": project.project_id,
-        "persona_count": len(personas),
-        "persona_set_id": persona_set_id,
-        "degradations": degradations.report().model_dump(mode="json"),
-    }, status=201)
+    return json_success(
+        CreateFromPersonasResponse(
+            simulation_id=state.simulation_id,
+            project_id=project.project_id,
+            persona_count=len(personas),
+            persona_set_id=persona_set_id,
+            degradations=degradations.report(),
+        ).model_dump(mode="json"),
+        status=201,
+    )
 
 
 def _resolve_personas(data):

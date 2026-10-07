@@ -392,6 +392,135 @@ def test_lauf_aus_satz_ohne_fallback_meldet_keine_degradation(set_env):
     assert "degradations" not in run["metadata"]
 
 
+# --- Rueckverweis und Antwortvertrag (#1807, E7-B1) -------------------------
+
+
+def test_antwort_aus_satz_hat_genau_die_vertragsfelder(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    data = _run_from_set(client, set_id).get_json()["data"]
+
+    assert set(data) == {
+        "simulation_id",
+        "project_id",
+        "persona_count",
+        "persona_set_id",
+        "degradations",
+    }
+    assert data["project_id"] == "proj_neu"
+    assert data["degradations"] == {"schema_version": 1, "events": []}
+
+
+def test_antwort_ohne_satz_bleibt_bei_den_drei_bisherigen_feldern(set_env):
+    res = _set_client().post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "personas": [PERSONA]},
+    )
+
+    assert res.status_code == 201
+    data = res.get_json()["data"]
+    assert set(data) == {"simulation_id", "project_id", "persona_count"}
+    assert data["persona_count"] == 1
+
+
+def test_lauf_aus_satz_haelt_den_rueckverweis_am_zustand(set_env):
+    from app.services.simulation_manager import SimulationManager
+
+    client = _set_client()
+    set_id = _make_set(client)
+
+    simulation_id = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+
+    read = client.get(f"/api/simulation/{simulation_id}").get_json()["data"]
+    assert read["persona_set_id"] == set_id
+    # Ueberlebt einen Neustart: ein frischer Manager liest ihn aus der Ablage.
+    reloaded = SimulationManager(store=set_env._store).get_simulation(simulation_id)
+    assert reloaded is not None
+    assert reloaded.persona_set_id == set_id
+    listed = client.get("/api/simulation/list").get_json()["data"]
+    assert [s["persona_set_id"] for s in listed if s["simulation_id"] == simulation_id] == [set_id]
+
+
+def test_lauf_ohne_satz_traegt_keinen_rueckverweis(set_env):
+    client = _set_client()
+    simulation_id = client.post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "personas": [PERSONA]},
+    ).get_json()["data"]["simulation_id"]
+
+    read = client.get(f"/api/simulation/{simulation_id}").get_json()["data"]
+
+    assert "persona_set_id" not in read
+    reloaded = set_env.get_simulation(simulation_id)
+    assert reloaded is not None
+    assert reloaded.persona_set_id is None
+    assert "persona_set_id" not in reloaded.to_dict()
+
+
+def test_gescheiterter_lauf_aus_satz_verweist_nicht_auf_den_satz(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    with patch(
+        "app.services.persona_prepare_service._build_config",
+        side_effect=ValueError("Vorbereitung fehlgeschlagen"),
+    ):
+        res = _run_from_set(client, set_id)
+
+    assert res.status_code == 400
+    assert [s.persona_set_id for s in set_env.list_simulations()] == [None]
+
+
+def test_laufprofil_haelt_die_herkunft_aller_vier_arten(set_env):
+    import csv
+
+    client = _set_client()
+    set_id = _make_set(client, usernames=())
+    for username, origin in (
+        ("gabi", "graph"),
+        ("manu", "manual"),
+        ("dora", "ai_draft"),
+        ("fritz", "fallback"),
+    ):
+        _add_entry(client, set_id, username, origin)
+
+    simulation_id = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+
+    profiles = set_env._store.read_json(simulation_id, "reddit_profiles", default=None)
+    by_name = {p["username"]: p for p in profiles}
+    assert {name: p["persona_set_origin"] for name, p in by_name.items()} == {
+        "gabi": "graph",
+        "manu": "manual",
+        "dora": "ai_draft",
+        "fritz": "fallback",
+    }
+    # Der KI-Entwurf ist nur ueber das neue Feld erkennbar: ``generation_source``
+    # und ``is_manual`` sehen aus wie bei einer vom Modell erzeugten Persona.
+    assert by_name["dora"]["generation_source"] == "llm"
+    assert by_name["dora"]["is_manual"] is False
+    assert by_name["manu"]["is_manual"] is True
+    assert by_name["fritz"]["generation_source"] == "rule_based"
+    # Twitter-CSV: die Spalte steht fuer ALLE Zeilen (Spalten leitet der Schreiber
+    # aus dem ersten Profil ab; eine Luecke wuerde ihn brechen bzw. leer lassen).
+    csv_path = os.path.join(set_env._get_simulation_dir(simulation_id), "twitter_profiles.csv")
+    with open(csv_path, encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [r["persona_set_origin"] for r in rows] == ["graph", "manual", "ai_draft", "fallback"]
+
+
+def test_laufprofile_ohne_satz_tragen_die_herkunft_nicht(set_env):
+    client = _set_client()
+    simulation_id = client.post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "personas": [PERSONA]},
+    ).get_json()["data"]["simulation_id"]
+
+    profiles = set_env._store.read_json(simulation_id, "reddit_profiles", default=None)
+
+    assert all("persona_set_origin" not in p for p in profiles)
+
+
 def test_scheitert_das_anlegen_wird_der_satz_nicht_gesperrt(set_env):
     client = _set_client()
     set_id = _make_set(client)

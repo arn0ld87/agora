@@ -17,8 +17,9 @@ unbekannte Version lehnt das ``Literal`` ab, statt sie still als Version 1 zu
 lesen.
 
 **Herkunft je Persona** (``PersonaOrigin``) steht am Eintrag, nicht am Profil.
-``PersonaModel`` aus ``persona_contract.py`` bleibt unveraendert (strikt,
-``extra="forbid"``): ein neues Feld braeche aeltere Leser. Das Profil im Satz
+``PersonaModel`` aus ``persona_contract.py`` traegt kein ``origin``; nur das
+Laufprofil eines Laufs aus einem Satz fuehrt die Herkunft zusaetzlich als
+``persona_set_origin`` (optional, additiv). Das Profil im Satz
 (``PersonaSetProfile``) ist ein eigenes, strikt typisiertes Modell mit den
 Feldern, die die Persona-Bibliothek (``persona_library._PROFILE_FIELDS``) und
 der Weg ``create-from-personas`` (``persona_prepare_service``) heute tragen.
@@ -43,6 +44,8 @@ from pydantic import (
     StringConstraints,
     model_validator,
 )
+
+from .pipeline_degradation_contract import PipelineDegradationReport
 
 _STRICT = ConfigDict(extra="forbid")
 
@@ -329,6 +332,32 @@ class PersonaSetEntriesDeleteResponse(BaseModel):
 
     removed_entry_ids: list[str]
     set: PersonaSetSummary
+
+
+class CreateFromPersonasResponse(BaseModel):
+    """Antwort (201) von ``POST /api/simulation/create-from-personas``.
+
+    Gilt fuer alle drei Quellen. ``persona_set_id`` und ``degradations`` gibt es
+    nur bei einem Lauf aus einem Personasatz; ohne Satz fehlen beide Schluessel
+    in der Antwort (``exclude_if``), damit die Form der Bibliotheks- und
+    Inline-Wege byte-identisch zur frueheren Antwort bleibt.
+
+    ``degradations`` ist der Befundbericht der Vorbereitung (z. B. regelbasierte
+    Fallback-Personas, #1807). Ein Lauf aus einem Satz traegt ihn immer, eine
+    leere Liste heisst: nichts ist still ausgefallen.
+    """
+
+    model_config = _STRICT
+
+    simulation_id: str
+    project_id: str
+    persona_count: int = Field(ge=0)
+    persona_set_id: Optional[str] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    degradations: Optional[PipelineDegradationReport] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 QualitySeverity = Literal["error", "warning", "info"]
