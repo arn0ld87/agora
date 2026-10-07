@@ -46,8 +46,15 @@ class GraphLockedError(Exception):
 
 def _default_repository() -> "SimulationRepository":
     from ..repositories.simulation_repository import get_simulation_repository
+    from .simulation_manager import SimulationManager
 
-    return get_simulation_repository()
+    # Derselbe Ablageort wie beim Schreibpfad (``SimulationManager``): ohne
+    # ``simulations_dir`` zaehlt der Dateiadapter nur seine instanzlokalen
+    # ``_known_ids`` — eine frische Instanz sieht dann niemanden und die
+    # abgeleitete Sperre meldet still „frei“ (#1808).
+    return get_simulation_repository(
+        simulations_dir=SimulationManager.SIMULATION_DATA_DIR,
+    )
 
 
 def _default_project_lister() -> list["Project"]:

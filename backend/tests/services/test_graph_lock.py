@@ -126,3 +126,39 @@ def test_repository_failure_is_not_swallowed():
 
     with pytest.raises(OSError):
         ensure_graph_unlocked(GRAPH, repository=_Broken(), project_lister=_projects())
+
+
+def test_default_repository_sees_records_written_by_simulation_manager(
+    tmp_path, monkeypatch
+):
+    """Regression (PR #1812, e2e „37186“): Der Default des Locks muss denselben
+    Ablageort aufzaehlen, in den ``SimulationManager`` schreibt.
+
+    ``get_simulation_repository()`` ohne ``simulations_dir`` zaehlt nur die
+    instanzlokale Menge bekannter Kennungen — eine frische Instanz sieht
+    niemanden, und die abgeleitete Sperre meldet still „frei“, obwohl eine
+    Simulation den Graphen verwendet. Der e2e Golden-Gate-Smoke fiel genau
+    darauf; Unit-Tests mit injizierten Fakes merken es nicht.
+    """
+    import os
+
+    from app.config import Config
+    from app.repositories.simulation_repository import get_simulation_repository
+    from app.services.simulation_manager import SimulationManager
+
+    sims_dir = str(tmp_path / "simulations")
+    os.makedirs(sims_dir, exist_ok=True)
+    # Write- und Read-Root auf dieselbe Stelle ziehen wie in Produktion
+    # (``Config.UPLOAD_FOLDER/simulations`` ≡ ``SIMULATION_DATA_DIR``).
+    monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
+    monkeypatch.setattr(SimulationManager, "SIMULATION_DATA_DIR", sims_dir)
+
+    # Schreibpfad: exakt wie ``SimulationManager`` seine Ablage baut.
+    write_repo = get_simulation_repository(simulations_dir=sims_dir)
+    write_repo.save(_sim("sim_0123456789ab", graph_id=GRAPH))
+
+    # Lesepfad: den Default nehmen, nichts injizieren.
+    state = get_graph_lock_state(GRAPH, project_lister=_projects())
+
+    assert state.locked is True
+    assert [u.simulation_id for u in state.used_by] == ["sim_0123456789ab"]
