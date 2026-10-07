@@ -344,7 +344,7 @@ Der Lauf-Arbeitsbereich liegt unter `/simulations/…` und nicht unter `/runs/�
 | `/simulations/:simulationId/simulation/post/:postId` | Faden-Ansicht. `?claim=` hebt den Beitrag hervor und zeigt den Rückweg zum Bericht. |
 | `/simulations/:simulationId/simulation/rounds` | Runden |
 | `/simulations/:simulationId/simulation/diagnostics` | Diagnose |
-| `/simulations/:simulationId/report/:reportId?` | Bericht; ohne `reportId` die jüngste Fassung. `?claim=` für die Auswahl, `?panel=questions` öffnet rechts die Nachfragen an den Berichtsagenten. |
+| `/simulations/:simulationId/report/:reportId?` | Bericht; ohne `reportId` die jüngste Fassung. `?claim=` für die Auswahl, `?panel=questions` öffnet rechts die Nachfragen an den Berichtsagenten. Seit Etappe 5 umgesetzt (siehe 11d). |
 | `/simulations/:simulationId/interviews/:conversationId?` | Interviews |
 | `/graphs/:projectId` | Graph-Ansicht der Bibliothek |
 | `/persona-sets/:setId` | Personasatz |
@@ -365,7 +365,7 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 | `/ablage?filter=personasatz` | `/library/persona-sets` | 7; bis dahin `/library/runs` |
 | `/ablage?filter=jobs`, `/v4/history` | `/activity/jobs` | 2 |
 | `/ablage/lauf/:objectId` | `/simulations/:objectId` | 2 |
-| `/ablage/bericht/:objectId` | `/simulations/:simulationId/report/:objectId` (Simulation aus dem Bericht auflösen) | 5; bis dahin alte Ansicht |
+| `/ablage/bericht/:objectId` | `/simulations/:simulationId/report/:objectId` (Simulation aus dem Bericht auflösen) | 5, umgesetzt |
 | `/ablage/graph/:objectId` | `/graphs/:projectId` (Projekt aus der Kennung auflösen) | 2 |
 | `/ablage/personasatz/:objectId` | `/persona-sets/:setId` | 7; bis dahin Personas-Reiter des zugehörigen Laufs |
 | `/runs/:id` | `/activity/jobs/:id`, Kennung unverändert | 2 |
@@ -376,7 +376,7 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 | `/v4/simulation/:id/feed`, `…/threads` | `/simulations/:id/simulation/feed` | 4 |
 | `/v4/simulation/:id/thread/:postId` | `/simulations/:id/simulation/post/:postId` | 4 |
 | `/v4/simulation/:id/rounds`, `…/live`, `…/actions` | `/simulations/:id/simulation/rounds` | 4 |
-| `/report/:reportId`, `/v4/report/:reportId` | `/simulations/:simulationId/report/:reportId` (Simulation aus dem Bericht auflösen) | 5 |
+| `/report/:reportId`, `/v4/report/:reportId` | `/simulations/:simulationId/report/:reportId` (Simulation aus dem Bericht auflösen) | 5, umgesetzt (`StepReport` bleibt als Auflöse-Ansicht) |
 | `/interaction/:reportId`, `/v4/interaction/:reportId` | `/simulations/:simulationId/report/:reportId?panel=questions` (Simulation aus dem Bericht auflösen). Die Adresse öffnet heute standardmäßig den Chat mit dem Berichtsagenten, deshalb führt sie zu „Nachfragen" am selben Bericht und nicht zu den Interviews | sobald 5 und 6 fertig sind; bis dahin alte Ansicht |
 | `/v4/compare/:simulationId` | `/compare/:simulationId` | 2 |
 | `/settings/general` | `/settings/general` | 3 |
@@ -707,6 +707,23 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 - Die Aktionstabelle filtert nach Runde, Netzwerk und Aktionsart, nicht nach Persona.
 - `useSimFeed.ts` hält noch den alten Store (`useSimFeed`, `clearSimFeed`), den kein Verbraucher mehr schreibt; die Strang-Helfer werden von `threads.ts` genutzt. Aufräumen, sobald sie umgezogen sind.
 - Die e2e-Smokes (Gates für Feed, Runden, Diagnose; Weiterleitungen der alten Adressen) laufen nur in der CI gegen den Docker-Stack; lokal wurden sie typgeprüft, nicht ausgeführt.
+
+---
+
+## 11d. Stand Etappe 5
+
+**Umgesetzt (#1804)** nach 4.6: Bericht als Reiter am Lauf unter `/simulations/:simulationId/report/:reportId?` (Gliederung, Lesetext, Seitenspalte „Belege | Nachfragen“, Fassungswähler mit Modell je Fassung aus `llm_model`, Export, Start/Neuerzeugung). **Belegspalte:** Kennzahlen (Belegdichte aus `GET /api/report/<id>/evidence-density`, Positionierungsquote aus `…/stance-analysis`, je mit den Zuständen Daten, „für diese Fassung nicht gespeichert“ bei 404 und sichtbarer Auslassung bei `artifact_omitted`; `applicable=false` steht als „Lauf ohne Streitfrage“), Belege des gewählten Claims nach Quellenart gruppiert (Auszug, Herkunft, Bindung, kopierbar), Claim-Liste je Abschnitt (Confidence als Text, Zahl der Belege, Quellenarten; Auswahl über `?claim=`, `aria-current`), Hypothesen und Datenlücken als getrennte Listen, einklappbarer Block „Prüfhinweise (n)“ für Binding-/Gate-Probleme (`unbound_evidence_refs`, `unverified_statements`, `gate_decision_log`, `degradation_log`; nie als Datenlücke bezeichnet). **Sprünge:** `agent_action` mit `origin_post_id` → Feed-Beitrag (`RunSimulationPost` mit `?claim=` und `?report=`), erst nachdem der Feed-Snapshot auf Bedarf geladen wurde und Beitrag **und** Text (normalisierter Enthaltensein-Vergleich) zum Beleg passen, sonst „Beitrag im Feed nicht eindeutig zuordenbar“; `entity_summary` mit `origin_node_uuids` → Graph-Reiter `?entity=<uuid>` (der Graph-Leser kannte `?entity=` schon); `agent_interview` mit `voice_key` → Interviews-Reiter des Laufs (`RunInterviewsLegacy`, bis Etappe 6); `graph_fact` ohne Kantenkennung: „Keine Kantenkennung im Beleg“. Der Feed-Beitrag bietet bei `?claim=` den Rückweg „Zurück zum Bericht“ auf dieselbe Fassung. Aufgelöst in `composables/run/report/evidenceJumps.ts`. **Entfernt:** `StepReportView`, `Step4Report` und die Leseumgebung unter `components/step4/` (`ReportReader`, `ReportOutline`, `ReportOutlinePanel`, `ReportEvidenceRail`, `ReportBranchControls`, `ReportModeControls`, `ReportModelControls`) samt Specs; `ReportReaderTestId` ist durch `RunReportTestId` ersetzt. Erhalten: `ReportLiveLogPane`, `useReportExports`, `useReportGeneration`, `ConfidenceBadge`/`confidenceUtils` (ohne Aufrufer), `ReportRedTeamSection` und `ReportProvenanceSection` (ohne Aufrufer, Restliste). Der Bericht steht im Accessibility-Gate (`golden-gate-accessibility`, Zustand ohne Bericht); `minimal-report` prüft die neue Adresse und `RunReportTestId`.
+
+**Bewusst nicht gebaut / offen:**
+
+- Claims im Fließtext sind nicht anklickbar: der Lesetext gespeicherter Berichte ist ein Markdown-Block ohne Claim-Anker. Die Claim-Liste in der rechten Spalte ersetzt das.
+- Graph-Belege (`graph_fact`) tragen keine Kantenkennung; ein Sprung zur Kante ist nicht möglich.
+- Gespeicherte Berichte erscheinen als ein Block, nicht Abschnitt für Abschnitt; die Gliederung nennt die Zustände.
+- `origin_post_id` ist nur mit Textabgleich ein Sprung (in rund 8 % alter Läufe zeigt sie auf einen anderen Beitrag); bei abgeschnittenem Snapshot (5000 je Netzwerk) kann auch ein richtiger Beitrag als „nicht eindeutig zuordenbar“ erscheinen.
+- Die Druckansicht ist nicht im Browser abgenommen.
+- Der Umfrage-Tab der Altansicht hat keinen Ersatz; deshalb bleiben `Step5Interaction`, `StepInteractionView` und die Route `StepInteraction` bestehen (Etappe 6).
+- Die Interviews-Verweise führen auf die Übergangsadresse, nicht auf die einzelne Stimme.
+- Die e2e-Smokes (`minimal-report`, `golden-gate-accessibility`) laufen nur in der CI gegen den Docker-Stack. Lokal: Typprüfung und eine temporäre Messung gegen gemockte Daten im Vite-Dev-Server (axe ohne serious/critical, 320 px, Tastatur, Tab-Reihenfolge, Fokus, reduzierte Bewegung grün).
 
 ---
 

@@ -6,10 +6,10 @@ import { asRunRegistryId, isSimulationId } from '../contracts/runIdentifiers'
  *
  * Issue #764 / PR #975: `simulation_id` und `run_id` sind nicht identisch —
  * die Run-Registry vergibt beim Start eine eigene UUID, die `/api/runs/<id>`
- * zwingend braucht. Sie erreicht `StepReportView` ausschliesslich ueber den
+ * zwingend braucht. Sie erreicht die Report-Ansicht ausschliesslich ueber den
  * Query-Parameter `?runId=<id>`. Jede Navigation auf eine neue `reportId`
- * (Report-Start, Regenerieren) muss ihn deshalb mitfuehren, sonst faellt
- * `Step4Report.loadRunUsage()` still auf die `simulationId` zurueck.
+ * (Report-Start, Regenerieren) muss ihn deshalb mitfuehren, sonst faellt die
+ * Nutzungsabfrage still auf die `simulationId` zurueck.
  *
  * Nur echte `run_…`-IDs landen im Query. Ein `sim_…`-Wert waere hier kein
  * brauchbarer Naeherungswert, sondern eine falsche Auskunft: `/api/runs/sim_…`
@@ -67,9 +67,9 @@ export function buildInteractionRoute(
  * es gibt keinen Report, den man stattdessen referenzieren koennte. Der
  * Sentinel `'new'` spiegelt die bereits etablierte Konvention aus
  * `useGraphBuildPipeline.ts` (`currentProjectId.value === 'new'`) fuer
- * "noch keine ID vorhanden". `StepReportView.vue` uebersetzt ihn zurueck
- * auf ein leeres `reportId`, damit `Step4Report`s bestehender
- * Bestaetigungs-Block (`v-if="reportPending && phase === 0"`) greift.
+ * "noch keine ID vorhanden". `useRunReport` (Bericht-Reiter am Lauf) liest ihn
+ * als "kein Bericht gewaehlt", damit der Start-Hinweis statt eines
+ * sofortigen Starts erscheint.
  */
 export const PENDING_REPORT_ID = 'new'
 
