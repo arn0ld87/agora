@@ -2812,6 +2812,82 @@
       "loading": "Loading persona sets …",
       "errorTitle": "Persona sets could not be loaded",
       "retry": "Try again",
+      "editor": {
+        "titleNew": "New persona",
+        "titleEdit": "Edit persona: {name}",
+        "navLabel": "Persona sections",
+        "required": "(required)",
+        "saving": "Saving …",
+        "save": "Save",
+        "cancel": "Cancel",
+        "close": "Close",
+        "unsaved": "Unsaved changes",
+        "locked": "Locked: a run was created from this persona set, so the persona is read-only. Duplicate the persona set to make changes.",
+        "summaryTitle": "{n} entries to check",
+        "sectionErrors": "{n} entries to check",
+        "originNote": {
+          "graph": "Taken from the graph.",
+          "manual": "Created by hand.",
+          "ai_draft": "Draft: suggested by the AI and not reviewed yet.",
+          "fallback": "Degradation: rule-based stand-in persona, not a fully worked-out one. Please review and rework."
+        },
+        "confirm": {
+          "text": "There are unsaved changes. Discard them?",
+          "keep": "Keep editing",
+          "discard": "Discard"
+        },
+        "errors": {
+          "required": "Required, please fill in.",
+          "tooLong": "Too long, at most {max} characters.",
+          "tooMany": "Too many entries, at most {max}.",
+          "range": "Enter a value between {min} and {max}.",
+          "countryCode": "Two-letter country code, for example DE.",
+          "wholeNumber": "Enter a whole number.",
+          "number": "Enter a number, for example 0.5.",
+          "invalid": "Invalid value."
+        },
+        "sections": {
+          "identity": { "label": "Identity" },
+          "stance": {
+            "label": "Stance and goals",
+            "note": "The contract has no dedicated field for stance or goals. Put both in the persona description."
+          },
+          "language": {
+            "label": "Language and tone",
+            "note": "The contract has no dedicated field for tone or style. Only the language can be set here; describe the tone in the persona description."
+          },
+          "activity": { "label": "Activity" },
+          "graph": {
+            "label": "Link to the graph",
+            "note": "The system sets origin and source entity; they cannot be changed here."
+          }
+        },
+        "fields": {
+          "name": { "label": "Name" },
+          "username": { "label": "Username", "hint": "Unique within the persona set." },
+          "persona_kind": { "label": "Kind" },
+          "profession": { "label": "Role or profession" },
+          "age": { "label": "Age", "hint": "Whole number from 0 to {max}, empty = not specified." },
+          "gender": {
+            "label": "Gender",
+            "unset": "Not specified",
+            "options": { "male": "male", "female": "female", "nonbinary": "non-binary", "other": "other" }
+          },
+          "country": { "label": "Country", "hint": "Two-letter country code, for example DE." },
+          "location": { "label": "Location" },
+          "bio": { "label": "Short profile", "hint": "{n} of {max} characters." },
+          "verified": { "label": "Verified", "hint": "Marks the persona as verified." },
+          "persona": { "label": "Persona description", "hint": "Background, stance, goals and tone as prose. {n} of {max} characters." },
+          "interested_topics": { "label": "Interests", "hint": "One topic per line, at most {max}." },
+          "mbti": { "label": "MBTI type", "unset": "Not specified" },
+          "language": { "label": "Language", "hint": "Language code, for example de or en." },
+          "activity_level": { "label": "Activity level", "hint": "Number from 0 to 1, empty = not specified." },
+          "time_zone": { "label": "Time zone", "hint": "For example Europe/Berlin." },
+          "source_entity_type": { "label": "Source entity type", "hint": "Entity type in the graph the persona comes from." },
+          "origin": { "label": "Origin" },
+          "source_entity_uuid": { "label": "Source entity (UUID)", "none": "Not linked to the graph." }
+        }
+      },
       "library": {
         "empty": "No persona sets yet.",
         "count": "{n} persona sets",

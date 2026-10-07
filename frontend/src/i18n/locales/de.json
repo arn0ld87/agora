@@ -2812,6 +2812,82 @@
       "loading": "Personasätze werden geladen …",
       "errorTitle": "Personasätze konnten nicht geladen werden",
       "retry": "Erneut versuchen",
+      "editor": {
+        "titleNew": "Neue Persona",
+        "titleEdit": "Persona bearbeiten: {name}",
+        "navLabel": "Abschnitte der Persona",
+        "required": "(Pflichtfeld)",
+        "saving": "Wird gespeichert …",
+        "save": "Speichern",
+        "cancel": "Abbrechen",
+        "close": "Schließen",
+        "unsaved": "Ungespeicherte Änderungen",
+        "locked": "Gesperrt: Aus diesem Personasatz ist ein Lauf entstanden, die Persona ist nur lesbar. Zum Ändern den Personasatz duplizieren.",
+        "summaryTitle": "{n} Eingaben prüfen",
+        "sectionErrors": "{n} Eingaben prüfen",
+        "originNote": {
+          "graph": "Aus dem Graphen übernommen.",
+          "manual": "Von Hand angelegt.",
+          "ai_draft": "Entwurf: von der KI vorgeschlagen und noch nicht geprüft.",
+          "fallback": "Degradation: regelbasierte Ersatz-Persona, keine ausgearbeitete Persona. Bitte prüfen und überarbeiten."
+        },
+        "confirm": {
+          "text": "Es gibt ungespeicherte Änderungen. Wirklich verwerfen?",
+          "keep": "Weiter bearbeiten",
+          "discard": "Verwerfen"
+        },
+        "errors": {
+          "required": "Pflichtfeld, bitte ausfüllen.",
+          "tooLong": "Zu lang, höchstens {max} Zeichen.",
+          "tooMany": "Zu viele Einträge, höchstens {max}.",
+          "range": "Wert zwischen {min} und {max} angeben.",
+          "countryCode": "Zweibuchstabiger Ländercode, zum Beispiel DE.",
+          "wholeNumber": "Ganze Zahl angeben.",
+          "number": "Zahl angeben, zum Beispiel 0,5.",
+          "invalid": "Ungültiger Wert."
+        },
+        "sections": {
+          "identity": { "label": "Identität" },
+          "stance": {
+            "label": "Haltung und Ziele",
+            "note": "Der Vertrag hat kein eigenes Feld für Haltung oder Ziele. Beides gehört in die Persona-Beschreibung."
+          },
+          "language": {
+            "label": "Sprache und Ton",
+            "note": "Der Vertrag hat kein eigenes Feld für Ton oder Stil. Hier lässt sich nur die Sprache festlegen; den Ton beschreibt die Persona-Beschreibung."
+          },
+          "activity": { "label": "Aktivität" },
+          "graph": {
+            "label": "Bezug zum Graphen",
+            "note": "Herkunft und Quell-Entität setzt das System; sie lassen sich hier nicht ändern."
+          }
+        },
+        "fields": {
+          "name": { "label": "Name" },
+          "username": { "label": "Benutzername", "hint": "Eindeutig im Personasatz." },
+          "persona_kind": { "label": "Art" },
+          "profession": { "label": "Rolle oder Beruf" },
+          "age": { "label": "Alter", "hint": "Ganze Zahl von 0 bis {max}, leer = nicht angegeben." },
+          "gender": {
+            "label": "Geschlecht",
+            "unset": "Nicht angegeben",
+            "options": { "male": "männlich", "female": "weiblich", "nonbinary": "nichtbinär", "other": "anderes" }
+          },
+          "country": { "label": "Land", "hint": "Zweibuchstabiger Ländercode, zum Beispiel DE." },
+          "location": { "label": "Ort" },
+          "bio": { "label": "Kurzprofil", "hint": "{n} von {max} Zeichen." },
+          "verified": { "label": "Verifiziert", "hint": "Markiert die Persona als verifiziert." },
+          "persona": { "label": "Persona-Beschreibung", "hint": "Hintergrund, Haltung, Ziele und Ton in Fließtext. {n} von {max} Zeichen." },
+          "interested_topics": { "label": "Interessen", "hint": "Ein Thema pro Zeile, höchstens {max}." },
+          "mbti": { "label": "MBTI-Typ", "unset": "Nicht angegeben" },
+          "language": { "label": "Sprache", "hint": "Sprachcode, zum Beispiel de oder en." },
+          "activity_level": { "label": "Aktivitätsniveau", "hint": "Zahl von 0 bis 1, leer = nicht angegeben." },
+          "time_zone": { "label": "Zeitzone", "hint": "Zum Beispiel Europe/Berlin." },
+          "source_entity_type": { "label": "Typ der Quell-Entität", "hint": "Entitätstyp im Graphen, aus dem die Persona stammt." },
+          "origin": { "label": "Herkunft" },
+          "source_entity_uuid": { "label": "Quell-Entität (UUID)", "none": "Keine Verknüpfung mit dem Graphen." }
+        }
+      },
       "library": {
         "empty": "Noch keine Personasätze vorhanden.",
         "count": "{n} Personasätze",
