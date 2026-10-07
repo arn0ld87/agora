@@ -38,6 +38,7 @@ IN_PROCESS_RUN_TYPES = [
     "report_generate",
     "graph_build",
     "ontology_generate",
+    "graph_duplicate",  # #1808: Graph-Kopie als In-Process-Job
 ]
 
 

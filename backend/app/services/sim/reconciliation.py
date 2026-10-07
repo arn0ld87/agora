@@ -138,6 +138,7 @@ _IN_PROCESS_RUN_TYPES = (
     "report_generate",
     "graph_build",
     "ontology_generate",
+    "graph_duplicate",
 )
 
 _TERMINATION_REASON = "process_restart"
