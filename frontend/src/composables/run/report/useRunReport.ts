@@ -68,6 +68,10 @@ export interface ReportVersionItem {
   createdAt: string
   /** Rohstatus des Berichts (`ReportStatusSchema`). */
   status: string
+  /** Gelaufenes Modell dieser Fassung (`llm_model`); `null`, wenn der Bericht keines belegt. */
+  model: string | null
+  /** Anbieter-ID des gelaufenen Modells; `null`, wenn nicht belegt. */
+  providerId: string | null
 }
 
 export type LoadFailure = { kind: 'notFound' | 'contract' | 'transport'; reason: string }
@@ -168,7 +172,14 @@ export function parseVersions(envelope: unknown): VersionsState {
   }
   reports.sort((a, b) => versionDate(a).localeCompare(versionDate(b)))
   const items = reports
-    .map((r, i) => ({ reportId: r.report_id, number: i + 1, createdAt: versionDate(r), status: r.status }))
+    .map((r, i) => ({
+      reportId: r.report_id,
+      number: i + 1,
+      createdAt: versionDate(r),
+      status: r.status,
+      model: r.llm_model || null,
+      providerId: r.llm_provider_id || null,
+    }))
     .reverse()
   return { status: 'ok', items, invalid }
 }

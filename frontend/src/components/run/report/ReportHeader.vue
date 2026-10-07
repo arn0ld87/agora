@@ -4,8 +4,9 @@
  * Zustand der gewählten Fassung, „Neu erzeugen mit …“ und ein Platz für das
  * Export-Menü (Slot `actions`, füllt ein anderes Ticket).
  *
- * Die Frage des Laufs steht im Kopf des Arbeitsbereichs, nicht hier. Ein
- * Modell je Fassung nennt der Bericht-Vertrag nicht; deshalb steht keines da.
+ * Die Frage des Laufs steht im Kopf des Arbeitsbereichs, nicht hier. Das Modell
+ * je Fassung (`llm_model` des Berichts) steht in der Option, wenn der Bericht es
+ * belegt; sonst steht dort nichts.
  * Ein Wechsel der Fassung ändert die Adresse (`/simulations/:id/report/:reportId`);
  * `?panel=` bleibt, Claim und Abschnitt der alten Fassung entfallen.
  */
@@ -34,12 +35,16 @@ const selectedStatus = computed<string | null>(() => {
 })
 const selectedState = computed(() => (selectedStatus.value ? reportStateKind(selectedStatus.value) : null))
 
-function optionLabel(v: { number: number; createdAt: string; status: string }): string {
-  return t('views.run.report.header.versionOption', {
+function optionLabel(v: { number: number; createdAt: string; status: string; model: string | null }): string {
+  const params = {
     n: v.number,
     date: formatShelfDate(v.createdAt, locale.value, t),
     state: t(`views.run.state.${reportStateKind(v.status)}`),
-  })
+  }
+  // Das Modell steht nur da, wo die Fassung es belegt; nie aus Voreinstellungen geraten.
+  return v.model
+    ? t('views.run.report.header.versionOptionModel', { ...params, model: v.model })
+    : t('views.run.report.header.versionOption', params)
 }
 
 function carriedQuery(): Record<string, string> {

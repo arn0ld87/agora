@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   listReports: vi.fn(),
   getReport: vi.fn(),
   getReportEvidence: vi.fn(),
+  getReportEvidenceDensity: vi.fn().mockResolvedValue({ success: false, code: 'not_found' }),
+  getReportStanceAnalysis: vi.fn().mockResolvedValue({ success: false, code: 'not_found' }),
   getReportStatus: vi.fn(),
   generateReport: vi.fn(),
   getAgentLog: vi.fn(),

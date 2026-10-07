@@ -2494,6 +2494,7 @@
         "header": {
           "versionLabel": "Fassung",
           "versionOption": "Fassung {n} · {date} · {state}",
+          "versionOptionModel": "Fassung {n} · {date} · {state} · {model}",
           "versionsLoading": "Fassungen werden geladen …",
           "noVersions": "Noch keine Fassung",
           "stateLabel": "Zustand",
@@ -2565,6 +2566,115 @@
             "title": "Belege ausgelassen (evidence_omitted)",
             "body": "Der Bericht hat Belege, aber sie ließen sich nicht vertragskonform ausliefern. Das ist keine Datenlücke; die Belege sind in dieser Ansicht nicht prüfbar."
           }
+        },
+        "claims": {
+          "title": "Claims",
+          "count": "{n} Claim | {n} Claims",
+          "none": "Der Bericht enthält keine Claims.",
+          "sectionLabel": "Abschnitt {n}: {title}",
+          "confidence": {
+            "speculative": "spekulativ",
+            "low": "niedrig",
+            "medium": "mittel",
+            "high": "hoch",
+            "verified": "verifiziert"
+          },
+          "confidenceLine": "Confidence: {label} ({pct} %)",
+          "evidenceCount": "{n} Beleg | {n} Belege",
+          "hypotheses": {
+            "title": "Hypothesen ({n})",
+            "hint": "Plausibel, aber nicht ausreichend belegt. Hypothesen sind keine Claims.",
+            "rationale": "Begründung: {text}"
+          },
+          "gaps": {
+            "title": "Datenlücken ({n})",
+            "hint": "Die benötigte Information fehlt in den Quellen.",
+            "reason": "Grund: {text}"
+          }
+        },
+        "evidence": {
+          "title": "Belege",
+          "noSelection": "Wähle einen Claim in der Liste, um seine Belege zu sehen.",
+          "overviewTotal": "{n} Beleg im Bericht | {n} Belege im Bericht",
+          "forClaim": "Belege zu {id}",
+          "none": "An diesen Claim sind keine Belege gebunden.",
+          "missing": "{n} gebundener Beleg fehlt im Beleg-Index (Vertragsproblem). | {n} gebundene Belege fehlen im Beleg-Index (Vertragsproblem).",
+          "kind": {
+            "seed_corpus": "Dokument",
+            "graph_relation": "Graph",
+            "agent_action": "Simulation (Beitrag)",
+            "agent_quote": "Stimme (Interview-Zitat)",
+            "web_source": "Web",
+            "inferred": "Abgeleitet, nicht belegt"
+          },
+          "origin": "Herkunft",
+          "sourceLabel": "Quelle",
+          "anchorLabel": "Anker",
+          "voiceLabel": "Stimme",
+          "groupLabel": "Gruppe",
+          "bindingLabel": "Bindung",
+          "binding": {
+            "supports": "stützt den Claim",
+            "contradicts": "widerspricht dem Claim",
+            "neutral": "stützt den Claim nicht"
+          },
+          "entailment": {
+            "SUPPORTED": "Folgerung gestützt",
+            "CONTRADICTED": "Folgerung widerlegt",
+            "RELATED_ONLY": "nur verwandt",
+            "INSUFFICIENT": "unzureichend"
+          },
+          "copy": "Auszug kopieren",
+          "copied": "Auszug kopiert.",
+          "copyFailed": "Der Auszug ließ sich nicht kopieren."
+        },
+        "metrics": {
+          "title": "Kennzahlen",
+          "loading": "Wird geladen …",
+          "unsaved": "Für diese Fassung nicht gespeichert.",
+          "failed": "Nicht ladbar: {reason}",
+          "omitted": {
+            "title": "{name} ausgelassen (artifact_omitted)",
+            "body": "Die gespeicherte Datei verletzt den Vertrag und ist in dieser Ansicht nicht prüfbar. Das ist keine Datenlücke."
+          },
+          "density": {
+            "title": "Belegdichte",
+            "noClaims": "Der Bericht hat keine Claims, daher keine Quote.",
+            "claimsTotal": "Claims gesamt",
+            "without": "ohne Beleg",
+            "single": "mit einem Beleg",
+            "multi": "mit mehreren Belegen",
+            "multiIndependent": "mit unabhängigen Belegen",
+            "singleRatio": "Anteil mit nur einem Beleg"
+          },
+          "stance": {
+            "title": "Positionierungsquote",
+            "notApplicable": "Lauf ohne Streitfrage",
+            "contested": "Streitfrage: {text}",
+            "ratio": "{positioned} von {total} Stimmen positioniert ({pct})",
+            "camps": {
+              "in_favour": "dafür",
+              "opposed": "dagegen",
+              "undecided": "unentschieden"
+            },
+            "unclassified": "{n} Beitrag ließ sich nicht einordnen. | {n} Beiträge ließen sich nicht einordnen."
+          }
+        },
+        "checks": {
+          "title": "Prüfhinweise ({n})",
+          "intro": "Binding-/Gate-Probleme des Berichts: Verweise und Aussagen, die sich nicht an einen Beleg binden ließen. Das sind keine Datenlücken.",
+          "none": "Keine Prüfhinweise.",
+          "entry": "Claim {claim}, Abschnitt {n}: {violation}, Maßnahme {action}. {detail}",
+          "unbound": {
+            "title": "Zitierte Belege ohne Bindung",
+            "item": "Abschnitt {n} ({title}): {refs}"
+          },
+          "unverified": {
+            "title": "Unbelegte Aussagen im Text",
+            "item": "Abschnitt {n}: {text} ({verdict}: {reason})"
+          },
+          "gate": { "title": "Gate-Entscheidungen" },
+          "degradation": { "title": "Abgestufte Claims" }
         },
         "export": {
           "trigger": "Exportieren",

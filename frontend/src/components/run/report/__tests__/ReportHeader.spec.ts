@@ -6,7 +6,7 @@ import { evidenceMap, listEnvelope, reportData } from '@/composables/run/report/
 import { mountWithReport, okApi } from './helpers'
 
 describe('ReportHeader', () => {
-  it('Fassungswähler nennt jede Fassung mit Nummer, Datum und Zustand; die jüngste ist gewählt; kein Modell', async () => {
+  it('Fassungswähler nennt jede Fassung mit Nummer, Datum und Zustand; die jüngste ist gewählt; ohne Beleg kein Modell', async () => {
     const { wrapper } = await mountWithReport(ReportHeader, { simulationId: 'sim_1' })
     const select = wrapper.get('[data-testid="report-version-select"]')
     const options = select.findAll('option').map((o) => o.text())
@@ -16,6 +16,23 @@ describe('ReportHeader', () => {
     expect((select.element as HTMLSelectElement).value).toBe('report_1')
     expect(wrapper.get('label[for="report-version-select"]').text()).toBe('Fassung')
     expect(wrapper.text()).not.toMatch(/Modell/)
+  })
+
+  it('nennt das Modell je Fassung, wenn der Bericht es belegt, sonst nichts', async () => {
+    const withModel = reportData({
+      report_id: 'report_1',
+      llm_model: 'gpt-5.4',
+      llm_provider_id: 'openai',
+    })
+    const without = reportData({ report_id: 'report_0', created_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:30:00Z' })
+    const api = okApi({
+      listReports: vi.fn().mockResolvedValue(listEnvelope([without, withModel])),
+      getReport: vi.fn().mockResolvedValue({ success: true, data: withModel }),
+    })
+    const { wrapper } = await mountWithReport(ReportHeader, { simulationId: 'sim_1' }, { api })
+    const options = wrapper.get('[data-testid="report-version-select"]').findAll('option').map((o) => o.text())
+    expect(options[0]).toMatch(/^Fassung 2 · .+ · Fertig · gpt-5\.4$/)
+    expect(options[1]).toMatch(/^Fassung 1 · .+ · Fertig$/)
   })
 
   it('zeigt den Zustand der gewählten Fassung als Text; Unvollständig ist nicht Fertig', async () => {

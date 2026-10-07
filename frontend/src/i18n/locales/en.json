@@ -2494,6 +2494,7 @@
         "header": {
           "versionLabel": "Version",
           "versionOption": "Version {n} · {date} · {state}",
+          "versionOptionModel": "Version {n} · {date} · {state} · {model}",
           "versionsLoading": "Loading versions …",
           "noVersions": "No version yet",
           "stateLabel": "State",
@@ -2565,6 +2566,115 @@
             "title": "Evidence omitted (evidence_omitted)",
             "body": "The report has evidence, but it could not be delivered in a contract-conforming way. This is not a data gap; the evidence cannot be checked in this view."
           }
+        },
+        "claims": {
+          "title": "Claims",
+          "count": "{n} claim | {n} claims",
+          "none": "The report contains no claims.",
+          "sectionLabel": "Section {n}: {title}",
+          "confidence": {
+            "speculative": "speculative",
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "verified": "verified"
+          },
+          "confidenceLine": "Confidence: {label} ({pct} %)",
+          "evidenceCount": "{n} piece of evidence | {n} pieces of evidence",
+          "hypotheses": {
+            "title": "Hypotheses ({n})",
+            "hint": "Plausible, but not sufficiently supported. Hypotheses are not claims.",
+            "rationale": "Rationale: {text}"
+          },
+          "gaps": {
+            "title": "Data gaps ({n})",
+            "hint": "The required information is missing from the sources.",
+            "reason": "Reason: {text}"
+          }
+        },
+        "evidence": {
+          "title": "Evidence",
+          "noSelection": "Choose a claim in the list to see its evidence.",
+          "overviewTotal": "{n} piece of evidence in the report | {n} pieces of evidence in the report",
+          "forClaim": "Evidence for {id}",
+          "none": "No evidence is bound to this claim.",
+          "missing": "{n} bound piece of evidence is missing from the evidence index (contract problem). | {n} bound pieces of evidence are missing from the evidence index (contract problem).",
+          "kind": {
+            "seed_corpus": "Document",
+            "graph_relation": "Graph",
+            "agent_action": "Simulation (post)",
+            "agent_quote": "Voice (interview quote)",
+            "web_source": "Web",
+            "inferred": "Inferred, not supported"
+          },
+          "origin": "Origin",
+          "sourceLabel": "Source",
+          "anchorLabel": "Anchor",
+          "voiceLabel": "Voice",
+          "groupLabel": "Group",
+          "bindingLabel": "Binding",
+          "binding": {
+            "supports": "supports the claim",
+            "contradicts": "contradicts the claim",
+            "neutral": "does not support the claim"
+          },
+          "entailment": {
+            "SUPPORTED": "entailment supported",
+            "CONTRADICTED": "entailment contradicted",
+            "RELATED_ONLY": "related only",
+            "INSUFFICIENT": "insufficient"
+          },
+          "copy": "Copy excerpt",
+          "copied": "Excerpt copied.",
+          "copyFailed": "The excerpt could not be copied."
+        },
+        "metrics": {
+          "title": "Metrics",
+          "loading": "Loading …",
+          "unsaved": "Not stored for this version.",
+          "failed": "Could not be loaded: {reason}",
+          "omitted": {
+            "title": "{name} omitted (artifact_omitted)",
+            "body": "The stored file violates the contract and cannot be checked in this view. This is not a data gap."
+          },
+          "density": {
+            "title": "Evidence density",
+            "noClaims": "The report has no claims, so there is no ratio.",
+            "claimsTotal": "Claims in total",
+            "without": "without evidence",
+            "single": "with one piece of evidence",
+            "multi": "with several pieces of evidence",
+            "multiIndependent": "with independent evidence",
+            "singleRatio": "Share with one piece of evidence only"
+          },
+          "stance": {
+            "title": "Positioning ratio",
+            "notApplicable": "Run without a contested question",
+            "contested": "Contested question: {text}",
+            "ratio": "{positioned} of {total} voices positioned ({pct})",
+            "camps": {
+              "in_favour": "in favour",
+              "opposed": "opposed",
+              "undecided": "undecided"
+            },
+            "unclassified": "{n} contribution could not be classified. | {n} contributions could not be classified."
+          }
+        },
+        "checks": {
+          "title": "Check notes ({n})",
+          "intro": "Binding/gate problems of the report: references and statements that could not be bound to evidence. These are not data gaps.",
+          "none": "No check notes.",
+          "entry": "Claim {claim}, section {n}: {violation}, action {action}. {detail}",
+          "unbound": {
+            "title": "Cited evidence without binding",
+            "item": "Section {n} ({title}): {refs}"
+          },
+          "unverified": {
+            "title": "Unsupported statements in the text",
+            "item": "Section {n}: {text} ({verdict}: {reason})"
+          },
+          "gate": { "title": "Gate decisions" },
+          "degradation": { "title": "Downgraded claims" }
         },
         "export": {
           "trigger": "Export",
