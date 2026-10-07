@@ -29,6 +29,7 @@ import {
   type FeedNetwork,
   type FeedPost,
 } from '@/composables/run/simulation/threads'
+import { NOT_FINISHED_STATES } from '@/composables/run/runStageState'
 import { RUN_WORKSPACE_KEY } from '@/composables/run/useRunWorkspace'
 
 const props = defineProps<{ simulationId: string; network?: string }>()
@@ -156,6 +157,16 @@ const fallbackName = computed(() => {
   return personaOptions.value.find((p) => p.id === id)?.name ?? null
 })
 
+// „Befragen": nur bei gewählter Persona und abgeschlossener Simulation (Etappe 6).
+const interviewTo = computed(() =>
+  selectedPersonaId.value && !NOT_FINISHED_STATES.has(runState.stateKind.value)
+    ? {
+        name: 'RunInterviews',
+        params: { simulationId: props.simulationId, conversationId: `persona-${selectedPersonaId.value}` },
+      }
+    : null,
+)
+
 // --- Zustände ---------------------------------------------------------------
 
 const notStarted = computed(() => runState.stateKind.value === 'notStarted')
@@ -282,7 +293,7 @@ const rightOpen = ref(false)
         </section>
 
         <aside id="feed-right" class="feed__aside" :class="{ 'feed__aside--collapsed': !rightOpen }">
-          <PersonaCard :persona="selectedPersona" :fallback-name="fallbackName" />
+          <PersonaCard :persona="selectedPersona" :fallback-name="fallbackName" :interview-to="interviewTo" />
           <RoundPanel
             :round="panelRound"
             :total="runState.totalRounds.value"

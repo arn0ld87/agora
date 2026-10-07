@@ -698,41 +698,9 @@
     "runner_status_ready": "Runner bereit."
   },
   "step5": {
-    "kicker": "№ 05 — GESPRÄCH",
-    "title": "Sprich mit den Agenten.",
-    "sub": "Frage einzelne Agenten direkt — oder den ReportAgent zum Gesamtbild. Persönlichkeit und Erinnerung bleiben erhalten.",
-    "tabs": {
-      "chat": "1-zu-1 Gespräch",
-      "survey": "Umfrage"
-    },
-    "selectAgent": "Agent auswählen",
-    "selectReport": "ReportAgent",
-    "search": "Suche Agent…",
-    "input": {
-      "placeholder": "Frag etwas… (Strg+Enter zum Senden)",
-      "send": "Senden"
-    },
     "agent": {
-      "bio": "Biografie",
-      "interests": "Interessen",
-      "stance": "Haltung",
-      "history": "Verlauf"
-    },
-    "empty": "Wähle links einen Agenten.",
-    "survey": {
-      "title": "Frag mehrere Agenten dasselbe.",
-      "sub": "Wähle 2–50 Agenten, formuliere eine Frage, sieh die Antworten nebeneinander.",
-      "selectAll": "Alle wählen",
-      "clear": "Auswahl leeren",
-      "selected": "Ausgewählt: {count}",
-      "question": "Deine Frage",
-      "placeholder": "z. B. „Wie reagierst du auf flächendeckende Videoüberwachung in der Innenstadt?\"",
-      "ask": "Umfrage starten",
-      "asking": "Frage {done} / {total} Agenten…",
-      "noResults": "Noch keine Antworten.",
-      "exportCsv": "Als CSV exportieren"
-    },
-    "noResponse": "Keine Antwort erhalten."
+      "interests": "Interessen"
+    }
   },
   "graph": {
     "panel": "Graph",
@@ -2307,6 +2275,90 @@
         "resume": "Fortsetzen",
         "view": "Ansehen"
       },
+      "interviews": {
+        "loading": "Interviews werden geladen …",
+        "retry": "Erneut laden",
+        "unavailable": "Interviews sind für diesen Lauf nicht verfügbar.",
+        "notRun": "Interviews sind nutzbar, sobald die Simulation abgeschlossen ist. Der bisherige Verlauf bleibt einsehbar.",
+        "stateUnknown": "Der Zustand der Simulation ist noch nicht bekannt. Fragen sind gesperrt, bis er geladen ist.",
+        "noAnswer": "Keine Antwort erhalten.",
+        "sending": "Wird gefragt …",
+        "budgetExceeded": "Budget erschöpft, die Frage wurde nicht beantwortet.",
+        "agentFallback": "Agent {n}",
+        "list": {
+          "aria": "Gespräche",
+          "heading": "Gespräche",
+          "empty": "Noch kein Gespräch",
+          "group": "Gruppe: {question}"
+        },
+        "new": {
+          "title": "Neues Gespräch",
+          "label": "Persona",
+          "placeholder": "Persona wählen",
+          "open": "Gespräch öffnen"
+        },
+        "group": {
+          "title": "Gruppenfrage",
+          "personas": "Personas auswählen",
+          "question": "Frage an alle",
+          "send": "Gruppenfrage stellen",
+          "large": "{n} Personas auf einmal können die Frist des Backends überschreiten. Einzelne Antworten können fehlen.",
+          "summary": "{asked} gefragt, {answered} beantwortet, {failed} fehlgeschlagen",
+          "cost": "Keine Persona gewählt: keine Aufrufe | Ein Aufruf, er zählt aufs Budget des Laufs | {n} Aufrufe, jeder zählt aufs Budget des Laufs"
+        },
+        "persona": {
+          "participants": "Beteiligte Personas",
+          "feed": "Beiträge im Feed",
+          "feedCount": "Beiträge im Feed ({n})",
+          "feedCountAtLeast": "Beiträge im Feed (mindestens {n})",
+          "cited": "Im Bericht zitiert ({n})"
+        },
+        "budget": {
+          "title": "Budget des Laufs erreicht",
+          "explain": "Der Lauf hat sein Budget erreicht. Die Frage wurde nicht beantwortet und nicht gespeichert; weitere Fragen werden abgelehnt, solange das Budget erschöpft ist.",
+          "reason": "Abbruchgrund: {reason}",
+          "figures": "{dimension}: {observed} von {threshold}",
+          "dimensionUnknown": "Grenze",
+          "persisted": "{n} Antwort(en) wurden vor dem Abbruch gespeichert und stehen im Verlauf."
+        },
+        "pane": {
+          "aria": "Gespräch",
+          "choose": "Gespräch aus der Liste wählen.",
+          "none": "Noch kein Gespräch",
+          "with": "Gespräch mit {name}",
+          "noTurns": "Noch keine Fragen an diese Persona.",
+          "you": "Du:",
+          "badgeSim": "SIM",
+          "badgeInterview": "Interview",
+          "origin": "Einträge können auch aus Interviews stammen, die der Bericht geführt hat; sie sind hier nicht zu unterscheiden.",
+          "unknownPersona": "Für Agent {n} liegt kein Persona-Profil vor und es gibt keinen Verlauf. Wähle eine Persona aus der Liste.",
+          "failedReason": "Keine Antwort: {reason}",
+          "copy": "Kopieren",
+          "copyAnswer": "Antwort von {name} kopieren",
+          "copied": "Antwort in die Zwischenablage kopiert.",
+          "copyFailed": "Kopieren nicht möglich. Die Zwischenablage ist nicht verfügbar.",
+          "groupCount": "{answered} von {total} beantwortet",
+          "cost": "Jede Frage ist ein Modellaufruf und zählt aufs Budget des Laufs.",
+          "shortcut": "Senden mit Strg/Cmd+Enter.",
+          "groupTitle": "Gruppenfrage",
+          "groupGone": "Diese Gruppenfrage gibt es nur in der Sitzung, in der sie gestellt wurde.",
+          "answeredStatus": "Antwort von {name} ist eingegangen.",
+          "inputLabel": "Frage an die Persona",
+          "model": "Modell des Laufs: {model}",
+          "modelUnknown": "Modell des Laufs: unbekannt",
+          "send": "Fragen",
+          "notRun": "Fragen sind erst nach abgeschlossener Simulation möglich."
+        },
+        "survey": {
+          "selectAll": "Alle auswählen",
+          "clear": "Alle abwählen",
+          "selected": "Keine Persona ausgewählt | Eine von {total} Personas ausgewählt | {n} von {total} Personas ausgewählt",
+          "blocked": "Umfragen sind erst nach abgeschlossener Simulation möglich.",
+          "exportCsv": "Als CSV exportieren",
+          "exported": "CSV mit {n} Zeilen exportiert.",
+          "nothingToExport": "Keine Antwort zum Exportieren: Alle Personas haben fehlgeschlagen oder nicht geantwortet."
+        }
+      },
       "simFeed": {
         "ariaLabel": "Feed der Simulation",
         "network": {
@@ -2363,6 +2415,7 @@
         },
         "persona": {
           "title": "Persona",
+          "interview": "Befragen",
           "none": "Wählen Sie eine Persona im Filter oder fokussieren Sie einen Beitrag.",
           "role": "Rolle",
           "stance": "Haltung",
@@ -2395,6 +2448,7 @@
         },
         "thread": {
           "back": "Zurück zum Feed",
+          "backToReport": "Zurück zum Bericht",
           "loading": "Beitrag wird geladen …",
           "rootMissing": "Der Ausgangsbeitrag liegt außerhalb des geladenen Ausschnitts.",
           "broken": "Die Antwortkette dieses Beitrags ist fehlerhaft (Zyklus oder zu tief) und wird nicht dargestellt.",
@@ -2487,6 +2541,270 @@
         "evidenceOmitted": "Belege ausgelassen (evidence_omitted)",
         "evidenceCheckFailed": "Belege konnten nicht geprüft werden",
         "reportIncomplete": "Bericht ist unvollständig"
+      },
+      "report": {
+        "label": "Bericht des Laufs",
+        "noGraph": "Dieser Lauf hat keinen Wissensgraphen; Berichte stützen sich auf Belege aus dem Graphen.",
+        "header": {
+          "versionLabel": "Fassung",
+          "versionOption": "Fassung {n} · {date} · {state}",
+          "versionOptionModel": "Fassung {n} · {date} · {state} · {model}",
+          "versionsLoading": "Fassungen werden geladen …",
+          "noVersions": "Noch keine Fassung",
+          "stateLabel": "Zustand",
+          "versionsFailed": "Die Fassungen ließen sich nicht laden: {reason}",
+          "versionsInvalid": "{n} Fassung verletzt den Vertrag und wird nicht angezeigt | {n} Fassungen verletzen den Vertrag und werden nicht angezeigt"
+        },
+        "banner": {
+          "label": "Hinweis zum Bericht",
+          "titleIncomplete": "Unvollständig: Was fehlt",
+          "titleNotes": "Hinweise zum Bericht: Was fehlt",
+          "noDetail": "Der Bericht ist als unvollständig markiert; das Backend nennt keine einzelnen Abschnitte oder Einschränkungen.",
+          "missingSections": "Fehlender Abschnitt | Fehlende Abschnitte",
+          "degradations": "Einschränkungen des Laufs",
+          "blocking": "Blockierend",
+          "warning": "Hinweis"
+        },
+        "outline": {
+          "label": "Gliederung des Berichts",
+          "empty": "Noch keine Gliederung.",
+          "state": {
+            "ready": "fertig",
+            "missing": "fehlt",
+            "failed": "fehlgeschlagen",
+            "pending": "in Arbeit"
+          }
+        },
+        "reading": {
+          "loading": "Der Bericht wird geladen …",
+          "retry": "Erneut laden",
+          "untitled": "Bericht",
+          "emptyText": "Der Bericht enthält keinen Text.",
+          "failedUnknown": "Kein Grund genannt.",
+          "sectionKicker": "Abschnitt {n}",
+          "sectionNote": {
+            "missing": "Dieser Abschnitt fehlt im Bericht.",
+            "failed": "Dieser Abschnitt konnte nicht erzeugt werden; der Text ist ein Ersatz.",
+            "pending": "Dieser Abschnitt wird noch erzeugt."
+          },
+          "loadFailed": {
+            "notFound": "Der Bericht wurde nicht gefunden.",
+            "contract": "Die Antwort des Backends verletzt den Vertrag.",
+            "transport": "Der Bericht ließ sich nicht laden."
+          }
+        },
+        "generation": {
+          "startTitle": "Für diesen Lauf gibt es noch keinen Bericht.",
+          "startDescription": "Die Erzeugung ist der teuerste Schritt der Pipeline und startet erst auf Bestätigung, mit dem Standardmodell. Ein anderes Modell wählst du über „Neu erzeugen mit …“.",
+          "startButton": "Bericht starten",
+          "running": "Der Bericht wird erzeugt",
+          "sectionsDone": "{done} von {total} Abschnitten fertig",
+          "noSectionsYet": "Es liegt noch kein Abschnitt vor.",
+          "transportError": "Die Statusabfrage schlägt wiederholt fehl; die Anzeige kann veraltet sein.",
+          "failed": "Die Erzeugung ist fehlgeschlagen:",
+          "schemaError": "Vertragsverletzung in {where}",
+          "logToggle": "Protokoll der Erzeugung"
+        },
+        "side": {
+          "label": "Belege und Nachfragen",
+          "tabsLabel": "Seitenspalte umschalten",
+          "tab": {
+            "evidence": "Belege",
+            "questions": "Nachfragen"
+          },
+          "evidencePlaceholder": "Belege zum gewählten Claim erscheinen hier.",
+          "questionsPlaceholder": "Nachfragen an den Berichtsagenten erscheinen hier.",
+          "evidenceLoading": "Die Belege werden geladen …",
+          "evidenceFailed": "Die Belege ließen sich nicht laden: {reason}",
+          "omitted": {
+            "title": "Belege ausgelassen (evidence_omitted)",
+            "body": "Der Bericht hat Belege, aber sie ließen sich nicht vertragskonform ausliefern. Das ist keine Datenlücke; die Belege sind in dieser Ansicht nicht prüfbar."
+          }
+        },
+        "claims": {
+          "title": "Claims",
+          "count": "{n} Claim | {n} Claims",
+          "none": "Der Bericht enthält keine Claims.",
+          "sectionLabel": "Abschnitt {n}: {title}",
+          "confidence": {
+            "speculative": "spekulativ",
+            "low": "niedrig",
+            "medium": "mittel",
+            "high": "hoch",
+            "verified": "verifiziert"
+          },
+          "confidenceLine": "Confidence: {label} ({pct} %)",
+          "evidenceCount": "{n} Beleg | {n} Belege",
+          "hypotheses": {
+            "title": "Hypothesen ({n})",
+            "hint": "Plausibel, aber nicht ausreichend belegt. Hypothesen sind keine Claims.",
+            "rationale": "Begründung: {text}"
+          },
+          "gaps": {
+            "title": "Datenlücken ({n})",
+            "hint": "Die benötigte Information fehlt in den Quellen.",
+            "reason": "Grund: {text}"
+          }
+        },
+        "evidence": {
+          "title": "Belege",
+          "noSelection": "Wähle einen Claim in der Liste, um seine Belege zu sehen.",
+          "overviewTotal": "{n} Beleg im Bericht | {n} Belege im Bericht",
+          "forClaim": "Belege zu {id}",
+          "none": "An diesen Claim sind keine Belege gebunden.",
+          "missing": "{n} gebundener Beleg fehlt im Beleg-Index (Vertragsproblem). | {n} gebundene Belege fehlen im Beleg-Index (Vertragsproblem).",
+          "kind": {
+            "seed_corpus": "Dokument",
+            "graph_relation": "Graph",
+            "agent_action": "Simulation (Beitrag)",
+            "agent_quote": "Stimme (Interview-Zitat)",
+            "web_source": "Web",
+            "inferred": "Abgeleitet, nicht belegt"
+          },
+          "origin": "Herkunft",
+          "sourceLabel": "Quelle",
+          "anchorLabel": "Anker",
+          "voiceLabel": "Stimme",
+          "groupLabel": "Gruppe",
+          "bindingLabel": "Bindung",
+          "binding": {
+            "supports": "stützt den Claim",
+            "contradicts": "widerspricht dem Claim",
+            "neutral": "stützt den Claim nicht"
+          },
+          "entailment": {
+            "SUPPORTED": "Folgerung gestützt",
+            "CONTRADICTED": "Folgerung widerlegt",
+            "RELATED_ONLY": "nur verwandt",
+            "INSUFFICIENT": "unzureichend"
+          },
+          "copy": "Auszug kopieren",
+          "copied": "Auszug kopiert.",
+          "copyFailed": "Der Auszug ließ sich nicht kopieren.",
+          "jump": {
+            "feed": "Im Feed zeigen",
+            "feedLabel": "Im Feed zeigen: {source}",
+            "graph": "Im Graph zeigen",
+            "graphLabel": "Im Graph zeigen: {source}, Knoten {n} von {total}",
+            "graphNth": "Im Graph zeigen ({n}/{total})",
+            "interview": "Interview öffnen",
+            "interviewLabel": "Interview öffnen: {source}",
+            "note": {
+              "checking": "Beitrag wird im Feed geprüft …",
+              "feedFailed": "Feed nicht ladbar, Sprung nicht prüfbar.",
+              "postMissing": "Kein Sprung: Beitrag im Feed nicht gefunden.",
+              "textMismatch": "Kein Sprung: Beitragstext passt nicht zum Beleg.",
+              "noPostId": "Kein Sprung: der Beleg nennt keinen eigenen Beitrag.",
+              "noNodeId": "Kein Sprung: der Beleg nennt keinen Knoten.",
+              "noEdgeId": "Kein Sprung: der Beleg nennt keine Kante.",
+              "noVoice": "Kein Sprung: der Beleg nennt keine Stimme.",
+              "noTarget": "Kein Sprung: für diese Belegart gibt es keinen Ursprung in der Oberfläche.",
+              "inferred": "Kein Sprung: abgeleitet, nicht belegt."
+            }
+          }
+        },
+        "metrics": {
+          "title": "Kennzahlen",
+          "loading": "Wird geladen …",
+          "unsaved": "Für diese Fassung nicht gespeichert.",
+          "failed": "Nicht ladbar: {reason}",
+          "omitted": {
+            "title": "{name} ausgelassen (artifact_omitted)",
+            "body": "Die gespeicherte Datei verletzt den Vertrag und ist in dieser Ansicht nicht prüfbar. Das ist keine Datenlücke."
+          },
+          "density": {
+            "title": "Belegdichte",
+            "noClaims": "Der Bericht hat keine Claims, daher keine Quote.",
+            "claimsTotal": "Claims gesamt",
+            "without": "ohne Beleg",
+            "single": "mit einem Beleg",
+            "multi": "mit mehreren Belegen",
+            "multiIndependent": "mit unabhängigen Belegen",
+            "singleRatio": "Anteil mit nur einem Beleg"
+          },
+          "stance": {
+            "title": "Positionierungsquote",
+            "notApplicable": "Lauf ohne Streitfrage",
+            "contested": "Streitfrage: {text}",
+            "ratio": "{positioned} von {total} Stimmen positioniert ({pct})",
+            "camps": {
+              "in_favour": "dafür",
+              "opposed": "dagegen",
+              "undecided": "unentschieden"
+            },
+            "unclassified": "{n} Beitrag ließ sich nicht einordnen. | {n} Beiträge ließen sich nicht einordnen."
+          }
+        },
+        "checks": {
+          "title": "Prüfhinweise ({n})",
+          "intro": "Binding-/Gate-Probleme des Berichts: Verweise und Aussagen, die sich nicht an einen Beleg binden ließen. Das sind keine Datenlücken.",
+          "none": "Keine Prüfhinweise.",
+          "entry": "Claim {claim}, Abschnitt {n}: {violation}, Maßnahme {action}. {detail}",
+          "unbound": {
+            "title": "Zitierte Belege ohne Bindung",
+            "item": "Abschnitt {n} ({title}): {refs}"
+          },
+          "unverified": {
+            "title": "Unbelegte Aussagen im Text",
+            "item": "Abschnitt {n}: {text} ({verdict}: {reason})"
+          },
+          "gate": { "title": "Gate-Entscheidungen" },
+          "degradation": { "title": "Abgestufte Claims" }
+        },
+        "export": {
+          "trigger": "Exportieren",
+          "incomplete": "Diese Fassung ist unvollständig; der Export enthält nur, was vorliegt.",
+          "noEvidence": "(Belege nicht geladen)",
+          "omittedReason": "Die Datei wurde ohne Belege ausgeliefert (evidence_omitted); sie ist nicht vollständig prüfbar.",
+          "running": "{action} wird vorbereitet …",
+          "done": "{action}: fertig.",
+          "failed": "{action} ist fehlgeschlagen: {reason}",
+          "warning": "{action}: {reason}",
+          "blocked": {
+            "noVersion": "Export gesperrt: Es ist keine Fassung gewählt.",
+            "loading": "Export gesperrt: Der Bericht wird noch geladen.",
+            "running": "Export gesperrt: Der Bericht wird noch erzeugt."
+          },
+          "action": {
+            "md": "Markdown (.md)",
+            "copy": "Markdown kopieren",
+            "html": "HTML (.html)",
+            "json": "JSON (.json)",
+            "evidence": "Belege (JSON)",
+            "csv-personas": "CSV: Personas",
+            "csv-segments": "CSV: Segmente",
+            "csv-claims": "CSV: Claims",
+            "zip": "ZIP-Bündel (alle Dateien)",
+            "print": "Drucken"
+          }
+        },
+        "print": {
+          "title": "Bericht: {title}",
+          "version": "Fassung {n}"
+        },
+        "chat": {
+          "unavailable": "Nachfragen sind möglich, sobald es mindestens eine Berichtsfassung gibt.",
+          "scope": "Nachfragen gelten für den ganzen Lauf, nicht für eine einzelne Fassung. Der Verlauf bleibt nur in dieser Sitzung.",
+          "logLabel": "Verlauf der Nachfragen",
+          "empty": "Noch keine Frage gestellt.",
+          "you": "Du",
+          "mark": "SIM",
+          "agentLabel": "Modellausgabe des Berichtsagenten",
+          "sending": "Der Berichtsagent antwortet …",
+          "inputLabel": "Frage an den Berichtsagenten",
+          "hint": "Strg+Enter oder Cmd+Enter sendet.",
+          "send": "Senden",
+          "clear": "Verlauf leeren",
+          "noResponse": "Keine Antwort erhalten."
+        },
+        "redirect": {
+          "loading": "Der Bericht wird gesucht …",
+          "notFoundTitle": "Bericht nicht gefunden",
+          "notFoundBody": "Zu „{id}“ gibt es keinen Bericht.",
+          "errorTitle": "Der Bericht ließ sich nicht auflösen",
+          "retry": "Erneut versuchen",
+          "toRuns": "Zu den Läufen"
+        }
       }
     },
     "graphLibrary": {
@@ -2701,10 +3019,6 @@
     "stepReport": {
       "title": "Report",
       "subtitle": "Simulationsergebnisse und Quellenbelege einsehen"
-    },
-    "stepInteraction": {
-      "title": "Interaktion",
-      "subtitle": "Gezielte Nachfragen an die simulierten Personas stellen"
     },
     "stepGraphBuild": {
       "title": "Graph Build",

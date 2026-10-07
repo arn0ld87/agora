@@ -16,6 +16,7 @@ import { listRuns } from '../../../api/runs'
 import { ApiError } from '../../../api/envelope'
 import { RunDetailSchema, type RunDetail } from '../../../contracts/runsContract'
 import { usePolling } from '../../../composables/usePolling'
+import { reportTarget } from '../../../utils/reportRoute'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -112,7 +113,15 @@ const rows = computed<ReportRow[]>(() =>
 
 function openReport(row: ReportRow) {
   if (row.report_id_full) {
-    router.push({ name: 'Report', params: { reportId: row.report_id_full } })
+    // Kennt der Lauf seine Simulation, geht es direkt in den Bericht-Reiter (Etappe 5);
+    // sonst über die alte Adresse, die den Lauf aus dem Bericht auflöst.
+    const linked = row.raw.linked_ids as Record<string, unknown>
+    const simulationId = typeof linked?.['simulation_id'] === 'string' ? (linked['simulation_id'] as string) : null
+    router.push(
+      simulationId
+        ? reportTarget(row.report_id_full, simulationId)
+        : { name: 'Report', params: { reportId: row.report_id_full } },
+    )
   } else {
     router.push({ name: 'RunDetail', params: { id: row.raw.run_id } })
   }

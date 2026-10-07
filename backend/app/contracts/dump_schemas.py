@@ -49,6 +49,10 @@ from app.contracts.report_status_contract import ReportStatusResponse
 from app.contracts.contested_question_contract import ContestedQuestion
 from app.contracts.stance_analysis_contract import StanceAnalysis
 from app.contracts.evidence_density_contract import EvidenceDensity
+from app.contracts.report_artifact_contract import (
+    EvidenceDensityResponseModel,
+    StanceAnalysisResponseModel,
+)
 from app.contracts.simulation_activity_contract import ActivityModelConfig
 from app.contracts.simulation_status_contract import SimulationStatusResponse
 from app.contracts.pipeline_degradation_contract import (
@@ -144,6 +148,9 @@ from app.contracts.embedding_contract import (
     EmbeddingModelMetadata,
 )
 from app.contracts.interview_envelope_contract import InterviewEnvelope
+from app.contracts.interview_budget_exceeded_contract import (
+    InterviewBudgetExceededResponse,
+)
 # Kennzahlen "Simulation lebt" (Issue #1713 Slice S0) — kein API-Endpoint,
 # kein Zod-Spiegel, siehe Docstring in simulation_liveness_contract.py.
 from app.contracts.simulation_liveness_contract import (
@@ -179,6 +186,10 @@ CONTRACTS: dict[str, type] = {
     "stance-analysis.schema.json": StanceAnalysis,
     # Belegdichte der Claims eines Berichts (Issue #1779, Schritt 2.1)
     "evidence-density.schema.json": EvidenceDensity,
+    # Response-Envelopes fuer GET /api/report/<id>/evidence-density und
+    # /stance-analysis (Issue #1804, Etappe 5)
+    "evidence-density-response.schema.json": EvidenceDensityResponseModel,
+    "stance-analysis-response.schema.json": StanceAnalysisResponseModel,
     # Aktivitätsmodell einer Simulation, time_config.activity_model (Issue #1779, Schritt 2.4)
     "simulation-activity-model.schema.json": ActivityModelConfig,
     "graph-diff.schema.json": GraphDiff,
@@ -299,6 +310,7 @@ CONTRACTS: dict[str, type] = {
     "embedding-model-metadata.schema.json": EmbeddingModelMetadata,
     # Interview-Envelope (Issue #1005)
     "interview-envelope.schema.json": InterviewEnvelope,
+    "interview-budget-exceeded.schema.json": InterviewBudgetExceededResponse,
     # Dokument-Manifest-Sidecar (ADR-0013 Slice 1, Teil A — Issue #1152)
     "document-manifest.schema.json": DocumentManifest,
     "document-manifest-entry.schema.json": DocumentManifestEntry,

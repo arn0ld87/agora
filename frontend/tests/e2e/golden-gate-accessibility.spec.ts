@@ -372,6 +372,22 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, `/simulations/${simulationId}/simulation/diagnostics`);
     });
 
+    // Etappe 5 (#1804): der Bericht ist ein Reiter am Lauf. Eine frische Simulation
+    // hat noch keinen Bericht; der Reiter zeigt dann den Start bzw. die Erklärung
+    // zum Lauf ohne Graph, nie einen Fehler. Die Belegspalte mit Claims prüfen die
+    // Komponententests und die lokale Messung gegen Mock-Daten (axe, Tab-Reihenfolge).
+    test('Lauf Bericht passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/report`);
+    });
+
+    // Etappe 6 (#1805): Interviews am Lauf. Eine frische Simulation ist nicht
+    // gelaufen: die Ansicht zeigt dann den Hinweis statt des Eingabefelds (ohne
+    // Betreiberzugang die Zugangshinweise); gegatet werden Liste, Gespräch und
+    // Persona-Spalte in diesem Zustand.
+    test('Lauf Interviews passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/simulations/${simulationId}/interviews`);
+    });
+
     // Gespeicherte Links auf die alten Simulationsadressen funktionieren weiter;
     // Query und Hash bleiben, geprüft wird die Weiterleitung (URL).
     const oldSimulationAddresses: Array<[string, (id: string) => string, (id: string) => RegExp]> = [
@@ -389,6 +405,11 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
         '/v4/simulation/:id/rounds',
         (id) => `/v4/simulation/${id}/rounds`,
         (id) => new RegExp(`/simulations/${id}/simulation/rounds$`),
+      ],
+      [
+        '/v4/simulation/:id/interviews',
+        (id) => `/v4/simulation/${id}/interviews`,
+        (id) => new RegExp(`/simulations/${id}/interviews$`),
       ],
     ];
     for (const [label, from, target] of oldSimulationAddresses) {
@@ -421,23 +442,17 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   });
 
   // Issue #838 — dokumentierte Ausnahme (KEIN stilles Weglassen):
-  // /v4/report/:reportId und /v4/interaction/:reportId sind bewusst NICHT
-  // Teil dieses Golden-Gate-Smokes. Ein zugänglicher, vollständiger Report
-  // erfordert den kompletten Report-Generierungs-Flow aus
-  // minimal-report.spec.ts (Persona-Floor-Seeding mit 50 Profilen +
-  // POST /api/report/generate + Status-Poll bis "completed", dort mit
-  // test.setTimeout(420_000) budgetiert). Das pro Push zusätzlich zweimal
-  // (Report- und Interaction-Route) im a11y-Gate zu wiederholen, würde die
-  // Golden-Gate-Laufzeit um mehrere Minuten pro Lauf erhöhen, ohne neue
-  // Strukturaussagen zu liefern — StepReportView/StepInteractionView teilen
-  // sich dieselbe AppShell/PageHeader-Struktur, die bereits über die anderen
-  // v4-Step-Routen in diesem Gate abgedeckt ist (AppShell-Navigation,
-  // Fokus-Reihenfolge, Reduced-Motion). Ein synthetischer/unbekannter
-  // reportId-Wert wurde bewusst NICHT verwendet, weil Step4Report (anders als
-  // RunDetailView/CompareView/StepGraphBuildView) keinen verifizierten
-  // barrierefreien Fehlerzustand für eine nicht existierende reportId zeigt
-  // — das würde faktisch einen ungetesteten Codepfad pinnen statt eine echte
-  // Garantie treffen. Sollte der Report-Flow künftig einen günstigeren
-  // Fixture-Seam bekommen (z.B. Report-Fixture-Import statt Voll-Generierung),
-  // ist das der Anschlusspunkt, um diese Ausnahme aufzulösen.
+  // Seit #1790 ist /v4/interaction/:reportId nur noch eine Weiterleitung auf den
+  // Bericht (?panel=questions); die Ansicht dahinter ist `RunReportView`.
+  // Die folgende Ausnahme galt der entfernten Altansicht und bleibt als Begründung
+  // dafür stehen, dass der Bericht selbst nicht im Smoke liegt:
+  // /v4/interaction/:reportId ist bewusst NICHT Teil dieses Golden-Gate-Smokes.
+  // Ein zugänglicher, vollständiger Report erfordert den kompletten
+  // Report-Generierungs-Flow aus minimal-report.spec.ts (Persona-Floor-Seeding
+  // mit 50 Profilen + POST /api/report/generate + Status-Poll bis "completed",
+  // dort mit test.setTimeout(420_000) budgetiert). Das pro Push im a11y-Gate zu
+  // wiederholen, würde die Golden-Gate-Laufzeit um mehrere Minuten pro Lauf
+  // erhöhen, ohne neue Strukturaussagen zu liefern. Der Bericht selbst ist seit
+  // Etappe 5 (#1804) als Reiter des Laufs im Block mit echter Simulations-ID
+  // gegatet (Zustand ohne Bericht); `/v4/report/:reportId` leitet nur noch dorthin um.
 });

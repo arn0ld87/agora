@@ -9,7 +9,7 @@ vi.mock('../index', () => ({
   requestWithRetry: vi.fn(),
 }))
 
-import { getReportEvidence } from '../report'
+import { getReportEvidence, getReportEvidenceDensity, getReportStanceAnalysis } from '../report'
 import { isApiError } from '../envelope'
 
 beforeEach(() => {
@@ -99,5 +99,67 @@ describe('getReportEvidence (Issue #1477 F1)', () => {
 
     expect(isApiError(caught)).toBe(true)
     expect((caught as { code?: string }).code).toBe('schema_mismatch')
+  })
+})
+
+describe('getReportEvidenceDensity / getReportStanceAnalysis (Issue #1804)', () => {
+  it('parst die Erfolgsvariante der Belegdichte und ruft den richtigen Pfad', async () => {
+    mockGet.mockResolvedValue({ success: true, data: { claims_total: 0 } })
+
+    const result = await getReportEvidenceDensity('report-1')
+
+    expect(mockGet).toHaveBeenCalledWith('/api/report/report-1/evidence-density')
+    expect(result).toMatchObject({ success: true, data: { claims_total: 0, schema_version: 1 } })
+  })
+
+  it('parst die Erfolgsvariante der Haltungsanalyse und ruft den richtigen Pfad', async () => {
+    mockGet.mockResolvedValue({ success: true, data: { applicable: false } })
+
+    const result = await getReportStanceAnalysis('report-1')
+
+    expect(mockGet).toHaveBeenCalledWith('/api/report/report-1/stance-analysis')
+    expect(result).toMatchObject({ success: true, data: { applicable: false } })
+  })
+
+  it('reicht die Omission sichtbar durch, statt leere Zahlen zu erfinden', async () => {
+    mockGet.mockResolvedValue({
+      success: true,
+      artifact_omitted: { artifact: 'evidence_density', reason: 'contract_violation', detail: 'kaputt' },
+    })
+
+    const result = await getReportEvidenceDensity('report-1')
+
+    expect(result).toEqual({
+      success: true,
+      artifact_omitted: {
+        artifact: 'evidence_density',
+        reason: 'contract_violation',
+        detail: 'kaputt',
+        validation_errors: [],
+      },
+    })
+  })
+
+  it('reicht den 404-Fehler-Envelope eines Altberichts ungeparst durch', async () => {
+    const notFound = { success: false, error: 'No stance analysis available for report: report-1' }
+    mockGet.mockResolvedValue(notFound)
+
+    expect(await getReportStanceAnalysis('report-1')).toEqual(notFound)
+    expect(await getReportEvidenceDensity('report-1')).toEqual(notFound)
+  })
+
+  it('wirft einen ApiError schema_mismatch bei vertragswidriger 2xx-Antwort', async () => {
+    mockGet.mockResolvedValue({ success: true })
+
+    for (const call of [getReportEvidenceDensity, getReportStanceAnalysis]) {
+      let caught: unknown
+      try {
+        await call('report-1')
+      } catch (err) {
+        caught = err
+      }
+      expect(isApiError(caught)).toBe(true)
+      expect((caught as { code?: string }).code).toBe('schema_mismatch')
+    }
   })
 })

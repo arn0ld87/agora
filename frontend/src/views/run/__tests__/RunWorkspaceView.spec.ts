@@ -71,6 +71,7 @@ function makeRouter() {
         children: [
           { path: '', name: 'RunOverview', component: RunOverviewView },
           { path: 'graph', name: 'RunGraph', component: Stub },
+          { path: 'report/:reportId?', name: 'RunReport', component: Stub },
         ],
       },
       { path: '/v4/env-setup/:projectId', name: 'StepEnvSetup', component: Stub },
@@ -78,7 +79,7 @@ function makeRouter() {
       { path: '/simulations/:simulationId/simulation/feed', name: 'RunSimulationFeed', component: Stub },
       { path: '/v4/report/:reportId', name: 'StepReport', component: Stub },
       { path: '/report/:reportId', name: 'Report', component: Stub },
-      { path: '/v4/simulation/:simulationId/interviews', name: 'RunInterviewsLegacy', component: Stub },
+      { path: '/simulations/:simulationId/interviews/:conversationId?', name: 'RunInterviews', component: Stub },
       { path: '/library/runs', name: 'LibraryRuns', component: Stub },
     ],
   })
@@ -162,14 +163,14 @@ describe('RunWorkspaceView: Reiter', () => {
     expect(href('graph')).toBe('/simulations/sim_1/graph')
     expect(href('personas')).toBe('/v4/env-setup/proj_1')
     expect(href('simulation')).toBe('/simulations/sim_1/simulation/feed')
-    expect(href('report')).toBe('/v4/report/report_1')
-    expect(href('interviews')).toBe('/v4/simulation/sim_1/interviews')
+    expect(href('report')).toBe('/simulations/sim_1/report')
+    expect(href('interviews')).toBe('/simulations/sim_1/interviews')
     const current = wrapper.findAll('[aria-current="page"]').filter((e) => e.attributes('data-testid')?.startsWith('run-tab-'))
     expect(current).toHaveLength(1)
     expect(current[0]!.attributes('data-testid')).toBe('run-tab-overview')
   })
 
-  it('wählt den jüngsten Bericht für den Berichts-Reiter', async () => {
+  it('der Berichts-Reiter trägt keine Berichts-ID (die Ansicht wählt die jüngste Fassung); die Stufenzeile führt auf den jüngsten', async () => {
     arrange({
       reports: [
         report({ report_id: 'report_old', created_at: '2026-10-01T00:00:00Z' }),
@@ -177,7 +178,16 @@ describe('RunWorkspaceView: Reiter', () => {
       ],
     })
     const { wrapper } = await mountAt()
-    expect(wrapper.get('[data-testid="run-tab-report"]').attributes('href')).toBe('/v4/report/report_new')
+    expect(wrapper.get('[data-testid="run-tab-report"]').attributes('href')).toBe('/simulations/sim_1/report')
+    expect(wrapper.get('[data-testid="stage-next-report"]').attributes('href')).toBe('/simulations/sim_1/report/report_new')
+  })
+
+  it('Bericht ohne Fassung, Simulation fertig: Reiter bleibt aktiv (Start), statt deaktiviert zu sein', async () => {
+    arrange({ jobs: [runDetail('simulation_run')], reports: [] })
+    const { wrapper } = await mountAt()
+    const tab = wrapper.get('[data-testid="run-tab-report"]')
+    expect(tab.element.tagName).toBe('A')
+    expect(tab.attributes('href')).toBe('/simulations/sim_1/report')
   })
 
   it('Bericht und Personas deaktiviert mit Grund, Interviews bleibt aktiv', async () => {
@@ -191,7 +201,7 @@ describe('RunWorkspaceView: Reiter', () => {
     }
     expect(wrapper.get('[data-testid="run-tab-personas"]').text()).toContain('lässt sich nicht auflösen')
     expect(wrapper.get('[data-testid="run-tab-report"]').text()).toContain('noch keinen Bericht')
-    expect(wrapper.get('[data-testid="run-tab-interviews"]').attributes('href')).toBe('/v4/simulation/sim_1/interviews')
+    expect(wrapper.get('[data-testid="run-tab-interviews"]').attributes('href')).toBe('/simulations/sim_1/interviews')
   })
 })
 
@@ -204,7 +214,7 @@ describe('RunOverviewView: Stufen', () => {
       expect(row.findAll('[data-testid^="stage-next-"]')).toHaveLength(1)
     }
     expect(wrapper.get('[data-testid="stage-next-graph"]').attributes('href')).toBe('/simulations/sim_1/graph')
-    expect(wrapper.get('[data-testid="stage-next-report"]').attributes('href')).toBe('/v4/report/report_1')
+    expect(wrapper.get('[data-testid="stage-next-report"]').attributes('href')).toBe('/simulations/sim_1/report/report_1')
     expect(wrapper.get('[data-testid="stage-model-graph"]').text()).toContain('snap-graph_build')
   })
 

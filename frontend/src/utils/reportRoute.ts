@@ -6,10 +6,10 @@ import { asRunRegistryId, isSimulationId } from '../contracts/runIdentifiers'
  *
  * Issue #764 / PR #975: `simulation_id` und `run_id` sind nicht identisch —
  * die Run-Registry vergibt beim Start eine eigene UUID, die `/api/runs/<id>`
- * zwingend braucht. Sie erreicht `StepReportView` ausschliesslich ueber den
+ * zwingend braucht. Sie erreicht die Report-Ansicht ausschliesslich ueber den
  * Query-Parameter `?runId=<id>`. Jede Navigation auf eine neue `reportId`
- * (Report-Start, Regenerieren) muss ihn deshalb mitfuehren, sonst faellt
- * `Step4Report.loadRunUsage()` still auf die `simulationId` zurueck.
+ * (Report-Start, Regenerieren) muss ihn deshalb mitfuehren, sonst faellt die
+ * Nutzungsabfrage still auf die `simulationId` zurueck.
  *
  * Nur echte `run_…`-IDs landen im Query. Ein `sim_…`-Wert waere hier kein
  * brauchbarer Naeherungswert, sondern eine falsche Auskunft: `/api/runs/sim_…`
@@ -67,9 +67,9 @@ export function buildInteractionRoute(
  * es gibt keinen Report, den man stattdessen referenzieren koennte. Der
  * Sentinel `'new'` spiegelt die bereits etablierte Konvention aus
  * `useGraphBuildPipeline.ts` (`currentProjectId.value === 'new'`) fuer
- * "noch keine ID vorhanden". `StepReportView.vue` uebersetzt ihn zurueck
- * auf ein leeres `reportId`, damit `Step4Report`s bestehender
- * Bestaetigungs-Block (`v-if="reportPending && phase === 0"`) greift.
+ * "noch keine ID vorhanden". `useRunReport` (Bericht-Reiter am Lauf) liest ihn
+ * als "kein Bericht gewaehlt", damit der Start-Hinweis statt eines
+ * sofortigen Starts erscheint.
  */
 export const PENDING_REPORT_ID = 'new'
 
@@ -100,4 +100,44 @@ export function buildReportReadyRoute(params: {
     params: { reportId: PENDING_REPORT_ID },
     query,
   }
+}
+
+/**
+ * Etappe 5 (#1804, Bauplan 6.1): der Bericht ist ein Reiter am Lauf unter
+ * `/simulations/:simulationId/report/:reportId?`. Ohne `reportId` zeigt der
+ * Reiter die jüngste Fassung; `PENDING_REPORT_ID` steht für „noch kein
+ * Bericht, Start anbieten“.
+ */
+export function buildRunReportRoute(params: {
+  simulationId: string
+  reportId?: string | null
+  query?: Record<string, string>
+}): RouteLocationRaw {
+  return {
+    name: 'RunReport',
+    params: {
+      simulationId: params.simulationId,
+      ...(params.reportId ? { reportId: params.reportId } : {}),
+    },
+    ...(params.query && Object.keys(params.query).length > 0 ? { query: params.query } : {}),
+  }
+}
+
+/**
+ * Verweis auf einen Bericht. Kennt der Aufrufer die Simulation, geht er direkt
+ * in den Bericht-Reiter des Laufs; sonst auf die alte Adresse `/v4/report/:id`,
+ * die den Lauf aus dem Bericht auflöst und umleitet (Bauplan 6.2).
+ */
+export function reportLink(reportId: string, simulationId?: string | null): RouteLocationRaw {
+  return reportTarget(reportId, simulationId)
+}
+
+/** Wie `reportLink`, als schlichtes Ziel (`name` + `params`) für Weiter-Aktionen und Befehle. */
+export function reportTarget(
+  reportId: string,
+  simulationId?: string | null,
+): { name: string; params: Record<string, string> } {
+  return isSimulationId(simulationId)
+    ? { name: 'RunReport', params: { simulationId, reportId } }
+    : { name: 'StepReport', params: { reportId } }
 }

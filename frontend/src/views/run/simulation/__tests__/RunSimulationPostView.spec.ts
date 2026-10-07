@@ -36,6 +36,7 @@ async function mountAt(path: string) {
     routes: [
       { path: '/simulations/:simulationId/simulation/feed/:network(twitter|reddit)?', name: 'RunSimulationFeed', component: Stub, props: true },
       { path: '/simulations/:simulationId/simulation/post/:postId', name: 'RunSimulationPost', component: RunSimulationPostView, props: true },
+      { path: '/simulations/:simulationId/report/:reportId?', name: 'RunReport', component: Stub },
     ],
   })
   await router.push(path)
@@ -122,6 +123,20 @@ describe('RunSimulationPostView', () => {
     hoisted.posts.value = reddit(true).slice(1)
     const { w } = await mountAt(`${P}/reddit:1`)
     expect(w.find('[data-testid="tree-root-missing"]').exists()).toBe(true)
+  })
+
+  it('„Zurück zum Bericht" nur mit ?fromClaim=, trägt die Fassung; ?claim= bleibt die post_id', async () => {
+    const plain = await mountAt(`${P}/twitter:1?claim=twitter:1`)
+    expect(plain.w.find('[data-testid="post-back-report"]').exists()).toBe(false)
+
+    const { w } = await mountAt(`${P}/twitter:1?claim=twitter:1&fromClaim=claim_01&report=report_7`)
+    const back = w.get('[data-testid="post-back-report"]')
+    expect(back.text()).toBe('Zurück zum Bericht')
+    expect(back.attributes('href')).toBe('/simulations/sim_1/report/report_7?claim=claim_01')
+    expect(w.find('[data-testid="thread-claim"]').exists()).toBe(true)
+
+    const noReport = await mountAt(`${P}/twitter:1?claim=twitter:1&fromClaim=claim_01`)
+    expect(noReport.w.get('[data-testid="post-back-report"]').attributes('href')).toBe('/simulations/sim_1/report?claim=claim_01')
   })
 
   it('„Zurück zum Feed" behält Netzwerk und Filter', async () => {

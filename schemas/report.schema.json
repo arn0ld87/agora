@@ -214,6 +214,19 @@
       "title": "Evidence Sections",
       "type": "integer"
     },
+    "generation_run_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Generation Run Id"
+    },
     "graph_id": {
       "minLength": 1,
       "title": "Graph Id",
@@ -223,6 +236,32 @@
       "default": false,
       "title": "Has Evidence",
       "type": "boolean"
+    },
+    "llm_model": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Model"
+    },
+    "llm_provider_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Llm Provider Id"
     },
     "markdown_content": {
       "default": "",

@@ -33,6 +33,7 @@ class ApiErrorCode(StrEnum):
 
     RATE_LIMITED = "rate_limited"
     TIMEOUT = "timeout"
+    BUDGET_EXCEEDED = "budget_exceeded"
 
     SERVICE_UNAVAILABLE = "service_unavailable"
     NEO4J_UNAVAILABLE = "neo4j_unavailable"
@@ -74,6 +75,7 @@ DEFAULT_MESSAGES: dict[ApiErrorCode, str] = {
 
     ApiErrorCode.RATE_LIMITED: "Zu viele Anfragen",
     ApiErrorCode.TIMEOUT: "Zeitüberschreitung",
+    ApiErrorCode.BUDGET_EXCEEDED: "Run-Budget erreicht",
 
     ApiErrorCode.SERVICE_UNAVAILABLE: "Dienst nicht verfügbar",
     ApiErrorCode.NEO4J_UNAVAILABLE: "Neo4j nicht erreichbar",

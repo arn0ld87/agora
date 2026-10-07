@@ -1,3 +1,4 @@
+import type { z } from 'zod'
 import service, { requestWithRetry } from './index'
 import { ApiError, type ApiEnvelope, type ApiErrorEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
@@ -8,6 +9,12 @@ import {
   type ReportSection,
   type EvidenceItem,
 } from '../contracts/reportContract'
+import {
+  EvidenceDensityResponseSchema,
+  StanceAnalysisResponseSchema,
+  type EvidenceDensityResponse,
+  type StanceAnalysisResponse,
+} from '../contracts/reportArtifactContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
 import type { AiModelRef } from '../contracts/aiModelRef'
 import type { ReportMessageKey } from '../contracts/reportStatusContract'
@@ -219,6 +226,60 @@ export const getReportEvidence = (reportId: string): Promise<EvidenceEnvelope> =
     }
     return parsed.data
   })
+}
+
+/**
+ * Gemeinsamer Parse-Pfad der Artefakt-Endpunkte (Issue #1804): Fehler-Envelope
+ * (`success: false`, z. B. 404 bei Altberichten) geht ungeparst durch, jede
+ * 2xx-Antwort muss das Schema erfüllen, sonst `ApiError` mit
+ * `code: 'schema_mismatch'` — dieselbe Linie wie `getReportEvidence`.
+ */
+function parseArtifactEnvelope<S extends z.ZodTypeAny>(
+  resp: unknown,
+  schema: S,
+  label: string
+): z.infer<S> | ApiErrorEnvelope {
+  if (resp !== null && typeof resp === 'object' && (resp as { success?: unknown }).success === false) {
+    return resp as ApiErrorEnvelope
+  }
+  const parsed = schema.safeParse(resp)
+  if (!parsed.success) {
+    console.warn(`[api] ${label} envelope parse failed`, parsed.error.flatten())
+    throw new ApiError({
+      code: 'schema_mismatch',
+      status: 0,
+      message: `schema mismatch: ${parsed.error.message}`,
+      originalResponse: resp,
+    })
+  }
+  return parsed.data
+}
+
+export type EvidenceDensityEnvelope = EvidenceDensityResponse | ApiErrorEnvelope
+export type StanceAnalysisEnvelope = StanceAnalysisResponse | ApiErrorEnvelope
+
+/**
+ * `GET /api/report/<id>/evidence-density` — Belegdichte des Berichts.
+ * Backend-Vertrag: `EvidenceDensityResponseModel`, Spiegel:
+ * `EvidenceDensityResponseSchema`. `artifact_omitted` heißt: die gespeicherte
+ * Datei verletzt den Vertrag (sichtbar machen, nicht als leer lesen). Ein
+ * Altbericht ohne Datei antwortet mit 404 (Fehler-Envelope).
+ */
+export const getReportEvidenceDensity = (reportId: string): Promise<EvidenceDensityEnvelope> => {
+  return service
+    .get(`/api/report/${reportId}/evidence-density`)
+    .then((resp: unknown) => parseArtifactEnvelope(resp, EvidenceDensityResponseSchema, 'evidence-density'))
+}
+
+/**
+ * `GET /api/report/<id>/stance-analysis` — Haltung der Stimmen und
+ * Positionierungsquote (#1778). Gleiche Zustände wie `getReportEvidenceDensity`.
+ * `data.applicable === false` ist ein Lauf ohne Streitfrage, kein Fehler.
+ */
+export const getReportStanceAnalysis = (reportId: string): Promise<StanceAnalysisEnvelope> => {
+  return service
+    .get(`/api/report/${reportId}/stance-analysis`)
+    .then((resp: unknown) => parseArtifactEnvelope(resp, StanceAnalysisResponseSchema, 'stance-analysis'))
 }
 
 export const getReportEvidenceSection = (

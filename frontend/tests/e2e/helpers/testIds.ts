@@ -19,5 +19,5 @@
 export {
   AiModelPickerTestId,
   LlmRoutingTestId,
-  ReportReaderTestId,
+  RunReportTestId,
 } from '../../../src/contracts/testIds'

@@ -5,6 +5,7 @@ import { listProjects } from '../api/graph'
 import { listPersonaTemplates, type PersonaTemplateRecord } from '../api/simulation'
 import { resolveStatusMessage } from '../i18n/statusMessage'
 import { useOperatorAccess } from './useOperatorAccess'
+import { reportTarget } from '../utils/reportRoute'
 import type { RunDetail } from '../contracts/runsContract'
 import type { Report } from '../contracts/reportContract'
 import type { ProjectResponse } from '../api/graph'
@@ -219,11 +220,11 @@ export function nextActionFor(latest: RunDetail, t: Translate): NextAction | nul
       if (simId) return { label: t('shelf.action.reviewPersonas'), to: { name: 'StepEnvSetup', params: { projectId: simId } }, kind: 'warn' }
       return null
     case 'simulation_run':
-      if (reportId) return { label: t('shelf.action.readReport'), to: { name: 'StepReport', params: { reportId } }, kind: 'accent' }
+      if (reportId) return { label: t('shelf.action.readReport'), to: reportTarget(reportId, simId), kind: 'accent' }
       if (simId) return { label: t('shelf.action.createReport'), to: { name: 'RunSimulationFeed', params: { simulationId: simId } }, kind: 'accent' }
       return null
     case 'report_generate':
-      if (reportId) return { label: t('shelf.action.readReport'), to: { name: 'StepReport', params: { reportId } }, kind: 'accent' }
+      if (reportId) return { label: t('shelf.action.readReport'), to: reportTarget(reportId, simId), kind: 'accent' }
       return null
     default:
       return null
@@ -313,7 +314,7 @@ export function buildShelfObjects(
       reportStatus: r.status,
       nextAction: {
         label: t('shelf.action.readReport'),
-        to: { name: 'StepReport', params: { reportId: r.report_id } },
+        to: reportTarget(r.report_id, r.simulation_id),
         kind: 'accent',
       },
       active: null,

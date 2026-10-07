@@ -91,6 +91,30 @@ Wichtige Konfliktcodes:
 - aktive Simulation → `simulation_already_running`
 - ausstehendes Persona-Review → `persona_review_required`
 - aktive Report-Generierung → `409 report_generate_in_progress`
+- Interview bei erreichtem hartem Run-Budget → `409 budget_exceeded` (siehe unten)
+
+#### Interviews und Run-Budget (#1805)
+
+`POST /api/simulation/interview`, `/interview/batch` und `/interview/all` laufen durch das Run-Budget des `simulation_run`-Jobs der Simulation: der Endpunkt löst die `run_id` über `linked_ids.simulation_id` auf und reicht sie bis zum LLM-Aufruf durch, sodass Budget-Guard, Ledger und Aufruf-Protokoll des Laufs greifen. Gibt es für die Simulation keinen `simulation_run`-Job (Altbestand), bleibt das Interview unbudgetiert wie bisher und wird mit der Warnung `interview_unbudgeted` protokolliert.
+
+Der Job wird nicht vom Simulationsende entkoppelt: Token-, Kosten- und Aufruflimit des Simulationslaufs gelten auch für Interviews nach dem Lauf, ein Interview nach einem Budgetabbruch wird daher dauerhaft abgelehnt. Das Zeitlimit misst bei einem beendeten Job die Laufdauer (Start bis Ende), nicht die seither vergangene Wanduhrzeit: ein im Zeitlimit beendeter Lauf nimmt weiter Interviews an, ein wegen des Zeitlimits beendeter Lauf lehnt sie ab. Eine Ablehnung schreibt zudem eine harte Warnung in das Manifest der bereits beendeten Simulation, deren Budgetstatus danach `exceeded` meldet. Hat die Simulation mehrere `simulation_run`-Jobs (Neustart), zählt der jüngste nach Anlagezeit; das wird als `interview_budget_multiple_runs` protokolliert. Hat der Job keine Budget-Konfiguration, läuft das Interview unbudgetiert und wird als `interview_unbudgeted … reason=no_budget_config` protokolliert.
+
+Ein erreichtes hartes Budget ist ein harter Fehler für den ganzen Request, nie `success: true` und nie ein Fallback-Text; bei `/interview/batch` und `/interview/all` enthält die Antwort keine Teilantworten. Bereits gespeicherte Antworten bleiben im Verlauf (`/interview/history`) und sind im Ledger verbucht; `persisted_count` nennt ihre Zahl für diesen Aufruf (Direktpfad; im IPC-Pfad immer `0`). Antwort: HTTP `409` mit
+
+```json
+{
+  "success": false,
+  "code": "budget_exceeded",
+  "error": "Tokenbudget überschritten: 21000000 >= 20000000",
+  "termination_reason": "budget_tokens",
+  "dimension": "tokens",
+  "observed": 21000000,
+  "threshold": 20000000,
+  "persisted_count": 1
+}
+```
+
+`termination_reason` ist `budget_tokens`, `budget_cost`, `budget_time` oder `budget_calls`; `dimension` ist `tokens`, `cost`, `time` oder `calls`. Vertrag: `backend/app/contracts/interview_budget_exceeded_contract.py::InterviewBudgetExceededResponse` (`schemas/interview-budget-exceeded.schema.json`).
 
 Nutzer-Stop und Infrastrukturabbruch sind unterschiedliche Zustände: ein expliziter Stop wird als `stopped` mit `termination_reason="user_stop"` geführt; stale Prozesse nach Worker-/Container-Restart können durch Startup-Reconciliation als `failed/process_restart` markiert werden.
 
@@ -171,6 +195,27 @@ Nach Completion (`completed`, `failed`, `stopped`) ist ein neuer Start wieder er
 Bei einem **persistierten Altartefakt**, das die heutige Evidence-Semantik nicht mehr erfüllt, kann der direkte Evidence-Endpunkt deshalb HTTP 200 mit `evidence_omitted` liefern. Das hält den Bericht lesbar, ohne ungültige Evidence als geprüft auszugeben (#1477).
 
 Belege aus Interview und Simulationsaktion tragen seit #1778 das optionale Feld `voice_key` (`agent:<agent_id>`), die Stimme, von der der Beleg stammt. `run_degradations` kennt seit #1778 die Komponente `simulation_positioning` (`warning`): zu wenige Stimmen beziehen in der Simulation Stellung zur Streitfrage.
+
+#### Sprungkennungen an Belegen (#1804)
+
+`GET /api/report/<id>/evidence` ergänzt Belege der Typen `agent_action` und `entity_summary` um optionale Sprungkennungen. Sie werden erst beim Ausliefern aus dem Beleg-Inhalt (`raw`, `producer_key`) abgeleitet, nie gespeichert; die Evidence-Map im Berichtsordner bleibt byte-identisch, und die Ableitung gilt damit auch für Altberichte. Ein nicht ableitbares Feld fehlt in der Antwort.
+
+- `origin_post_id` (`agent_action`): Feed-Format von `GET /api/simulation/<id>/feed-snapshot`, `<platform>:<id>` bzw. `<platform>:comment:<id>` mit `platform` = `twitter` | `reddit`. Nur für Aktionen, die einen eigenen Beitrag erzeugen und dessen Kennung das Aktionsprotokoll trägt: `CREATE_POST` (`post_id`), `QUOTE_POST` und `REPOST` (`new_post_id`), `CREATE_COMMENT` (`comment_id`). `LIKE_*`, `FOLLOW` und `SEARCH_*` tragen nur die Kennung ihres Ziels und bekommen kein Feld. Widerspricht der `producer_key` der Aktion Plattform oder Aktionsart in `raw`, bleibt das Feld leer. Die Kennung stammt aus dem Aktionsprotokoll; bei Läufen, deren Protokoll nach einem Neustart nicht zur Datenbank passt, kann sie auf einen anderen Beitrag zeigen. Clients sollten deshalb vor dem Sprung prüfen, ob der Beitrag im Feed existiert und zum Belegtext passt.
+- `origin_node_uuids` (`entity_summary`): Knoten-UUIDs im Wissensgraphen aus `raw.uuid`. `graph_fact` und `relationship_chain` tragen als `raw` nur den Faktentext und bekommen keine Kennung. `agent_interview` braucht keine: `voice_key` (`agent:<id>`) benennt die Persona bereits.
+
+#### Erzeugungsherkunft einer Berichtsfassung (#1804)
+
+`GET /api/report/<id>`, `GET /api/report/by-simulation/<simulation_id>` und `GET /api/report/list` tragen die optionalen Felder `llm_model`, `llm_provider_id` und `generation_run_id` (`ReportModel`, jeweils `null`, wenn nicht belegt). Quelle ist der jüngste Berichts-Job (`run_type=report_generate`, `entity_id=<report_id>`) der RunRegistry: `metadata.llm_model` und `metadata.llm_provider.provider_id` stammen dort aus der gelockten Route der Stufe `report_generation`, also aus dem Modell, das tatsächlich lief. `generation_run_id` ist die `run_id` dieses Jobs und der Schlüssel für `GET /api/runs/<run_id>/llm-routing`. Berichte ohne Job (Altbestand, gelöschter Lauf) und Jobs ohne Modellangabe lassen die Felder `null`; nichts wird aus Workspace-Defaults geraten, die Basis-URL des Anbieters wird nicht ausgeliefert. Die Berichts-Metadatei (`meta.json`) speichert sie nicht, und im Export (`report` im Envelope) bleiben sie `null`. `/list` liest die Registry einmal für alle Fassungen.
+
+#### Belegdichte und Positionierungsquote (#1804)
+
+`GET /api/report/<id>/evidence-density` liefert die je Bericht gespeicherte `evidence_density.json` (#1779), `GET /api/report/<id>/stance-analysis` die `stance_analysis.json` mit Positionierungsquote und Lagerverteilung (#1778). Beide sind rein lesend, ohne eigene Scope-Regel (wie `/evidence`), und antworten mit genau einer von drei Formen:
+
+1. `{"success": true, "data": {…}}` — die Datei liegt vor und erfüllt den Vertrag (`EvidenceDensity` bzw. `StanceAnalysis`). `data.applicable=false` bei der Haltungsanalyse ist ein Lauf ohne Streitfrage, kein Fehler.
+2. HTTP 404 (`{"success": false, "error": …}`) — der Bericht hat die Datei nicht (Altbericht aus der Zeit vor #1778/#1779).
+3. HTTP 200 `{"success": true, "artifact_omitted": {"artifact", "reason": "contract_violation", "detail", "validation_errors"}}` — die Datei liegt vor, ist aber beschädigt oder vertragswidrig. Das ist sichtbar und nicht dasselbe wie „keine Daten“ (Muster von `evidence_omitted`). Die Datei wird nie verändert.
+
+Verträge: `EvidenceDensityResponseModel` / `StanceAnalysisResponseModel` (`backend/app/contracts/report_artifact_contract.py`), Schemas `schemas/evidence-density-response.schema.json` und `schemas/stance-analysis-response.schema.json`, Zod-Spiegel `frontend/src/contracts/reportArtifactContract.ts`.
 
 Exportpfade bleiben strenger: Wenn ein Format Evidence als geprüfte Datei ausliefern würde, wird sie weggelassen (`evidence-omitted.json`) oder der spezifische Export antwortet mit Contract-Fehler. Die alten pauschalen Aussagen „jede invalide Evidence = 422“ sind damit nicht mehr korrekt.
 

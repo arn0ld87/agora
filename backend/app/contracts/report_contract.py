@@ -15,6 +15,7 @@ Aufruf zum Schema-Dump: python -m app.contracts.dump_schemas
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional, Union
@@ -295,6 +296,11 @@ class EvidenceItemModel(BaseModel):
 
 EVIDENCE_ID_PATTERN = r"^ev_[0-9a-f]{32}$"
 
+#: UUID eines Wissensgraph-Knotens (Issue #1804, ``origin_node_uuids``).
+_NODE_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
 
 class EvidenceRecordModel(BaseModel):
     """Claim-unabhaengiger, kanonisch adressierbarer Quellen-Datensatz."""
@@ -329,6 +335,39 @@ class EvidenceRecordModel(BaseModel):
     )
     # Issue #1240, siehe EvidenceItemModel.
     document_role: Optional[DocumentRole] = None
+    #: Sprungkennung zum Beitrag im Feed (Issue #1804, Etappe 5), Format wie
+    #: ``GET /api/simulation/<id>/feed-snapshot``: ``<platform>:<id>`` bzw.
+    #: ``<platform>:comment:<id>``. Wird nur beim Ausliefern aus ``raw`` und
+    #: ``producer_key`` abgeleitet (``services/evidence_origin.py``), nie
+    #: gespeichert: ``exclude_if`` lässt ein ungesetztes Feld aus jedem Dump
+    #: heraus, damit persistierte Maps byte-identisch bleiben (ein Rollback auf
+    #: eine ältere Fassung würde unbekannte Schlüssel mit ``extra=forbid``
+    #: ablehnen).
+    origin_post_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        pattern=r"^(twitter|reddit):(comment:)?\d+$",
+        exclude_if=lambda value: value is None,
+    )
+    #: Knoten-UUIDs im Wissensgraphen, aus denen der Beleg stammt (``entity_summary``).
+    #: Selbe Regeln wie ``origin_post_id``. Kanten-UUIDs kennt kein Beleg: für
+    #: ``graph_fact`` und ``relationship_chain`` trägt ``raw`` nur den Faktentext.
+    origin_node_uuids: Optional[list[str]] = Field(
+        default=None,
+        min_length=1,
+        max_length=20,
+        exclude_if=lambda value: value is None,
+    )
+
+    @field_validator("origin_node_uuids")
+    @classmethod
+    def origin_node_uuids_are_uuids(cls, value: Optional[list[str]]) -> Optional[list[str]]:
+        if value is None:
+            return value
+        bad = [item for item in value if not _NODE_UUID_RE.match(item)]
+        if bad:
+            raise ValueError(f"origin_node_uuids enthaelt Nicht-UUIDs: {bad[:3]}")
+        return value
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceRecordModel":
@@ -978,6 +1017,17 @@ class ReportModel(BaseModel):
     #: Qualitätsmängel des Laufs, auf dem dieser Bericht beruht. Additiv mit
     #: Default leer — Bestandsreports bleiben gültig.
     run_degradations: list[RunDegradationModel] = Field(default_factory=list)
+    #: Erzeugungsherkunft dieser Fassung (Issue #1804, Etappe 5). Additiv mit
+    #: Default ``None``. Belegt aus dem Berichts-Job der RunRegistry
+    #: (``metadata.llm_model``, ``metadata.llm_provider.provider_id``), also aus
+    #: der gelockten Route, die tatsächlich lief — nie aus Workspace-Defaults.
+    #: Leer bei Berichten ohne Job oder ohne Angabe im Job; ``GET /api/report/<id>``
+    #: und ``/list`` füllen sie, der Export und die Metadatei tragen sie nicht.
+    llm_model: Optional[str] = Field(default=None, max_length=200)
+    llm_provider_id: Optional[str] = Field(default=None, max_length=100)
+    #: ``run_id`` des jüngsten Berichts-Jobs; Schlüssel für
+    #: ``GET /api/runs/<run_id>/llm-routing`` (Stufe ``report_generation``).
+    generation_run_id: Optional[str] = Field(default=None, max_length=100)
 
     @property
     def degraded(self) -> bool:

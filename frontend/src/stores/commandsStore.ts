@@ -16,6 +16,7 @@ import { useCommandPalette } from '@/composables/useCommandPalette'
 import { useRunsPolling } from '@/composables/useRunsPolling'
 import type { RunDetail } from '@/contracts/runsContract'
 import { t } from '@/i18n/translate'
+import { reportTarget } from '@/utils/reportRoute'
 
 export interface Command {
   id: string
@@ -71,6 +72,12 @@ function extractReportId(run: RunDetail): string | null {
   const arts = run.artifacts as Record<string, unknown>
   if (typeof arts['report_id'] === 'string') return arts['report_id']
   return null
+}
+
+/** `simulation_id` aus linked_ids, falls vorhanden (Ziel: Bericht-Reiter des Laufs). */
+function extractSimulationId(run: RunDetail): string | null {
+  const linked = run.linked_ids as Record<string, unknown>
+  return typeof linked['simulation_id'] === 'string' ? linked['simulation_id'] : null
 }
 
 /** Ob ein Run als "aktiv/offen" gilt (sim-Command). */
@@ -171,10 +178,7 @@ export const useCommandsStore = defineStore('commands', () => {
           group: 'report',
           keywords: [reportId, run.run_id, label, 'report', 'bericht', 'ergebnis'],
           action: () => {
-            router.push({
-              name: 'StepReport',
-              params: { reportId },
-            }).catch(() => {})
+            router.push(reportTarget(reportId, extractSimulationId(run))).catch(() => {})
           },
         })
         reportCount++

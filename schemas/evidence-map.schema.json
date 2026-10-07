@@ -319,6 +319,37 @@
           "title": "Evidence Id",
           "type": "string"
         },
+        "origin_node_uuids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Node Uuids"
+        },
+        "origin_post_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^(twitter|reddit):(comment:)?\\d+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Post Id"
+        },
         "persona_role_family": {
           "anyOf": [
             {
