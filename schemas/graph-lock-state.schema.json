@@ -42,10 +42,9 @@
   "$id": "https://alexle135.de/schemas/graph-lock-state.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Sperrzustand eines Graphen (ADR-0022 \u00a76).\n\nGesperrt ist ein Graph, sobald eine Simulation sein Projekt oder seine\n``graph_id`` verwendet. Der Zustand wird bei jeder Abfrage aus dem\nBestand abgeleitet; es gibt kein eigenes Feld.",
+  "description": "Sperrzustand eines Graphen (ADR-0022 \u00a76).\n\nGesperrt ist ein Graph, sobald eine Simulation sein Projekt oder seine\n``graph_id`` verwendet. Der Zustand wird bei jeder Abfrage aus dem\nBestand abgeleitet; es gibt kein eigenes Feld.\n\n``graph_id`` ist leer, wenn die Sperre f\u00fcr ein Projekt ohne Graph\nermittelt wurde (L\u00f6schen und Zur\u00fccksetzen eines Projekts); dann z\u00e4hlen\nnur die Simulationen des Projekts.",
   "properties": {
     "graph_id": {
-      "minLength": 1,
       "title": "Graph Id",
       "type": "string"
     },

@@ -5,6 +5,8 @@ Graph API: Project management endpoints.
 from flask import request
 from . import graph_bp
 from ..models.project import ProjectManager, ProjectStatus
+from ..services.graph_lock import GraphLockedError, ensure_graph_unlocked
+from .graph_guard import graph_locked_response
 from ..utils.validation import validate_project_id
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -39,6 +41,14 @@ def delete_project(project_id: str):
     if not validate_project_id(project_id):
         return json_error(ApiErrorCode.INVALID_ID, status=400)
 
+    # ADR-0022 §6: Löschen ist ein Schreibzugriff auf den Graphen des Projekts.
+    project = ProjectManager.get_project(project_id)
+    if project is not None:
+        try:
+            ensure_graph_unlocked(project.graph_id or "", project_ids=[project_id])
+        except GraphLockedError as exc:
+            return graph_locked_response(exc)
+
     success = ProjectManager.delete_project(project_id)
     if not success:
         return json_error(ApiErrorCode.NOT_FOUND, status=404, message=f"Project does not exist or deletion failed: {project_id}")
@@ -56,6 +66,13 @@ def reset_project(project_id: str):
     project = ProjectManager.get_project(project_id)
     if not project:
         return json_error(ApiErrorCode.NOT_FOUND, status=404, message=f"Project does not exist: {project_id}")
+
+    # ADR-0022 §6: Zurücksetzen löst das Projekt vom Graphen und ist damit ein
+    # Schreibzugriff, den eine verwendende Simulation ausschließt.
+    try:
+        ensure_graph_unlocked(project.graph_id or "", project_ids=[project_id])
+    except GraphLockedError as exc:
+        return graph_locked_response(exc)
 
     # Reset to ontology generated state
     if project.ontology:

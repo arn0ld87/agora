@@ -283,11 +283,15 @@ class GraphLockState(BaseModel):
     Gesperrt ist ein Graph, sobald eine Simulation sein Projekt oder seine
     ``graph_id`` verwendet. Der Zustand wird bei jeder Abfrage aus dem
     Bestand abgeleitet; es gibt kein eigenes Feld.
+
+    ``graph_id`` ist leer, wenn die Sperre für ein Projekt ohne Graph
+    ermittelt wurde (Löschen und Zurücksetzen eines Projekts); dann zählen
+    nur die Simulationen des Projekts.
     """
 
     model_config = _STRICT
 
-    graph_id: str = Field(min_length=1)
+    graph_id: str
     locked: bool
     used_by: list[GraphLockUser] = Field(default_factory=list)
 
