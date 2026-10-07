@@ -22,6 +22,7 @@ from ..contracts.report_artifact_contract import ReportArtifactKind
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.report_agent.artifact_read import ArtifactContractViolation
 from ..services.report_agent.sections import strip_raw_html_markers
+from ..services.evidence_origin import with_evidence_origins
 from ..services.report_provenance import ReportGenerationInfo, load_generation_info
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -332,7 +333,10 @@ def get_report_evidence(report_id: str):
         # der Evidence-Records nicht an.
         envelope = EvidenceMapResponseModel.for_omission(omission)
         return jsonify(envelope.to_payload()), 200
-    envelope = EvidenceMapResponseModel.for_data(validated)
+    # Issue #1804: Sprungkennungen (Feed-Beitrag, Graph-Knoten) werden erst hier
+    # aus dem Beleg-Inhalt abgeleitet — Lesepfad, daher auch fuer Altberichte,
+    # und ohne dass die gespeicherte Map beruehrt wird.
+    envelope = EvidenceMapResponseModel.for_data(with_evidence_origins(validated))
     return jsonify(envelope.to_payload()), 200
 
 

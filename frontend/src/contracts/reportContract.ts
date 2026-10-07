@@ -163,6 +163,21 @@ export type EvidenceItem = z.infer<typeof EvidenceItemSchema>;
 export const EvidenceRecordSchema = EvidenceSourceSchema.extend({
   evidence_id: EvidenceIdSchema,
   producer_key: z.string().min(1),
+  // Issue #1804 (Etappe 5): Sprungkennungen, nur im Lesepfad aus raw und
+  // producer_key abgeleitet (backend/app/services/evidence_origin.py), nie
+  // gespeichert. Fehlt das Feld, ist kein eindeutiger Ursprung belegt — nie
+  // aus Zeitfenster oder Text raten. Pendant zu EvidenceRecordModel.
+  //   origin_post_id: Feed-Format `<platform>:<id>` bzw. `<platform>:comment:<id>`
+  //     (GET /api/simulation/<id>/feed-snapshot), nur bei agent_action mit
+  //     eigenem Beitrag (CREATE_POST, QUOTE_POST, REPOST, CREATE_COMMENT).
+  //   origin_node_uuids: Knoten-UUIDs im Wissensgraphen (entity_summary).
+  origin_post_id: z.string().max(64).regex(/^(twitter|reddit):(comment:)?\d+$/).optional().nullable(),
+  origin_node_uuids: z
+    .array(z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/))
+    .min(1)
+    .max(20)
+    .optional()
+    .nullable(),
 }).superRefine(validateEvidenceSource);
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>;
 
