@@ -1,0 +1,46 @@
+{
+  "$id": "https://alexle135.de/schemas/persona-set-quality-summary.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Verteilungskennzahlen des Satzes (ohne Review-Zaehler: Saetze kennen kein Review).",
+  "properties": {
+    "distinct_mbti": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Distinct Mbti",
+      "type": "array"
+    },
+    "distinct_roles": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Distinct Roles",
+      "type": "array"
+    },
+    "mbti_diversity": {
+      "minimum": 0.0,
+      "title": "Mbti Diversity",
+      "type": "number"
+    },
+    "role_diversity": {
+      "minimum": 0.0,
+      "title": "Role Diversity",
+      "type": "number"
+    },
+    "total": {
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "total",
+    "role_diversity",
+    "mbti_diversity",
+    "distinct_roles",
+    "distinct_mbti"
+  ],
+  "title": "PersonaSetQualitySummary",
+  "type": "object"
+}

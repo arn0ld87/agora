@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "PersonaSetSummary": {
+      "additionalProperties": false,
+      "description": "Kachel-Sicht auf einen Satz: ohne Eintraege, mit Zaehlern.",
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "entry_count": {
+          "minimum": 0,
+          "title": "Entry Count",
+          "type": "integer"
+        },
+        "graph_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Id"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "locked": {
+          "title": "Locked",
+          "type": "boolean"
+        },
+        "locked_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Locked At"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Id"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        },
+        "usage_count": {
+          "minimum": 0,
+          "title": "Usage Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "entry_count",
+        "locked",
+        "usage_count",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "PersonaSetSummary",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/persona-set-entries-delete-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort auf das Loeschen von Eintraegen: Kennungen und neuer Stand.",
+  "properties": {
+    "removed_entry_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Removed Entry Ids",
+      "type": "array"
+    },
+    "set": {
+      "$ref": "#/$defs/PersonaSetSummary"
+    }
+  },
+  "required": [
+    "removed_entry_ids",
+    "set"
+  ],
+  "title": "PersonaSetEntriesDeleteResponse",
+  "type": "object"
+}

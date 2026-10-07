@@ -10,11 +10,18 @@ from opentelemetry import trace
 from . import simulation_bp
 from ..config import Config
 from ..contracts.model_preset_contract import AvailableModelsResponse, ModelPreset
+from ..contracts.persona_set_contract import CreateFromPersonasResponse
 from ..contracts.simulation_status_contract import SimulationStatusResponse
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
+from ..services.degradation_collector import DegradationCollector
 from ..services.persona_library import PersonaLibrary
 from ..services.persona_prepare_service import prepare_from_personas
+from ..services.persona_set_service import (
+    PersonaSetEmpty,
+    PersonaSetNotFound,
+    PersonaSetService,
+)
 from ..services.simulation_manager import (
     SimulationManager,
     SimulationStatus,
@@ -266,8 +273,17 @@ def create_simulation_from_personas():
     Hier gibt es keinen Graphen, also traegt die Simulation auch keine
     ``graph_id``; erfunden wird keine.
 
-    Erwartet ``simulation_requirement`` und entweder ``template_ids``
-    (Verweise in die Persona-Bibliothek) oder ``personas`` (Inline).
+    Erwartet ``simulation_requirement`` und genau eine Quelle der Personas:
+    ``persona_set_id`` (ein Personasatz, #1807), ``template_ids`` (Verweise
+    in die Persona-Bibliothek) oder ``personas`` (Inline).
+
+    Aus einem Personasatz erhaelt der Lauf eine **Kopie** der Personas. Erst
+    nach erfolgreicher Vorbereitung wird der Satz gesperrt und der Lauf in
+    ``used_by_simulation_ids`` vermerkt; scheitert das Anlegen, bleibt der Satz
+    unveraendert bearbeitbar. Die ``persona_set_id`` steht am Simulationszustand
+    (Rueckverweis, ``GET /api/simulation/<id>``) und in den Metadaten des
+    Prepare-Runs (``persona_source="set"``). Die 201-Antwort ist
+    ``CreateFromPersonasResponse``.
     """
     data = request.get_json() or {}
 
@@ -278,18 +294,48 @@ def create_simulation_from_personas():
             message="Please provide simulation_requirement",
         )
 
-    personas, problem = _resolve_personas(data)
-    if problem == "missing":
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            message="Please provide template_ids or personas",
-        )
-    if problem == "unknown_templates":
-        return json_error(
-            ApiErrorCode.NOT_FOUND,
-            status=404,
-            message="None of the given template_ids exist in the persona library",
-        )
+    persona_set_id = None
+    persona_set_service = None
+    if data.get('persona_set_id') is not None:
+        raw_set_id = data.get('persona_set_id')
+        if not isinstance(raw_set_id, str) or not raw_set_id.strip():
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message="persona_set_id must be a non-empty string",
+            )
+        if data.get('template_ids') or data.get('personas'):
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message="Provide only one of persona_set_id, template_ids or personas",
+            )
+        persona_set_id = raw_set_id.strip()
+        persona_set_service = PersonaSetService()
+        try:
+            personas = persona_set_service.snapshot_profiles(persona_set_id)
+        except PersonaSetNotFound:
+            return json_error(
+                ApiErrorCode.NOT_FOUND,
+                status=404,
+                message=f"Persona set not found: {persona_set_id}",
+            )
+        except PersonaSetEmpty:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Persona set {persona_set_id} has no personas",
+            )
+    else:
+        personas, problem = _resolve_personas(data)
+        if problem == "missing":
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message="Please provide persona_set_id, template_ids or personas",
+            )
+        if problem == "unknown_templates":
+            return json_error(
+                ApiErrorCode.NOT_FOUND,
+                status=404,
+                message="None of the given template_ids exist in the persona library",
+            )
 
     project = ProjectManager.create_project(name=requirement[:60])
     manager = SimulationManager()
@@ -298,13 +344,40 @@ def create_simulation_from_personas():
     # einen, und das ist eine bewusst offene Stelle (PLAN.md, B4).
     state = manager.create_simulation(project_id=project.project_id, graph_id="")
 
-    prepare_from_personas(manager, state.simulation_id, personas)
+    if persona_set_service is None or persona_set_id is None:
+        prepare_from_personas(manager, state.simulation_id, personas)
+        return json_success(
+            CreateFromPersonasResponse(
+                simulation_id=state.simulation_id,
+                project_id=project.project_id,
+                persona_count=len(personas),
+            ).model_dump(mode="json"),
+            status=201,
+        )
 
-    return json_success({
-        "simulation_id": state.simulation_id,
-        "project_id": project.project_id,
-        "persona_count": len(personas),
-    }, status=201)
+    # Gleiches Muster wie ``run_prepare`` (#1034): der Sammler gehoert dem
+    # Aufrufer, damit Befunde (regelbasierte Fallback-Personas, #1807) in der
+    # Antwort stehen. Leere Liste heisst: nichts ist still ausgefallen.
+    degradations = DegradationCollector()
+    prepare_from_personas(
+        manager,
+        state.simulation_id,
+        personas,
+        persona_set_id=persona_set_id,
+        degradations=degradations,
+    )
+    # Erst jetzt sperren: ein gescheitertes Anlegen laesst den Satz offen.
+    persona_set_service.record_run(persona_set_id, state.simulation_id)
+    return json_success(
+        CreateFromPersonasResponse(
+            simulation_id=state.simulation_id,
+            project_id=project.project_id,
+            persona_count=len(personas),
+            persona_set_id=persona_set_id,
+            degradations=degradations.report(),
+        ).model_dump(mode="json"),
+        status=201,
+    )
 
 
 def _resolve_personas(data):

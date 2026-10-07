@@ -120,6 +120,7 @@ Der aktuelle `ApiErrorCode`-Katalog enthält **28** Werte. Die Liste im Code ist
 - `graph_edit_conflict` — Handänderung kollidiert mit einem bestehenden Element (409)
 - `embedding_migration_running` — während einer Embedding-Migration sind Graph-Schreibzugriffe abgelehnt (409)
 - `report_generate_in_progress`
+- `persona_set_locked` — Personasatz gesperrt, weil ein Lauf aus ihm entstanden ist (`409`, `/api/persona-sets`, #1807); `conflict` (`409`) steht dort für einen doppelten `username` im Satz
 
 ### Upload
 

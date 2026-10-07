@@ -20,6 +20,23 @@ vi.mock('@/composables/useOperatorAccess', async () => {
   const { computed } = await import('vue')
   return { useOperatorAccess: () => computed(() => operator.value) }
 })
+// Ein einziger Mock je Modul. Zwei `@/api/simulation`-Mocks wuerfen sich
+// gegenseitig weg — der spaetere gewinnt, und ein im frueheren ergaenztes
+// `createSimulationFromPersonas` (#1807) fehlte dann im Aufrufpfad.
+vi.mock('@/api/personaSets', async () => {
+  const actual = await vi.importActual<typeof import('@/api/personaSets')>('@/api/personaSets')
+  return { ...actual, listPersonaSets: api.listPersonaSets }
+})
+vi.mock('@/api/simulation', async () => {
+  const actual = await vi.importActual<typeof import('@/api/simulation')>('@/api/simulation')
+  return {
+    ...actual,
+    createSimulation: api.createSimulation,
+    prepareSimulation: api.prepareSimulation,
+    createSimulationFromPersonas: api.createSimulationFromPersonas,
+    getAvailableModels: api.getAvailableModels,
+  }
+})
 vi.mock('@/composables/useEffectiveModelSelection', () => ({
   useEffectiveModelSelection: () => ({
     effectiveRef: { value: null },
@@ -36,15 +53,13 @@ const api = vi.hoisted(() => ({
   preflightEstimate: vi.fn(),
   setPendingUpload: vi.fn(),
   ensureLoaded: vi.fn(),
+  createSimulationFromPersonas: vi.fn(),
+  listPersonaSets: vi.fn(),
 }))
 const settingsFields = vi.hoisted(() => ({ value: {} as Record<string, unknown[]> }))
 
 vi.mock('@/api/graph', () => ({ listProjects: api.listProjects }))
-vi.mock('@/api/simulation', () => ({
-  createSimulation: api.createSimulation,
-  prepareSimulation: api.prepareSimulation,
-  getAvailableModels: api.getAvailableModels,
-}))
+
 vi.mock('@/api/llmProfiles', () => ({ fetchLlmProfiles: api.fetchLlmProfiles }))
 vi.mock('@/api/budget', () => ({ preflightEstimate: api.preflightEstimate }))
 vi.mock('@/store/pendingUpload', () => ({ setPendingUpload: api.setPendingUpload }))
@@ -137,6 +152,13 @@ async function mountDialog(path = '/library/runs/new', returnTo: string | null =
 const q = <T extends Element>(sel: string) => document.body.querySelector<T>(sel)
 const qa = <T extends Element>(sel: string) => Array.from(document.body.querySelectorAll<T>(sel))
 const byTestId = <T extends HTMLElement>(id: string) => q<T>(`[data-testid="${id}"]`)
+/** Wie `byTestId`, aber bricht mit einer lesbaren Meldung statt `null`
+ *  weiterzureichen — im Personasatz-Block ist sein Fehlen der Befund. */
+const need = <T extends HTMLElement>(id: string): T => {
+  const el = byTestId<T>(id)
+  if (!el) throw new Error(`Element ${id} fehlt`)
+  return el
+}
 
 async function type(el: HTMLTextAreaElement | HTMLInputElement | null, value: string) {
   if (!el) throw new Error('Feld fehlt')
@@ -209,11 +231,139 @@ describe('NewRunDialog — Aufbau', () => {
     expect(none?.disabled).toBe(true)
     const why = document.getElementById(none?.getAttribute('aria-describedby') ?? '')
     expect(why?.textContent).toContain('Noch nicht verfügbar. Simulation und Interviews wären möglich, ein Bericht nicht.')
-    const personas = qa<HTMLInputElement>('input[name="persona-mode"]').find((r) => r.value === 'existing')
-    expect(personas?.disabled).toBe(true)
-    expect(document.getElementById(personas?.getAttribute('aria-describedby') ?? '')?.textContent).toContain(
-      'Kommt mit den Personasätzen in der Bibliothek.',
-    )
+  })
+
+  it('wählt einen Personasatz aus der Bibliothek (#1807)', async () => {
+    // Vor Etappe 7 stand hier ein dauerhaft deaktiviertes Feld mit dem Hinweis,
+    // der Satz komme spaeter. Er ist jetzt eine echte Auswahl; der Test haelt
+    // fest, dass die Begruendung erhalten bleibt und nicht mehr „kommt spaeter"
+    // lautet — sonst waere die Aenderung nicht sichtbar.
+    await mountDialog()
+    const fromSet = qa<HTMLInputElement>('input[name="persona-mode"]').find((r) => r.value === 'set')
+
+    expect(fromSet?.disabled).toBe(false)
+    const why = document.getElementById(fromSet?.getAttribute('aria-describedby') ?? '')
+    expect(why?.textContent).toContain('Kopie')
+    expect(why?.textContent).not.toContain('Kommt mit')
+  })
+
+  describe('Personasatz wählen (#1807)', () => {
+    const set = (id: string, name: string, entry_count: number) => ({
+      id, name, description: '', graph_id: null, project_id: null,
+      entry_count, locked: false, locked_at: null, usage_count: 0,
+      created_at: '2026-10-07T10:00:00', updated_at: '2026-10-07T10:00:00', schema_version: 1 as const,
+    })
+
+    beforeEach(() => {
+      api.listPersonaSets.mockResolvedValue({
+        count: 2,
+        sets: [set('pset_a', 'Betroffene', 12), set('pset_b', 'Leere', 0)],
+      })
+    })
+
+    it('zeigt die Auswahl erst nach dem Wählen der Option', async () => {
+      await mountDialog()
+      expect(byTestId('new-run-persona-set')).toBeNull()
+
+      await qa<HTMLInputElement>('input[name="persona-mode"]')
+        .find((r) => r.value === 'set')!.click()
+      await flushPromises()
+
+      expect(byTestId('new-run-persona-set')).not.toBeNull()
+    })
+
+    it('bietet nur Saetze mit Personas an', async () => {
+      // Ein leerer Satz kann keinen Lauf tragen; ihn anzubieten wuerde einen
+      // Fehler des Servers vorwegnehmen, den der Dialog selbst vermeiden kann.
+      await mountDialog()
+      await qa<HTMLInputElement>('input[name="persona-mode"]')
+        .find((r) => r.value === 'set')!.click()
+      await flushPromises()
+
+      const options = Array.from(need<HTMLSelectElement>('new-run-persona-set').options)
+        .map((o) => o.value)
+        .filter(Boolean)
+      expect(options).toEqual(['pset_a'])
+    })
+
+    it('sagt, wenn es keinen brauchbaren Satz gibt', async () => {
+      api.listPersonaSets.mockResolvedValue({ count: 1, sets: [set('pset_b', 'Leere', 0)] })
+      await mountDialog()
+      await qa<HTMLInputElement>('input[name="persona-mode"]')
+        .find((r) => r.value === 'set')!.click()
+      await flushPromises()
+
+      const text = need<HTMLSelectElement>('new-run-persona-set').closest('div')?.textContent ?? ''
+      expect(text).toContain('Es gibt noch keinen Satz mit Personas')
+    })
+
+    it('nennt den Leerzustand des Graphen, statt ihn zu verschweigen', async () => {
+      // Der Satz-Weg laeuft ohne Graph. Wer das nicht sieht, wartet im Lauf auf
+      // einen Graphen, den es nicht geben wird.
+      await mountDialog()
+      await qa<HTMLInputElement>('input[name="persona-mode"]')
+        .find((r) => r.value === 'set')!.click()
+      await flushPromises()
+      const picker = need<HTMLSelectElement>('new-run-persona-set')
+      picker.value = 'pset_a'
+      await picker.dispatchEvent(new Event('change'))
+      await flushPromises()
+
+      expect(picker.closest('div')?.textContent).toContain('ohne Graph')
+    })
+
+    it('„Starten“ legt den Lauf über create-from-personas an, ohne prepare', async () => {
+      api.createSimulationFromPersonas.mockResolvedValue({
+        success: true,
+        data: { simulation_id: 'sim-9', project_id: 'proj-9', persona_count: 12 },
+      })
+      const { router } = await mountDialog()
+      await type(need<HTMLTextAreaElement>('new-run-question'), 'Wie hält das Betriebsrat?')
+      await qa<HTMLInputElement>('input[name="persona-mode"]').find((r) => r.value === 'set')!.click()
+      await flushPromises()
+      const picker = need<HTMLSelectElement>('new-run-persona-set')
+      picker.value = 'pset_a'
+      await picker.dispatchEvent(new Event('change'))
+      await flushPromises()
+      await click(startBtn())
+      await flushPromises()
+
+      expect(api.createSimulationFromPersonas).toHaveBeenCalledWith({
+        simulation_requirement: 'Wie hält das Betriebsrat?',
+        persona_set_id: 'pset_a',
+      })
+      // Der Weg traegt weder Datei noch Graph und bereitet nicht nach: der
+      // Endpunkt macht beides in einem Schritt.
+      expect(api.createSimulation).not.toHaveBeenCalled()
+      expect(api.prepareSimulation).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('RunOverview')
+    })
+
+    it('verlangt die Frage auch ohne Graph', async () => {
+      // Der Endpunkt braucht `simulation_requirement`, auch ohne Graph. Ohne
+      // diese Forderung ginge ein Lauf ohne Fragestellung raus und der Server
+      // wuerde ihn mit 400 ablehnen. Geprueft wird der Blocker, nicht die
+      // Frage selbst: die ist im Satz-Weg Pflicht wie im Graph-Weg.
+      await mountDialog()
+      await qa<HTMLInputElement>('input[name="persona-mode"]')
+        .find((r) => r.value === 'set')!.click()
+      await flushPromises()
+
+      // Ohne Satz gewaehlt: der Satz-Blocker steht da.
+      expect(document.body.textContent).toContain('Bitte einen Personasatz wählen')
+
+      const picker = need<HTMLSelectElement>('new-run-persona-set')
+      picker.value = 'pset_a'
+      await picker.dispatchEvent(new Event('change'))
+      await flushPromises()
+
+      // Mit Satz, aber ohne Frage: jetzt der Frage-Blocker.
+      const text = document.body.textContent ?? ''
+      expect(text).not.toContain('Bitte einen Personasatz wählen')
+      expect(text).toContain('Die Simulationsfrage fehlt.')
+      // Der Startknopf bleibt gesperrt.
+      expect(need<HTMLButtonElement>('new-run-start').disabled).toBe(true)
+    })
   })
 
   it('zeigt Modell-Hinweis, kein Feld „Anzahl“ und keinen Je-Stufe-Teil', async () => {
@@ -240,14 +390,14 @@ describe('NewRunDialog — Frage', () => {
     expect(startBtn()?.textContent?.trim()).toBe('Graph bauen')
     expect(startBtn()?.disabled).toBe(true)
     expect(byTestId('new-run-blockers')?.textContent).toContain('Die Simulationsfrage fehlt.')
-    await type(byTestId<HTMLTextAreaElement>('new-run-question'), 'Wie reagiert der Rat?')
+    await type(need<HTMLTextAreaElement>('new-run-question'), 'Wie reagiert der Rat?')
     expect(startBtn()?.disabled).toBe(false)
   })
 
   it('vorhandener Graph zeigt dessen Frage schreibgeschützt mit Hinweis', async () => {
     await mountDialog()
     await chooseGraphMode('existing')
-    const field = byTestId<HTMLTextAreaElement>('new-run-question')
+    const field = need<HTMLTextAreaElement>('new-run-question')
     expect(field?.readOnly).toBe(true)
     expect(field?.value).toBe('Frage zu p1')
     expect(q('.nr')?.textContent).toContain(
@@ -380,7 +530,7 @@ describe('NewRunDialog — neu aus Quelle', () => {
   it('„Starten“ nutzt setPendingUpload und geht nach Process mit Run-Query', async () => {
     const { router } = await mountDialog()
     const file = await addFile('quelle.md')
-    await type(byTestId<HTMLTextAreaElement>('new-run-question'), 'Wie reagiert der Rat?')
+    await type(need<HTMLTextAreaElement>('new-run-question'), 'Wie reagiert der Rat?')
     await click(startBtn())
     expect(api.setPendingUpload).toHaveBeenCalledWith(
       [file],
@@ -399,7 +549,7 @@ describe('NewRunDialog — neu aus Quelle', () => {
   it('„Nur anlegen“ ist gesperrt und nennt den Grund', async () => {
     await mountDialog()
     await addFile()
-    await type(byTestId<HTMLTextAreaElement>('new-run-question'), 'Frage?')
+    await type(need<HTMLTextAreaElement>('new-run-question'), 'Frage?')
     expect(createBtn()?.disabled).toBe(true)
     const why = document.getElementById(createBtn()?.getAttribute('aria-describedby') ?? '')
     expect(why?.textContent).toContain('Ein Lauf entsteht, sobald der Graph gebaut ist.')

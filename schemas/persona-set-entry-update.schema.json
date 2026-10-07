@@ -1,0 +1,254 @@
+{
+  "$defs": {
+    "PersonaSetProfile": {
+      "additionalProperties": false,
+      "description": "Die Persona-Felder eines Satzeintrags.\n\nEntspricht der Feldliste der Persona-Bibliothek plus ``persona_kind``\n(Individual- vs. Kollektiv-Persona, #1246). Alles ausser ``username`` und\n``name`` ist optional bzw. hat einen Vorgabewert: ein KI-Entwurf oder ein\nhandgeschriebener Eintrag ist zunaechst unvollstaendig. Der Weg\n``create-from-personas`` fuellt Luecken beim Anlegen des Laufs.",
+      "properties": {
+        "activity_level": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Level"
+        },
+        "age": {
+          "anyOf": [
+            {
+              "maximum": 120,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age"
+        },
+        "bio": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Bio",
+          "type": "string"
+        },
+        "country": {
+          "anyOf": [
+            {
+              "maxLength": 2,
+              "minLength": 2,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country"
+        },
+        "gender": {
+          "anyOf": [
+            {
+              "enum": [
+                "male",
+                "female",
+                "nonbinary",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gender"
+        },
+        "interested_topics": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 15,
+          "title": "Interested Topics",
+          "type": "array"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 16,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "mbti": {
+          "anyOf": [
+            {
+              "enum": [
+                "INTJ",
+                "INTP",
+                "ENTJ",
+                "ENTP",
+                "INFJ",
+                "INFP",
+                "ENFJ",
+                "ENFP",
+                "ISTJ",
+                "ISFJ",
+                "ESTJ",
+                "ESFJ",
+                "ISTP",
+                "ISFP",
+                "ESTP",
+                "ESFP"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mbti"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "persona": {
+          "default": "",
+          "maxLength": 12000,
+          "title": "Persona",
+          "type": "string"
+        },
+        "persona_kind": {
+          "default": "individual",
+          "enum": [
+            "individual",
+            "collective"
+          ],
+          "title": "Persona Kind",
+          "type": "string"
+        },
+        "profession": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Profession"
+        },
+        "source_entity_type": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Entity Type"
+        },
+        "time_zone": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Zone"
+        },
+        "username": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Username",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "username",
+        "name"
+      ],
+      "title": "PersonaSetProfile",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/persona-set-entry-update.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eintrag aendern. Mindestens ``origin`` oder ``profile`` ist Pflicht.\n\n``profile`` ersetzt das Profil als Ganzes; es gibt kein Teil-Profil-Update,\nweil ein fehlendes Feld sonst nicht von einem zu loeschenden zu\nunterscheiden waere.",
+  "properties": {
+    "origin": {
+      "anyOf": [
+        {
+          "enum": [
+            "graph",
+            "manual",
+            "ai_draft",
+            "fallback"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Origin"
+    },
+    "profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PersonaSetProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "PersonaSetEntryUpdate",
+  "type": "object"
+}

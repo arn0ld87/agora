@@ -87,6 +87,18 @@
       "default": null,
       "title": "Persona Floor"
     },
+    "persona_set_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona Set Id"
+    },
     "profiles_count": {
       "title": "Profiles Count",
       "type": "integer"

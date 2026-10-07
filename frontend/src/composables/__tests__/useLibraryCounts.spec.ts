@@ -21,6 +21,8 @@ vi.mock('@/api/runs', () => ({ listRuns: (...a: unknown[]) => listRuns(...a) }))
 vi.mock('@/api/report', () => ({ listReports: (...a: unknown[]) => listReports(...a) }))
 vi.mock('@/api/graph', () => ({ listProjects: (...a: unknown[]) => listProjects(...a) }))
 vi.mock('@/api/simulation', () => ({ listPersonaTemplates: (...a: unknown[]) => listPersonaTemplates(...a) }))
+const listPersonaSets = vi.fn()
+vi.mock('@/api/personaSets', () => ({ listPersonaSets: (...a: unknown[]) => listPersonaSets(...a) }))
 
 import {
   deriveLibraryCounts,
@@ -68,8 +70,15 @@ describe('deriveLibraryCounts', () => {
   it('zaehlt Bibliothek und Aktivitaet (Jobs) aus dem Ablage-Stand', () => {
     const c = deriveLibraryCounts(
       snap([lauf('a', 'completed', { jobs: 3 }), lauf('b', 'completed'), other('graph', 'g'), other('personasatz', 'p1'), other('personasatz', 'p2')]),
+      5,
     )
-    expect(c).toMatchObject({ laeufe: 2, graphen: 1, personasaetze: 2, aktivitaet: 4 })
+    // Personasaetze: die Zahl der Saetze aus /api/persona-sets, nicht die alten Vorlagen-Zeilen der Ablage.
+    expect(c).toMatchObject({ laeufe: 2, graphen: 1, personasaetze: 5, aktivitaet: 4 })
+  })
+
+  it('Personasaetze sind ohne bekannte Satzzahl unbekannt (null), auch wenn die Ablage Vorlagen traegt', () => {
+    expect(deriveLibraryCounts(snap([other('personasatz', 'p1')])).personasaetze).toBeNull()
+    expect(deriveLibraryCounts(null, 4).personasaetze).toBe(4)
   })
 
   it('„Läuft gerade“ zaehlt nur pending und processing, nicht paused', () => {
@@ -111,13 +120,14 @@ describe('deriveLibraryCounts', () => {
 
   it('ein ausgefallene Quelle macht abhaengige Zahlen unbekannt, die uebrigen bleiben', () => {
     const objects = [lauf('a', 'processing'), other('graph', 'g')]
-    expect(deriveLibraryCounts(snap(objects, ['runs']))).toMatchObject({
+    expect(deriveLibraryCounts(snap(objects, ['runs']), 0)).toMatchObject({
       laeufe: null, laeuft: null, aktivitaet: null, brauchtDich: null, graphen: null, personasaetze: 0,
     })
     // Berichte fehlen: „unvollstaendig“ laesst sich nicht pruefen — die Zahl waere zu klein.
     expect(deriveLibraryCounts(snap(objects, ['reports']))).toMatchObject({ laeufe: 1, laeuft: 1, brauchtDich: null })
     expect(deriveLibraryCounts(snap(objects, ['projects']))).toMatchObject({ laeufe: 1, graphen: null })
-    expect(deriveLibraryCounts(snap(objects, ['templates']))).toMatchObject({ laeufe: 1, personasaetze: null })
+    // Die Vorlagen-Quelle der Ablage beeinflusst die Satzzahl nicht mehr.
+    expect(deriveLibraryCounts(snap(objects, ['templates']), 3)).toMatchObject({ laeufe: 1, personasaetze: 3 })
   })
 })
 
@@ -155,6 +165,37 @@ describe('useLibraryCounts — Laden', () => {
     listReports.mockReset().mockResolvedValue({ success: true, data: [] })
     listProjects.mockReset().mockResolvedValue({ success: true, data: [] })
     listPersonaTemplates.mockReset().mockResolvedValue({ success: true, data: { templates: [] } })
+    listPersonaSets.mockReset().mockResolvedValue({ count: 3, sets: [] })
+  })
+
+  it('zaehlt Personasaetze aus /api/persona-sets, auch wenn die Laeufe-Bibliothek offen ist', async () => {
+    const router = makeTestRouter()
+    await router.push({ name: 'LibraryRuns' })
+    const { api } = mountComposable(router)
+    await flushPromises()
+    expect(listPersonaSets).toHaveBeenCalledTimes(1)
+    expect(api().counts.value.personasaetze).toBe(3)
+    expect(api().loadFailed.value).toBe(false)
+  })
+
+  it('laedt die Personasaetze nicht selbst, solange deren Bibliothek offen ist', async () => {
+    const router = makeTestRouter()
+    await router.push({ name: 'LibraryPersonaSets' })
+    const { api } = mountComposable(router)
+    await flushPromises()
+    expect(listPersonaSets).not.toHaveBeenCalled()
+    expect(api().counts.value.personasaetze).toBeNull()
+  })
+
+  it('Fehler beim Laden der Personasaetze: Zaehler unbekannt (null), Fehler wird gemeldet', async () => {
+    listPersonaSets.mockRejectedValue(new Error('boom'))
+    const router = makeTestRouter()
+    await router.push('/activity/jobs')
+    const { api } = mountComposable(router)
+    await flushPromises()
+    expect(api().counts.value.personasaetze).toBeNull()
+    expect(api().counts.value.laeufe).toBe(0)
+    expect(api().loadFailed.value).toBe(true)
   })
 
   it('laedt beim Einhaengen genau einmal, wenn die Ablage nicht offen ist', async () => {

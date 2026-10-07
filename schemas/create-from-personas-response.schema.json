@@ -1,0 +1,156 @@
+{
+  "$defs": {
+    "DegradationKind": {
+      "description": "Art des Teilausfalls.\n\nEng halten. Ein neuer Wert bedeutet, dass eine weitere Stelle der\nPipeline still degradieren konnte \u2014 das geh\u00f6rt in einen eigenen Slice\nmit eigenem Regressionstest, nicht in einen Sammelwert.",
+      "enum": [
+        "embedding_unavailable",
+        "graph_below_threshold",
+        "persona_rule_based_fallback",
+        "person_represents_organization_merged",
+        "persona_name_identity_rejected",
+        "persona_role_implausible",
+        "ontology_topic_type_missing",
+        "stance_position_unrepresented",
+        "initial_post_stance_conflict",
+        "entity_selection_actors_omitted"
+      ],
+      "title": "DegradationKind",
+      "type": "string"
+    },
+    "DegradationSeverity": {
+      "description": "Wie schwer der Ausfall wiegt.\n\nDer Unterschied ist nicht kosmetisch: ``BLOCKING`` hei\u00dft, dass der\nSchritt den Zustand \u201ebereit\u201c nicht erreichen darf, auch wenn technisch\nkein Fehler aufgetreten ist.",
+      "enum": [
+        "warning",
+        "blocking"
+      ],
+      "title": "DegradationSeverity",
+      "type": "string"
+    },
+    "PipelineDegradationModel": {
+      "additionalProperties": false,
+      "description": "Ein Teilausfall, der ohne diesen Eintrag unsichtbar geblieben w\u00e4re.\n\nGleichartige Ereignisse werden vom ``DegradationCollector``\nzusammengefasst: vierzig parallel verarbeitete Chunks, die alle am\nselben abwesenden Ollama scheitern, ergeben **einen** Eintrag mit\n``occurrences=40``, nicht vierzig identische. ``occurred_at`` tr\u00e4gt\ndann den Zeitpunkt des ersten Auftretens.",
+      "properties": {
+        "context": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "description": "Zahlen, die die Einstufung belegen \u2014 etwa node_count/edge_count bei einem Graph unter der Schwelle. Keine freien Objekte, damit der Zod-Spiegel eng bleibt.",
+          "title": "Context",
+          "type": "object"
+        },
+        "detail": {
+          "description": "Menschenlesbare Ursache \u2014 geht so in die Oberfl\u00e4che.",
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/DegradationKind"
+        },
+        "occurred_at": {
+          "description": "Erstes Auftreten, nicht das letzte.",
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "occurrences": {
+          "default": 1,
+          "description": "Wie oft dieses Ereignis zusammengefasst wurde.",
+          "minimum": 1,
+          "title": "Occurrences",
+          "type": "integer"
+        },
+        "severity": {
+          "$ref": "#/$defs/DegradationSeverity"
+        }
+      },
+      "required": [
+        "kind",
+        "severity",
+        "detail"
+      ],
+      "title": "PipelineDegradationModel",
+      "type": "object"
+    },
+    "PipelineDegradationReport": {
+      "additionalProperties": false,
+      "description": "Alle Degradierungen eines Pipeline-Schritts.\n\nWird als ``degradations`` in das Task-Ergebnis geschrieben und von dort\nan die Oberfl\u00e4che gereicht. Ein leerer Report ist der Normalfall und\nbedeutet: nichts ist still ausgefallen.",
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/PipelineDegradationModel"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "schema_version": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "title": "PipelineDegradationReport",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/create-from-personas-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort (201) von ``POST /api/simulation/create-from-personas``.\n\nGilt fuer alle drei Quellen. ``persona_set_id`` und ``degradations`` gibt es\nnur bei einem Lauf aus einem Personasatz; ohne Satz fehlen beide Schluessel\nin der Antwort (``exclude_if``), damit die Form der Bibliotheks- und\nInline-Wege byte-identisch zur frueheren Antwort bleibt.\n\n``degradations`` ist der Befundbericht der Vorbereitung (z. B. regelbasierte\nFallback-Personas, #1807). Ein Lauf aus einem Satz traegt ihn immer, eine\nleere Liste heisst: nichts ist still ausgefallen.",
+  "properties": {
+    "degradations": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PipelineDegradationReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "persona_count": {
+      "minimum": 0,
+      "title": "Persona Count",
+      "type": "integer"
+    },
+    "persona_set_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Persona Set Id"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "simulation_id": {
+      "title": "Simulation Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "simulation_id",
+    "project_id",
+    "persona_count"
+  ],
+  "title": "CreateFromPersonasResponse",
+  "type": "object"
+}

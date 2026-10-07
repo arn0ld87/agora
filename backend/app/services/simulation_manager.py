@@ -133,8 +133,19 @@ class SimulationState:
     # auf MIN_PERSONA_TABLE_ROWS zurück.
     persona_floor: Optional[int] = None
 
+    # Rueckverweis auf den Personasatz (#1807), aus dem der Lauf stammt.
+    # None = Lauf ohne Satz und Altbestand; ``to_dict`` laesst den Schluessel
+    # dann aus (byte-identische ``state.json`` und Antworten).
+    persona_set_id: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Complete status dict (internal use)"""
+        data = self._base_dict()
+        if self.persona_set_id is not None:
+            data["persona_set_id"] = self.persona_set_id
+        return data
+
+    def _base_dict(self) -> Dict[str, Any]:
         return {
             "simulation_id": self.simulation_id,
             "project_id": self.project_id,
@@ -313,6 +324,7 @@ class SimulationManager:
             branch_name=record.branch_name,
             branch_depth=int(record.branch_depth or 0),
             persona_floor=record.persona_floor,
+            persona_set_id=record.persona_set_id,
         )
 
         self._simulations[simulation_id] = state

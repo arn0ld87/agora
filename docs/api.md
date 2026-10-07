@@ -298,6 +298,46 @@ Transportklassen:
 
 Details: [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
+### Personasätze — `/api/persona-sets` (#1807)
+
+Ein Personasatz ist eine benannte Sammlung synthetischer Personas, aus der mehrere Läufe entstehen können. Dünne HTTP-Schicht über `services/persona_set_service.py` (`backend/app/api/persona_sets.py`); Anfragen und Antworten laufen über die Modelle aus `backend/app/contracts/persona_set_contract.py` (`schemas/persona-set-*.schema.json`). Zugriff wie die Persona-Bibliothek: Blueprint-Guard plus Operator.
+
+| Methode und Pfad | Body | Antwort |
+|---|---|---|
+| `GET /api/persona-sets` | – | `200` `{count, sets[]}` (`PersonaSetListResponse`, Kacheln `PersonaSetSummary` ohne Einträge, neuester Satz zuerst) |
+| `POST /api/persona-sets` | `{name, description?, graph_id?, project_id?}` | `201` `PersonaSetRecord` (leer, ungesperrt) |
+| `GET /api/persona-sets/<id>` | – | `200` `PersonaSetRecord` mit allen Einträgen |
+| `PATCH /api/persona-sets/<id>` | `{name?, description?}`, mindestens ein Feld | `200` `PersonaSetRecord`; auch bei gesperrtem Satz erlaubt |
+| `DELETE /api/persona-sets/<id>` | – | `200` `{removed: <id>}` |
+| `POST /api/persona-sets/<id>/duplicate` | `{name}` | `201` `PersonaSetRecord`: Kopie mit neuen Kennungen, ohne Sperre und ohne Läufe; auch bei gesperrtem Quellsatz erlaubt |
+| `GET /api/persona-sets/<id>/quality` | – | `200` `PersonaSetQualityReport` (reine Heuristik, kein LLM-Aufruf, Hinweise sperren nichts) |
+| `POST /api/persona-sets/<id>/entries` | `{origin, profile, source_entity_uuid?}` | `201` `PersonaSetEntry` (Server vergibt `entry_id` und Zeitstempel) |
+| `POST /api/persona-sets/<id>/entries/delete` | `{entry_ids[]}`, mindestens eine Kennung | `200` `{removed_entry_ids[], set}`; alles oder nichts, doppelte Kennungen zählen einmal |
+| `PATCH /api/persona-sets/<id>/entries/<entry_id>` | `{origin?, profile?}`, mindestens ein Feld | `200` `PersonaSetEntry`; `profile` ersetzt das Profil als Ganzes |
+| `DELETE /api/persona-sets/<id>/entries/<entry_id>` | – | `200` `{removed_entry_ids: [<entry_id>], set}` |
+| `POST /api/persona-sets/<id>/draft` | `{brief, language?}` (`PersonaDraftRequest`, `schemas/persona-draft-request.schema.json`); `brief` ist Pflicht und wird auf Leerzeichen geprüft, `language` ist die Sprache der Antwort (Standard `de`) | `201` `PersonaDraftResponse` (`schemas/persona-draft-response.schema.json`): `{origin, profile, example_post?}`. Der Entwurf ist zugleich ein neuer Eintrag im Satz (`PersonaSetEntry` mit `origin="ai_draft"`). `example_post` ist `{content, network}` (`schemas/persona-draft-example-post.schema.json`) und fehlt, wenn das Modell keinen geliefert hat |
+
+**KI-Entwurf.** Der Endpunkt prüft die Sperre **vor** dem Modell: sonst verbrannte ein gesperrter Satz Tokens für einen Entwurf, der danach mit 409 abgelehnt würde. `brief` beschreibt die Rolle in freien Worten; ohne Brief hätte das Modell nichts, woran es sich entlangschreiben könnte. Der Aufruf nimmt **kein Modell** an, er läuft über die aktive LLM-Konfiguration, und zwar als eigener Job (`run_type="persona_draft"`) durch das Budget-Ledger, damit er in der Aktivität auftaucht. Die Herkunft vergibt der Dienst, nicht der Aufrufer und nicht das Modell (`origin` steht in der Antwort immer auf `ai_draft`). Anders als die Persona-Erzeugung im Prepare-Pfad fällt der Entwurf **nicht** auf einen regelbasierten Ersatz zurück: Ein `BudgetExceededError` wird durchgereicht, ein Anbieterfehler als `502`. Der Entwurf läuft in `backend/app/services/persona_set_draft_service.py`, getrennt von `persona_set_service.py` (dort steht im Modulkopf „Kein LLM-Aufruf in diesem Modul" — eine Grenze, damit Sperre, Eindeutigkeit und Schnappschuss ohne Modell prüfbar bleiben).
+
+`origin` ist `graph`, `manual`, `ai_draft` oder `fallback`; sie steht am Eintrag, nicht am Profil. `username` ist je Satz eindeutig, ohne Beachtung der Groß-/Kleinschreibung. Unbekannte Felder in einem Body werden abgelehnt.
+
+Fehlercodes (Envelope `{success: false, code, error}`):
+
+- `400 validation_failed`: Body verletzt den Vertrag (Antwort trägt `errors[]`); außerdem ein Lauf aus einem Satz ohne Einträge.
+- `404 not_found`: unbekannter Satz oder Eintrag (bei `entries/delete` reicht eine unbekannte Kennung, dann ändert sich nichts).
+- `409 persona_set_locked`: der Satz ist gesperrt, weil ein Lauf aus ihm entstanden ist. Gesperrt sind Einträge hinzufügen, ändern, löschen und das Löschen des Satzes; Name und Beschreibung bleiben änderbar, Duplizieren bleibt möglich.
+- `409 conflict`: der `username` kommt im Satz schon vor.
+- `502 llm_unavailable`: beim KI-Entwurf war der Auftrag gültig, der Anbieter nicht (kein Angebot, Fehler nach beiden Versuchen). Der Endpunkt fällt nicht auf ein regelbasiertes Ersatzprofil zurück; die Oberfläche unterscheidet daran „Brief prüfen" von „Anbieter nicht erreichbar".
+- `500 internal_error`: unerwarteter Fehler, etwa eine nicht beschreibbare Ablage; Details nur im Log.
+
+**Altbestand.** Der erste `GET /api/persona-sets` übernimmt die Vorlagen der alten Persona-Bibliothek (`uploads/simulations/_persona_library/`) einmalig in den Sammelsatz „Importiert“ (`pset_importiert`). Ein Marker verhindert, dass ein gelöschter Sammelsatz beim nächsten Aufruf wiederkehrt. Schlägt der Import fehl (Ablage nicht les- oder beschreibbar), antwortet die Liste mit `500 internal_error` statt ohne den Altbestand weiterzumachen.
+
+**Lauf aus Satz.** `POST /api/simulation/create-from-personas` nimmt `persona_set_id` als Quelle der Personas (genau eine von `persona_set_id`, `template_ids`, `personas`, sonst `400 validation_failed`; unbekannter Satz `404 not_found`; Satz ohne Einträge `400`). Der Lauf erhält eine Kopie der Personas; erst nach erfolgreicher Vorbereitung wird der Satz gesperrt und der Lauf in `used_by_simulation_ids` vermerkt, bei einem gescheiterten Anlegen bleibt der Satz bearbeitbar. Die Antwort `201` ist `CreateFromPersonasResponse` (`schemas/create-from-personas-response.schema.json`) und trägt `simulation_id`, `project_id`, `persona_count` sowie bei einem Lauf aus einem Satz zusätzlich `persona_set_id` und `degradations` (`PipelineDegradationReport`, immer vorhanden, leere `events` heißen: nichts ist ausgefallen). Bei den Quellen `template_ids` und `personas` fehlen beide Schlüssel, die Antwort bleibt bei den drei bisherigen Feldern. Einträge mit Herkunft `fallback` stehen im Laufprofil mit `generation_source="rule_based"`, und der Lauf meldet einmal `persona_rule_based_fallback` (`warning`, bei ausschließlich regelbasierten Personas `blocking`), auch in den Metadaten des Prepare-Runs (`metadata.degradations`). Ein leerer `events`-Eintrag heißt: nichts ist ausgefallen. Die `persona_set_id` steht in den Metadaten des Prepare-Runs (`persona_source="set"`).
+
+**Rückverweis vom Lauf auf den Satz.** Ein Lauf aus einem Satz trägt `persona_set_id` am Simulationszustand (`state.json`). `GET /api/simulation/<id>` (`SimulationStatusResponse`), und `GET /api/simulation/list` liefern das Feld aus; bei einem Lauf ohne Satz und bei Altbestand **fehlt der Schlüssel** (kein `null`), die Antwortform bleibt dort unverändert. Der Verweis wird erst gesetzt, wenn die Vorbereitung `READY` erreicht hat; ein gescheiterter Lauf verweist nicht auf einen Satz, den er nie gesperrt hat.
+
+**Herkunft im Laufprofil.** Bei einem Lauf aus einem Satz trägt jedes Profil in `reddit_profiles.json` und jede Zeile in `twitter_profiles.csv` zusätzlich `persona_set_origin` (`graph` | `manual` | `ai_draft` | `fallback`). Das ist die einzige Stelle am Laufprofil, an der ein KI-Entwurf (`ai_draft`) erkennbar ist: `generation_source` kennt nur `llm` und `rule_based`, `is_manual` nur Hand-Personas. Bei Läufen ohne Satz fehlt das Feld. Eine später per `POST /api/simulation/<id>/profiles` ergänzte Persona trägt es nicht (leere CSV-Zelle).
+
 ### Settings — `/api/settings`
 
 - Settings lesen/schreiben

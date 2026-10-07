@@ -56,6 +56,8 @@ _API_ERROR_STATUS_MAP: dict[ApiErrorCode, int] = {
     ApiErrorCode.GRAPH_EDIT_CONFLICT: 409,
     ApiErrorCode.EMBEDDING_MIGRATION_RUNNING: 409,
     ApiErrorCode.REPORT_GENERATE_IN_PROGRESS: 409,
+    ApiErrorCode.PERSONA_SET_LOCKED: 409,
+    ApiErrorCode.CONFLICT: 409,
 }
 
 

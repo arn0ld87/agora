@@ -92,13 +92,14 @@ def test_modes_are_exactly_legacy_hybrid_supabase():
     assert AUTH_BACKENDS == frozenset({'legacy', 'hybrid', 'supabase'})
 
 
-def test_workspace_scoped_backends_are_the_five_metadata_switches():
+def test_workspace_scoped_backends_are_the_six_metadata_switches():
     assert [env for env, _ in WORKSPACE_SCOPED_BACKENDS] == [
         'AGORA_LLM_PROFILE_BACKEND',
         'AGORA_PROJECT_BACKEND',
         'AGORA_SIMULATION_BACKEND',
         'AGORA_RUN_BACKEND',
         'AGORA_REPORT_BACKEND',
+        'AGORA_PERSONA_SET_BACKEND',
     ]
 
 

@@ -6,6 +6,10 @@ import type { ActivityMode } from '../contracts/simulationActivityContract'
 import type { AiModelRefPayload } from './report'
 import type { ApiEnvelope } from './envelope'
 import type { RunBudgetConfig } from '../contracts/runBudgetContract'
+import {
+  CreateFromPersonasRequestSchema,
+  type CreateFromPersonasRequest,
+} from '../contracts/personaSetContract'
 import type { BranchOverrides as BranchOverridesContract } from '../contracts/branchOverrides'
 import {
   PostCreatedEventSchema,
@@ -803,12 +807,11 @@ export const deletePersonaTemplate = (templateId: string): Promise<ApiEnvelope<u
  * POST /api/simulation/create-from-personas — Lauf allein aus
  * gespeicherten Personas (Block B4). Kein Dokument, kein Graph.
  */
-export const createSimulationFromPersonas = (data: {
-  simulation_requirement: string
-  template_ids?: string[]
-  personas?: Record<string, unknown>[]
-}): Promise<ApiEnvelope<{ simulation_id: string; project_id: string; persona_count: number }>> => {
-  return service.post('/api/simulation/create-from-personas', data)
+export const createSimulationFromPersonas = (
+  data: CreateFromPersonasRequest,
+): Promise<ApiEnvelope<{ simulation_id: string; project_id: string; persona_count: number }>> => {
+  // Genau eine Quelle (#1807): `persona_set_id` oder `template_ids` oder `personas`.
+  return service.post('/api/simulation/create-from-personas', CreateFromPersonasRequestSchema.parse(data))
 }
 
 export const createSimulationBranch = (

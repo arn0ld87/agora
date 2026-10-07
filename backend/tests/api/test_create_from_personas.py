@@ -114,6 +114,429 @@ def test_nimmt_auch_inline_personas_ohne_bibliothek():
     assert prep.call_args[0][2] == [PERSONA]
 
 
+# --- Lauf aus Personasatz (#1807, Slice 7b) ---------------------------------
+
+
+@pytest.fixture
+def set_env(tmp_path, monkeypatch):
+    """Echter Dienst und Dateiablage, echte Vorbereitung, kein Graph, kein Netz.
+
+    ``ProjectManager`` ist ersetzt (es braucht nur eine Kennung); der
+    ``SimulationManager`` ist ein echter mit In-Memory-Ablage, damit die
+    geschriebenen Profile lesbar bleiben.
+    """
+    from app.config import Config
+    from app.services.artifact_store import InMemoryArtifactStore
+    from app.services.run_registry import RunRegistry
+    from app.services.simulation_manager import SimulationManager
+
+    monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
+    monkeypatch.setattr(Config, "PERSONA_SET_BACKEND", "file")
+    monkeypatch.setattr(
+        SimulationManager, "SIMULATION_DATA_DIR", str(tmp_path / "simulations")
+    )
+    registry_dir = str(tmp_path / "run_registry")
+    monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", registry_dir)
+    RunRegistry._instance = None
+    os.makedirs(registry_dir, exist_ok=True)
+
+    manager = SimulationManager(store=InMemoryArtifactStore())
+    with patch("app.api.simulation_lifecycle.ProjectManager") as pm, \
+         patch("app.api.simulation_lifecycle.SimulationManager", lambda: manager):
+        pm.create_project.return_value.project_id = "proj_neu"
+        yield manager
+    RunRegistry._instance = None
+
+
+def _set_client():
+    from app.api import persona_sets_bp
+
+    app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
+    app.extensions = {}
+    app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
+    app.register_blueprint(persona_sets_bp, url_prefix="/api/persona-sets")
+    return app.test_client()
+
+
+def _make_set(client, usernames=("anna", "bernd")) -> str:
+    set_id = client.post("/api/persona-sets", json={"name": "Betroffene"}).get_json()["data"]["id"]
+    for username in usernames:
+        res = client.post(
+            f"/api/persona-sets/{set_id}/entries",
+            json={
+                "origin": "manual",
+                "profile": {
+                    "username": username,
+                    "name": username.title(),
+                    "persona": f"Persona von {username}.",
+                },
+            },
+        )
+        assert res.status_code == 201
+    return set_id
+
+
+def _run_from_set(client, set_id):
+    return client.post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Wie reagiert die Belegschaft?", "persona_set_id": set_id},
+    )
+
+
+def _usernames(manager, simulation_id):
+    profiles = manager._store.read_json(simulation_id, "reddit_profiles", default=None)
+    return [p["username"] for p in profiles]
+
+
+def test_lauf_aus_satz_kopiert_personas_und_sperrt_den_satz(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    res = _run_from_set(client, set_id)
+
+    assert res.status_code == 201
+    data = res.get_json()["data"]
+    assert data["persona_count"] == 2
+    assert data["persona_set_id"] == set_id
+    assert _usernames(set_env, data["simulation_id"]) == ["anna", "bernd"]
+
+    locked = client.get(f"/api/persona-sets/{set_id}").get_json()["data"]
+    assert locked["locked_at"] is not None
+    assert locked["used_by_simulation_ids"] == [data["simulation_id"]]
+
+
+def test_zwei_laeufe_aus_demselben_satz_erhalten_je_eine_kopie(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    first = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+    second = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+
+    assert first != second
+    assert _usernames(set_env, first) == _usernames(set_env, second) == ["anna", "bernd"]
+    used = client.get(f"/api/persona-sets/{set_id}").get_json()["data"]["used_by_simulation_ids"]
+    assert used == [first, second]
+
+
+def test_lauf_haelt_persona_set_id_in_den_metadaten_des_prepare_runs(set_env):
+    from app.services.run_registry import RunRegistry
+
+    client = _set_client()
+    set_id = _make_set(client)
+
+    simulation_id = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+
+    run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", simulation_id, run_type="simulation_prepare"
+    )
+    assert run is not None
+    assert run["metadata"]["persona_source"] == "set"
+    assert run["metadata"]["persona_set_id"] == set_id
+    assert run["metadata"]["persona_count"] == 2
+
+
+def test_aendern_einer_persona_nach_dem_ersten_lauf_ist_409(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+    entry_id = client.get(f"/api/persona-sets/{set_id}").get_json()["data"]["entries"][0]["entry_id"]
+    _run_from_set(client, set_id)
+
+    res = client.patch(
+        f"/api/persona-sets/{set_id}/entries/{entry_id}",
+        json={"profile": {"username": "anna", "name": "Anna Neu"}},
+    )
+
+    assert res.status_code == 409
+    assert res.get_json()["code"] == "persona_set_locked"
+
+
+def test_erster_lauf_behaelt_profile_wenn_die_kopie_des_satzes_geaendert_wird(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+    first = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+    before = set_env._store.read_json(first, "reddit_profiles", default=None)
+
+    copy = client.post(f"/api/persona-sets/{set_id}/duplicate", json={"name": "Kopie"}).get_json()["data"]
+    victim = copy["entries"][0]["entry_id"]
+    changed = client.patch(
+        f"/api/persona-sets/{copy['id']}/entries/{victim}",
+        json={"profile": {"username": "anna", "name": "Anna Veraendert", "persona": "Neu."}},
+    )
+    assert changed.status_code == 200
+    deleted = client.delete(f"/api/persona-sets/{copy['id']}/entries/{copy['entries'][1]['entry_id']}")
+    assert deleted.status_code == 200
+
+    assert set_env._store.read_json(first, "reddit_profiles", default=None) == before
+    original = client.get(f"/api/persona-sets/{set_id}").get_json()["data"]
+    assert [e["profile"]["name"] for e in original["entries"]] == ["Anna", "Bernd"]
+    # Auch ein Lauf aus der Kopie ist moeglich und traegt die neuen Werte.
+    second = _run_from_set(client, copy["id"]).get_json()["data"]["simulation_id"]
+    names = [p["name"] for p in set_env._store.read_json(second, "reddit_profiles", default=None)]
+    assert names == ["Anna Veraendert"]
+
+
+def test_unbekannter_satz_ist_404_und_legt_nichts_an(set_env):
+    res = _run_from_set(_set_client(), "pset_nein")
+
+    assert res.status_code == 404
+    assert set_env.list_simulations() == []
+
+
+def test_leerer_satz_ist_validierungsfehler_und_bleibt_ungesperrt(set_env):
+    client = _set_client()
+    set_id = _make_set(client, usernames=())
+
+    res = _run_from_set(client, set_id)
+
+    assert res.status_code == 400
+    assert res.get_json()["code"] == "validation_failed"
+    assert set_env.list_simulations() == []
+    assert client.get(f"/api/persona-sets/{set_id}").get_json()["data"]["locked_at"] is None
+
+
+@pytest.mark.parametrize("extra", [{"template_ids": ["tpl_1"]}, {"personas": [PERSONA]}])
+def test_persona_set_id_zusammen_mit_anderer_quelle_ist_validierungsfehler(set_env, extra):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    res = client.post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "persona_set_id": set_id, **extra},
+    )
+
+    assert res.status_code == 400
+    assert res.get_json()["code"] == "validation_failed"
+    assert client.get(f"/api/persona-sets/{set_id}").get_json()["data"]["locked_at"] is None
+
+
+@pytest.mark.parametrize("bad", ["", "   ", 7, ["pset_x"]])
+def test_persona_set_id_muss_nichtleerer_text_sein(set_env, bad):
+    res = _set_client().post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "persona_set_id": bad},
+    )
+
+    assert res.status_code == 400
+
+
+def _add_entry(client, set_id, username, origin):
+    res = client.post(
+        f"/api/persona-sets/{set_id}/entries",
+        json={
+            "origin": origin,
+            "profile": {
+                "username": username,
+                "name": username.title(),
+                "persona": f"Persona von {username}.",
+            },
+        },
+    )
+    assert res.status_code == 201
+
+
+def test_lauf_aus_satz_mit_fallback_meldet_die_degradation(set_env):
+    from app.services.run_registry import RunRegistry
+
+    client = _set_client()
+    set_id = _make_set(client, usernames=("anna",))
+    _add_entry(client, set_id, "bernd", "fallback")
+
+    res = _run_from_set(client, set_id)
+
+    assert res.status_code == 201
+    data = res.get_json()["data"]
+    # Marke im Laufprofil: dieselbe wie im normalen Prepare-Pfad.
+    profiles = set_env._store.read_json(data["simulation_id"], "reddit_profiles", default=None)
+    assert [(p["username"], p["generation_source"]) for p in profiles] == [
+        ("anna", "llm"),
+        ("bernd", "rule_based"),
+    ]
+    # Degradation in der Antwort ...
+    events = data["degradations"]["events"]
+    assert [e["kind"] for e in events] == ["persona_rule_based_fallback"]
+    assert events[0]["severity"] == "warning"
+    assert events[0]["context"]["fallback_personas"] == 1
+    assert events[0]["context"]["total_personas"] == 2
+    # ... und in den Metadaten des Prepare-Runs.
+    run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", data["simulation_id"], run_type="simulation_prepare"
+    )
+    assert run["metadata"]["degradations"]["events"][0]["kind"] == "persona_rule_based_fallback"
+
+
+def test_lauf_aus_satz_nur_mit_fallback_ist_blocking(set_env):
+    client = _set_client()
+    set_id = _make_set(client, usernames=())
+    _add_entry(client, set_id, "anna", "fallback")
+
+    data = _run_from_set(client, set_id).get_json()["data"]
+
+    assert data["degradations"]["events"][0]["severity"] == "blocking"
+
+
+def test_lauf_aus_satz_ohne_fallback_meldet_keine_degradation(set_env):
+    from app.services.run_registry import RunRegistry
+
+    client = _set_client()
+    set_id = _make_set(client)
+
+    data = _run_from_set(client, set_id).get_json()["data"]
+
+    assert data["degradations"]["events"] == []
+    profiles = set_env._store.read_json(data["simulation_id"], "reddit_profiles", default=None)
+    assert {p["generation_source"] for p in profiles} == {"llm"}
+    run = RunRegistry().get_latest_by_linked_id(
+        "simulation_id", data["simulation_id"], run_type="simulation_prepare"
+    )
+    assert "degradations" not in run["metadata"]
+
+
+# --- Rueckverweis und Antwortvertrag (#1807, E7-B1) -------------------------
+
+
+def test_antwort_aus_satz_hat_genau_die_vertragsfelder(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    data = _run_from_set(client, set_id).get_json()["data"]
+
+    assert set(data) == {
+        "simulation_id",
+        "project_id",
+        "persona_count",
+        "persona_set_id",
+        "degradations",
+    }
+    assert data["project_id"] == "proj_neu"
+    assert data["degradations"] == {"schema_version": 1, "events": []}
+
+
+def test_antwort_ohne_satz_bleibt_bei_den_drei_bisherigen_feldern(set_env):
+    res = _set_client().post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "personas": [PERSONA]},
+    )
+
+    assert res.status_code == 201
+    data = res.get_json()["data"]
+    assert set(data) == {"simulation_id", "project_id", "persona_count"}
+    assert data["persona_count"] == 1
+
+
+def test_lauf_aus_satz_haelt_den_rueckverweis_am_zustand(set_env):
+    from app.services.simulation_manager import SimulationManager
+
+    client = _set_client()
+    set_id = _make_set(client)
+
+    simulation_id = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+
+    read = client.get(f"/api/simulation/{simulation_id}").get_json()["data"]
+    assert read["persona_set_id"] == set_id
+    # Ueberlebt einen Neustart: ein frischer Manager liest ihn aus der Ablage.
+    reloaded = SimulationManager(store=set_env._store).get_simulation(simulation_id)
+    assert reloaded is not None
+    assert reloaded.persona_set_id == set_id
+    listed = client.get("/api/simulation/list").get_json()["data"]
+    assert [s["persona_set_id"] for s in listed if s["simulation_id"] == simulation_id] == [set_id]
+
+
+def test_lauf_ohne_satz_traegt_keinen_rueckverweis(set_env):
+    client = _set_client()
+    simulation_id = client.post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "personas": [PERSONA]},
+    ).get_json()["data"]["simulation_id"]
+
+    read = client.get(f"/api/simulation/{simulation_id}").get_json()["data"]
+
+    assert "persona_set_id" not in read
+    reloaded = set_env.get_simulation(simulation_id)
+    assert reloaded is not None
+    assert reloaded.persona_set_id is None
+    assert "persona_set_id" not in reloaded.to_dict()
+
+
+def test_gescheiterter_lauf_aus_satz_verweist_nicht_auf_den_satz(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    with patch(
+        "app.services.persona_prepare_service._build_config",
+        side_effect=ValueError("Vorbereitung fehlgeschlagen"),
+    ):
+        res = _run_from_set(client, set_id)
+
+    assert res.status_code == 400
+    assert [s.persona_set_id for s in set_env.list_simulations()] == [None]
+
+
+def test_laufprofil_haelt_die_herkunft_aller_vier_arten(set_env):
+    import csv
+
+    client = _set_client()
+    set_id = _make_set(client, usernames=())
+    for username, origin in (
+        ("gabi", "graph"),
+        ("manu", "manual"),
+        ("dora", "ai_draft"),
+        ("fritz", "fallback"),
+    ):
+        _add_entry(client, set_id, username, origin)
+
+    simulation_id = _run_from_set(client, set_id).get_json()["data"]["simulation_id"]
+
+    profiles = set_env._store.read_json(simulation_id, "reddit_profiles", default=None)
+    by_name = {p["username"]: p for p in profiles}
+    assert {name: p["persona_set_origin"] for name, p in by_name.items()} == {
+        "gabi": "graph",
+        "manu": "manual",
+        "dora": "ai_draft",
+        "fritz": "fallback",
+    }
+    # Der KI-Entwurf ist nur ueber das neue Feld erkennbar: ``generation_source``
+    # und ``is_manual`` sehen aus wie bei einer vom Modell erzeugten Persona.
+    assert by_name["dora"]["generation_source"] == "llm"
+    assert by_name["dora"]["is_manual"] is False
+    assert by_name["manu"]["is_manual"] is True
+    assert by_name["fritz"]["generation_source"] == "rule_based"
+    # Twitter-CSV: die Spalte steht fuer ALLE Zeilen (Spalten leitet der Schreiber
+    # aus dem ersten Profil ab; eine Luecke wuerde ihn brechen bzw. leer lassen).
+    csv_path = os.path.join(set_env._get_simulation_dir(simulation_id), "twitter_profiles.csv")
+    with open(csv_path, encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [r["persona_set_origin"] for r in rows] == ["graph", "manual", "ai_draft", "fallback"]
+
+
+def test_laufprofile_ohne_satz_tragen_die_herkunft_nicht(set_env):
+    client = _set_client()
+    simulation_id = client.post(
+        "/api/simulation/create-from-personas",
+        json={"simulation_requirement": "Frage", "personas": [PERSONA]},
+    ).get_json()["data"]["simulation_id"]
+
+    profiles = set_env._store.read_json(simulation_id, "reddit_profiles", default=None)
+
+    assert all("persona_set_origin" not in p for p in profiles)
+
+
+def test_scheitert_das_anlegen_wird_der_satz_nicht_gesperrt(set_env):
+    client = _set_client()
+    set_id = _make_set(client)
+
+    with patch(
+        "app.api.simulation_lifecycle.prepare_from_personas",
+        side_effect=ValueError("Vorbereitung fehlgeschlagen"),
+    ):
+        res = _run_from_set(client, set_id)
+
+    assert res.status_code == 400
+    after = client.get(f"/api/persona-sets/{set_id}").get_json()["data"]
+    assert after["locked_at"] is None
+    assert after["used_by_simulation_ids"] == []
+
+
 def test_persona_lauf_sagt_beim_bericht_klar_was_fehlt():
     """Ein Lauf ohne Graphen kann keinen Bericht erzeugen — das muss er sagen.
 

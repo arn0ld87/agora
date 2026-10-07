@@ -1979,7 +1979,15 @@
         "generate": "Generate",
         "existing": "Choose an existing one",
         "existingWhy": "Arrives with persona sets in the library.",
-        "laterWithSource": "With a new source you set the upper limit during preparation."
+        "laterWithSource": "With a new source you set the upper limit during preparation.",
+        "set": "From a persona set",
+        "setWhy": "The run gets the personas of the set as a copy. Without graph, without report.",
+        "chooseSet": "Persona set",
+        "noSetChosen": "Please choose",
+        "loadingSets": "loading …",
+        "count": "{n} personas",
+        "noSetsYet": "There is no set with personas yet. Create one in the library.",
+        "noGraphNotice": "The run is created without a graph. The graph tab then shows an empty state."
       },
       "models": {
         "legend": "Models",
@@ -2002,7 +2010,8 @@
         "contested": "The contested question needs 10 to 300 characters or stays empty.",
         "agents": "The persona upper limit is at least 10.",
         "days": "The number of days is between 1 and 365.",
-        "rounds": "The number of rounds is between 3 and 30."
+        "rounds": "The number of rounds is between 3 and 30.",
+        "personaSet": "Please choose a persona set."
       },
       "actions": {
         "cancel": "Cancel",
@@ -2020,7 +2029,10 @@
         "createShape": "The response when creating the run was incomplete.",
         "prepare": "Preparation could not be started.",
         "prepareAfterCreate": "Run {id} was created, but preparation failed: {message}",
-        "openCreated": "Go to the created run"
+        "openCreated": "Go to the created run",
+        "createFromPersonaSet": "The run from the persona set could not be created.",
+        "noPersonaSet": "Please choose a persona set.",
+        "noRequirement": "Please provide a question — it names the run even without a graph."
       }
     },
     "settingsWindow": {
@@ -2042,9 +2054,26 @@
       "appearance": {
         "groupTheme": "Color scheme",
         "groupText": "Density and type",
-        "theme": { "label": "Appearance", "hint": "System follows your device setting.", "system": "System", "light": "Light", "dark": "Dark" },
-        "density": { "label": "Density", "hint": "Compact tightens the sidebar and the top bar.", "comfortable": "Comfortable", "compact": "Compact" },
-        "fontSize": { "label": "Font size", "hint": "Affects body text, headings and hint text of the interface.", "small": "Small", "normal": "Normal", "large": "Large" },
+        "theme": {
+          "label": "Appearance",
+          "hint": "System follows your device setting.",
+          "system": "System",
+          "light": "Light",
+          "dark": "Dark"
+        },
+        "density": {
+          "label": "Density",
+          "hint": "Compact tightens the sidebar and the top bar.",
+          "comfortable": "Comfortable",
+          "compact": "Compact"
+        },
+        "fontSize": {
+          "label": "Font size",
+          "hint": "Affects body text, headings and hint text of the interface.",
+          "small": "Small",
+          "normal": "Normal",
+          "large": "Large"
+        },
         "local": "This choice applies to this browser only."
       },
       "system": {
@@ -2053,14 +2082,41 @@
         "loading": "Checking status…",
         "loadError": "The system status could not be retrieved.",
         "retry": "Check again",
-        "state": { "ok": "OK", "down": "Unreachable", "unknown": "Unknown", "skipped": "Not checked" },
-        "backend": { "label": "Backend", "hint": "Application server of this instance." },
-        "neo4j": { "label": "Neo4j", "hint": "Graph database for sources and entities." },
-        "ollama": { "label": "Ollama", "hint": "Local model service.", "skipped": "The active provider is {provider}; Ollama is not checked." },
-        "disk": { "label": "Upload storage", "free": "{free} free", "used": "{pct} % used" },
-        "version": { "label": "Version", "unknown": "unknown" },
+        "state": {
+          "ok": "OK",
+          "down": "Unreachable",
+          "unknown": "Unknown",
+          "skipped": "Not checked"
+        },
+        "backend": {
+          "label": "Backend",
+          "hint": "Application server of this instance."
+        },
+        "neo4j": {
+          "label": "Neo4j",
+          "hint": "Graph database for sources and entities."
+        },
+        "ollama": {
+          "label": "Ollama",
+          "hint": "Local model service.",
+          "skipped": "The active provider is {provider}; Ollama is not checked."
+        },
+        "disk": {
+          "label": "Upload storage",
+          "free": "{free} free",
+          "used": "{pct} % used"
+        },
+        "version": {
+          "label": "Version",
+          "unknown": "unknown"
+        },
         "unreported": "The backend does not currently report Redis and PostgreSQL; their state is not visible here.",
-        "console": { "label": "Console", "hint": "Shows the backend log.", "open": "Open console", "unavailable": "Operator only." }
+        "console": {
+          "label": "Console",
+          "hint": "Shows the backend log.",
+          "open": "Open console",
+          "unavailable": "Operator only."
+        }
       },
       "budgets": {
         "intro": "These default limits apply only to new runs without a budget of their own. A budget set in the start dialog replaces the default limits entirely.",
@@ -2069,11 +2125,31 @@
         "groupEnforcement": "Enforcement",
         "loading": "Loading budgets…",
         "loadError": "The budgets could not be loaded.",
-        "tokens": { "label": "Tokens", "hint": "Maximum number of tokens per run." },
-        "cost": { "label": "Cost in US dollars", "hint": "Maximum cost per run, e.g. 12.50." },
-        "duration": { "label": "Duration", "hint": "Maximum duration per run.", "unit": "Unit", "minutes": "Minutes", "hours": "Hours" },
-        "calls": { "label": "Model calls", "hint": "Maximum number of calls to the language model per run." },
-        "enforcement": { "label": "Enforcement", "hint": "Hard ends the run when exceeded, soft only warns.", "hard": "Hard (run ends)", "soft": "Soft (warning only)" },
+        "tokens": {
+          "label": "Tokens",
+          "hint": "Maximum number of tokens per run."
+        },
+        "cost": {
+          "label": "Cost in US dollars",
+          "hint": "Maximum cost per run, e.g. 12.50."
+        },
+        "duration": {
+          "label": "Duration",
+          "hint": "Maximum duration per run.",
+          "unit": "Unit",
+          "minutes": "Minutes",
+          "hours": "Hours"
+        },
+        "calls": {
+          "label": "Model calls",
+          "hint": "Maximum number of calls to the language model per run."
+        },
+        "enforcement": {
+          "label": "Enforcement",
+          "hint": "Hard ends the run when exceeded, soft only warns.",
+          "hard": "Hard (run ends)",
+          "soft": "Soft (warning only)"
+        },
         "invalidNumber": "Enter a number greater than or equal to 0.",
         "invalidInteger": "Enter a whole number greater than or equal to 0.",
         "save": "Save",
@@ -2837,8 +2913,12 @@
             "title": "Unsupported statements in the text",
             "item": "Section {n}: {text} ({verdict}: {reason})"
           },
-          "gate": { "title": "Gate decisions" },
-          "degradation": { "title": "Downgraded claims" }
+          "gate": {
+            "title": "Gate decisions"
+          },
+          "degradation": {
+            "title": "Downgraded claims"
+          }
         },
         "export": {
           "trigger": "Export",
@@ -2894,6 +2974,305 @@
           "retry": "Try again",
           "toRuns": "To the runs"
         }
+      }
+    },
+    "personaSets": {
+      "title": "Persona sets",
+      "loading": "Loading persona sets …",
+      "errorTitle": "Persona sets could not be loaded",
+      "retry": "Try again",
+      "editor": {
+        "titleNew": "New persona",
+        "titleEdit": "Edit persona: {name}",
+        "navLabel": "Persona sections",
+        "required": "(required)",
+        "saving": "Saving …",
+        "save": "Save",
+        "cancel": "Cancel",
+        "close": "Close",
+        "unsaved": "Unsaved changes",
+        "locked": "Locked: a run was created from this persona set, so the persona is read-only. Duplicate the persona set to make changes.",
+        "summaryTitle": "{n} entries to check",
+        "sectionErrors": "{n} entries to check",
+        "originNote": {
+          "graph": "Taken from the graph.",
+          "manual": "Created by hand.",
+          "ai_draft": "Draft: suggested by the AI and not reviewed yet.",
+          "fallback": "Degradation: rule-based stand-in persona, not a fully worked-out one. Please review and rework."
+        },
+        "confirm": {
+          "text": "There are unsaved changes. Discard them?",
+          "keep": "Keep editing",
+          "discard": "Discard"
+        },
+        "errors": {
+          "required": "Required, please fill in.",
+          "tooLong": "Too long, at most {max} characters.",
+          "tooMany": "Too many entries, at most {max}.",
+          "range": "Enter a value between {min} and {max}.",
+          "countryCode": "Two-letter country code, for example DE.",
+          "wholeNumber": "Enter a whole number.",
+          "number": "Enter a number, for example 0.5.",
+          "invalid": "Invalid value."
+        },
+        "sections": {
+          "identity": {
+            "label": "Identity"
+          },
+          "stance": {
+            "label": "Stance and goals",
+            "note": "The contract has no dedicated field for stance or goals. Put both in the persona description."
+          },
+          "language": {
+            "label": "Language and tone",
+            "note": "The contract has no dedicated field for tone or style. Only the language can be set here; describe the tone in the persona description."
+          },
+          "activity": {
+            "label": "Activity"
+          },
+          "graph": {
+            "label": "Link to the graph",
+            "note": "The system sets origin and source entity; they cannot be changed here."
+          }
+        },
+        "fields": {
+          "name": {
+            "label": "Name"
+          },
+          "username": {
+            "label": "Username",
+            "hint": "Unique within the persona set."
+          },
+          "persona_kind": {
+            "label": "Kind"
+          },
+          "profession": {
+            "label": "Role or profession"
+          },
+          "age": {
+            "label": "Age",
+            "hint": "Whole number from 0 to {max}, empty = not specified."
+          },
+          "gender": {
+            "label": "Gender",
+            "unset": "Not specified",
+            "options": {
+              "male": "male",
+              "female": "female",
+              "nonbinary": "non-binary",
+              "other": "other"
+            }
+          },
+          "country": {
+            "label": "Country",
+            "hint": "Two-letter country code, for example DE."
+          },
+          "location": {
+            "label": "Location"
+          },
+          "bio": {
+            "label": "Short profile",
+            "hint": "{n} of {max} characters."
+          },
+          "verified": {
+            "label": "Verified",
+            "hint": "Marks the persona as verified."
+          },
+          "persona": {
+            "label": "Persona description",
+            "hint": "Background, stance, goals and tone as prose. {n} of {max} characters."
+          },
+          "interested_topics": {
+            "label": "Interests",
+            "hint": "One topic per line, at most {max}."
+          },
+          "mbti": {
+            "label": "MBTI type",
+            "unset": "Not specified"
+          },
+          "language": {
+            "label": "Language",
+            "hint": "Language code, for example de or en."
+          },
+          "activity_level": {
+            "label": "Activity level",
+            "hint": "Number from 0 to 1, empty = not specified."
+          },
+          "time_zone": {
+            "label": "Time zone",
+            "hint": "For example Europe/Berlin."
+          },
+          "source_entity_type": {
+            "label": "Source entity type",
+            "hint": "Entity type in the graph the persona comes from."
+          },
+          "origin": {
+            "label": "Origin"
+          },
+          "source_entity_uuid": {
+            "label": "Source entity (UUID)",
+            "none": "Not linked to the graph."
+          }
+        }
+      },
+      "library": {
+        "empty": "No persona sets yet.",
+        "count": "{n} persona sets",
+        "list": "Persona sets",
+        "new": "New persona set",
+        "searchLabel": "Search persona sets by name",
+        "searchPlaceholder": "Search names …",
+        "noMatches": "No persona set matches “{query}”.",
+        "matches": "Showing {n} of {total} persona sets",
+        "personasOne": "1 persona",
+        "personas": "{n} personas",
+        "stateEditable": "Editable",
+        "stateLocked": "Locked",
+        "usageNone": "Not used in any run yet",
+        "usageOne": "Used in 1 run",
+        "usage": "Used in {n} runs",
+        "updated": "Changed {date}",
+        "open": "Open",
+        "duplicate": "Duplicate",
+        "duplicateName": "{name} (copy)",
+        "delete": "Delete",
+        "deleteLockedReason": "Locked: a run was created from this persona set. It cannot be deleted, only duplicated.",
+        "importedNote": "Collection set “Importiert” (id pset_importiert): holds the personas carried over from the former template library.",
+        "tileActions": "Actions for {name}",
+        "create": {
+          "title": "New persona set",
+          "description": "An empty set. You add personas inside the set afterwards.",
+          "nameLabel": "Name",
+          "descriptionLabel": "Description (optional)",
+          "nameRequired": "Please enter a name.",
+          "nameTooLong": "The name may be at most {max} characters long.",
+          "descriptionTooLong": "The description may be at most {max} characters long.",
+          "submit": "Create",
+          "submitting": "Creating …",
+          "cancel": "Cancel"
+        },
+        "remove": {
+          "title": "Delete persona set?",
+          "body": "“{name}” will be deleted permanently. This cannot be undone.",
+          "confirm": "Delete permanently",
+          "cancel": "Cancel"
+        },
+        "messages": {
+          "created": "Persona set “{name}” created.",
+          "duplicated": "Persona set “{name}” duplicated.",
+          "deleted": "Persona set “{name}” deleted.",
+          "locked": "This persona set is locked because a run was created from it. It cannot be deleted, but it can be duplicated.",
+          "actionFailed": "The action failed: {error}"
+        }
+      },
+      "detail": {
+        "title": "Persona set",
+        "empty": "This persona set has no personas yet.",
+        "locked": "Locked: a run was created from this persona set. Duplicate it to make changes.",
+        "notFound": "Persona set not found.",
+        "backToLibrary": "Back to persona sets",
+        "conflict": "Conflict: this username already exists in the persona set.",
+        "header": {
+          "label": "Persona set",
+          "rename": "Rename",
+          "name": "Name",
+          "description": "Description",
+          "save": "Save",
+          "cancel": "Cancel",
+          "count": "{n} personas",
+          "stateLocked": "locked",
+          "stateEditable": "editable",
+          "duplicate": "Duplicate",
+          "duplicateAndEdit": "Duplicate and edit",
+          "duplicateName": "{name} (copy)",
+          "usedBy": "Used by these runs:"
+        },
+        "origin": {
+          "graph": "from graph",
+          "manual": "by hand",
+          "ai_draft": "AI draft",
+          "fallback": "Fallback"
+        },
+        "kind": {
+          "individual": "individual",
+          "collective": "collective"
+        },
+        "card": {
+          "select": "Select {name}",
+          "noRole": "No role given",
+          "fallbackNote": "Degradation: rule-based fallback persona, not a regular persona.",
+          "draftNote": "Draft: AI-generated and not reviewed yet."
+        },
+        "filter": {
+          "label": "Filter personas",
+          "search": "Search",
+          "origin": "Origin",
+          "kind": "Kind",
+          "role": "Role",
+          "all": "All",
+          "reset": "Reset filters",
+          "count": "{shown} of {total}",
+          "noMatches": "No persona matches the filters."
+        },
+        "toolbar": {
+          "label": "Persona actions",
+          "add": "+ Persona",
+          "selectAll": "Select all shown",
+          "deleteSelected": "Delete ({n})",
+          "lockedReason": "The persona set is locked. Duplicate it to make changes."
+        },
+        "confirm": {
+          "label": "Confirm deletion",
+          "text": "Delete {n} personas permanently? If one deletion fails, nothing changes.",
+          "yes": "Delete permanently",
+          "no": "Cancel"
+        },
+        "cards": {
+          "label": "Personas"
+        },
+        "quality": {
+          "label": "Quality hints",
+          "loading": "Checking quality …",
+          "error": "Quality hints could not be loaded:",
+          "summary": "{total} personas, {roles} distinct roles, {mbti} distinct MBTI types.",
+          "noGlobalIssues": "No set-wide hints.",
+          "issuesFor": "Hints for {name}",
+          "severity": {
+            "error": "Error",
+            "warning": "Warning",
+            "info": "Note"
+          }
+        },
+        "editor": {
+          "titleNew": "New persona",
+          "titleEdit": "Edit persona",
+          "name": "Name",
+          "username": "Username",
+          "save": "Save",
+          "cancel": "Cancel",
+          "invalid": "Name and username are required.",
+          "lockedHint": "The persona set is locked, the persona is read-only."
+        },
+        "announce": {
+          "deleted": "{n} personas deleted.",
+          "saved": "{name} saved.",
+          "renamed": "Persona set updated."
+        },
+        "draft": {
+          "title": "Draft with AI",
+          "brief": "What role should the persona have?",
+          "briefPlaceholder": "e.g. works council member from Bremen, in conflict over shift planning",
+          "submit": "Generate draft",
+          "running": "Draft running …",
+          "locked": "A locked persona set takes no drafts. Duplicate the set to change it.",
+          "providerError": "The provider was unreachable. The request is fine — another attempt helps.",
+          "previewLabel": "How this persona might write",
+          "dismiss": "Close preview"
+        }
+      },
+      "run": {
+        "title": "Personas",
+        "empty": "No persona set view is available for this run yet."
       }
     },
     "graphLibrary": {
@@ -3372,22 +3751,22 @@
       "tokenLabel": "Access token",
       "tokenHint": "The token is the AGORA_AUTH_TOKEN value of your installation.",
       "tokenInvalid": "The token was rejected. Please check the value."
-  },
-  "workspaceProviderKeys": {
-    "title": "Your provider keys",
-    "description": "Keys apply only to the active workspace. Agora does not display stored keys again.",
-    "keyLabel": "API key for {provider}",
-    "configured": "Key saved",
-    "missing": "No key saved",
-    "save": "Save key",
-    "delete": "Delete key",
-    "saved": "Key saved.",
-    "deleted": "Key deleted.",
-    "readOnly": "Only owners and admins can change keys.",
-    "loadError": "Keys could not be loaded.",
-    "saveError": "Key could not be saved.",
-    "deleteError": "Key could not be deleted."
-  },
+    },
+    "workspaceProviderKeys": {
+      "title": "Your provider keys",
+      "description": "Keys apply only to the active workspace. Agora does not display stored keys again.",
+      "keyLabel": "API key for {provider}",
+      "configured": "Key saved",
+      "missing": "No key saved",
+      "save": "Save key",
+      "delete": "Delete key",
+      "saved": "Key saved.",
+      "deleted": "Key deleted.",
+      "readOnly": "Only owners and admins can change keys.",
+      "loadError": "Keys could not be loaded.",
+      "saveError": "Key could not be saved.",
+      "deleteError": "Key could not be deleted."
+    },
     "register": {
       "title": "Create account",
       "emailLabel": "Email address",

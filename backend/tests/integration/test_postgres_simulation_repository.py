@@ -113,6 +113,7 @@ def _full_record() -> SimulationRecord:
         branch_name='Variante B',
         branch_depth=3,
         persona_floor=25,
+        persona_set_id='pset_voll00000001',
     )
 
 

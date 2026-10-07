@@ -54,6 +54,13 @@ export const useShellStore = defineStore('shell', () => {
   // Stand statt zweier Ladevorgaenge. null = noch nie geladen. Fluechtig.
   const shelfSnapshot = ref<ShelfSnapshot | null>(null)
 
+  // Zahl der Personasaetze (`GET /api/persona-sets`, #1807). Die Seitenleiste
+  // laedt sie selbst; die Personasatz-Bibliothek veroeffentlicht ihren Stand.
+  // null = unbekannt (nie geladen oder Laden gescheitert), nie 0.
+  const personaSetCount = ref<number | null>(null)
+  // Das Laden der Personasaetze ist gescheitert (Hinweis in der Seitenleiste).
+  const personaSetCountFailed = ref(false)
+
   watch(sidebarCollapsed, (v) => writeBool(KEYS.sidebarCollapsed, v))
   watch(settingsGroupOpen, (v) => writeBool(KEYS.settingsGroupOpen, v))
   watch(inspectorOpen, (v) => writeBool(KEYS.inspectorOpen, v))
@@ -98,6 +105,8 @@ export const useShellStore = defineStore('shell', () => {
     breadcrumbs,
     activeObjects,
     shelfSnapshot,
+    personaSetCount,
+    personaSetCountFailed,
     toggleSidebar,
     toggleSettingsGroup,
     toggleInspector,
