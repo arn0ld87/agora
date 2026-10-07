@@ -2432,6 +2432,115 @@
         "resume": "Resume",
         "view": "View"
       },
+      "simFeed": {
+        "ariaLabel": "Simulation feed",
+        "network": {
+          "label": "Network",
+          "twitter": "Twitter",
+          "reddit": "Reddit"
+        },
+        "filters": {
+          "title": "Filters",
+          "persona": "Persona",
+          "personaAll": "All personas",
+          "round": "Round only",
+          "roundAll": "All rounds",
+          "search": "Text search",
+          "searchPlaceholder": "Search in posts",
+          "reset": "Reset filters",
+          "contested": "Contested question",
+          "contestedNone": "No contested question is recorded for this run."
+        },
+        "toggle": {
+          "showFilters": "Show filters",
+          "hideFilters": "Hide filters",
+          "showSide": "Show persona and round",
+          "hideSide": "Hide persona and round"
+        },
+        "timeline": {
+          "twitter": "Posts on Twitter, newest first",
+          "reddit": "Posts on Reddit, newest first"
+        },
+        "scrubber": {
+          "label": "Look back",
+          "live": "Live",
+          "liveHint": "The feed follows along.",
+          "status": "Shown up to round {round} of {max}",
+          "slider": "Up to round",
+          "noRounds": "No round information yet.",
+          "pill": "Show {count} new posts"
+        },
+        "post": {
+          "sim": "SIM",
+          "simText": "synthetic utterance",
+          "open": "Open post by {name}",
+          "openLink": "Open post",
+          "reposted": "Repost without own text",
+          "quoteOf": "Quoted",
+          "referenceMissing": "The referenced post is outside the loaded excerpt.",
+          "round": "Round {round}",
+          "counts": "Counts",
+          "replies": "no replies | one reply | {n} replies",
+          "reposts": "no reposts | one repost | {n} reposts",
+          "likes": "no likes | one like | {n} likes",
+          "votes": "Votes: {n}",
+          "comments": "no comments | one comment | {n} comments"
+        },
+        "persona": {
+          "title": "Persona",
+          "none": "Pick a persona in the filter or focus a post.",
+          "role": "Role",
+          "stance": "Stance",
+          "stanceMissing": "Stance not recorded",
+          "roleMissing": "Role not recorded",
+          "bio": "Description",
+          "profileMissing": "No profile is available for this persona."
+        },
+        "roundPanel": {
+          "title": "Round {round} of {total}",
+          "titleUnknownTotal": "Round {round} of ?",
+          "titleNone": "No round information yet",
+          "activity": "Activity",
+          "activityLine": "{twitter} Twitter · {reddit} Reddit",
+          "activityNone": "No posts in this round."
+        },
+        "notices": {
+          "error": "The feed could not be loaded completely: {message}",
+          "retry": "Reload",
+          "truncated": "Only the newest {limit} posts per network are shown.",
+          "invalid": "{count} posts did not match the contract and were discarded.",
+          "evicted": "{count} older posts were evicted because of the buffer limit.",
+          "unrounded": "{count} posts without a round are shown in every round.",
+          "stream": "The live connection is interrupted. New posts only appear after reloading."
+        },
+        "states": {
+          "loading": "Loading feed …",
+          "empty": "There are no posts in this network yet.",
+          "emptyFiltered": "No post matches the filters."
+        },
+        "thread": {
+          "back": "Back to feed",
+          "loading": "Loading post …",
+          "rootMissing": "The original post is outside the loaded excerpt.",
+          "broken": "The reply chain of this post is broken (cycle or too deep) and is not shown.",
+          "parentMissing": "The parent post is missing from the loaded excerpt.",
+          "replies": "Replies",
+          "noReplies": "No replies in the loaded excerpt.",
+          "quotes": "Quotes",
+          "reposts": "Reposts: {count}",
+          "claim": "Evidence for this statement",
+          "region": "Thread"
+        },
+        "tree": {
+          "region": "Comments",
+          "collapse": "Collapse branch of {name}",
+          "expand": "Expand branch of {name} ({count} replies below)",
+          "flatOnly": "This run does not contain nested comments. All comments are listed flat under the post.",
+          "unplaced": "{count} comments could not be placed (cycle or nesting too deep).",
+          "noComments": "No comments in the loaded excerpt.",
+          "parentMissing": "The parent comment is missing from the loaded excerpt."
+        }
+      },
       "simHeader": {
         "ariaLabel": "Simulation",
         "round": "Round {current} of {total}",

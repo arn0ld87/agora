@@ -1,18 +1,29 @@
 <script setup lang="ts">
 /**
  * Simulation als Reiter am Lauf (Etappe 4, #1801, Bauplan 4.5): Hülle mit den
- * Unterreitern Feed · Runden · Diagnose, einem leeren Kopf-Bereich (hier hängt
- * ein anderes Ticket den Simulationskopf ein) und der Kind-Ansicht.
+ * Unterreitern Feed · Runden · Diagnose, dem Simulationskopf und der Kind-Ansicht.
  */
 import { computed, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import RunSimHeader from '@/components/run/simulation/RunSimHeader.vue'
+import { usePersonasReady } from '@/composables/run/simulation/usePersonasReady'
+import { useRunWorkspaceContext } from '@/composables/run/useRunWorkspace'
 import { clearSimFeed } from '@/composables/useSimFeed'
 import { clearSimClock } from '@/composables/useSimClock'
 
 const props = defineProps<{ simulationId: string }>()
 const { t } = useI18n()
 const route = useRoute()
+
+const workspace = useRunWorkspaceContext()
+const personasReady = usePersonasReady()
+const simulationJob = computed(() => workspace.data.value?.jobs.simulation_run ?? null)
+
+/** Start, Stopp, Pause oder Fortsetzen ist durch: Stufenstand des Arbeitsbereichs neu laden. */
+function reloadWorkspace(): void {
+  void workspace.reload()
+}
 
 type SubTabKey = 'feed' | 'rounds' | 'diagnostics'
 
@@ -72,7 +83,16 @@ onBeforeUnmount(() => {
       role="region"
       :aria-label="t('views.run.simulation.headerSlotLabel')"
       data-testid="run-sim-header-slot"
-    ></div>
+    >
+      <RunSimHeader
+        :simulation-id="simulationId"
+        :run-id="simulationJob?.runId ?? null"
+        :route="simulationJob?.route ?? null"
+        :personas-ready="personasReady"
+        @started="reloadWorkspace"
+        @changed="reloadWorkspace"
+      />
+    </div>
 
     <router-view />
   </div>

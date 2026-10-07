@@ -1,12 +1,40 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { RouterView, createMemoryHistory, createRouter } from 'vue-router'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 import { createI18n } from 'vue-i18n'
 import RunSimulationView from '../simulation/RunSimulationView.vue'
 import RunTabs from '@/components/run/RunTabs.vue'
 import { deriveRunTabs } from '@/composables/run/runTabs'
 import de from '@/i18n/locales/de.json'
+import { RUN_WORKSPACE_KEY } from '@/composables/run/useRunWorkspace'
+
+const hoisted = vi.hoisted(() => ({ reload: vi.fn() }))
+
+// Der Simulationskopf holt Zustand und Steuerung selbst vom Backend; hier zählt nur die Einhängung.
+vi.mock('@/components/run/simulation/RunSimHeader.vue', async () => {
+  const { defineComponent: define, h: hh } = await import('vue')
+  return {
+    default: define({
+      name: 'RunSimHeader',
+      props: ['simulationId', 'runId', 'route', 'personasReady'],
+      emits: ['started', 'changed'],
+      setup: (p, { emit }) => () =>
+        hh('div', { 'data-testid': 'header-stub', 'data-run-id': String(p.runId), 'data-ready': String(p.personasReady) }, [
+          hh('button', { 'data-testid': 'header-started', onClick: () => emit('started', 'run_9') }),
+          hh('button', { 'data-testid': 'header-changed', onClick: () => emit('changed') }),
+        ]),
+    }),
+  }
+})
+
+const workspace = {
+  state: ref('ready'),
+  error: ref(null),
+  data: ref({ jobs: { simulation_run: { runId: 'run_1', route: { model: 'm', providerId: 'p' } } } }),
+  stages: ref([{ key: 'personas', state: 'done' }]),
+  reload: hoisted.reload,
+}
 
 const Stub = defineComponent({ render: () => h('div', { 'data-testid': 'child' }) })
 
@@ -41,7 +69,7 @@ async function mountAt(path: string) {
   await router.isReady()
   const w = mount(
     defineComponent({ render: () => h('div', [h(RunTabs, { tabs: deriveRunTabs({ simulationId: 'sim_1', projectId: null, latestReportId: null }) }), h(RouterView)]) }),
-    { global: { plugins: [router, i18n] } },
+    { global: { plugins: [router, i18n], provide: { [RUN_WORKSPACE_KEY as symbol]: workspace } } },
   )
   await flushPromises()
   return { router, w }
@@ -55,8 +83,19 @@ describe('RunSimulationView', () => {
     expect(nav.attributes('aria-label')).toBe('Ansichten der Simulation')
     expect(nav.findAll('a').map((a) => a.text())).toEqual(['Feed', 'Runden', 'Diagnose'])
     const slot = w.get('[data-testid="run-sim-header-slot"]')
-    expect(slot.element.children.length).toBe(0)
+    expect(slot.find('[data-testid="header-stub"]').exists()).toBe(true)
     expect(w.find('[data-testid="child"]').exists()).toBe(true)
+  })
+
+  it('hängt den Simulationskopf mit runId und Personas-Stand aus dem Arbeitsbereich ein und lädt bei started/changed neu', async () => {
+    const { w } = await mountAt('/simulations/sim_1/simulation/feed')
+    const header = w.get('[data-testid="run-sim-header-slot"] [data-testid="header-stub"]')
+    expect(header.attributes('data-run-id')).toBe('run_1')
+    expect(header.attributes('data-ready')).toBe('true')
+    hoisted.reload.mockClear()
+    await w.get('[data-testid="header-started"]').trigger('click')
+    await w.get('[data-testid="header-changed"]').trigger('click')
+    expect(hoisted.reload).toHaveBeenCalledTimes(2)
   })
 
   it.each([
