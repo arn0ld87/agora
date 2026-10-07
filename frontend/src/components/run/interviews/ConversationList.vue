@@ -25,7 +25,7 @@ const { t } = useI18n()
 const router = useRouter()
 const ctx = useRunInterviewsContext()
 
-const uid = Math.random().toString(36).slice(2, 8)
+const uid = crypto.getRandomValues(new Uint32Array(1))[0].toString(36).slice(0, 6)
 const pickId = `interviews-new-${uid}`
 const groupTextId = `interviews-group-text-${uid}`
 
