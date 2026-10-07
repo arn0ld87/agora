@@ -3,13 +3,15 @@ import { useI18n } from 'vue-i18n'
 import { formatShelfDate } from '@/composables/useShelf'
 import type { VersionsState } from '@/composables/library/useLibraryRuns'
 import RunStateMark from './RunStateMark.vue'
+import { reportLink } from '@/utils/reportRoute'
 
 /**
- * Liste aller Fassungen eines Laufs (Datum, Zustand). Jede Zeile fuehrt auf die
- * alte Berichtsansicht (`StepReport`); der Bericht traegt kein Modell, deshalb
- * gibt es keine Modellspalte.
+ * Liste aller Fassungen eines Laufs (Datum, Zustand). Jede Zeile oeffnet genau
+ * diese Fassung im Bericht-Reiter des Laufs (Etappe 5); ist die Simulation nicht
+ * bekannt, fuehrt sie auf die alte Adresse, die den Lauf aufloest. Der Bericht
+ * traegt kein Modell, deshalb gibt es keine Modellspalte.
  */
-defineProps<{ id: string; state: VersionsState }>()
+defineProps<{ id: string; state: VersionsState; simulationId?: string | null }>()
 const { t, locale } = useI18n()
 </script>
 
@@ -23,7 +25,7 @@ const { t, locale } = useI18n()
       <p v-if="state.versions.length === 0" class="versions__note">{{ t('views.library.runs.versions.empty') }}</p>
       <ul v-else class="versions__list">
         <li v-for="v in state.versions" :key="v.reportId" class="versions__row">
-          <RouterLink :to="{ name: 'StepReport', params: { reportId: v.reportId } }" class="versions__link">
+          <RouterLink :to="reportLink(v.reportId, simulationId)" class="versions__link">
             <span class="versions__name">{{ t('views.library.runs.versions.row', { n: v.number }) }}</span>
             <span class="versions__date">{{ formatShelfDate(v.createdAt, locale, t) }}</span>
             <RunStateMark :state="v.state" />

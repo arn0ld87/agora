@@ -77,6 +77,7 @@ async function mountAt(url: string): Promise<{ wrapper: VueWrapper; router: Retu
     { path: '/simulations/:simulationId', name: 'RunOverview', component: stub },
     { path: '/compare/:simulationId?', name: 'Compare', component: stub },
     { path: '/v4/report/:reportId', name: 'StepReport', component: stub },
+    { path: '/simulations/:simulationId/report/:reportId?', name: 'RunReport', component: stub },
   ])
   await router.push(url)
   await router.isReady()
@@ -179,8 +180,9 @@ describe('LibraryRunsView', () => {
     expect(rows[1].text()).toContain('Fertig')
     await rows[1].find('a').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.name).toBe('StepReport')
-    expect(router.currentRoute.value.params.reportId).toBe('report_b1')
+    // Seit Etappe 5 öffnet die Zeile genau diese Fassung im Bericht-Reiter des Laufs.
+    expect(router.currentRoute.value.name).toBe('RunReport')
+    expect(router.currentRoute.value.params).toMatchObject({ simulationId: 'sim_b', reportId: 'report_b1' })
   })
 
   it('zweiter Knopf fuehrt zur juengsten Fassung', async () => {

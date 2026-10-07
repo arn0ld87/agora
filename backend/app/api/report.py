@@ -11,12 +11,19 @@ from pydantic import ValidationError
 from . import report_bp
 from ..contracts import (
     DEFAULT_REPORT_MODE,
+    EvidenceDensityResponseModel,
     EvidenceMapModel,
     EvidenceMapResponseModel,
+    ReportArtifactOmissionModel,
     ReportMode,
+    StanceAnalysisResponseModel,
 )
+from ..contracts.report_artifact_contract import ReportArtifactKind
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent.artifact_read import ArtifactContractViolation
 from ..services.report_agent.sections import strip_raw_html_markers
+from ..services.evidence_origin import with_evidence_origins
+from ..services.report_provenance import ReportGenerationInfo, load_generation_info
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..services.graph_tools import GraphToolsService
@@ -218,6 +225,17 @@ def get_generate_status():
 
 # ============== Report Retrieval Interface ==============
 
+def _report_payload(report, generation: dict[str, ReportGenerationInfo]) -> dict:
+    """``ReportModel`` einer Fassung inkl. Erzeugungsherkunft (Issue #1804).
+
+    Modell, Anbieter und Job stammen aus dem Berichts-Job der RunRegistry; ohne
+    Job bleiben die Felder ``None``.
+    """
+    return ReportExportService.build_report_contract_model(
+        report, generation.get(report.report_id)
+    ).model_dump(mode="json")
+
+
 @report_bp.route('/<report_id>', methods=['GET'])
 @handle_api_errors(log_prefix="Failed to get report")
 def get_report(report_id: str):
@@ -227,7 +245,7 @@ def get_report(report_id: str):
     report = ReportManager.get_report(report_id)
     if not report:
         return json_error(f"Report does not exist: {report_id}", status=404)
-    return json_success(ReportExportService.build_report_contract_model(report).model_dump(mode="json"))
+    return json_success(_report_payload(report, load_generation_info([report.report_id])))
 
 
 @report_bp.route('/by-simulation/<simulation_id>', methods=['GET'])
@@ -243,7 +261,7 @@ def get_report_by_simulation(simulation_id: str):
             status=404,
             extra={"has_report": False},
         )
-    return json_success(ReportExportService.build_report_contract_model(report).model_dump(mode="json"))
+    return json_success(_report_payload(report, load_generation_info([report.report_id])))
 
 
 @report_bp.route('/list', methods=['GET'])
@@ -254,8 +272,10 @@ def list_reports():
         return json_error("Invalid simulation_id format", status=400)
     limit = request.args.get('limit', 50, type=int)
     reports = ReportManager.list_reports(simulation_id=simulation_id, limit=limit)
+    # Ein Registerscan für alle Fassungen, nicht einer je Bericht (Issue #1804).
+    generation = load_generation_info([r.report_id for r in reports])
     return json_success(
-        [ReportExportService.build_report_contract_model(r).model_dump(mode="json") for r in reports],
+        [_report_payload(r, generation) for r in reports],
         count=len(reports),
     )
 
@@ -313,8 +333,74 @@ def get_report_evidence(report_id: str):
         # der Evidence-Records nicht an.
         envelope = EvidenceMapResponseModel.for_omission(omission)
         return jsonify(envelope.to_payload()), 200
-    envelope = EvidenceMapResponseModel.for_data(validated)
+    # Issue #1804: Sprungkennungen (Feed-Beitrag, Graph-Knoten) werden erst hier
+    # aus dem Beleg-Inhalt abgeleitet — Lesepfad, daher auch fuer Altberichte,
+    # und ohne dass die gespeicherte Map beruehrt wird.
+    envelope = EvidenceMapResponseModel.for_data(with_evidence_origins(validated))
     return jsonify(envelope.to_payload()), 200
+
+
+def _artifact_omission(
+    artifact: ReportArtifactKind, exc: ArtifactContractViolation
+) -> ReportArtifactOmissionModel:
+    """Auslassungshinweis für ein vertragswidriges Berichts-Artefakt (Issue #1804)."""
+    return ReportArtifactOmissionModel(
+        artifact=artifact,
+        reason="contract_violation",
+        detail=(
+            "Das gespeicherte Artefakt dieses Berichts verletzt den Vertrag und "
+            "wurde deshalb nicht ausgeliefert. Der Bericht selbst ist unberührt."
+        ),
+        validation_errors=exc.validation_errors,
+    )
+
+
+@report_bp.route('/<report_id>/evidence-density', methods=['GET'])
+@handle_api_errors
+def get_report_evidence_density(report_id: str):
+    """Belegdichte des Berichts (``evidence_density.json``, Issue #1779/#1804)."""
+    if not validate_report_id(report_id):
+        return json_error("Invalid report_id format", status=400)
+    try:
+        density = ReportManager.get_evidence_density(report_id)
+    except ArtifactContractViolation as exc:
+        logger.warning(
+            "Evidence density for report %s violates its contract; reported as "
+            "artifact_omitted. First errors: %s",
+            report_id,
+            exc.validation_errors[:3],
+        )
+        omitted = EvidenceDensityResponseModel.for_omission(
+            _artifact_omission("evidence_density", exc)
+        )
+        return jsonify(omitted.to_payload()), 200
+    if density is None:
+        return json_error(f"No evidence density available for report: {report_id}", status=404)
+    return jsonify(EvidenceDensityResponseModel.for_data(density).to_payload()), 200
+
+
+@report_bp.route('/<report_id>/stance-analysis', methods=['GET'])
+@handle_api_errors
+def get_report_stance_analysis(report_id: str):
+    """Haltung der Stimmen und Positionierungsquote (``stance_analysis.json``, Issue #1778/#1804)."""
+    if not validate_report_id(report_id):
+        return json_error("Invalid report_id format", status=400)
+    try:
+        analysis = ReportManager.get_stance_analysis(report_id)
+    except ArtifactContractViolation as exc:
+        logger.warning(
+            "Stance analysis for report %s violates its contract; reported as "
+            "artifact_omitted. First errors: %s",
+            report_id,
+            exc.validation_errors[:3],
+        )
+        omitted = StanceAnalysisResponseModel.for_omission(
+            _artifact_omission("stance_analysis", exc)
+        )
+        return jsonify(omitted.to_payload()), 200
+    if analysis is None:
+        return json_error(f"No stance analysis available for report: {report_id}", status=404)
+    return jsonify(StanceAnalysisResponseModel.for_data(analysis).to_payload()), 200
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])

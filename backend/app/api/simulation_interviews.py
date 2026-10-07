@@ -2,15 +2,117 @@
 Interview-related simulation API routes split from the main module.
 """
 
+import functools
+from typing import Callable, Optional
+
 from flask import jsonify, request
 
 from . import simulation_bp
+from ..contracts.interview_budget_exceeded_contract import (
+    InterviewBudgetExceededResponse,
+)
 from ..contracts.interview_envelope_contract import InterviewEnvelope
+from ..services.run_budget import BudgetExceededError, get_run_budget_config
+from ..services.run_registry import RunRegistry
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger, optimize_interview_prompt
+
+
+def _resolve_budget_run_id(simulation_id: str) -> Optional[str]:
+    """``run_id`` des ``simulation_run``-Jobs, dem ein UI-Interview zugerechnet wird.
+
+    Gleiches Aufloesungsmuster wie ``api/runs.py::_get_run_by_run_or_simulation_id``
+    und ``SimulationRunner._registry_sync``: ``linked_ids.simulation_id`` plus
+    ``run_type="simulation_run"``. Das Interview laeuft damit gegen Budget-Guard
+    und Ledger der Simulation (#1805, Variante A).
+
+    Hat die Simulation mehrere ``simulation_run``-Jobs (Neustart), zaehlt
+    deterministisch der juengste nach Anlagezeit (``started_at`` ist der
+    Anlagezeitpunkt) — nicht der zuletzt aktualisierte, den
+    ``get_latest_by_linked_id`` liefern wuerde. Mehr als ein Treffer wird als
+    ``interview_budget_multiple_runs`` protokolliert. ``find_by_linked_id`` ist
+    der gezielteste Registry-Zugriff; er scannt wie ``get_latest_by_linked_id``
+    die Registry einmal je Request.
+
+    Altbestand ohne Job und ein Job ohne Budget-Konfiguration bleiben
+    unbudgetiert wie bisher, aber nicht still: die Luecke wird als strukturierte
+    Warnung ``interview_unbudgeted`` (``reason=no_simulation_run`` bzw.
+    ``reason=no_budget_config``) protokolliert. Registry-Fehler werden bewusst
+    nicht geschluckt — sonst liefe ein Interview unbemerkt am Budget vorbei.
+    """
+    runs = [
+        run
+        for run in RunRegistry().find_by_linked_id(
+            "simulation_id", simulation_id, run_type="simulation_run"
+        )
+        if run.get("run_id")
+    ]
+    if not runs:
+        logger.warning(
+            "interview_unbudgeted simulation_id=%s reason=no_simulation_run",
+            simulation_id,
+        )
+        return None
+    run = max(runs, key=lambda r: (str(r.get("started_at") or ""), str(r["run_id"])))
+    run_id = str(run["run_id"])
+    if len(runs) > 1:
+        logger.warning(
+            "interview_budget_multiple_runs simulation_id=%s count=%d chosen_run_id=%s",
+            simulation_id,
+            len(runs),
+            run_id,
+        )
+    if get_run_budget_config(run_id) is None:
+        logger.warning(
+            "interview_unbudgeted simulation_id=%s run_id=%s reason=no_budget_config",
+            simulation_id,
+            run_id,
+        )
+    return run_id
+
+
+def _budget_exceeded_response(exc: BudgetExceededError):
+    """Budgetabbruch als harter, strukturierter Fehler (HTTP 409).
+
+    Nie ``success: true`` und kein Fallback-Text: ein erreichtes hartes Budget
+    ist das Ende der Interviews dieser Simulation, keine freundliche Antwort.
+    Der Body folgt dem Vertrag ``InterviewBudgetExceededResponse``; die Antwort
+    enthaelt keine Teilantworten, ``persisted_count`` nennt die vor dem Abbruch
+    schon gespeicherten (sie bleiben im Verlauf).
+    """
+    body = InterviewBudgetExceededResponse.model_validate(
+        {
+            "error": str(exc),
+            "code": ApiErrorCode.BUDGET_EXCEEDED.value,
+            "termination_reason": exc.termination_reason,
+            "dimension": exc.dimension,
+            "observed": exc.observed,
+            "threshold": exc.threshold,
+            "persisted_count": exc.persisted_count,
+        }
+    )
+    return jsonify(body.model_dump(mode="json")), 409
+
+
+def _budget_exceeded_as_conflict(view: Callable) -> Callable:
+    """Wandelt ``BudgetExceededError`` eines Interview-Endpunkts in HTTP 409.
+
+    Muss INNERHALB von ``handle_api_errors`` stehen: dessen ``RuntimeError``-Zweig
+    machte daraus sonst ein generisches 500.
+    """
+
+    @functools.wraps(view)
+    def wrapper(*args, **kwargs):
+        try:
+            return view(*args, **kwargs)
+        except BudgetExceededError as exc:
+            logger.warning("interview_budget_exceeded %s", exc)
+            return _budget_exceeded_response(exc)
+
+    return wrapper
 
 
 def _require_simulation_id(simulation_id):
@@ -121,6 +223,7 @@ def _echo_result(result: dict):
 
 @simulation_bp.route('/interview', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="InterviewFailed")
+@_budget_exceeded_as_conflict
 def interview_agent():
     """Interview a single agent."""
     data = request.get_json() or {}
@@ -161,12 +264,14 @@ def interview_agent():
         prompt=optimized_prompt,
         platform=platform,
         timeout=timeout,
+        run_id=_resolve_budget_run_id(simulation_id),
     )
     return _echo_result(result)
 
 
 @simulation_bp.route('/interview/batch', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="BatchInterviewFailed")
+@_budget_exceeded_as_conflict
 def interview_agents_batch():
     """Interview multiple agents in one request."""
     data = request.get_json() or {}
@@ -223,12 +328,14 @@ def interview_agents_batch():
         interviews=optimized_interviews,
         platform=platform,
         timeout=timeout,
+        run_id=_resolve_budget_run_id(simulation_id),
     )
     return _echo_result(result)
 
 
 @simulation_bp.route('/interview/all', methods=['POST'])
 @handle_api_errors(logger=logger, log_prefix="GlobalInterviewFailed")
+@_budget_exceeded_as_conflict
 def interview_all_agents():
     """Interview all agents with a shared prompt."""
     data = request.get_json() or {}
@@ -262,6 +369,7 @@ def interview_all_agents():
         prompt=optimized_prompt,
         platform=platform,
         timeout=timeout,
+        run_id=_resolve_budget_run_id(simulation_id),
     )
     return _echo_result(result)
 

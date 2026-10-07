@@ -1,0 +1,73 @@
+{
+  "$id": "https://alexle135.de/schemas/interview-budget-exceeded.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "409-Body ``budget_exceeded`` der Interview-Endpunkte.",
+  "properties": {
+    "code": {
+      "const": "budget_exceeded",
+      "default": "budget_exceeded",
+      "title": "Code",
+      "type": "string"
+    },
+    "dimension": {
+      "enum": [
+        "tokens",
+        "cost",
+        "time",
+        "calls"
+      ],
+      "title": "Dimension",
+      "type": "string"
+    },
+    "error": {
+      "minLength": 1,
+      "title": "Error",
+      "type": "string"
+    },
+    "observed": {
+      "title": "Observed",
+      "type": "integer"
+    },
+    "persisted_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Persisted Count",
+      "type": "integer"
+    },
+    "success": {
+      "const": false,
+      "default": false,
+      "title": "Success",
+      "type": "boolean"
+    },
+    "termination_reason": {
+      "enum": [
+        "completed",
+        "error",
+        "user_cancel",
+        "user_stop",
+        "budget_tokens",
+        "budget_cost",
+        "budget_time",
+        "budget_calls",
+        "process_restart"
+      ],
+      "title": "Termination Reason",
+      "type": "string"
+    },
+    "threshold": {
+      "title": "Threshold",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "error",
+    "termination_reason",
+    "dimension",
+    "observed",
+    "threshold"
+  ],
+  "title": "InterviewBudgetExceededResponse",
+  "type": "object"
+}

@@ -240,11 +240,6 @@ export interface CloseEnvData {
   timeout?: number
 }
 
-export interface InterviewAgentsData {
-  simulation_id: string
-  interviews: Array<{ agent_id: string; prompt: string }>
-}
-
 /**
  * Ein Eintrag aus `presets[]` bzw. `ollama[]` von
  * `backend/app/api/simulation_lifecycle.py::get_available_models`.
@@ -610,14 +605,6 @@ export const closeSimulationEnv = (data: CloseEnvData): Promise<ApiEnvelope<unkn
  */
 export const getEnvStatus = (data: EnvStatusData): Promise<ApiEnvelope<unknown>> => {
   return service.post('/api/simulation/env-status', data)
-}
-
-/**
- * Batch interview Agents
- * @param data - { simulation_id, interviews: [{ agent_id, prompt }] }
- */
-export const interviewAgents = (data: InterviewAgentsData): Promise<ApiEnvelope<unknown>> => {
-  return service.post('/api/simulation/interview/batch', data)
 }
 
 /**

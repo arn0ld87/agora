@@ -36,6 +36,11 @@ from .report_contract import (
     ReportSectionModel,
     ReportStatus,
 )
+from .report_artifact_contract import (
+    EvidenceDensityResponseModel,
+    ReportArtifactOmissionModel,
+    StanceAnalysisResponseModel,
+)
 from .persona_contract import (
     PersonaModel,
     PersonaQuotaActual,
@@ -231,6 +236,7 @@ __all__ = [
     "EntityRelationship",
     "EvidenceCoverageEntry",
     "EvidenceDegradationModel",
+    "EvidenceDensityResponseModel",
     "EvidenceItemModel",
     "EvidenceMapModel",
     "EvidenceMapResponseModel",
@@ -267,6 +273,7 @@ __all__ = [
     "PrepareMessageKey",
     "PrepareStatusResponse",
     "PrepareStatusValue",
+    "ReportArtifactOmissionModel",
     "ReportClaimModel",
     "ReportContractModel",
     "ReportModel",
@@ -284,6 +291,7 @@ __all__ = [
     "RunsListResponse",
     "RunStatus",
     "RunSummary",
+    "StanceAnalysisResponseModel",
     "ScoreQuestion",
     "SegmentReach",
     "VoiceRegister",

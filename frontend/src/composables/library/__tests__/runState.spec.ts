@@ -238,6 +238,24 @@ describe('parseReportVersions', () => {
     ])
   })
 
+  it('traegt das gelaufene Modell je Fassung, ohne Angabe bleibt es null (#1804)', () => {
+    const r = parseReportVersions({
+      success: true,
+      data: [
+        { ...report('r2', 'completed', '2026-10-02T00:00:00Z'), llm_model: 'MiniMax-M3', llm_provider_id: 'minimax', generation_run_id: 'run_2' },
+        report('r1', 'completed', '2026-10-01T00:00:00Z'),
+        { ...report('r0', 'completed', '2026-09-30T00:00:00Z'), llm_model: null, llm_provider_id: null, generation_run_id: 'run_0' },
+      ],
+    })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.versions.map((v) => [v.reportId, v.model, v.providerId])).toEqual([
+      ['r2', 'MiniMax-M3', 'minimax'],
+      ['r1', null, null],
+      ['r0', null, null],
+    ])
+  })
+
   it('zaehlt vertragswidrige Fassungen statt sie zu rendern', () => {
     const r = parseReportVersions({ success: true, data: [report('r1', 'completed', '2026-10-01T00:00:00Z'), { report_id: 'kaputt' }] })
     expect(r).toMatchObject({ ok: true, invalid: 1 })

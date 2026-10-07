@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional
 from ...contracts.evidence_density_contract import EvidenceDensity
 from ...utils.logger import get_logger
 from ..confidence_calculator import _count_independent_sources
+from .artifact_read import read_contract_artifact
 from .storage import write_json_atomic
 
 logger = get_logger("agora.report_agent.evidence_density")
@@ -134,6 +135,18 @@ def load_evidence_density(report_folder: str) -> Optional[EvidenceDensity]:
         return None
 
 
+def read_evidence_density(report_folder: str) -> Optional[EvidenceDensity]:
+    """Strenges Lesen für den Lese-Endpunkt (Issue #1804).
+
+    ``None``, wenn keine Datei vorliegt; ``ArtifactContractViolation``, wenn sie
+    den Vertrag verletzt. ``load_evidence_density`` bleibt der tolerante
+    Resume-Pfad.
+    """
+    return read_contract_artifact(
+        os.path.join(report_folder, EVIDENCE_DENSITY_FILENAME), EvidenceDensity
+    )
+
+
 def save_evidence_density(report_folder: str, density: EvidenceDensity) -> str:
     """Schreibt die Zählung atomar als ``evidence_density.json`` und liefert den Pfad."""
     path = os.path.join(report_folder, EVIDENCE_DENSITY_FILENAME)
@@ -145,5 +158,6 @@ __all__ = [
     "EVIDENCE_DENSITY_FILENAME",
     "compute_evidence_density",
     "load_evidence_density",
+    "read_evidence_density",
     "save_evidence_density",
 ]

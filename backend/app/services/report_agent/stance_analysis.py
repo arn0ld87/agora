@@ -28,6 +28,7 @@ from ...contracts.stance_analysis_contract import (
 from ...utils.logger import get_logger
 from ..run_budget import reraise_if_budget_exceeded
 from .action_search import build_action_evidence_item, text_contributions
+from .artifact_read import read_contract_artifact
 from .sections import action_content
 from .storage import write_json_atomic
 
@@ -340,6 +341,18 @@ def load_stance_analysis(report_folder: str) -> Optional[StanceAnalysis]:
         return None
 
 
+def read_stance_analysis(report_folder: str) -> Optional[StanceAnalysis]:
+    """Strenges Lesen für den Lese-Endpunkt (Issue #1804).
+
+    ``None``, wenn keine Datei vorliegt; ``ArtifactContractViolation``, wenn sie
+    den Vertrag verletzt. ``load_stance_analysis`` bleibt der tolerante
+    Resume-Pfad.
+    """
+    return read_contract_artifact(
+        os.path.join(report_folder, STANCE_ANALYSIS_FILENAME), StanceAnalysis
+    )
+
+
 def save_stance_analysis(report_folder: str, analysis: StanceAnalysis) -> str:
     """Schreibt die Analyse atomar als ``stance_analysis.json`` und liefert den Pfad."""
     path = os.path.join(report_folder, STANCE_ANALYSIS_FILENAME)
@@ -350,6 +363,7 @@ def save_stance_analysis(report_folder: str, analysis: StanceAnalysis) -> str:
 __all__ = [
     "STANCE_ANALYSIS_FILENAME",
     "load_stance_analysis",
+    "read_stance_analysis",
     "StanceBatchResponse",
     "build_stance_analysis",
     "classify_contributions",

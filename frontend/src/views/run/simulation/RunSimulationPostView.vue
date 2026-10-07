@@ -4,8 +4,10 @@
  * Antworten und Verbindungslinie. Reddit: Beitrag mit einklappbarem
  * Kommentarbaum. Das Netzwerk ergibt sich aus dem Präfix der `postId`
  * (`twitter:123`, `reddit:comment:7`); sie kann Doppelpunkte enthalten und wird
- * unverändert gereicht. `?claim=` bleibt erhalten und hebt den Beitrag hervor
- * (die Belegspalte folgt in Etappe 5). Kein `h1`: die Überschrift gehört dem
+ * unverändert gereicht. `?claim=` (eine `post_id`) bleibt erhalten und hebt den
+ * Beitrag hervor. Kommt der Besuch aus der Belegspalte des Berichts, trägt die
+ * Adresse zusätzlich `?fromClaim=<claim_id>` (und optional `?report=`): dann
+ * führt „Zurück zum Bericht" zum gewählten Claim (`evidenceJumps.ts`). Kein `h1`: die Überschrift gehört dem
  * Arbeitsbereich.
  */
 import { computed, toRef } from 'vue'
@@ -17,6 +19,7 @@ import RedditTree from '@/components/run/simulation/RedditTree.vue'
 import TwitterThread from '@/components/run/simulation/TwitterThread.vue'
 import { FEED_SNAPSHOT_LIMIT, useRunFeed } from '@/composables/run/simulation/useRunFeed'
 import { buildRedditTree, buildTwitterThread } from '@/composables/run/simulation/threads'
+import { reportBackRoute } from '@/composables/run/report/evidenceJumps'
 
 const props = defineProps<{ simulationId: string; postId: string }>()
 const { t } = useI18n()
@@ -37,6 +40,17 @@ const thread = computed(() =>
 const tree = computed(() =>
   network.value === 'reddit' ? buildRedditTree(props.postId, feed.posts.value) : null,
 )
+
+function queryString(key: string): string | null {
+  const raw = route.query[key]
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' && value !== '' ? value : null
+}
+/** Rückweg in den Bericht: nur mit `?fromClaim=` (`claim_id`), `?report=` wählt die Fassung. */
+const reportBack = computed(() => {
+  const claim = queryString('fromClaim')
+  return claim ? reportBackRoute(props.simulationId, { claim, report: queryString('report') }) : null
+})
 
 const backTo = computed(() => ({
   name: 'RunSimulationFeed',
@@ -59,6 +73,9 @@ const streamError = computed(() => feed.streamState.value === 'error')
   <div class="post" data-testid="run-sim-post">
     <router-link :to="backTo" class="post__back" data-testid="post-back">
       {{ t('views.run.simFeed.thread.back') }}
+    </router-link>
+    <router-link v-if="reportBack" :to="reportBack" class="post__back" data-testid="post-back-report">
+      {{ t('views.run.simFeed.thread.backToReport') }}
     </router-link>
 
     <FeedNotices

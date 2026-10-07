@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationAsRelativeGeneric, RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
 import { onboardingGuard } from './onboardingGuard'
+import { parseConversationId } from '../composables/run/interviews/conversations'
 import { useAuthStore } from '../store/auth'
 import { safeNext } from '../auth/safeNext'
 import {
@@ -201,17 +202,26 @@ const routes: RouteRecordRaw[] = [
     path: '/v4/simulation/:simulationId/live',
     redirect: simulationRoundsRedirect,
   },
+  // Etappe 5 (#1804, Bauplan 6.2): der Bericht ist ein Reiter am Lauf
+  // (/simulations/:id/report/:reportId?). Die alte Adresse loest die Simulation
+  // aus dem Bericht auf und leitet um (ReportRedirectView); der Name bleibt, damit
+  // Aufrufer ohne bekannte Simulation weiter `{ name: 'StepReport' }` nutzen.
+  // `/report/:reportId` (Name `Report`) leitet oben auf diese Adresse.
   {
     path: '/v4/report/:reportId',
     name: 'StepReport',
-    component: () => import('../views/v4/steps/StepReportView.vue'),
+    component: () => import('../views/run/report/ReportRedirectView.vue'),
     props: true,
   },
+  // #1790: Die alte Gesprächsansicht ist entfernt. Der Parameter ist eine
+  // Berichts-ID: dieselbe Auflösung wie bei `StepReport` (ReportRedirectView),
+  // Ziel ist die rechte Spalte "Nachfragen" des Berichts (`?panel=questions`).
+  // Query und Hash bleiben erhalten; ein vorhandenes `?panel=` gewinnt.
   {
     path: '/v4/interaction/:reportId',
     name: 'StepInteraction',
-    component: () => import('../views/v4/steps/StepInteractionView.vue'),
-    props: true,
+    component: () => import('../views/run/report/ReportRedirectView.vue'),
+    props: (to) => ({ reportId: String(to.params.reportId), panel: 'questions' }),
   },
 
   // v4 compare + history (Slice I)
@@ -335,6 +345,30 @@ const routes: RouteRecordRaw[] = [
           },
         ],
       },
+      // Etappe 5 (#1804): Bericht als Reiter. Ohne `reportId` die juengste
+      // Fassung; `new` (PENDING_REPORT_ID) bietet den Start an. Query:
+      // `?claim=`, `?section=`, `?panel=evidence|questions`.
+      {
+        path: 'report/:reportId?',
+        name: 'RunReport',
+        component: () => import('../views/run/report/RunReportView.vue'),
+        props: true,
+      },
+      // Etappe 6 (#1805): Interviews am Lauf. `conversationId` ist `persona-<n>`
+      // oder `group-<kennung>`; alles andere erreicht die View als fehlender Param.
+      {
+        path: 'interviews/:conversationId?',
+        name: 'RunInterviews',
+        component: () => import('../views/run/interviews/RunInterviewsView.vue'),
+        props: (route) => {
+          const raw = route.params.conversationId
+          const id = Array.isArray(raw) ? raw[0] : raw
+          return {
+            simulationId: String(route.params.simulationId),
+            conversationId: parseConversationId(id) ? id : undefined,
+          }
+        },
+      },
     ],
   },
   {
@@ -367,14 +401,17 @@ const routes: RouteRecordRaw[] = [
     name: 'ActivityLog',
     component: () => import('../views/activity/ActivityLogView.vue'),
   },
-  // Uebergangsadresse bis Etappe 6: Gespraechsansicht nur mit simulationId,
-  // auch fuer Laeufe ohne Bericht. Etappe 6 leitet sie auf
-  // /simulations/:simulationId/interviews um.
+  // Alte Uebergangsadresse (Etappe 2): seit Etappe 6 (#1805) eine Weiterleitung
+  // auf den Interviews-Reiter. Query und Hash bleiben erhalten.
   {
     path: '/v4/simulation/:simulationId/interviews',
     name: 'RunInterviewsLegacy',
-    component: () => import('../views/v4/steps/StepInteractionView.vue'),
-    props: true,
+    redirect: (to) => ({
+      name: 'RunInterviews',
+      params: { simulationId: String(to.params.simulationId) },
+      query: to.query,
+      hash: to.hash,
+    }),
   },
 
   // Auth-Routen (#1617, Teil B1)

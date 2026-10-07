@@ -698,41 +698,9 @@
     "runner_status_ready": "Runner ready."
   },
   "step5": {
-    "kicker": "№ 05 — CONVERSATION",
-    "title": "Talk to the agents.",
-    "sub": "Ask a single agent directly — or the ReportAgent for the big picture. Personality and memory persist.",
-    "tabs": {
-      "chat": "1-on-1 chat",
-      "survey": "Survey"
-    },
-    "selectAgent": "Select agent",
-    "selectReport": "ReportAgent",
-    "search": "Search agent…",
-    "input": {
-      "placeholder": "Ask something… (Ctrl+Enter to send)",
-      "send": "Send"
-    },
     "agent": {
-      "bio": "Bio",
-      "interests": "Interests",
-      "stance": "Stance",
-      "history": "History"
-    },
-    "empty": "Pick an agent on the left.",
-    "survey": {
-      "title": "Ask many agents the same thing.",
-      "sub": "Pick 2–50 agents, write one question, see the answers side by side.",
-      "selectAll": "Select all",
-      "clear": "Clear",
-      "selected": "Selected: {count}",
-      "question": "Your question",
-      "placeholder": "e.g. 'How do you react to area-wide CCTV in the city centre?'",
-      "ask": "Run survey",
-      "asking": "Asking {done} / {total} agents…",
-      "noResults": "No answers yet.",
-      "exportCsv": "Export as CSV"
-    },
-    "noResponse": "No response received."
+      "interests": "Interests"
+    }
   },
   "graph": {
     "panel": "Graph",
@@ -2307,6 +2275,90 @@
         "resume": "Resume",
         "view": "View"
       },
+      "interviews": {
+        "loading": "Loading interviews …",
+        "retry": "Reload",
+        "unavailable": "Interviews are not available for this run.",
+        "notRun": "Interviews are available once the simulation has finished. Earlier history stays readable.",
+        "stateUnknown": "The simulation state is not known yet. Questions stay locked until it has loaded.",
+        "noAnswer": "No answer received.",
+        "sending": "Asking …",
+        "budgetExceeded": "Budget exhausted, the question was not answered.",
+        "agentFallback": "Agent {n}",
+        "list": {
+          "aria": "Conversations",
+          "heading": "Conversations",
+          "empty": "No conversation yet",
+          "group": "Group: {question}"
+        },
+        "new": {
+          "title": "New conversation",
+          "label": "Persona",
+          "placeholder": "Choose a persona",
+          "open": "Open conversation"
+        },
+        "group": {
+          "title": "Group question",
+          "personas": "Choose personas",
+          "question": "Question for everyone",
+          "send": "Ask the group",
+          "large": "Asking {n} personas at once may exceed the backend deadline. Some answers can be missing.",
+          "summary": "{asked} asked, {answered} answered, {failed} failed",
+          "cost": "No persona chosen: no calls | One call, it counts against the run budget | {n} calls, each counts against the run budget"
+        },
+        "persona": {
+          "participants": "Participating personas",
+          "feed": "Posts in the feed",
+          "feedCount": "Posts in the feed ({n})",
+          "feedCountAtLeast": "Posts in the feed (at least {n})",
+          "cited": "Cited in the report ({n})"
+        },
+        "budget": {
+          "title": "Run budget reached",
+          "explain": "The run has reached its budget. The question was not answered or stored; further questions are rejected while the budget is exhausted.",
+          "reason": "Termination reason: {reason}",
+          "figures": "{dimension}: {observed} of {threshold}",
+          "dimensionUnknown": "Limit",
+          "persisted": "{n} answer(s) were stored before the run stopped and appear in the history."
+        },
+        "pane": {
+          "aria": "Conversation",
+          "choose": "Choose a conversation from the list.",
+          "none": "No conversation yet",
+          "with": "Conversation with {name}",
+          "noTurns": "No questions to this persona yet.",
+          "you": "You:",
+          "badgeSim": "SIM",
+          "badgeInterview": "Interview",
+          "origin": "Entries may also come from interviews the report conducted; they cannot be told apart here.",
+          "unknownPersona": "There is no persona profile and no history for agent {n}. Choose a persona from the list.",
+          "failedReason": "No answer: {reason}",
+          "copy": "Copy",
+          "copyAnswer": "Copy answer from {name}",
+          "copied": "Answer copied to the clipboard.",
+          "copyFailed": "Copying failed. The clipboard is not available.",
+          "groupCount": "{answered} of {total} answered",
+          "cost": "Each question is a model call and counts against the run budget.",
+          "shortcut": "Send with Ctrl/Cmd+Enter.",
+          "groupTitle": "Group question",
+          "groupGone": "This group question only exists in the session where it was asked.",
+          "answeredStatus": "Answer from {name} received.",
+          "inputLabel": "Question to the persona",
+          "model": "Run model: {model}",
+          "modelUnknown": "Run model: unknown",
+          "send": "Ask",
+          "notRun": "Questions are only possible once the simulation has finished."
+        },
+        "survey": {
+          "selectAll": "Select all",
+          "clear": "Clear selection",
+          "selected": "No persona selected | One of {total} personas selected | {n} of {total} personas selected",
+          "blocked": "Surveys are only possible once the simulation has finished.",
+          "exportCsv": "Export as CSV",
+          "exported": "CSV with {n} rows exported.",
+          "nothingToExport": "No answer to export: every persona failed or did not answer."
+        }
+      },
       "simFeed": {
         "ariaLabel": "Simulation feed",
         "network": {
@@ -2363,6 +2415,7 @@
         },
         "persona": {
           "title": "Persona",
+          "interview": "Interview",
           "none": "Pick a persona in the filter or focus a post.",
           "role": "Role",
           "stance": "Stance",
@@ -2395,6 +2448,7 @@
         },
         "thread": {
           "back": "Back to feed",
+          "backToReport": "Back to report",
           "loading": "Loading post …",
           "rootMissing": "The original post is outside the loaded excerpt.",
           "broken": "The reply chain of this post is broken (cycle or too deep) and is not shown.",
@@ -2487,6 +2541,270 @@
         "evidenceOmitted": "Evidence omitted (evidence_omitted)",
         "evidenceCheckFailed": "Evidence could not be checked",
         "reportIncomplete": "Report is incomplete"
+      },
+      "report": {
+        "label": "Report of the run",
+        "noGraph": "This run has no knowledge graph; reports rely on evidence from the graph.",
+        "header": {
+          "versionLabel": "Version",
+          "versionOption": "Version {n} · {date} · {state}",
+          "versionOptionModel": "Version {n} · {date} · {state} · {model}",
+          "versionsLoading": "Loading versions …",
+          "noVersions": "No version yet",
+          "stateLabel": "State",
+          "versionsFailed": "The versions could not be loaded: {reason}",
+          "versionsInvalid": "{n} version violates the contract and is not shown | {n} versions violate the contract and are not shown"
+        },
+        "banner": {
+          "label": "Report notice",
+          "titleIncomplete": "Incomplete: what is missing",
+          "titleNotes": "Report notes: what is missing",
+          "noDetail": "The report is marked incomplete; the backend names no individual sections or limitations.",
+          "missingSections": "Missing section | Missing sections",
+          "degradations": "Limitations of the run",
+          "blocking": "Blocking",
+          "warning": "Note"
+        },
+        "outline": {
+          "label": "Report outline",
+          "empty": "No outline yet.",
+          "state": {
+            "ready": "done",
+            "missing": "missing",
+            "failed": "failed",
+            "pending": "in progress"
+          }
+        },
+        "reading": {
+          "loading": "Loading the report …",
+          "retry": "Reload",
+          "untitled": "Report",
+          "emptyText": "The report contains no text.",
+          "failedUnknown": "No reason given.",
+          "sectionKicker": "Section {n}",
+          "sectionNote": {
+            "missing": "This section is missing from the report.",
+            "failed": "This section could not be generated; the text is a replacement.",
+            "pending": "This section is still being generated."
+          },
+          "loadFailed": {
+            "notFound": "The report was not found.",
+            "contract": "The backend response violates the contract.",
+            "transport": "The report could not be loaded."
+          }
+        },
+        "generation": {
+          "startTitle": "This run has no report yet.",
+          "startDescription": "Generation is the most expensive pipeline step and only starts on confirmation, with the default model. Pick another model via “Regenerate with …”.",
+          "startButton": "Start report",
+          "running": "The report is being generated",
+          "sectionsDone": "{done} of {total} sections done",
+          "noSectionsYet": "No section is available yet.",
+          "transportError": "The status request keeps failing; the display may be outdated.",
+          "failed": "Generation failed:",
+          "schemaError": "Contract violation in {where}",
+          "logToggle": "Generation log"
+        },
+        "side": {
+          "label": "Evidence and questions",
+          "tabsLabel": "Switch side column",
+          "tab": {
+            "evidence": "Evidence",
+            "questions": "Questions"
+          },
+          "evidencePlaceholder": "Evidence for the selected claim appears here.",
+          "questionsPlaceholder": "Questions to the report agent appear here.",
+          "evidenceLoading": "Loading the evidence …",
+          "evidenceFailed": "The evidence could not be loaded: {reason}",
+          "omitted": {
+            "title": "Evidence omitted (evidence_omitted)",
+            "body": "The report has evidence, but it could not be delivered in a contract-conforming way. This is not a data gap; the evidence cannot be checked in this view."
+          }
+        },
+        "claims": {
+          "title": "Claims",
+          "count": "{n} claim | {n} claims",
+          "none": "The report contains no claims.",
+          "sectionLabel": "Section {n}: {title}",
+          "confidence": {
+            "speculative": "speculative",
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "verified": "verified"
+          },
+          "confidenceLine": "Confidence: {label} ({pct} %)",
+          "evidenceCount": "{n} piece of evidence | {n} pieces of evidence",
+          "hypotheses": {
+            "title": "Hypotheses ({n})",
+            "hint": "Plausible, but not sufficiently supported. Hypotheses are not claims.",
+            "rationale": "Rationale: {text}"
+          },
+          "gaps": {
+            "title": "Data gaps ({n})",
+            "hint": "The required information is missing from the sources.",
+            "reason": "Reason: {text}"
+          }
+        },
+        "evidence": {
+          "title": "Evidence",
+          "noSelection": "Choose a claim in the list to see its evidence.",
+          "overviewTotal": "{n} piece of evidence in the report | {n} pieces of evidence in the report",
+          "forClaim": "Evidence for {id}",
+          "none": "No evidence is bound to this claim.",
+          "missing": "{n} bound piece of evidence is missing from the evidence index (contract problem). | {n} bound pieces of evidence are missing from the evidence index (contract problem).",
+          "kind": {
+            "seed_corpus": "Document",
+            "graph_relation": "Graph",
+            "agent_action": "Simulation (post)",
+            "agent_quote": "Voice (interview quote)",
+            "web_source": "Web",
+            "inferred": "Inferred, not supported"
+          },
+          "origin": "Origin",
+          "sourceLabel": "Source",
+          "anchorLabel": "Anchor",
+          "voiceLabel": "Voice",
+          "groupLabel": "Group",
+          "bindingLabel": "Binding",
+          "binding": {
+            "supports": "supports the claim",
+            "contradicts": "contradicts the claim",
+            "neutral": "does not support the claim"
+          },
+          "entailment": {
+            "SUPPORTED": "entailment supported",
+            "CONTRADICTED": "entailment contradicted",
+            "RELATED_ONLY": "related only",
+            "INSUFFICIENT": "insufficient"
+          },
+          "copy": "Copy excerpt",
+          "copied": "Excerpt copied.",
+          "copyFailed": "The excerpt could not be copied.",
+          "jump": {
+            "feed": "Show in feed",
+            "feedLabel": "Show in feed: {source}",
+            "graph": "Show in graph",
+            "graphLabel": "Show in graph: {source}, node {n} of {total}",
+            "graphNth": "Show in graph ({n}/{total})",
+            "interview": "Open interview",
+            "interviewLabel": "Open interview: {source}",
+            "note": {
+              "checking": "Checking the post in the feed …",
+              "feedFailed": "Feed could not be loaded, jump cannot be checked.",
+              "postMissing": "No jump: post not found in the feed.",
+              "textMismatch": "No jump: post text does not match the evidence.",
+              "noPostId": "No jump: the evidence names no post of its own.",
+              "noNodeId": "No jump: the evidence names no node.",
+              "noEdgeId": "No jump: the evidence names no edge.",
+              "noVoice": "No jump: the evidence names no voice.",
+              "noTarget": "No jump: this kind of evidence has no origin in the interface.",
+              "inferred": "No jump: inferred, not evidenced."
+            }
+          }
+        },
+        "metrics": {
+          "title": "Metrics",
+          "loading": "Loading …",
+          "unsaved": "Not stored for this version.",
+          "failed": "Could not be loaded: {reason}",
+          "omitted": {
+            "title": "{name} omitted (artifact_omitted)",
+            "body": "The stored file violates the contract and cannot be checked in this view. This is not a data gap."
+          },
+          "density": {
+            "title": "Evidence density",
+            "noClaims": "The report has no claims, so there is no ratio.",
+            "claimsTotal": "Claims in total",
+            "without": "without evidence",
+            "single": "with one piece of evidence",
+            "multi": "with several pieces of evidence",
+            "multiIndependent": "with independent evidence",
+            "singleRatio": "Share with one piece of evidence only"
+          },
+          "stance": {
+            "title": "Positioning ratio",
+            "notApplicable": "Run without a contested question",
+            "contested": "Contested question: {text}",
+            "ratio": "{positioned} of {total} voices positioned ({pct})",
+            "camps": {
+              "in_favour": "in favour",
+              "opposed": "opposed",
+              "undecided": "undecided"
+            },
+            "unclassified": "{n} contribution could not be classified. | {n} contributions could not be classified."
+          }
+        },
+        "checks": {
+          "title": "Check notes ({n})",
+          "intro": "Binding/gate problems of the report: references and statements that could not be bound to evidence. These are not data gaps.",
+          "none": "No check notes.",
+          "entry": "Claim {claim}, section {n}: {violation}, action {action}. {detail}",
+          "unbound": {
+            "title": "Cited evidence without binding",
+            "item": "Section {n} ({title}): {refs}"
+          },
+          "unverified": {
+            "title": "Unsupported statements in the text",
+            "item": "Section {n}: {text} ({verdict}: {reason})"
+          },
+          "gate": { "title": "Gate decisions" },
+          "degradation": { "title": "Downgraded claims" }
+        },
+        "export": {
+          "trigger": "Export",
+          "incomplete": "This version is incomplete; the export contains only what exists.",
+          "noEvidence": "(evidence not loaded)",
+          "omittedReason": "The file was delivered without evidence (evidence_omitted); it cannot be fully verified.",
+          "running": "Preparing {action} …",
+          "done": "{action}: done.",
+          "failed": "{action} failed: {reason}",
+          "warning": "{action}: {reason}",
+          "blocked": {
+            "noVersion": "Export unavailable: no version selected.",
+            "loading": "Export unavailable: the report is still loading.",
+            "running": "Export unavailable: the report is still being generated."
+          },
+          "action": {
+            "md": "Markdown (.md)",
+            "copy": "Copy Markdown",
+            "html": "HTML (.html)",
+            "json": "JSON (.json)",
+            "evidence": "Evidence (JSON)",
+            "csv-personas": "CSV: personas",
+            "csv-segments": "CSV: segments",
+            "csv-claims": "CSV: claims",
+            "zip": "ZIP bundle (all files)",
+            "print": "Print"
+          }
+        },
+        "print": {
+          "title": "Report: {title}",
+          "version": "Version {n}"
+        },
+        "chat": {
+          "unavailable": "Follow-up questions are possible once there is at least one report version.",
+          "scope": "Questions apply to the whole run, not to a single version. The history only lasts for this session.",
+          "logLabel": "Follow-up history",
+          "empty": "No question asked yet.",
+          "you": "You",
+          "mark": "SIM",
+          "agentLabel": "Model output of the report agent",
+          "sending": "The report agent is answering …",
+          "inputLabel": "Question to the report agent",
+          "hint": "Ctrl+Enter or Cmd+Enter sends.",
+          "send": "Send",
+          "clear": "Clear history",
+          "noResponse": "No response received."
+        },
+        "redirect": {
+          "loading": "Looking for the report …",
+          "notFoundTitle": "Report not found",
+          "notFoundBody": "There is no report for “{id}”.",
+          "errorTitle": "The report could not be resolved",
+          "retry": "Try again",
+          "toRuns": "To the runs"
+        }
       }
     },
     "graphLibrary": {
@@ -2701,10 +3019,6 @@
     "stepReport": {
       "title": "Report",
       "subtitle": "View simulation results and source citations"
-    },
-    "stepInteraction": {
-      "title": "Interaction",
-      "subtitle": "Ask targeted questions to the simulated personas"
     },
     "stepGraphBuild": {
       "title": "Graph Build",

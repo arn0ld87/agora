@@ -191,8 +191,8 @@ describe('deriveStages: genau ein nächster Schritt', () => {
     expect(row(rows, 'graph').next).toMatchObject({ kind: 'view', to: { name: 'RunGraph', params: { simulationId: 'sim_1' } } })
     expect(row(rows, 'personas').next.to).toEqual({ name: 'StepEnvSetup', params: { projectId: 'proj_1' } })
     expect(row(rows, 'simulation').next.to).toEqual({ name: 'RunSimulationFeed', params: { simulationId: 'sim_1' } })
-    expect(row(rows, 'report').next).toMatchObject({ kind: 'view', to: { name: 'StepReport', params: { reportId: 'report_1' } } })
-    expect(row(rows, 'interviews').next.to).toEqual({ name: 'RunInterviewsLegacy', params: { simulationId: 'sim_1' } })
+    expect(row(rows, 'report').next).toMatchObject({ kind: 'view', to: { name: 'RunReport', params: { simulationId: 'sim_1', reportId: 'report_1' } } })
+    expect(row(rows, 'interviews').next.to).toEqual({ name: 'RunInterviews', params: { simulationId: 'sim_1' } })
   })
 
   it('gestoppte Simulation: Fortsetzen; nicht gestartet: Starten', () => {
@@ -207,7 +207,7 @@ describe('deriveStages: genau ein nächster Schritt', () => {
     const before = row(deriveStages(data({ hasGraph: false })), 'report').next
     expect(before).toMatchObject({ kind: 'start', to: null, disabledReason: 'afterSimulation' })
     const after = row(deriveStages(data({ jobs: { simulation_run: job('simulation_run') } })), 'report').next
-    expect(after).toMatchObject({ kind: 'start', to: { name: 'Report', params: { reportId: 'new' } } })
+    expect(after).toMatchObject({ kind: 'start', to: { name: 'RunReport', params: { simulationId: 'sim_1', reportId: 'new' } } })
   })
 
   it('ohne Projekt sind Personas deaktiviert mit Grund', () => {
@@ -229,21 +229,20 @@ describe('deriveStages: Ziele von Simulationsstart und Berichtsstart (#1801)', (
     expect(row(stopped, 'simulation').next.to).toEqual(feed)
   })
 
-  it('der Berichtsstart führt auf die Berichtsseite im Zustand „bereit“ mit Simulation und Lauf in der Query', () => {
+  it('der Berichtsstart führt auf den Bericht-Reiter im Zustand „bereit“ mit der Registry-Kennung des Laufs in der Query', () => {
     const rows = deriveStages(data({ jobs: { simulation_run: job('simulation_run') } }))
     expect(row(rows, 'report').next.to).toEqual({
-      name: 'Report',
-      params: { reportId: 'new' },
-      query: { simulationId: 'sim_1', runId: 'run_simulation_run' },
+      name: 'RunReport',
+      params: { simulationId: 'sim_1', reportId: 'new' },
+      query: { runId: 'run_simulation_run' },
     })
   })
 
-  it('ohne Registry-Kennung des Simulationsjobs bleibt runId aus der Query', () => {
+  it('ohne Registry-Kennung des Simulationsjobs entfällt runId aus der Query', () => {
     const rows = deriveStages(data({ jobs: { simulation_run: job('simulation_run', { runId: 'sim_1' }) } }))
     expect(row(rows, 'report').next.to).toEqual({
-      name: 'Report',
-      params: { reportId: 'new' },
-      query: { simulationId: 'sim_1' },
+      name: 'RunReport',
+      params: { simulationId: 'sim_1', reportId: 'new' },
     })
   })
 
