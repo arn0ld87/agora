@@ -333,7 +333,13 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
       </ComboboxAnchor>
 
       <ComboboxPortal>
-        <ComboboxContent class="ai-model-picker__content">
+        <ComboboxContent
+          class="ai-model-picker__content"
+          position="popper"
+          align="start"
+          :side-offset="4"
+          :collision-padding="8"
+        >
           <ComboboxViewport class="ai-model-picker__viewport">
             <ComboboxInput
               class="ai-model-picker__search"
@@ -514,7 +520,9 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   color: var(--text-primary);
 }
 
-.ai-model-picker__content {
+/* :global — im Popper-Modus trägt nicht das Wurzelelement, sondern ein inneres div die Klasse;
+   dort fehlt das scoped-Attribut. Zusätzlich liegt der Inhalt per Portal in <body>. */
+:global(.ai-model-picker__content) {
   inline-size: var(--reka-combobox-trigger-width, min(360px, calc(100vw - 16px)));
   min-inline-size: min(300px, calc(100vw - 16px));
   max-inline-size: calc(100vw - 16px);
@@ -523,7 +531,9 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   border-radius: var(--r-6, 12px);
   box-shadow: var(--shadow-popover, var(--shadow-3));
   overflow: hidden;
-  z-index: 50;
+  position: relative;
+  /* Über Dialog (201) und Overlay (200): die Liste wird nach <body> teleportiert. */
+  z-index: 300;
 }
 
 .ai-model-picker__viewport {

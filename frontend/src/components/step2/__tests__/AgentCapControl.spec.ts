@@ -83,4 +83,16 @@ describe('AgentCapControl (Issue #586)', () => {
     const wrapper = mountComponent({ useAgentCap: true, maxAgents: 50 })
     expect(wrapper.find('input[type="range"]').attributes('min')).toBe('10')
   })
+
+  it('Range und Zahlenfeld haben einen zugänglichen Namen aus sichtbarem Text, nicht aus title (#1799)', () => {
+    const wrapper = mountComponent({ useAgentCap: true })
+    for (const sel of ['input[type="range"]', 'input[type="number"]']) {
+      const el = wrapper.find(sel)
+      const labelId = el.attributes('aria-labelledby')
+      expect(labelId).toBeTruthy()
+      expect(wrapper.find(`[id="${labelId}"]`).text()).toBe('step2.agentCap.label')
+      const hintId = el.attributes('aria-describedby')
+      expect(wrapper.find(`[id="${hintId}"]`).text()).toBe('step2.agentCap.minimumHint')
+    }
+  })
 })

@@ -341,4 +341,14 @@ describe('AiModelPicker (Slice 5.1, isolated)', () => {
       /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?transition:\s*none/,
     )
   })
+
+  it('positioniert die Liste per Popper über dem Dialog (#1799)', () => {
+    // Ohne Popper hängt die Liste statisch am Ende von <body> und liegt im
+    // modalen Einstellungsfenster (Scroll-Sperre) unterhalb des sichtbaren Bereichs.
+    expect(aiModelPickerSource).toMatch(/<ComboboxContent[^>]*position="popper"/)
+    // Klasse sitzt im Popper-Modus auf einem inneren div ohne scoped-Attribut.
+    expect(aiModelPickerSource).toMatch(/:global\(\.ai-model-picker__content\)\s*\{[^}]*z-index:\s*(\d+)/)
+    const z = Number(/:global\(\.ai-model-picker__content\)\s*\{[^}]*z-index:\s*(\d+)/.exec(aiModelPickerSource)?.[1])
+    expect(z).toBeGreaterThan(201)
+  })
 })

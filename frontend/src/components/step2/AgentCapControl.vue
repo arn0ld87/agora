@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+const labelId = useId()
+const hintId = useId()
 
 defineProps({
   useAgentCap: { type: Boolean, required: true },
@@ -23,7 +26,7 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
         :disabled="isPreparing"
         @change="emit('update:useAgentCap', ($event.target as HTMLInputElement).checked)"
       />
-      <span>{{ t('step2.agentCap.label') }}</span>
+      <span :id="labelId">{{ t('step2.agentCap.label') }}</span>
     </label>
     <div v-if="useAgentCap" class="agent-cap-slider">
       <input
@@ -34,6 +37,8 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
         step="5"
         :disabled="isPreparing"
         :title="t('step2.agentCap.minimumHint')"
+        :aria-labelledby="labelId"
+        :aria-describedby="hintId"
         @input="emit('update:maxAgents', Number(($event.target as HTMLInputElement).value))"
       />
       <input
@@ -44,8 +49,11 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
         :disabled="isPreparing"
         class="agent-cap-number"
         :title="t('step2.agentCap.minimumHint')"
+        :aria-labelledby="labelId"
+        :aria-describedby="hintId"
         @input="emit('update:maxAgents', Number(($event.target as HTMLInputElement).value))"
       />
+      <span :id="hintId" class="sr-only">{{ t('step2.agentCap.minimumHint') }}</span>
       <span class="meta">{{ t('step2.agentCap.unit') }}</span>
     </div>
     <p v-if="belowQuotaWarning" class="hint hint--warn" role="alert">
@@ -95,6 +103,14 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
   text-align: right;
 }
 .agent-cap-number:focus { border-bottom-color: var(--accent); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .hint {
   font-family: var(--ff-mono);
   font-size: 11px;
