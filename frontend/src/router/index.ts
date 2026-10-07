@@ -213,11 +213,15 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/run/report/ReportRedirectView.vue'),
     props: true,
   },
+  // #1790: Die alte Gesprächsansicht ist entfernt. Der Parameter ist eine
+  // Berichts-ID: dieselbe Auflösung wie bei `StepReport` (ReportRedirectView),
+  // Ziel ist die rechte Spalte "Nachfragen" des Berichts (`?panel=questions`).
+  // Query und Hash bleiben erhalten; ein vorhandenes `?panel=` gewinnt.
   {
     path: '/v4/interaction/:reportId',
     name: 'StepInteraction',
-    component: () => import('../views/v4/steps/StepInteractionView.vue'),
-    props: true,
+    component: () => import('../views/run/report/ReportRedirectView.vue'),
+    props: (to) => ({ reportId: String(to.params.reportId), panel: 'questions' }),
   },
 
   // v4 compare + history (Slice I)

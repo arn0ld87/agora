@@ -698,41 +698,9 @@
     "runner_status_ready": "Runner bereit."
   },
   "step5": {
-    "kicker": "№ 05 — GESPRÄCH",
-    "title": "Sprich mit den Agenten.",
-    "sub": "Frage einzelne Agenten direkt — oder den ReportAgent zum Gesamtbild. Persönlichkeit und Erinnerung bleiben erhalten.",
-    "tabs": {
-      "chat": "1-zu-1 Gespräch",
-      "survey": "Umfrage"
-    },
-    "selectAgent": "Agent auswählen",
-    "selectReport": "ReportAgent",
-    "search": "Suche Agent…",
-    "input": {
-      "placeholder": "Frag etwas… (Strg+Enter zum Senden)",
-      "send": "Senden"
-    },
     "agent": {
-      "bio": "Biografie",
-      "interests": "Interessen",
-      "stance": "Haltung",
-      "history": "Verlauf"
-    },
-    "empty": "Wähle links einen Agenten.",
-    "survey": {
-      "title": "Frag mehrere Agenten dasselbe.",
-      "sub": "Wähle 2–50 Agenten, formuliere eine Frage, sieh die Antworten nebeneinander.",
-      "selectAll": "Alle wählen",
-      "clear": "Auswahl leeren",
-      "selected": "Ausgewählt: {count}",
-      "question": "Deine Frage",
-      "placeholder": "z. B. „Wie reagierst du auf flächendeckende Videoüberwachung in der Innenstadt?\"",
-      "ask": "Umfrage starten",
-      "asking": "Frage {done} / {total} Agenten…",
-      "noResults": "Noch keine Antworten.",
-      "exportCsv": "Als CSV exportieren"
-    },
-    "noResponse": "Keine Antwort erhalten."
+      "interests": "Interessen"
+    }
   },
   "graph": {
     "panel": "Graph",
@@ -2380,6 +2348,15 @@
           "modelUnknown": "Modell des Laufs: unbekannt",
           "send": "Fragen",
           "notRun": "Fragen sind erst nach abgeschlossener Simulation möglich."
+        },
+        "survey": {
+          "selectAll": "Alle auswählen",
+          "clear": "Alle abwählen",
+          "selected": "Keine Persona ausgewählt | Eine von {total} Personas ausgewählt | {n} von {total} Personas ausgewählt",
+          "blocked": "Umfragen sind erst nach abgeschlossener Simulation möglich.",
+          "exportCsv": "Als CSV exportieren",
+          "exported": "CSV mit {n} Zeilen exportiert.",
+          "nothingToExport": "Keine Antwort zum Exportieren: Alle Personas haben fehlgeschlagen oder nicht geantwortet."
         }
       },
       "simFeed": {
@@ -3042,10 +3019,6 @@
     "stepReport": {
       "title": "Report",
       "subtitle": "Simulationsergebnisse und Quellenbelege einsehen"
-    },
-    "stepInteraction": {
-      "title": "Interaktion",
-      "subtitle": "Gezielte Nachfragen an die simulierten Personas stellen"
     },
     "stepGraphBuild": {
       "title": "Graph Build",

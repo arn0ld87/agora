@@ -19,7 +19,11 @@ import { ReportSchema } from '@/contracts/reportContract'
 import { isSimulationId } from '@/contracts/runIdentifiers'
 import { INTERACTION_SIMULATION_ID_QUERY_KEY, PENDING_REPORT_ID, REPORT_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
 
-const props = defineProps<{ reportId: string }>()
+const props = defineProps<{
+  reportId: string
+  /** Seitenspalte des Berichts als Ziel (`?panel=`), wenn die alte Adresse keine nennt (`/v4/interaction/:reportId`). */
+  panel?: string
+}>()
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
@@ -74,6 +78,7 @@ async function resolve(): Promise<void> {
     const query: LocationQueryRaw = { ...route.query }
     delete query[INTERACTION_SIMULATION_ID_QUERY_KEY]
     delete query[REPORT_SIMULATION_ID_QUERY_KEY]
+    if (props.panel && query.panel === undefined) query.panel = props.panel
     await router.replace({
       name: 'RunReport',
       params: { simulationId, reportId: props.reportId },

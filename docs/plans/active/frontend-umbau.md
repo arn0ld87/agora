@@ -377,7 +377,7 @@ Eine Zeile wird erst in der genannten Etappe umgestellt. Bis dahin bleibt die al
 | `/v4/simulation/:id/thread/:postId` | `/simulations/:id/simulation/post/:postId` | 4 |
 | `/v4/simulation/:id/rounds`, `…/live`, `…/actions` | `/simulations/:id/simulation/rounds` | 4 |
 | `/report/:reportId`, `/v4/report/:reportId` | `/simulations/:simulationId/report/:reportId` (Simulation aus dem Bericht auflösen) | 5, umgesetzt (`StepReport` bleibt als Auflöse-Ansicht) |
-| `/interaction/:reportId`, `/v4/interaction/:reportId` | `/simulations/:simulationId/report/:reportId?panel=questions` (Simulation aus dem Bericht auflösen). Die Adresse öffnet heute standardmäßig den Chat mit dem Berichtsagenten, deshalb führt sie zu „Nachfragen" am selben Bericht und nicht zu den Interviews | sobald 5 und 6 fertig sind; bis dahin alte Ansicht |
+| `/interaction/:reportId`, `/v4/interaction/:reportId` | `/simulations/:simulationId/report/:reportId?panel=questions` (Simulation aus dem Bericht auflösen). Die Adresse öffnet heute standardmäßig den Chat mit dem Berichtsagenten, deshalb führt sie zu „Nachfragen" am selben Bericht und nicht zu den Interviews. Umgesetzt mit #1790: die Route `StepInteraction` nutzt `ReportRedirectView` mit dem Vorgabewert `panel=questions`; ein vorhandenes `?panel=`, die übrige Query und der Hash bleiben, „Bericht nicht gefunden“ ist ein sichtbarer Zustand | erledigt (#1790); Altansicht entfernt |
 | `/v4/compare/:simulationId` | `/compare/:simulationId` | 2 |
 | `/settings/general` | `/settings/general` | 3 |
 | `/settings/integrations` | `/settings/pipeline` | 3 |
@@ -730,7 +730,7 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 - Interviews, die der Bericht geführt hat, liegen in derselben Tabelle und sind nicht unterscheidbar; der Erklärsatz sagt das.
 - **Folgen der Budget-Zurechnung zum Simulations-Job:** Interviews zählen gegen das Budget des Laufs der Simulation. Nach Ende wegen Zeit- oder Token-Limit werden weitere Fragen dauerhaft abgelehnt (409). Der Budgetstatus der beendeten Simulation wird durch Interviews „überschritten“, auch wenn der Lauf selbst regulär endete.
 - Der Zähler „Beiträge im Feed“ lädt je Interviews-Ansicht einen Feed-Snapshot (ohne SSE-Strom) und zählt über beide Netzwerke; bei mehr als 5000 Beiträgen je Netzwerk steht „mindestens“.
-- `Step5Interaction`, `StepInteractionView` und die Route `StepInteraction` bleiben bis zur Übernahme des Berichtsagenten-Chats durch Etappe 5 bestehen.
+- ~~`Step5Interaction`, `StepInteractionView` und die Route `StepInteraction` bleiben bis zur Übernahme des Berichtsagenten-Chats durch Etappe 5 bestehen.~~ Erledigt mit #1790: Die Altansicht ist entfernt, `/v4/interaction/:reportId` leitet auf den Bericht (`?panel=questions`). Die Umfrage der Altansicht ist Teil der Gruppenfrage im Interviews-Reiter: „Alle auswählen/abwählen“, Zählzeile, Kostenhinweis, Warnung bei großen Gruppen, Ergebnis je Persona und „Als CSV exportieren“ (`agora-survey-<Zeitstempel>.csv`, Spalten `agent_id,username,question,answer` plus neu `error`; Zellen mit `=`, `+`, `-`, `@`, Tab oder CR am Anfang werden mit `'` entschärft). Gesendet wird weiter über `POST /api/simulation/interview/batch` (kein `/interview/all`).
 - Das Gate `golden-gate-accessibility` prüft den Interviews-Reiter einer nicht gelaufenen Simulation (Hinweiszustand) und die Weiterleitung der Übergangsadresse; es läuft nur in der CI gegen den Docker-Stack. Lokal wurden Verlauf, Gruppenraster und Budgetmeldung mit denselben Helfern (axe, 320 px, Tastatur, Tab-Reihenfolge, Fokus) gegen den Vite-Dev-Server mit gemockten Antworten geprüft.
 
 ---
@@ -746,7 +746,7 @@ Der Entwurf kommt mit 26 Tokens aus, der Bestand hat 261 in `tokens-v3.css`. Eta
 - Gespeicherte Berichte erscheinen als ein Block, nicht Abschnitt für Abschnitt; die Gliederung nennt die Zustände.
 - `origin_post_id` ist nur mit Textabgleich ein Sprung (in rund 8 % alter Läufe zeigt sie auf einen anderen Beitrag); bei abgeschnittenem Snapshot (5000 je Netzwerk) kann auch ein richtiger Beitrag als „nicht eindeutig zuordenbar“ erscheinen.
 - Die Druckansicht ist nicht im Browser abgenommen.
-- Der Umfrage-Tab der Altansicht hat keinen Ersatz; deshalb bleiben `Step5Interaction`, `StepInteractionView` und die Route `StepInteraction` bestehen (Etappe 6).
+- ~~Der Umfrage-Tab der Altansicht hat keinen Ersatz; deshalb bleiben `Step5Interaction`, `StepInteractionView` und die Route `StepInteraction` bestehen (Etappe 6).~~ Erledigt mit #1790: Umfrage im Interviews-Reiter, Altansicht entfernt, Route `StepInteraction` ist eine Weiterleitung (siehe 6.2 und 11e).
 - Die Interviews-Verweise führen auf die Übergangsadresse, nicht auf die einzelne Stimme.
 - Die e2e-Smokes (`minimal-report`, `golden-gate-accessibility`) laufen nur in der CI gegen den Docker-Stack. Lokal: Typprüfung und eine temporäre Messung gegen gemockte Daten im Vite-Dev-Server (axe ohne serious/critical, 320 px, Tastatur, Tab-Reihenfolge, Fokus, reduzierte Bewegung grün).
 

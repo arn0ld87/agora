@@ -13,7 +13,7 @@ vi.mock('@/api/report', () => ({ getReport: api.getReport }))
 
 const Stub = defineComponent({ render: () => h('div') })
 
-async function mountAt(path: string) {
+async function mountAt(path: string, panel?: string) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -25,7 +25,7 @@ async function mountAt(path: string) {
   await router.push(path)
   await router.isReady()
   const wrapper = mount(
-    defineComponent({ render: () => h(ReportRedirectView, { reportId: String(router.currentRoute.value.params.reportId) }) }),
+    defineComponent({ render: () => h(ReportRedirectView, { reportId: String(router.currentRoute.value.params.reportId), panel }) }),
     { global: { plugins: [router, createI18n({ legacy: false, locale: 'de', messages: { de } as never })] } },
   )
   await flushPromises()
@@ -46,6 +46,24 @@ describe('ReportRedirectView', () => {
     const { router } = await mountAt('/v4/report/report_9?simId=sim_3&panel=questions')
     expect(api.getReport).not.toHaveBeenCalled()
     expect(router.currentRoute.value.fullPath).toBe('/simulations/sim_3/report/report_9?panel=questions')
+  })
+
+  it('mit panel (alte Adresse /v4/interaction/:reportId, #1790) zielt die Weiterleitung auf ?panel=questions', async () => {
+    api.getReport.mockResolvedValue({ success: true, data: reportData({ report_id: 'report_9', simulation_id: 'sim_7' }) })
+    const { router } = await mountAt('/v4/report/report_9?claim=c1#x', 'questions')
+    expect(router.currentRoute.value.fullPath).toBe('/simulations/sim_7/report/report_9?claim=c1&panel=questions#x')
+  })
+
+  it('ein vorhandenes ?panel= gewinnt gegen den Vorgabewert', async () => {
+    const { router } = await mountAt('/v4/report/report_9?simId=sim_3&panel=evidence', 'questions')
+    expect(router.currentRoute.value.fullPath).toBe('/simulations/sim_3/report/report_9?panel=evidence')
+  })
+
+  it('eine Registry-Run-ID (run_…) in ?simId= wird nie als Simulation genutzt (#1023), die Simulation kommt aus dem Bericht', async () => {
+    api.getReport.mockResolvedValue({ success: true, data: reportData({ report_id: 'report_9', simulation_id: 'sim_7' }) })
+    const { router } = await mountAt('/v4/report/report_9?simId=run_a1b2c3d4e5f6', 'questions')
+    expect(api.getReport).toHaveBeenCalledWith('report_9')
+    expect(router.currentRoute.value.fullPath).toContain('/simulations/sim_7/report/report_9')
   })
 
   it('Sentinel new mit ?simulationId=', async () => {

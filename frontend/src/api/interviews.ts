@@ -10,7 +10,7 @@
  * - `success:true` heißt nur: mindestens eine Antwort kam. Fehler je Persona
  *   stehen im Eintrag und bleiben dort erhalten (`InterviewAnswer.error`).
  * - 503, wenn weder die Umgebung lebt noch persistierte Personas vorliegen.
- * `interviewAgents` in `api/simulation.ts` bleibt für die Altansicht bestehen.
+ * Der frühere ungeprüfte Aufruf `interviewAgents` (Altansicht) ist entfernt (#1790).
  */
 import service from './index'
 import { readEnvelope } from '@/composables/run/simulation/simulationEnvelope'
