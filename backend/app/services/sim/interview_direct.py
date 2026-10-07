@@ -292,12 +292,13 @@ def _persist_interview(
     response: str,
     *,
     run_state_dir: str,
-) -> None:
+) -> bool:
     """Schreibe das Interview in die Trace-DB der Plattform (best effort).
 
     Damit bleibt ``/interview/history`` auch für den Direktpfad gefüllt. Fehler
     werden geloggt und niemals an den Aufrufer weitergereicht — eine bereits
-    erzeugte Antwort darf an der Persistenz nicht scheitern.
+    erzeugte Antwort darf an der Persistenz nicht scheitern. Liefert ``True``,
+    wenn die Antwort in der Trace-DB steht (Grundlage von ``persisted_count``).
     """
     # SEC-1 (CodeQL py/path-injection): simulation_id speist die Trace-DB.
     # safe_join_within_root loest den kanonischen Pfad auf statt nur die ID
@@ -327,6 +328,26 @@ def _persist_interview(
         logger.warning(
             f"Interview-Trace nicht geschrieben ({simulation_id}/{platform}): {exc}"
         )
+        return False
+    return True
+
+
+class _PersistedCounter:
+    """Zählt die in der Trace-DB gespeicherten Antworten eines Batch-Aufrufs.
+
+    Die Worker laufen parallel; der Zähler ist deshalb gesperrt. Grundlage für
+    ``BudgetExceededError.persisted_count``: bricht ein späteres Element am
+    Budget ab, stehen die früheren schon im Verlauf und sind verbucht.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.value = 0
+
+    def record(self, stored: bool) -> None:
+        if stored:
+            with self._lock:
+                self.value += 1
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +547,14 @@ def _persona_history_for(
     return history
 
 
+def _attach_persisted_count(exc: BaseException, persisted: _PersistedCounter) -> None:
+    """Hängt die Zahl bereits gespeicherter Antworten an ein Budget-Abbruch-Fehler."""
+    from ..run_budget import BudgetExceededError
+
+    if isinstance(exc, BudgetExceededError):
+        exc.persisted_count = persisted.value
+
+
 def _answer_one(
     clients: _ThreadLocalClients,
     persona: Dict[str, Any],
@@ -619,6 +648,7 @@ def interview_agents_batch_direct(
         client_factory or _default_client_factory(timeout, context, run_id=run_id)
     )
     timestamp = datetime.now().isoformat()
+    persisted = _PersistedCounter()
     # Gesamt-Deadline: ohne sie summieren sich bei mehr als _MAX_WORKERS Items
     # die Wellen zu einem Vielfachen des angefragten Timeouts auf. Ein bereits
     # laufender Call wird nicht abgebrochen — die Obergrenze ist damit
@@ -695,13 +725,15 @@ def interview_agents_batch_direct(
             entry["error"] = str(exc)
             return entry
 
-        _persist_interview(
-            simulation_id,
-            item_platform,
-            agent_id,
-            prompt,
-            entry["response"],
-            run_state_dir=run_state_dir,
+        persisted.record(
+            _persist_interview(
+                simulation_id,
+                item_platform,
+                agent_id,
+                prompt,
+                entry["response"],
+                run_state_dir=run_state_dir,
+            )
         )
         return entry
 
@@ -711,19 +743,24 @@ def interview_agents_batch_direct(
     )
 
     entries: List[Dict[str, Any]] = []
-    if interviews:
-        workers = max(1, min(max_workers, len(interviews)))
-        if workers == 1:
-            entries = [_run(item) for item in interviews]
-        else:
-            credential_context = copy_context()
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                entries = list(
-                    pool.map(
-                        lambda item: credential_context.copy().run(_run, item),
-                        interviews,
+    try:
+        if interviews:
+            workers = max(1, min(max_workers, len(interviews)))
+            if workers == 1:
+                entries = [_run(item) for item in interviews]
+            else:
+                credential_context = copy_context()
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    entries = list(
+                        pool.map(
+                            lambda item: credential_context.copy().run(_run, item),
+                            interviews,
+                        )
                     )
-                )
+    except Exception as exc:
+        # Erst hier, nach dem Join aller Worker, ist die Zahl endgueltig.
+        _attach_persisted_count(exc, persisted)
+        raise
 
     results = {f"{e['platform']}_{e['agent_id']}": e for e in entries}
     succeeded = [e for e in entries if e.get("response")]

@@ -99,7 +99,7 @@ Der aktuelle `ApiErrorCode`-Katalog enthält **26** Werte. Die Liste im Code ist
 
 ### Budget
 
-- `budget_exceeded` — hartes Run-Budget erreicht (`409`, Interview-Endpunkte seit #1805; zusätzliche Felder `termination_reason`, `dimension`, `observed`, `threshold` im Fehler-Envelope)
+- `budget_exceeded` — hartes Run-Budget erreicht (`409`, Interview-Endpunkte seit #1805; zusätzliche Felder `termination_reason`, `dimension`, `observed`, `threshold`, `persisted_count` im Fehler-Envelope, Vertrag `InterviewBudgetExceededResponse` / `schemas/interview-budget-exceeded.schema.json`; die Antwort enthält keine Teilantworten, bereits gespeicherte Antworten bleiben im Interview-Verlauf und `persisted_count` nennt ihre Zahl)
 
 ### Infrastruktur
 

@@ -8,6 +8,9 @@ from typing import Callable, Optional
 from flask import jsonify, request
 
 from . import simulation_bp
+from ..contracts.interview_budget_exceeded_contract import (
+    InterviewBudgetExceededResponse,
+)
 from ..contracts.interview_envelope_contract import InterviewEnvelope
 from ..services.run_budget import BudgetExceededError
 from ..services.run_registry import RunRegistry
@@ -48,18 +51,22 @@ def _budget_exceeded_response(exc: BudgetExceededError):
 
     Nie ``success: true`` und kein Fallback-Text: ein erreichtes hartes Budget
     ist das Ende der Interviews dieser Simulation, keine freundliche Antwort.
+    Der Body folgt dem Vertrag ``InterviewBudgetExceededResponse``; die Antwort
+    enthaelt keine Teilantworten, ``persisted_count`` nennt die vor dem Abbruch
+    schon gespeicherten (sie bleiben im Verlauf).
     """
-    return json_error(
-        ApiErrorCode.BUDGET_EXCEEDED,
-        status=409,
-        message=str(exc),
-        extra={
+    body = InterviewBudgetExceededResponse.model_validate(
+        {
+            "error": str(exc),
+            "code": ApiErrorCode.BUDGET_EXCEEDED.value,
             "termination_reason": exc.termination_reason,
             "dimension": exc.dimension,
             "observed": exc.observed,
             "threshold": exc.threshold,
-        },
+            "persisted_count": exc.persisted_count,
+        }
     )
+    return jsonify(body.model_dump(mode="json")), 409
 
 
 def _budget_exceeded_as_conflict(view: Callable) -> Callable:

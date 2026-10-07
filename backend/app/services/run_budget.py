@@ -63,6 +63,10 @@ _DIMENSION_LABELS = {
 class BudgetExceededError(RuntimeError):
     """Hartes Budget erreicht — weitere planbare Modellaufrufe verboten."""
 
+    # Antworten, die ein Batch-Interview vor dem Abbruch schon gespeichert hat
+    # (#1805). Setzt nur der Direktpfad nach dem Join aller Worker; sonst 0.
+    persisted_count: int = 0
+
     def __init__(self, dimension: str, observed: int, threshold: int):
         self.dimension = dimension
         self.observed = observed
