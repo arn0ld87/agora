@@ -2487,6 +2487,93 @@
         "evidenceOmitted": "Evidence omitted (evidence_omitted)",
         "evidenceCheckFailed": "Evidence could not be checked",
         "reportIncomplete": "Report is incomplete"
+      },
+      "report": {
+        "label": "Report of the run",
+        "noGraph": "This run has no knowledge graph; reports rely on evidence from the graph.",
+        "header": {
+          "versionLabel": "Version",
+          "versionOption": "Version {n} · {date} · {state}",
+          "versionsLoading": "Loading versions …",
+          "noVersions": "No version yet",
+          "stateLabel": "State",
+          "versionsFailed": "The versions could not be loaded: {reason}",
+          "versionsInvalid": "{n} version violates the contract and is not shown | {n} versions violate the contract and are not shown"
+        },
+        "banner": {
+          "label": "Report notice",
+          "titleIncomplete": "Incomplete: what is missing",
+          "titleNotes": "Report notes: what is missing",
+          "noDetail": "The report is marked incomplete; the backend names no individual sections or limitations.",
+          "missingSections": "Missing section | Missing sections",
+          "degradations": "Limitations of the run",
+          "blocking": "Blocking",
+          "warning": "Note"
+        },
+        "outline": {
+          "label": "Report outline",
+          "empty": "No outline yet.",
+          "state": {
+            "ready": "done",
+            "missing": "missing",
+            "failed": "failed",
+            "pending": "in progress"
+          }
+        },
+        "reading": {
+          "loading": "Loading the report …",
+          "retry": "Reload",
+          "untitled": "Report",
+          "emptyText": "The report contains no text.",
+          "failedUnknown": "No reason given.",
+          "sectionKicker": "Section {n}",
+          "sectionNote": {
+            "missing": "This section is missing from the report.",
+            "failed": "This section could not be generated; the text is a replacement.",
+            "pending": "This section is still being generated."
+          },
+          "loadFailed": {
+            "notFound": "The report was not found.",
+            "contract": "The backend response violates the contract.",
+            "transport": "The report could not be loaded."
+          }
+        },
+        "generation": {
+          "startTitle": "This run has no report yet.",
+          "startDescription": "Generation is the most expensive pipeline step and only starts on confirmation, with the default model. Pick another model via “Regenerate with …”.",
+          "startButton": "Start report",
+          "running": "The report is being generated",
+          "sectionsDone": "{done} of {total} sections done",
+          "noSectionsYet": "No section is available yet.",
+          "transportError": "The status request keeps failing; the display may be outdated.",
+          "failed": "Generation failed:",
+          "schemaError": "Contract violation in {where}",
+          "logToggle": "Generation log"
+        },
+        "side": {
+          "label": "Evidence and questions",
+          "tabsLabel": "Switch side column",
+          "tab": {
+            "evidence": "Evidence",
+            "questions": "Questions"
+          },
+          "evidencePlaceholder": "Evidence for the selected claim appears here.",
+          "questionsPlaceholder": "Questions to the report agent appear here.",
+          "evidenceLoading": "Loading the evidence …",
+          "evidenceFailed": "The evidence could not be loaded: {reason}",
+          "omitted": {
+            "title": "Evidence omitted (evidence_omitted)",
+            "body": "The report has evidence, but it could not be delivered in a contract-conforming way. This is not a data gap; the evidence cannot be checked in this view."
+          }
+        },
+        "redirect": {
+          "loading": "Looking for the report …",
+          "notFoundTitle": "Report not found",
+          "notFoundBody": "There is no report for “{id}”.",
+          "errorTitle": "The report could not be resolved",
+          "retry": "Try again",
+          "toRuns": "To the runs"
+        }
       }
     },
     "graphLibrary": {

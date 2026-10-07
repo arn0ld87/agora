@@ -2487,6 +2487,93 @@
         "evidenceOmitted": "Belege ausgelassen (evidence_omitted)",
         "evidenceCheckFailed": "Belege konnten nicht geprüft werden",
         "reportIncomplete": "Bericht ist unvollständig"
+      },
+      "report": {
+        "label": "Bericht des Laufs",
+        "noGraph": "Dieser Lauf hat keinen Wissensgraphen; Berichte stützen sich auf Belege aus dem Graphen.",
+        "header": {
+          "versionLabel": "Fassung",
+          "versionOption": "Fassung {n} · {date} · {state}",
+          "versionsLoading": "Fassungen werden geladen …",
+          "noVersions": "Noch keine Fassung",
+          "stateLabel": "Zustand",
+          "versionsFailed": "Die Fassungen ließen sich nicht laden: {reason}",
+          "versionsInvalid": "{n} Fassung verletzt den Vertrag und wird nicht angezeigt | {n} Fassungen verletzen den Vertrag und werden nicht angezeigt"
+        },
+        "banner": {
+          "label": "Hinweis zum Bericht",
+          "titleIncomplete": "Unvollständig: Was fehlt",
+          "titleNotes": "Hinweise zum Bericht: Was fehlt",
+          "noDetail": "Der Bericht ist als unvollständig markiert; das Backend nennt keine einzelnen Abschnitte oder Einschränkungen.",
+          "missingSections": "Fehlender Abschnitt | Fehlende Abschnitte",
+          "degradations": "Einschränkungen des Laufs",
+          "blocking": "Blockierend",
+          "warning": "Hinweis"
+        },
+        "outline": {
+          "label": "Gliederung des Berichts",
+          "empty": "Noch keine Gliederung.",
+          "state": {
+            "ready": "fertig",
+            "missing": "fehlt",
+            "failed": "fehlgeschlagen",
+            "pending": "in Arbeit"
+          }
+        },
+        "reading": {
+          "loading": "Der Bericht wird geladen …",
+          "retry": "Erneut laden",
+          "untitled": "Bericht",
+          "emptyText": "Der Bericht enthält keinen Text.",
+          "failedUnknown": "Kein Grund genannt.",
+          "sectionKicker": "Abschnitt {n}",
+          "sectionNote": {
+            "missing": "Dieser Abschnitt fehlt im Bericht.",
+            "failed": "Dieser Abschnitt konnte nicht erzeugt werden; der Text ist ein Ersatz.",
+            "pending": "Dieser Abschnitt wird noch erzeugt."
+          },
+          "loadFailed": {
+            "notFound": "Der Bericht wurde nicht gefunden.",
+            "contract": "Die Antwort des Backends verletzt den Vertrag.",
+            "transport": "Der Bericht ließ sich nicht laden."
+          }
+        },
+        "generation": {
+          "startTitle": "Für diesen Lauf gibt es noch keinen Bericht.",
+          "startDescription": "Die Erzeugung ist der teuerste Schritt der Pipeline und startet erst auf Bestätigung, mit dem Standardmodell. Ein anderes Modell wählst du über „Neu erzeugen mit …“.",
+          "startButton": "Bericht starten",
+          "running": "Der Bericht wird erzeugt",
+          "sectionsDone": "{done} von {total} Abschnitten fertig",
+          "noSectionsYet": "Es liegt noch kein Abschnitt vor.",
+          "transportError": "Die Statusabfrage schlägt wiederholt fehl; die Anzeige kann veraltet sein.",
+          "failed": "Die Erzeugung ist fehlgeschlagen:",
+          "schemaError": "Vertragsverletzung in {where}",
+          "logToggle": "Protokoll der Erzeugung"
+        },
+        "side": {
+          "label": "Belege und Nachfragen",
+          "tabsLabel": "Seitenspalte umschalten",
+          "tab": {
+            "evidence": "Belege",
+            "questions": "Nachfragen"
+          },
+          "evidencePlaceholder": "Belege zum gewählten Claim erscheinen hier.",
+          "questionsPlaceholder": "Nachfragen an den Berichtsagenten erscheinen hier.",
+          "evidenceLoading": "Die Belege werden geladen …",
+          "evidenceFailed": "Die Belege ließen sich nicht laden: {reason}",
+          "omitted": {
+            "title": "Belege ausgelassen (evidence_omitted)",
+            "body": "Der Bericht hat Belege, aber sie ließen sich nicht vertragskonform ausliefern. Das ist keine Datenlücke; die Belege sind in dieser Ansicht nicht prüfbar."
+          }
+        },
+        "redirect": {
+          "loading": "Der Bericht wird gesucht …",
+          "notFoundTitle": "Bericht nicht gefunden",
+          "notFoundBody": "Zu „{id}“ gibt es keinen Bericht.",
+          "errorTitle": "Der Bericht ließ sich nicht auflösen",
+          "retry": "Erneut versuchen",
+          "toRuns": "Zu den Läufen"
+        }
       }
     },
     "graphLibrary": {

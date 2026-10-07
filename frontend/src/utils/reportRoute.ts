@@ -101,3 +101,43 @@ export function buildReportReadyRoute(params: {
     query,
   }
 }
+
+/**
+ * Etappe 5 (#1804, Bauplan 6.1): der Bericht ist ein Reiter am Lauf unter
+ * `/simulations/:simulationId/report/:reportId?`. Ohne `reportId` zeigt der
+ * Reiter die jüngste Fassung; `PENDING_REPORT_ID` steht für „noch kein
+ * Bericht, Start anbieten“.
+ */
+export function buildRunReportRoute(params: {
+  simulationId: string
+  reportId?: string | null
+  query?: Record<string, string>
+}): RouteLocationRaw {
+  return {
+    name: 'RunReport',
+    params: {
+      simulationId: params.simulationId,
+      ...(params.reportId ? { reportId: params.reportId } : {}),
+    },
+    ...(params.query && Object.keys(params.query).length > 0 ? { query: params.query } : {}),
+  }
+}
+
+/**
+ * Verweis auf einen Bericht. Kennt der Aufrufer die Simulation, geht er direkt
+ * in den Bericht-Reiter des Laufs; sonst auf die alte Adresse `/v4/report/:id`,
+ * die den Lauf aus dem Bericht auflöst und umleitet (Bauplan 6.2).
+ */
+export function reportLink(reportId: string, simulationId?: string | null): RouteLocationRaw {
+  return reportTarget(reportId, simulationId)
+}
+
+/** Wie `reportLink`, als schlichtes Ziel (`name` + `params`) für Weiter-Aktionen und Befehle. */
+export function reportTarget(
+  reportId: string,
+  simulationId?: string | null,
+): { name: string; params: Record<string, string> } {
+  return isSimulationId(simulationId)
+    ? { name: 'RunReport', params: { simulationId, reportId } }
+    : { name: 'StepReport', params: { reportId } }
+}

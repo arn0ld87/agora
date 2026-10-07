@@ -201,10 +201,15 @@ const routes: RouteRecordRaw[] = [
     path: '/v4/simulation/:simulationId/live',
     redirect: simulationRoundsRedirect,
   },
+  // Etappe 5 (#1804, Bauplan 6.2): der Bericht ist ein Reiter am Lauf
+  // (/simulations/:id/report/:reportId?). Die alte Adresse loest die Simulation
+  // aus dem Bericht auf und leitet um (ReportRedirectView); der Name bleibt, damit
+  // Aufrufer ohne bekannte Simulation weiter `{ name: 'StepReport' }` nutzen.
+  // `/report/:reportId` (Name `Report`) leitet oben auf diese Adresse.
   {
     path: '/v4/report/:reportId',
     name: 'StepReport',
-    component: () => import('../views/v4/steps/StepReportView.vue'),
+    component: () => import('../views/run/report/ReportRedirectView.vue'),
     props: true,
   },
   {
@@ -334,6 +339,15 @@ const routes: RouteRecordRaw[] = [
             props: true,
           },
         ],
+      },
+      // Etappe 5 (#1804): Bericht als Reiter. Ohne `reportId` die juengste
+      // Fassung; `new` (PENDING_REPORT_ID) bietet den Start an. Query:
+      // `?claim=`, `?section=`, `?panel=evidence|questions`.
+      {
+        path: 'report/:reportId?',
+        name: 'RunReport',
+        component: () => import('../views/run/report/RunReportView.vue'),
+        props: true,
       },
     ],
   },

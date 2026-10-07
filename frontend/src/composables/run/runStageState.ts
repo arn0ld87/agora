@@ -9,7 +9,7 @@
  */
 
 import { asRunRegistryId } from '@/contracts/runIdentifiers'
-import { PENDING_REPORT_ID, REPORT_SIMULATION_ID_QUERY_KEY } from '@/utils/reportRoute'
+import { PENDING_REPORT_ID } from '@/utils/reportRoute'
 
 export type StageKey = 'graph' | 'personas' | 'simulation' | 'report' | 'interviews'
 
@@ -160,7 +160,12 @@ function kindFromJob(job: JobInfo): StageStateKind {
 }
 
 function kindFromReport(report: ReportInfo): StageStateKind {
-  switch (report.status) {
+  return reportStateKind(report.status)
+}
+
+/** Berichtsstatus -> Zustand; `incomplete` ist nie `done`. */
+export function reportStateKind(status: string): StageStateKind {
+  switch (status) {
     case 'pending':
     case 'planning':
     case 'generating':
@@ -200,12 +205,12 @@ function target(name: string, params: Record<string, string>, query?: Record<str
   return query && Object.keys(query).length > 0 ? { name, params, query } : { name, params }
 }
 
-/** Berichtsseite im Zustand „bereit, noch nicht gestartet“ (Sentinel-ID, Simulation und Lauf in der Query). */
+/** Bericht-Reiter im Zustand „bereit, noch nicht gestartet“ (Sentinel-ID, Registry-Lauf in der Query). */
 function reportReadyTarget(data: RunWorkspaceData): RouteTarget {
-  const query: Record<string, string> = { [REPORT_SIMULATION_ID_QUERY_KEY]: data.simulationId }
+  const query: Record<string, string> = {}
   const runId = asRunRegistryId(data.jobs['simulation_run']?.runId)
   if (runId) query.runId = runId
-  return target('Report', { reportId: PENDING_REPORT_ID }, query)
+  return target('RunReport', { simulationId: data.simulationId, reportId: PENDING_REPORT_ID }, query)
 }
 
 function disabled(reason: string, kind: StepKind): NextStep {
@@ -243,7 +248,7 @@ function nextStepFor(
         ? enabled('view', target('RunSimulationFeed', { simulationId: data.simulationId }))
         : enabled(stepKind, target('RunSimulationFeed', { simulationId: data.simulationId }))
     case 'report': {
-      if (reportId) return enabled('view', target('StepReport', { reportId }))
+      if (reportId) return enabled('view', target('RunReport', { simulationId: data.simulationId, reportId }))
       const sim = rows.get('simulation') ?? 'notStarted'
       if (!DONE_KINDS.includes(sim)) return disabled('afterSimulation', 'start')
       // Der Bericht wird erst auf der Berichtsseite nach Bestätigung gestartet (#1023, #1801).

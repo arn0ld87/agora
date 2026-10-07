@@ -7,6 +7,7 @@ import { formatShelfDate, jobStatusMessage } from '@/composables/useShelf'
 import RunStageDots from './RunStageDots.vue'
 import RunStateMark from './RunStateMark.vue'
 import RunVersionsList from './RunVersionsList.vue'
+import { reportLink } from '@/utils/reportRoute'
 
 /**
  * Lauf als Kachel oder Listenzeile (dieselben Angaben, anderes Raster).
@@ -88,7 +89,7 @@ const count = computed(() => props.entry.reports.length)
       >
         {{ t('views.library.runs.versions.count', { n: count }, count) }}
       </button>
-      <RouterLink v-if="latestReportId" class="run-tile__btn" :to="{ name: 'StepReport', params: { reportId: latestReportId } }">
+      <RouterLink v-if="latestReportId" class="run-tile__btn" :to="reportLink(latestReportId, entry.lauf.id)">
         {{ t('views.library.runs.versions.openLatest') }}
       </RouterLink>
     </div>
@@ -113,7 +114,7 @@ const count = computed(() => props.entry.reports.length)
 
     <p class="run-tile__date">{{ date }}</p>
 
-    <RunVersionsList v-if="versionsOpen && versionsState" :id="versionsId" :state="versionsState" class="run-tile__versions" />
+    <RunVersionsList v-if="versionsOpen && versionsState" :id="versionsId" :state="versionsState" :simulation-id="entry.lauf.id" class="run-tile__versions" />
   </li>
 </template>
 
