@@ -2820,7 +2820,95 @@
         "title": "Personasatz",
         "empty": "Dieser Personasatz enthält noch keine Personas.",
         "locked": "Gesperrt: Aus diesem Personasatz ist ein Lauf entstanden. Zum Ändern bitte duplizieren.",
-        "notFound": "Personasatz nicht gefunden."
+        "notFound": "Personasatz nicht gefunden.",
+        "backToLibrary": "Zurück zu den Personasätzen",
+        "conflict": "Konflikt: Dieser Benutzername kommt im Personasatz schon vor.",
+        "header": {
+          "label": "Personasatz",
+          "rename": "Umbenennen",
+          "name": "Name",
+          "description": "Beschreibung",
+          "save": "Speichern",
+          "cancel": "Abbrechen",
+          "count": "{n} Personas",
+          "stateLocked": "gesperrt",
+          "stateEditable": "bearbeitbar",
+          "duplicate": "Duplizieren",
+          "duplicateAndEdit": "Duplizieren und bearbeiten",
+          "duplicateName": "{name} (Kopie)",
+          "usedBy": "Genutzt von diesen Läufen:"
+        },
+        "origin": {
+          "graph": "aus Graph",
+          "manual": "von Hand",
+          "ai_draft": "KI-Entwurf",
+          "fallback": "Fallback"
+        },
+        "kind": {
+          "individual": "individuell",
+          "collective": "kollektiv"
+        },
+        "card": {
+          "select": "{name} auswählen",
+          "noRole": "Keine Rolle angegeben",
+          "fallbackNote": "Degradation: regelbasierte Fallback-Persona, keine normale Persona.",
+          "draftNote": "Entwurf: KI-generiert und noch nicht geprüft."
+        },
+        "filter": {
+          "label": "Personas filtern",
+          "search": "Suche",
+          "origin": "Herkunft",
+          "kind": "Art",
+          "role": "Rolle",
+          "all": "Alle",
+          "reset": "Filter zurücksetzen",
+          "count": "{shown} von {total}",
+          "noMatches": "Keine Persona passt zu den Filtern."
+        },
+        "toolbar": {
+          "label": "Aktionen für Personas",
+          "add": "+ Persona",
+          "selectAll": "Alle angezeigten auswählen",
+          "deleteSelected": "Löschen ({n})",
+          "lockedReason": "Der Personasatz ist gesperrt. Zum Ändern bitte duplizieren."
+        },
+        "confirm": {
+          "label": "Löschen bestätigen",
+          "text": "{n} Personas endgültig löschen? Schlägt eine Löschung fehl, bleibt alles unverändert.",
+          "yes": "Endgültig löschen",
+          "no": "Abbrechen"
+        },
+        "cards": {
+          "label": "Personas"
+        },
+        "quality": {
+          "label": "Qualitätshinweise",
+          "loading": "Qualität wird geprüft …",
+          "error": "Qualitätshinweise konnten nicht geladen werden:",
+          "summary": "{total} Personas, {roles} verschiedene Rollen, {mbti} verschiedene MBTI-Typen.",
+          "noGlobalIssues": "Keine übergreifenden Hinweise.",
+          "issuesFor": "Hinweise zu {name}",
+          "severity": {
+            "error": "Fehler",
+            "warning": "Warnung",
+            "info": "Hinweis"
+          }
+        },
+        "editor": {
+          "titleNew": "Neue Persona",
+          "titleEdit": "Persona bearbeiten",
+          "name": "Name",
+          "username": "Benutzername",
+          "save": "Speichern",
+          "cancel": "Abbrechen",
+          "invalid": "Name und Benutzername sind Pflicht.",
+          "lockedHint": "Der Personasatz ist gesperrt, die Persona ist nur lesbar."
+        },
+        "announce": {
+          "deleted": "{n} Personas gelöscht.",
+          "saved": "{name} gespeichert.",
+          "renamed": "Personasatz aktualisiert."
+        }
       },
       "run": {
         "title": "Personas",

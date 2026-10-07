@@ -19,6 +19,7 @@ import {
   updatePersonaSet,
   updatePersonaSetEntry,
 } from '@/api/personaSets'
+import { ApiError } from '@/api/envelope'
 import { describeError } from '@/composables/run/simulation/simulationEnvelope'
 import type {
   PersonaSetEntry,
@@ -33,6 +34,8 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
   const record = ref<PersonaSetRecord | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  /** Ladefehler war 404: der Satz existiert nicht (mehr). */
+  const notFound = ref(false)
   const actionError = ref<string | null>(null)
   const conflictError = ref(false)
   const lockedByServer = ref(false)
@@ -48,11 +51,13 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
   async function load(): Promise<void> {
     loading.value = true
     error.value = null
+    notFound.value = false
     try {
       record.value = await getPersonaSet(toValue(setId))
       lockedByServer.value = false
     } catch (err) {
       record.value = null
+      notFound.value = err instanceof ApiError && err.status === 404
       error.value = describeError(err)
     } finally {
       loading.value = false
@@ -156,6 +161,7 @@ export function usePersonaSet(setId: MaybeRefOrGetter<string>) {
     entries,
     loading,
     error,
+    notFound,
     actionError,
     conflictError,
     busy,

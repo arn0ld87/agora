@@ -2820,7 +2820,95 @@
         "title": "Persona set",
         "empty": "This persona set has no personas yet.",
         "locked": "Locked: a run was created from this persona set. Duplicate it to make changes.",
-        "notFound": "Persona set not found."
+        "notFound": "Persona set not found.",
+        "backToLibrary": "Back to persona sets",
+        "conflict": "Conflict: this username already exists in the persona set.",
+        "header": {
+          "label": "Persona set",
+          "rename": "Rename",
+          "name": "Name",
+          "description": "Description",
+          "save": "Save",
+          "cancel": "Cancel",
+          "count": "{n} personas",
+          "stateLocked": "locked",
+          "stateEditable": "editable",
+          "duplicate": "Duplicate",
+          "duplicateAndEdit": "Duplicate and edit",
+          "duplicateName": "{name} (copy)",
+          "usedBy": "Used by these runs:"
+        },
+        "origin": {
+          "graph": "from graph",
+          "manual": "by hand",
+          "ai_draft": "AI draft",
+          "fallback": "Fallback"
+        },
+        "kind": {
+          "individual": "individual",
+          "collective": "collective"
+        },
+        "card": {
+          "select": "Select {name}",
+          "noRole": "No role given",
+          "fallbackNote": "Degradation: rule-based fallback persona, not a regular persona.",
+          "draftNote": "Draft: AI-generated and not reviewed yet."
+        },
+        "filter": {
+          "label": "Filter personas",
+          "search": "Search",
+          "origin": "Origin",
+          "kind": "Kind",
+          "role": "Role",
+          "all": "All",
+          "reset": "Reset filters",
+          "count": "{shown} of {total}",
+          "noMatches": "No persona matches the filters."
+        },
+        "toolbar": {
+          "label": "Persona actions",
+          "add": "+ Persona",
+          "selectAll": "Select all shown",
+          "deleteSelected": "Delete ({n})",
+          "lockedReason": "The persona set is locked. Duplicate it to make changes."
+        },
+        "confirm": {
+          "label": "Confirm deletion",
+          "text": "Delete {n} personas permanently? If one deletion fails, nothing changes.",
+          "yes": "Delete permanently",
+          "no": "Cancel"
+        },
+        "cards": {
+          "label": "Personas"
+        },
+        "quality": {
+          "label": "Quality hints",
+          "loading": "Checking quality …",
+          "error": "Quality hints could not be loaded:",
+          "summary": "{total} personas, {roles} distinct roles, {mbti} distinct MBTI types.",
+          "noGlobalIssues": "No set-wide hints.",
+          "issuesFor": "Hints for {name}",
+          "severity": {
+            "error": "Error",
+            "warning": "Warning",
+            "info": "Note"
+          }
+        },
+        "editor": {
+          "titleNew": "New persona",
+          "titleEdit": "Edit persona",
+          "name": "Name",
+          "username": "Username",
+          "save": "Save",
+          "cancel": "Cancel",
+          "invalid": "Name and username are required.",
+          "lockedHint": "The persona set is locked, the persona is read-only."
+        },
+        "announce": {
+          "deleted": "{n} personas deleted.",
+          "saved": "{name} saved.",
+          "renamed": "Persona set updated."
+        }
       },
       "run": {
         "title": "Personas",
