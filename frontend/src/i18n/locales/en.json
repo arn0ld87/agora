@@ -1859,6 +1859,32 @@
     }
   },
   "views": {
+    "graphEdit": {
+      "lock": {
+        "title": "Graph locked",
+        "unknown": "Checking lock state",
+        "editable": "Editable",
+        "locked": "Locked: a simulation uses this graph. Create an independent copy to edit it.",
+        "usedBy": "Used by",
+        "simulation": "Simulation {id}",
+        "checkFailed": "The lock state could not be determined.",
+        "reload": "Reload lock state"
+      },
+      "errors": {
+        "locked": "The graph is locked because a simulation uses it. Nothing was changed.",
+        "conflict": "The change conflicts with an existing element. Nothing was changed.",
+        "migrationRunning": "An embedding migration is running; the graph is temporarily not editable.",
+        "embeddingFailed": "The embedding could not be computed. Nothing was changed.",
+        "invalidInput": "The input is invalid.",
+        "other": "The change failed."
+      },
+      "origin": {
+        "manual": "manual",
+        "edited": "edited",
+        "extracted": "extracted",
+        "changedAt": "Changed on {date}"
+      }
+    },
     "newRun": {
       "title": "New run",
       "close": "Close dialog",

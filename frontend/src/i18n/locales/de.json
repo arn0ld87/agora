@@ -1859,6 +1859,32 @@
     }
   },
   "views": {
+    "graphEdit": {
+      "lock": {
+        "title": "Graph gesperrt",
+        "unknown": "Sperrzustand wird geprüft",
+        "editable": "Bearbeitbar",
+        "locked": "Gesperrt: Eine Simulation verwendet diesen Graphen. Zum Bearbeiten eine unabhängige Kopie anlegen.",
+        "usedBy": "Verwendet von",
+        "simulation": "Simulation {id}",
+        "checkFailed": "Der Sperrzustand konnte nicht ermittelt werden.",
+        "reload": "Sperrzustand neu laden"
+      },
+      "errors": {
+        "locked": "Der Graph ist gesperrt, weil eine Simulation ihn verwendet. Es wurde nichts geändert.",
+        "conflict": "Die Änderung kollidiert mit einem bestehenden Element. Es wurde nichts geändert.",
+        "migrationRunning": "Eine Embedding-Migration läuft, der Graph ist vorübergehend nicht bearbeitbar.",
+        "embeddingFailed": "Die Einbettung konnte nicht berechnet werden. Es wurde nichts geändert.",
+        "invalidInput": "Die Eingabe ist ungültig.",
+        "other": "Die Änderung ist fehlgeschlagen."
+      },
+      "origin": {
+        "manual": "manuell",
+        "edited": "bearbeitet",
+        "extracted": "extrahiert",
+        "changedAt": "Geändert am {date}"
+      }
+    },
     "newRun": {
       "title": "Neuer Lauf",
       "close": "Dialog schließen",
