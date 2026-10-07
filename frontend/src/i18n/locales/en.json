@@ -2566,6 +2566,37 @@
             "body": "The report has evidence, but it could not be delivered in a contract-conforming way. This is not a data gap; the evidence cannot be checked in this view."
           }
         },
+        "export": {
+          "trigger": "Export",
+          "incomplete": "This version is incomplete; the export contains only what exists.",
+          "noEvidence": "(evidence not loaded)",
+          "omittedReason": "The file was delivered without evidence (evidence_omitted); it cannot be fully verified.",
+          "running": "Preparing {action} …",
+          "done": "{action}: done.",
+          "failed": "{action} failed: {reason}",
+          "warning": "{action}: {reason}",
+          "blocked": {
+            "noVersion": "Export unavailable: no version selected.",
+            "loading": "Export unavailable: the report is still loading.",
+            "running": "Export unavailable: the report is still being generated."
+          },
+          "action": {
+            "md": "Markdown (.md)",
+            "copy": "Copy Markdown",
+            "html": "HTML (.html)",
+            "json": "JSON (.json)",
+            "evidence": "Evidence (JSON)",
+            "csv-personas": "CSV: personas",
+            "csv-segments": "CSV: segments",
+            "csv-claims": "CSV: claims",
+            "zip": "ZIP bundle (all files)",
+            "print": "Print"
+          }
+        },
+        "print": {
+          "title": "Report: {title}",
+          "version": "Version {n}"
+        },
         "redirect": {
           "loading": "Looking for the report …",
           "notFoundTitle": "Report not found",

@@ -2566,6 +2566,37 @@
             "body": "Der Bericht hat Belege, aber sie ließen sich nicht vertragskonform ausliefern. Das ist keine Datenlücke; die Belege sind in dieser Ansicht nicht prüfbar."
           }
         },
+        "export": {
+          "trigger": "Exportieren",
+          "incomplete": "Diese Fassung ist unvollständig; der Export enthält nur, was vorliegt.",
+          "noEvidence": "(Belege nicht geladen)",
+          "omittedReason": "Die Datei wurde ohne Belege ausgeliefert (evidence_omitted); sie ist nicht vollständig prüfbar.",
+          "running": "{action} wird vorbereitet …",
+          "done": "{action}: fertig.",
+          "failed": "{action} ist fehlgeschlagen: {reason}",
+          "warning": "{action}: {reason}",
+          "blocked": {
+            "noVersion": "Export gesperrt: Es ist keine Fassung gewählt.",
+            "loading": "Export gesperrt: Der Bericht wird noch geladen.",
+            "running": "Export gesperrt: Der Bericht wird noch erzeugt."
+          },
+          "action": {
+            "md": "Markdown (.md)",
+            "copy": "Markdown kopieren",
+            "html": "HTML (.html)",
+            "json": "JSON (.json)",
+            "evidence": "Belege (JSON)",
+            "csv-personas": "CSV: Personas",
+            "csv-segments": "CSV: Segmente",
+            "csv-claims": "CSV: Claims",
+            "zip": "ZIP-Bündel (alle Dateien)",
+            "print": "Drucken"
+          }
+        },
+        "print": {
+          "title": "Bericht: {title}",
+          "version": "Fassung {n}"
+        },
         "redirect": {
           "loading": "Der Bericht wird gesucht …",
           "notFoundTitle": "Bericht nicht gefunden",

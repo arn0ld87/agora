@@ -16,6 +16,7 @@
 import { computed, inject, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import ReportExportMenu from '@/components/run/report/ReportExportMenu.vue'
 import ReportHeader from '@/components/run/report/ReportHeader.vue'
 import ReportIncompleteBanner from '@/components/run/report/ReportIncompleteBanner.vue'
 import ReportOutlinePane from '@/components/run/report/ReportOutlinePane.vue'
@@ -114,7 +115,9 @@ const noGraph = computed(
     </p>
 
     <template v-else>
-      <ReportHeader :simulation-id="simulationId" />
+      <ReportHeader :simulation-id="simulationId">
+        <template #actions><ReportExportMenu /></template>
+      </ReportHeader>
       <ReportIncompleteBanner :report="reportData" />
 
       <div class="run-report__grid" data-testid="report-grid">
