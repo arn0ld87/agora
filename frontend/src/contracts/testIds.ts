@@ -142,30 +142,23 @@ export const DossierTestId = {
 } as const
 
 /**
- * ReportReaderTestId — PR 6 (Premium-Redesign, "Bericht lesen").
- *
- * Deckt die Dreispalten-Leseumgebung ab (ReportReader.vue + ReportOutline.vue
- * + ReportEvidenceRail.vue): Outline links, Serif-Lesespalte, Belegrand
- * rechts, Overlay "Neu generieren" fuer Modell/Modus.
+ * RunReportTestId — Bericht als Reiter am Lauf (Etappe 5, #1804). Loest die
+ * Selektoren der alten Leseumgebung (`ReportReaderTestId`) ab. Die Eintraege
+ * stehen als Literale in `components/run/report/**`; `ReportTestIds.spec.ts`
+ * prueft, dass beides uebereinstimmt.
+ *   outline          Gliederung (nav)
+ *   outlineItemPrefix  Eintrag je Abschnitt: `report-outline-item-<n>`
+ *   text             Lesetext (article), gespeicherte Berichte als ein Block
+ *   claim            ein Claim der Claim-Liste in der Belegspalte
+ *   evidencePanel    Belegspalte (Kennzahlen, Belege, Claims, Pruefhinweise)
  */
-export const ReportReaderTestId = {
-  root: 'report-reader-root',
-  outline: 'report-reader-outline',
-  outlineItem: 'report-reader-outline-item',
-  body: 'report-reader-body',
-  section: 'report-reader-section',
-  rail: 'report-reader-evidence-rail',
-  railToggle: 'report-reader-rail-toggle',
-  claim: 'report-reader-claim',
-  gap: 'report-reader-gap',
-  redTeam: 'report-reader-red-team',
-  regenerateOpen: 'report-reader-regenerate-open',
-  regenerateOverlay: 'report-reader-regenerate-overlay',
-  regenerateClose: 'report-reader-regenerate-close',
-  regenerateConfirm: 'report-reader-regenerate-confirm',
+export const RunReportTestId = {
+  outline: 'report-outline',
+  outlineItemPrefix: 'report-outline-item-',
+  text: 'report-text',
+  claim: 'report-claim',
+  evidencePanel: 'report-evidence-panel',
 } as const
-
-export type ReportReaderTestId = (typeof ReportReaderTestId)[keyof typeof ReportReaderTestId]
 
 /**
  * SimulationLiveTestId — Selektoren fuer die Simulation-live-Instrument-
