@@ -9,7 +9,7 @@
  *
  * Persistenz via localStorage, damit ein Reload den Drawer-Zustand haelt.
  */
-import { computed, getCurrentScope, onScopeDispose, ref, watch, type Ref } from 'vue'
+import { computed, getCurrentScope, onBeforeUnmount, onMounted, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { buildLogsStreamUrl } from '../api/logs'
 import { useOperatorAccess } from './useOperatorAccess'
 
@@ -138,11 +138,23 @@ async function startErrorWatch(): Promise<void> {
   }
 }
 
+// --- Protokollseite ---------------------------------------------------------
+// Zeigt die Seite /activity/log den Protokollstrom, haelt sie ihn allein: die
+// Konsole bleibt dann unsichtbar (ihr Strom endet) und der Fehlerzaehler
+// oeffnet keine zweite Verbindung. So gibt es nie zwei Streams gleichzeitig.
+const pageClaims = ref(0)
+
+/** Aus einer Komponente: meldet fuer ihre Lebenszeit, dass die Seite den Strom haelt. */
+export function useLogStreamPageClaim(): void {
+  onMounted(() => { pageClaims.value++ })
+  onBeforeUnmount(() => { pageClaims.value = Math.max(0, pageClaims.value - 1) })
+}
+
 export function useLogDrawer() {
   // Logs sind Betreiber-Zustand (operator_only, #1617): für Supabase-Nutzer
   // weder Knopf noch Hotkey noch Drawer.
   const available = useOperatorAccess()
-  const visible = computed(() => isOpen.value && available.value)
+  const visible = computed(() => isOpen.value && available.value && pageClaims.value === 0)
 
   // Nur aus einem Effekt-Scope (Komponente): Strom folgt "Betreiber und
   // geschlossen". Mehrere Aufrufer stimmen im Ergebnis ueberein; der letzte
@@ -150,7 +162,7 @@ export function useLogDrawer() {
   if (getCurrentScope()) {
     watchSubscribers++
     watch(
-      () => available.value && !isOpen.value,
+      () => available.value && !isOpen.value && pageClaims.value === 0,
       (shouldWatch) => {
         if (shouldWatch) {
           if (!watchSource && watchRetryTimer === null) void startErrorWatch()

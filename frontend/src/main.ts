@@ -7,6 +7,7 @@ import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
 import { useTheme } from './composables/useTheme'
+import { useFontSize } from './composables/settings-window/useFontSize'
 import { useAuthStore } from './store/auth'
 
 // Self-hosted Webfonts: Newsreader traegt den Berichts-Fliesstext inkl.
@@ -19,6 +20,7 @@ import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
 import './assets/styles/tokens-umbau.css'
 import './assets/styles/tokens-compat.css'
+import './assets/styles/font-scale.css'
 import './assets/styles/global.css'
 import './assets/styles/states.css'
 
@@ -33,6 +35,9 @@ useTheme()
 // Density: data-density auf <html> setzen bevor Vue mountet → kein FOUC.
 // Slice FE-Redesign-6 · 2026-05-15
 useDensity().applyOnMount()
+
+// Schriftgröße: data-font-size auf <html> (#1799, Etappe 3).
+useFontSize().applyOnMount()
 
 const uiVersion = (import.meta.env.VITE_UI_VERSION as string | undefined) ?? 'v4'
 ;(window as unknown as { __AGORA_UI_VERSION__?: string }).__AGORA_UI_VERSION__ = uiVersion

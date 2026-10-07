@@ -269,7 +269,7 @@
     "model": {
       "label": "LLM model",
       "placeholder": "Select model …",
-      "workspaceDefaultHint": "No selection: workspace default from /settings/llm-providers will be used.",
+      "workspaceDefaultHint": "No selection: workspace default from Settings → Providers will be used.",
       "presetGroup": "Recommended",
       "ollamaGroup": "Locally available",
       "customGroup": "Custom",
@@ -277,7 +277,7 @@
       "customPlaceholder": "e.g. qwen3-coder-next:cloud",
       "refresh": "Refresh list",
       "loadingModels": "Loading available models…",
-      "noOllama": "No connection to Ollama. Configure a provider in /settings/llm-providers or start Ollama.",
+      "noOllama": "No connection to Ollama. Configure a provider in Settings → Providers or start Ollama.",
       "openAiDefault": "OpenAI default model active.",
       "default": "Default from .env",
       "ollamaOption": "{model} (Ollama)"
@@ -412,6 +412,8 @@
     },
     "agentCap": {
       "label": "Limit max. number of agents",
+      "sliderLabel": "Persona limit, slider",
+      "numberLabel": "Persona limit, number",
       "unit": "Agents",
       "minimumHint": "Minimum for the DACH persona table: 10 agents.",
       "unlimitedHint": "Without a limit, one agent is created per eligible graph entity — but never fewer than the report needs for its persona table."
@@ -925,18 +927,7 @@
     },
     "countsError": "Counts could not be loaded completely.",
     "settings": {
-      "label": "Settings",
-      "general": "General",
-      "integrations": "Integrations",
-      "usersTeams": "Users & Teams",
-      "apiKeys": "API Keys",
-      "llmProviders": "LLM Providers",
-      "embedding": "Embedding configuration",
-      "llmRouting": "LLM Routing",
-      "auditLogs": "Audit logs",
-      "profile": "Profile",
-      "providerKeys": "Provider keys",
-      "previewBadge": "Preview"
+      "label": "Settings"
     },
     "footer": {
       "collapse": "Collapse",
@@ -1055,7 +1046,10 @@
       "copy": "Copy",
       "copyTitle": "Copy visible lines to the clipboard",
       "copied": "Copied",
-      "copyFailed": "Copying failed. The clipboard is not available."
+      "copyFailed": "Copying failed. The clipboard is not available.",
+      "showAll": "Show everything",
+      "scopeNote": "Only lines containing “{id}” (text search in the line, not exact).",
+      "emptyScoped": "No lines with this run identifier."
     }
   },
   "settings": {
@@ -1117,6 +1111,7 @@
       "ui": "UI",
       "webtools": "Webtools",
       "oasis": "OASIS",
+      "budget": "Budgets",
       "security": "Secrets"
     },
     "llmActive": {
@@ -2022,12 +2017,604 @@
     }
   },
   "views": {
+    "newRun": {
+      "title": "New run",
+      "close": "Close dialog",
+      "question": {
+        "legend": "Question",
+        "label": "Simulation question",
+        "belongsToGraph": "The question belongs to the graph. To ask a different question, build a new graph from the source.",
+        "noneStored": "No question is stored for this graph.",
+        "contestedLater": "You set the contested question during preparation, after the graph is built."
+      },
+      "graph": {
+        "legend": "Graph",
+        "existing": "Choose an existing one",
+        "selectLabel": "Existing graph",
+        "fromSource": "New from source",
+        "none": "Without a graph",
+        "noneWhy": "Not available yet. Simulation and interviews would be possible, a report would not.",
+        "noneYet": "There is no finished graph yet.",
+        "loading": "Loading graphs …",
+        "loadError": "The graphs could not be loaded.",
+        "rejected": "{n} graphs were unreadable and are not offered."
+      },
+      "source": {
+        "dropHint": "Drop files here or choose them",
+        "fileList": "Chosen files"
+      },
+      "personas": {
+        "legend": "Persona set",
+        "generate": "Generate",
+        "existing": "Choose an existing one",
+        "existingWhy": "Arrives with persona sets in the library.",
+        "laterWithSource": "With a new source you set the upper limit during preparation."
+      },
+      "models": {
+        "legend": "Models",
+        "scope": "Applies to all stages of this run. Per-stage deviations are chosen at the stage's start button."
+      },
+      "scope": {
+        "legend": "Scope and budget",
+        "days": "Days (1–365)",
+        "rounds": "Rounds (3–30)",
+        "activityLater": "With a new source you set the activity mode during preparation.",
+        "budgetUnavailable": "The instance's default limits apply.",
+        "budgetReplaces": "A custom budget replaces the default limits entirely.",
+        "estimateNeedsCap": "Without an upper limit on personas no estimate is possible.",
+        "estimateBasis": "The estimate assumes at most {agents} personas and {rounds} rounds."
+      },
+      "blockers": {
+        "graph": "Choose an existing graph.",
+        "files": "Add at least one source file.",
+        "question": "The simulation question is missing.",
+        "contested": "The contested question needs 10 to 300 characters or stays empty.",
+        "agents": "The persona upper limit is at least 10.",
+        "days": "The number of days is between 1 and 365.",
+        "rounds": "The number of rounds is between 3 and 30."
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "start": "Start",
+        "buildGraph": "Build graph",
+        "createOnly": "Create only",
+        "createOnlyWhy": "A run is created as soon as the graph is built."
+      },
+      "progress": {
+        "create": "Creating the run …",
+        "prepare": "Preparing the personas …"
+      },
+      "errors": {
+        "create": "The run could not be created.",
+        "createShape": "The response when creating the run was incomplete.",
+        "prepare": "Preparation could not be started.",
+        "prepareAfterCreate": "Run {id} was created, but preparation failed: {message}",
+        "openCreated": "Go to the created run"
+      }
+    },
+    "settingsWindow": {
+      "title": "Settings",
+      "close": "Close settings",
+      "navLabel": "Sections",
+      "sectionSelect": "Choose a section",
+      "operatorOnly": "This section belongs to the operator. It is shown here as a preview only, changes are not possible.",
+      "access": {
+        "apiKeys": "API keys",
+        "audit": "Audit log",
+        "account": "Account",
+        "security": "Security",
+        "needsAuth": "This requires an access token or a sign-in."
+      },
+      "embedding": {
+        "notice": "Note: some consumers still read the environment variables. The configuration shown here is not necessarily the one in effect. Status:"
+      },
+      "appearance": {
+        "groupTheme": "Color scheme",
+        "groupText": "Density and type",
+        "theme": { "label": "Appearance", "hint": "System follows your device setting.", "system": "System", "light": "Light", "dark": "Dark" },
+        "density": { "label": "Density", "hint": "Compact tightens the sidebar and the top bar.", "comfortable": "Comfortable", "compact": "Compact" },
+        "fontSize": { "label": "Font size", "hint": "Affects body text, headings and hint text of the interface.", "small": "Small", "normal": "Normal", "large": "Large" },
+        "local": "This choice applies to this browser only."
+      },
+      "system": {
+        "groupServices": "Services",
+        "groupApp": "Application",
+        "loading": "Checking status…",
+        "loadError": "The system status could not be retrieved.",
+        "retry": "Check again",
+        "state": { "ok": "OK", "down": "Unreachable", "unknown": "Unknown", "skipped": "Not checked" },
+        "backend": { "label": "Backend", "hint": "Application server of this instance." },
+        "neo4j": { "label": "Neo4j", "hint": "Graph database for sources and entities." },
+        "ollama": { "label": "Ollama", "hint": "Local model service.", "skipped": "The active provider is {provider}; Ollama is not checked." },
+        "disk": { "label": "Upload storage", "free": "{free} free", "used": "{pct} % used" },
+        "version": { "label": "Version", "unknown": "unknown" },
+        "unreported": "The backend does not currently report Redis and PostgreSQL; their state is not visible here.",
+        "console": { "label": "Console", "hint": "Shows the backend log.", "open": "Open console", "unavailable": "Operator only." }
+      },
+      "budgets": {
+        "intro": "These default limits apply only to new runs without a budget of their own. A budget set in the start dialog replaces the default limits entirely.",
+        "noLimit": "0 = no limit.",
+        "groupLimits": "Default limits",
+        "groupEnforcement": "Enforcement",
+        "loading": "Loading budgets…",
+        "loadError": "The budgets could not be loaded.",
+        "tokens": { "label": "Tokens", "hint": "Maximum number of tokens per run." },
+        "cost": { "label": "Cost in US dollars", "hint": "Maximum cost per run, e.g. 12.50." },
+        "duration": { "label": "Duration", "hint": "Maximum duration per run.", "unit": "Unit", "minutes": "Minutes", "hours": "Hours" },
+        "calls": { "label": "Model calls", "hint": "Maximum number of calls to the language model per run." },
+        "enforcement": { "label": "Enforcement", "hint": "Hard ends the run when exceeded, soft only warns.", "hard": "Hard (run ends)", "soft": "Soft (warning only)" },
+        "invalidNumber": "Enter a number greater than or equal to 0.",
+        "invalidInteger": "Enter a whole number greater than or equal to 0.",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "Saved.",
+        "discard": "Discard",
+        "saveError": "Saving failed: {message}"
+      },
+      "sections": {
+        "general": "General",
+        "appearance": "Appearance",
+        "providers": "Providers",
+        "profiles": "Profiles",
+        "embedding": "Embedding",
+        "pipeline": "Pipeline",
+        "budgets": "Budgets",
+        "access": "Access",
+        "system": "System"
+      },
+      "providers": {
+        "managementTitle": "Provider management",
+        "managementDescription": "Connection, transport, state and available models per provider.",
+        "managementLocked": "Provider management belongs to the operator and is locked for this sign-in. You can store your own keys below.",
+        "keysTitle": "Own keys",
+        "keysDescription": "They apply to the active workspace only. Stored keys are never shown again.",
+        "transport": "Transport",
+        "key": "Key",
+        "keyStored": "Stored (not displayed)",
+        "keyMissing": "Not stored",
+        "keyNone": "Not needed (local service)",
+        "keySession": "Sign-in via the local CLI session",
+        "transports": {
+          "http": "HTTP",
+          "local": "Local service",
+          "cli": "CLI"
+        }
+      },
+      "profiles": {
+        "modelsTitle": "Model profiles",
+        "modelsDescription": "A profile is one saved model; one of them is the default.",
+        "stagesTitle": "Default model per stage",
+        "stagesDescription": "Which model graph, personas, simulation and report use by default.",
+        "valuesTitle": "Technical values (LLM)"
+      }
+    },
     "history": {
       "title": "History",
       "subtitle": "Run and Branch History"
     },
     "compare": {
-      "title": "Compare"
+      "title": "Compare",
+      "pickRun": "Pick a run to compare its branches."
+    },
+    "library": {
+      "title": "Library",
+      "runs": {
+        "title": "Runs",
+        "views": {
+          "label": "Filter runs",
+          "all": "All",
+          "running": "Running",
+          "attention": "Needs you",
+          "withReport": "With report"
+        },
+        "layout": {
+          "label": "Layout",
+          "tiles": "Tiles",
+          "list": "List"
+        },
+        "band": {
+          "title": "In focus",
+          "running": "Running now",
+          "attention": "Needs you"
+        },
+        "state": {
+          "running": "Running",
+          "paused": "Paused",
+          "done": "Done",
+          "incomplete": "Incomplete",
+          "stopped": "Stopped",
+          "budget": "Budget exhausted",
+          "failed": "Failed",
+          "pending": "Open",
+          "unknown": "No data"
+        },
+        "stage": {
+          "list": "Stages of the run",
+          "graph": "Graph",
+          "personas": "Personas",
+          "simulation": "Simulation",
+          "report": "Report",
+          "interviews": "Interviews"
+        },
+        "reason": {
+          "user_stop": "You stopped the run.",
+          "stopped": "The run was stopped.",
+          "process_restart": "A server restart interrupted the job.",
+          "budget": "The run's budget is exhausted.",
+          "budget_tokens": "The run's token budget is exhausted.",
+          "budget_cost": "The run's cost budget is exhausted.",
+          "budget_time": "The run's time budget is exhausted.",
+          "budget_calls": "The LLM call budget is exhausted.",
+          "failed": "The job failed.",
+          "incomplete": "The report is incomplete."
+        },
+        "tile": {
+          "select": "Select run \"{title}\"",
+          "source": "Source:",
+          "progress": "Progress {n} %"
+        },
+        "versions": {
+          "count": "{n} version | {n} versions",
+          "openLatest": "Open latest version",
+          "listLabel": "Versions of the run",
+          "row": "Version {n}",
+          "loading": "Loading versions …",
+          "error": "The versions could not be loaded.",
+          "empty": "This run has no version.",
+          "invalid": "{n} version is unreadable and not shown. | {n} versions are unreadable and not shown."
+        },
+        "selection": {
+          "count": "{n} selected",
+          "compare": "Compare",
+          "clear": "Clear selection",
+          "compareHint": "Select exactly two runs to compare them.",
+          "noSimulation": "This run has no simulation to compare yet."
+        },
+        "empty": {
+          "text": "A run is a whole undertaking from source to report: graph, personas, simulation and report.",
+          "filtered": "No run matches this filter.",
+          "action": "New run"
+        }
+      },
+      "newRun": {
+        "title": "New run",
+        "subtitle": "Start a new run from a source: drop files, choose question, model and budget."
+      },
+      "graphs": {
+        "title": "Graphs"
+      }
+    },
+    "run": {
+      "overview": {
+        "title": "Overview",
+        "stagesLabel": "Stages of the run",
+        "col": {
+          "stage": "Stage",
+          "state": "State",
+          "model": "Model",
+          "duration": "Duration",
+          "tokens": "Tokens",
+          "cost": "Cost",
+          "next": "Next step"
+        },
+        "notRecorded": "not recorded",
+        "modelDefault": "Default: {model}",
+        "modelDefaultHint": "applies if nothing else is chosen at the start",
+        "modelNone": "no default recorded",
+        "modelLoadFailed": "The model that ran could not be loaded.",
+        "withModel": "with {model}",
+        "stepWithModel": "{step}, with {model}",
+        "regenerate": {
+          "button": "Regenerate with …",
+          "title": "Regenerate report",
+          "description": "Creates another version. Existing versions are kept.",
+          "pickLabel": "Model for the new version",
+          "pickPlaceholder": "Choose a model",
+          "confirm": "Regenerate",
+          "cancel": "Cancel",
+          "pending": "Creating …",
+          "failed": "The report could not be regenerated: {reason}"
+        },
+        "budgetTitle": "Budget status",
+        "budgetNone": "No job with recorded usage for this run yet.",
+        "cardsLabel": "Parts of the run",
+        "questionTitle": "Question",
+        "questionMissing": "Question not recorded",
+        "graphTitle": "Graph",
+        "graphMissing": "No graph recorded",
+        "openGraph": "View graph",
+        "personasTitle": "Persona set",
+        "personasCount": "{n} personas",
+        "personasMissing": "Persona set not recorded",
+        "openPersonas": "View personas",
+        "fallbackUnknown": "Whether fallback personas were created only shows in the report; without a report it is not recorded."
+      },
+      "graph": {
+        "title": "Graph"
+      },
+      "header": {
+        "loading": "Loading run …",
+        "notFoundTitle": "Run not found",
+        "notFoundBody": "There is no run for “{id}”.",
+        "errorTitle": "Run could not be loaded",
+        "retry": "Reload",
+        "toRuns": "Back to runs",
+        "questionMissing": "Question not recorded",
+        "headline": "{stage}: {state}",
+        "stateLabel": "State of the run"
+      },
+      "tabs": {
+        "label": "Run tabs",
+        "overview": "Overview",
+        "graph": "Graph",
+        "personas": "Personas",
+        "simulation": "Simulation",
+        "report": "Report",
+        "interviews": "Interviews"
+      },
+      "disabled": {
+        "noProject": "The project of this run cannot be resolved.",
+        "noReport": "This run has no report yet.",
+        "afterSimulation": "Only possible after the simulation has finished."
+      },
+      "stage": {
+        "graph": "Graph",
+        "personas": "Personas",
+        "simulation": "Simulation",
+        "report": "Report",
+        "interviews": "Interviews"
+      },
+      "state": {
+        "notStarted": "Not started",
+        "queued": "Queued",
+        "running": "Running",
+        "paused": "Paused",
+        "done": "Done",
+        "degraded": "With limitation",
+        "fallback": "With fallback",
+        "incomplete": "Incomplete",
+        "stopped": "Stopped",
+        "budget": "Budget exhausted",
+        "failed": "Failed",
+        "notRecorded": "Not recorded"
+      },
+      "step": {
+        "start": "Start",
+        "resume": "Resume",
+        "view": "View"
+      },
+      "termination": {
+        "user_stop": "Stopped on request",
+        "user_cancel": "Cancelled on request",
+        "process_restart": "Process was restarted",
+        "error": "Ended with an error",
+        "budget_tokens": "Token budget exhausted",
+        "budget_cost": "Cost budget exhausted",
+        "budget_time": "Time budget exhausted",
+        "budget_calls": "Call budget exhausted",
+        "completed": "Ended normally"
+      },
+      "degradation": {
+        "persona_generation": "Fallback personas: rule-based placeholders instead of generated personas",
+        "simulation": "Simulation with limitation",
+        "simulation_positioning": "Too few voices take a position on the contested question",
+        "interview_agents": "Interviews without result",
+        "section_generation": "Sections not generated normally",
+        "section_metadata": "Section metadata missing",
+        "requirement_checker": "Analysis aspects missing in the report text",
+        "contract_export": "Contract export limited",
+        "outline_planning": "Outline from fallback schema",
+        "run_cancellation": "Sections missing after cancellation",
+        "missingSections": "{count} sections missing",
+        "evidenceOmitted": "Evidence omitted (evidence_omitted)",
+        "evidenceCheckFailed": "Evidence could not be checked",
+        "reportIncomplete": "Report is incomplete"
+      }
+    },
+    "graphLibrary": {
+      "title": "Graph",
+      "errors": {
+        "unknown": "Unknown error while loading.",
+        "schema": "The server response does not have the expected format.",
+        "graphData": "The graph data could not be loaded.",
+        "project": "The graph could not be loaded.",
+        "run": "The run could not be loaded.",
+        "runs": "The runs on this graph could not be loaded.",
+        "runsPartial": "{n} runs in the response were unreadable and are not shown."
+      },
+      "runStatus": {
+        "created": "Created",
+        "preparing": "Preparing",
+        "ready": "Ready",
+        "idle": "Waiting",
+        "starting": "Starting",
+        "running": "Running",
+        "paused": "Paused",
+        "stopping": "Stopping",
+        "stopped": "Stopped",
+        "completed": "Done",
+        "failed": "Failed"
+      },
+      "state": {
+        "loading": "Loading graph …",
+        "errorTitle": "The graph could not be loaded",
+        "retry": "Try again",
+        "noGraphTitle": "There is no graph",
+        "notBuilt": "The graph has not been built yet, or the run was created without a graph.",
+        "failed": "Building the graph failed.",
+        "openBuild": "Open build view",
+        "buildingTitle": "The graph is being built",
+        "buildingNoProgress": "No progress reported yet.",
+        "incomplete": "The build was cancelled. This is a partial graph and not a basis for further runs."
+      },
+      "run": {
+        "title": "Graph",
+        "openInLibrary": "Open in library"
+      },
+      "detail": {
+        "newRun": "New run on this graph",
+        "newRunUnavailable": "A new run is only possible once the graph is fully built.",
+        "runsTitle": "Runs on this graph",
+        "runsLoading": "Loading runs …",
+        "runsEmpty": "No run uses this graph yet."
+      },
+      "library": {
+        "loading": "Loading graphs …",
+        "errorTitle": "The graphs could not be loaded",
+        "empty": "No graph yet. A graph is created as soon as a run is started from a source.",
+        "rejected": "{n} graphs in the response were unreadable and are not shown.",
+        "runsUnavailable": "The number of runs could not be loaded.",
+        "runsUnknown": "Runs unknown",
+        "runs": "{n} runs",
+        "runsOne": "1 run",
+        "moreSources": "+ {n} more"
+      },
+      "reader": {
+        "label": "Read graph",
+        "counts": "{entities} entities · {relations} relations",
+        "targetMissing": "The requested target is not part of this graph.",
+        "export": {
+          "graphml": "Export as GraphML",
+          "running": "Exporting …",
+          "failed": "The export failed."
+        },
+        "search": {
+          "label": "Search entity",
+          "placeholder": "Name or alias"
+        },
+        "types": {
+          "label": "Type filter",
+          "title": "Types",
+          "clear": "All types"
+        },
+        "list": {
+          "title": "Entities",
+          "empty": "No entity matches search and filter.",
+          "capped": "First {shown} of {total} entities. Narrow search or filter."
+        },
+        "view": {
+          "label": "View",
+          "net": "Network",
+          "table": "Table"
+        },
+        "net": {
+          "hint": "Click a node or a relation to see details on the right."
+        },
+        "tabs": {
+          "label": "Table",
+          "entities": "Entities",
+          "relations": "Relations"
+        },
+        "table": {
+          "captionEntities": "Entities of the graph",
+          "captionRelations": "Relations of the graph",
+          "emptyEntities": "No entity matches search and filter.",
+          "emptyRelations": "No relation matches search and filter.",
+          "capped": "First {shown} of {total} rows. Narrow search or filter.",
+          "entity": {
+            "name": "Name",
+            "type": "Type",
+            "degree": "Relations",
+            "createdAt": "Created"
+          },
+          "relation": {
+            "from": "From",
+            "label": "Relation",
+            "to": "To",
+            "episodes": "Source fragments"
+          }
+        },
+        "detail": {
+          "label": "Details",
+          "none": "Select an entity or a relation to see details.",
+          "aliases": "Aliases",
+          "description": "Description",
+          "attributes": "Attributes",
+          "relations": "Relations ({n})",
+          "noRelations": "This entity has no relations.",
+          "outgoing": "outgoing",
+          "incoming": "incoming",
+          "origin": "Origin",
+          "episodes": "Supported by {n} source fragments",
+          "created": "Created: {date}",
+          "noDocument": "Document and section are not stored in the graph data.",
+          "unnamedRelation": "Unnamed relation",
+          "relationKind": "Relation",
+          "between": "Between",
+          "from": "From",
+          "to": "To",
+          "fact": "Statement"
+        }
+      }
+    },
+    "activity": {
+      "title": "Activity",
+      "tabs": "Activity sections",
+      "jobs": {
+        "title": "Jobs",
+        "caption": "Registry jobs with kind, run, state, progress and duration",
+        "col": {
+          "kind": "Kind",
+          "run": "Run",
+          "state": "State",
+          "progress": "Progress",
+          "started": "Started",
+          "duration": "Duration",
+          "actions": "Actions"
+        },
+        "filter": {
+          "kind": "Kind",
+          "state": "State",
+          "all": "All",
+          "none": "Reset filters"
+        },
+        "kind": {
+          "graph_build": "Graph build",
+          "ontology_generate": "Ontology",
+          "simulation_prepare": "Preparation",
+          "simulation_run": "Simulation",
+          "report_generate": "Report",
+          "report_generation": "Report"
+        },
+        "state": {
+          "pending": "Waiting",
+          "running": "Running",
+          "paused": "Paused",
+          "completed": "Done",
+          "stopped": "Stopped",
+          "budget": "Budget exhausted",
+          "failed": "Failed"
+        },
+        "reason": {
+          "user_stop": "stopped by user",
+          "user_cancel": "cancelled by user",
+          "process_restart": "process was restarted",
+          "error": "error",
+          "budget_tokens": "token budget",
+          "budget_cost": "cost budget",
+          "budget_time": "time budget",
+          "budget_calls": "call budget"
+        },
+        "action": {
+          "toRun": "Go to run",
+          "cancel": "Cancel",
+          "cancelConfirm": "Really cancel this job?",
+          "cancelYes": "Yes, cancel",
+          "cancelNo": "No",
+          "cancelRequested": "Cancel requested",
+          "cancelFailed": "Cancel failed"
+        },
+        "open": "Open job {id}",
+        "unknownRun": "no run",
+        "loading": "Loading jobs…",
+        "error": "Jobs could not be loaded: {message}",
+        "empty": "No jobs yet.",
+        "emptyFiltered": "No job matches this filter."
+      },
+      "log": {
+        "title": "Log",
+        "pageTitle": "Backend log"
+      }
     },
     "stepEnvSetup": {
       "title": "Personas",

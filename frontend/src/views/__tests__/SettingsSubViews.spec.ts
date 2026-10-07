@@ -21,6 +21,7 @@ import en from '@/i18n/locales/en.json'
 import {
   GENERAL_SETTINGS_SECTIONS,
   INTEGRATION_SETTINGS_SECTIONS,
+  PROFILE_SETTINGS_SECTIONS,
 } from '../Settings/settingsSections'
 
 vi.mock('@/components/v4/shell/AppShell.vue', () => ({
@@ -126,6 +127,7 @@ describe('Settings-Section-Parität (Slice 7.4a)', () => {
   it('ordnet jede Schema-Section exakt einer v4-Settings-Seite zu', () => {
     const mappedSections = [
       ...GENERAL_SETTINGS_SECTIONS,
+      ...PROFILE_SETTINGS_SECTIONS,
       ...INTEGRATION_SETTINGS_SECTIONS,
     ]
     const occurrences = mappedSections.reduce<Record<string, number>>((counts, section) => {

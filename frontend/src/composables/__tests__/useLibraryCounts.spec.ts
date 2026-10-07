@@ -159,7 +159,7 @@ describe('useLibraryCounts — Laden', () => {
 
   it('laedt beim Einhaengen genau einmal, wenn die Ablage nicht offen ist', async () => {
     const router = makeTestRouter()
-    await router.push('/dashboard')
+    await router.push('/activity/jobs')
     const { api } = mountComposable(router)
     await flushPromises()
     expect(listRuns).toHaveBeenCalledTimes(1)
@@ -168,26 +168,26 @@ describe('useLibraryCounts — Laden', () => {
     expect(api().loadFailed.value).toBe(false)
   })
 
-  it('laedt NICHT, solange die Ablage offen ist (ShelfView laedt und veroeffentlicht)', async () => {
+  it('laedt NICHT, solange die Laeufe-Bibliothek offen ist (LibraryRunsView laedt und veroeffentlicht)', async () => {
     const router = makeTestRouter()
-    await router.push({ name: 'Shelf' })
+    await router.push({ name: 'LibraryRuns' })
     const { api } = mountComposable(router)
     await flushPromises()
     expect(listRuns).not.toHaveBeenCalled()
     // Noch kein Stand: unbekannt, nicht 0.
     expect(api().counts.value.laeufe).toBeNull()
-    // ShelfView veroeffentlicht → die Zaehler folgen ohne eigenen Ladevorgang.
+    // LibraryRunsView veroeffentlicht → die Zaehler folgen ohne eigenen Ladevorgang.
     useShellStore().shelfSnapshot = snap([lauf('a', 'processing')])
     expect(api().counts.value).toMatchObject({ laeufe: 1, laeuft: 1 })
     expect(listRuns).not.toHaveBeenCalled()
   })
 
-  it('laedt einmal, sobald man die Ablage verlaesst', async () => {
+  it('laedt einmal, sobald man die Laeufe-Bibliothek verlaesst', async () => {
     const router = makeTestRouter()
-    await router.push({ name: 'Shelf' })
+    await router.push({ name: 'LibraryRuns' })
     mountComposable(router)
     await flushPromises()
-    await router.push('/dashboard')
+    await router.push('/activity/jobs')
     await flushPromises()
     expect(listRuns).toHaveBeenCalledTimes(1)
   })
@@ -195,7 +195,7 @@ describe('useLibraryCounts — Laden', () => {
   it('faellt eine Quelle aus, bleibt ihr Zaehler leer (null) und der Fehler wird gemeldet', async () => {
     listRuns.mockRejectedValue(new Error('boom'))
     const router = makeTestRouter()
-    await router.push('/dashboard')
+    await router.push('/activity/jobs')
     const { api } = mountComposable(router)
     await flushPromises()
     expect(api().counts.value.laeufe).toBeNull()

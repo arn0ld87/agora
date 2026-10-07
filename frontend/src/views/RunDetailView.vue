@@ -20,7 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
-const runId = String(route.params.id)
+const runId = String(route.params.id ?? route.params.runId)
 
 const run = ref<RunDetail | null>(null)
 const loading = ref(false)
@@ -78,7 +78,7 @@ async function loadRun(): Promise<void> {
 }
 
 function goBack(): void {
-  void router.push({ name: 'Runs' })
+  void router.push({ name: 'ActivityJobs' })
 }
 
 onMounted(() => void loadRun())

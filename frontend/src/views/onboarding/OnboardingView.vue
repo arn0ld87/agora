@@ -22,7 +22,7 @@
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRouter, type RouteLocationRaw } from 'vue-router'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Button from '@/components/v4/forms/Button.vue'
@@ -51,7 +51,7 @@ interface StatusStepConfig {
   descriptionKey: string
   futureNoticeKey: string
   settingsLinkKey: string
-  settingsRouteName: string
+  settingsTo: RouteLocationRaw
   configured: () => boolean
   /**
    * Optionaler Hinweis-Key, der nur gerendert wird, wenn
@@ -87,7 +87,7 @@ const statusSteps = computed<StatusStepConfig[]>(() => [
     descriptionKey: 'onboarding.providers.description',
     futureNoticeKey: 'onboarding.providers.futureNotice',
     settingsLinkKey: 'onboarding.providers.settingsLink',
-    settingsRouteName: 'SettingsLlmProviders',
+    settingsTo: { name: 'SettingsWindow', params: { section: 'providers' } },
     // Phase 2 §3.2.1: providers zeigt Connection-Store-Status (mindestens
     // eine ProviderConnection existiert), nicht das redundante
     // `chat_model_configured`-Flag. Voraussetzung: onMounted ruft
@@ -100,7 +100,7 @@ const statusSteps = computed<StatusStepConfig[]>(() => [
     descriptionKey: 'onboarding.chatModel.description',
     futureNoticeKey: 'onboarding.chatModel.futureNotice',
     settingsLinkKey: 'onboarding.chatModel.settingsLink',
-    settingsRouteName: 'SettingsLlmProviders',
+    settingsTo: { name: 'SettingsWindow', params: { section: 'providers' } },
     configured: () => store.onboarding.requirements?.chat_model_configured ?? false,
   },
   {
@@ -111,7 +111,7 @@ const statusSteps = computed<StatusStepConfig[]>(() => [
     settingsLinkKey: 'onboarding.embeddings.settingsLink',
     // Onboarding Slice 4.3.3: embeddings hat eine eigene Settings-Route
     // (Slice 4.2 + 4.3.1 API), nicht mehr LlmProviders.
-    settingsRouteName: 'SettingsEmbedding',
+    settingsTo: { name: 'SettingsEmbedding' },
     configured: () => store.onboarding.requirements?.embedding_configured ?? false,
     legacyHintKey: 'onboarding.embeddings.legacyHint',
     legacyHintMatcher: () =>
@@ -374,7 +374,7 @@ useShellBreadcrumbs(() => [{ label: t('onboarding.wizard.title') }])
           {{ t(activeStatusStep.legacyHintKey) }}
         </p>
         <p class="onboarding-step__notice">{{ t(activeStatusStep.futureNoticeKey) }}</p>
-        <RouterLink :to="{ name: activeStatusStep.settingsRouteName }" class="onboarding-step__link">
+        <RouterLink :to="activeStatusStep.settingsTo" class="onboarding-step__link">
           {{ t(activeStatusStep.settingsLinkKey) }}
         </RouterLink>
       </div>

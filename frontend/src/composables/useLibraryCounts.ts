@@ -12,7 +12,8 @@ import type { ShelfObject, ShelfSource } from '../types/shelf'
  * Zaehler der Seitenleiste (#1795): Bibliothek, Im Blick, Aktivitaet.
  *
  * Quelle ist der Ablage-Stand (`useShelf`), nicht ein eigener Endpunkt. Der
- * Stand liegt im Shell-Store: Ist die Ablage offen, veroeffentlicht ShelfView
+ * Stand liegt im Shell-Store: Ist die Laeufe-Bibliothek (`LibraryRuns`) oder
+ * die alte Objektansicht (`ShelfObject`) offen, veroeffentlicht die Ansicht
  * ihn nach jedem Laden und die Seitenleiste laedt NICHT mit. Auf allen anderen
  * Seiten laedt die Seitenleiste selbst (beim Verlassen der Ablage und danach
  * alle `COUNTS_POLL_MS`, im Hintergrund-Tab pausiert) sowie bei einem
@@ -110,8 +111,8 @@ export function deriveLibraryCounts(snapshot: ShelfSnapshot | null): LibraryCoun
 
 /**
  * Simulation des juengsten Laufs, der eine hat: Ziel des Eintrags „Vergleich“.
- * Die Vergleichsansicht (`CompareV4`) verlangt eine `simulationId`; eine
- * parameterlose Adresse gibt es heute nicht. `null`, solange keine bekannt ist.
+ * Die Vergleichsansicht (`Compare`, `/compare/:simulationId?`) waehlt mit
+ * Kennung den ersten Lauf vor. `null`, solange keine bekannt ist.
  */
 export function latestSimulationId(snapshot: ShelfSnapshot | null): string | null {
   for (const lauf of laeufe(snapshot?.objects ?? [])) {
@@ -130,7 +131,8 @@ export function useLibraryCounts() {
   const operatorAccess = useOperatorAccess()
   const shelf = useShelf(t, te)
 
-  const onShelf = computed(() => route.name === 'Shelf' || route.name === 'ShelfObject')
+  // Ansichten, die den Stand selbst laden und im Shell-Store veroeffentlichen.
+  const onShelf = computed(() => route.name === 'LibraryRuns' || route.name === 'ShelfObject')
 
   const counts = computed(() => deriveLibraryCounts(shell.shelfSnapshot))
 
@@ -144,7 +146,7 @@ export function useLibraryCounts() {
     shell.shelfSnapshot = { objects: shelf.objects.value, unavailable: shelf.unavailableSources.value }
   }
 
-  // Auf der Ablage laedt ShelfView und veroeffentlicht den Stand; sonst laden wir.
+  // Auf der Bibliothek bzw. Ablage laedt die Ansicht und veroeffentlicht den Stand; sonst laden wir.
   const polling = usePolling(load, COUNTS_POLL_MS)
   watch(
     onShelf,

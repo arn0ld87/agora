@@ -83,4 +83,19 @@ describe('AgentCapControl (Issue #586)', () => {
     const wrapper = mountComponent({ useAgentCap: true, maxAgents: 50 })
     expect(wrapper.find('input[type="range"]').attributes('min')).toBe('10')
   })
+
+  it('Range und Zahlenfeld haben ein echtes label-for (#1799)', () => {
+    const wrapper = mountComponent({ useAgentCap: true })
+    const expected = { 'input[type="range"]': 'step2.agentCap.sliderLabel', 'input[type="number"]': 'step2.agentCap.numberLabel' }
+    for (const [sel, key] of Object.entries(expected)) {
+      const el = wrapper.find(sel)
+      const id = el.attributes('id')
+      expect(id).toBeTruthy()
+      const label = wrapper.find(`label[for="${id}"]`)
+      expect(label.exists()).toBe(true)
+      expect(label.text()).toBe(key)
+      const hintId = el.attributes('aria-describedby')
+      expect(wrapper.find(`[id="${hintId}"]`).text()).toBe('step2.agentCap.minimumHint')
+    }
+  })
 })

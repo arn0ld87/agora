@@ -57,7 +57,7 @@
           <span class="kbd">⌘K</span>
         </button>
 
-        <!-- Neuer Lauf → bestehender Start eines Laufs (Dashboard mit HeroNewRun) -->
+        <!-- Neuer Lauf → Startdialog „Neuer Lauf“ (Route NewRun, Fenster ueber der Ansicht) -->
         <button
           class="topbar__primary"
           type="button"
@@ -142,9 +142,9 @@ const consoleLabel = computed(() =>
     : t('topbar.consoleToggle'),
 )
 
-/** Ein neuer Lauf beginnt heute im Dashboard (HeroNewRun → Process/new). */
+/** Ein neuer Lauf beginnt im Startdialog (Route NewRun, seit Etappe 3). */
 function startNewRun(): void {
-  void router.push({ name: 'Dashboard' })
+  void router.push({ name: 'NewRun' })
 }
 </script>
 

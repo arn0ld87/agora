@@ -76,6 +76,15 @@ const emit = defineEmits<{
 
 const { models: discoveredModels, providers, loading, error, refresh: refreshDiscovery } = useAvailableModels()
 const operatorAccess = useOperatorAccess()
+/**
+ * Liste öffnet per Klick auf das Feld, per Trigger und per Pfeiltaste — nicht
+ * mehr beim bloßen Fokussieren (`open-on-focus`). Sonst springt der Fokus beim
+ * Durchtabben jedes Pickers sofort in das Suchfeld der Liste (eigener Portal-Knoten
+ * am Seitenende); im scrollenden Einstellungsfenster verschieben sich diese
+ * Suchfelder mit dem Scrollen von Picker zu Picker, die Tab-Reihenfolge springt
+ * scheinbar nach oben (#1797).
+ */
+const open = ref(false)
 const customProviderId = ref('')
 const customModelId = ref('')
 const customProvider = computed(() => providers.value.find((provider) =>
@@ -313,7 +322,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
     <ComboboxRoot
       :model-value="selectedId ?? ''"
       :disabled="disabled"
-      :open-on-focus="true"
+      v-model:open="open"
       @update:model-value="onUpdate"
     >
       <ComboboxAnchor class="ai-model-picker__anchor">
@@ -326,6 +335,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
           spellcheck="false"
           :data-testid="testIds.input"
           :aria-label="placeholderText"
+          @click="open = true"
         />
         <ComboboxTrigger class="ai-model-picker__trigger" :aria-label="placeholderText" tabindex="-1">
           <span aria-hidden="true">▾</span>
@@ -333,7 +343,15 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
       </ComboboxAnchor>
 
       <ComboboxPortal>
-        <ComboboxContent class="ai-model-picker__content">
+        <ComboboxContent
+          class="ai-model-picker__content"
+          position="popper"
+          side="bottom"
+          align="start"
+          :avoid-collisions="false"
+          :side-offset="4"
+          :collision-padding="8"
+        >
           <ComboboxViewport class="ai-model-picker__viewport">
             <ComboboxInput
               class="ai-model-picker__search"
@@ -514,7 +532,9 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   color: var(--text-primary);
 }
 
-.ai-model-picker__content {
+/* :global — im Popper-Modus trägt nicht das Wurzelelement, sondern ein inneres div die Klasse;
+   dort fehlt das scoped-Attribut. Zusätzlich liegt der Inhalt per Portal in <body>. */
+:global(.ai-model-picker__content) {
   inline-size: var(--reka-combobox-trigger-width, min(360px, calc(100vw - 16px)));
   min-inline-size: min(300px, calc(100vw - 16px));
   max-inline-size: calc(100vw - 16px);
@@ -523,11 +543,13 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   border-radius: var(--r-6, 12px);
   box-shadow: var(--shadow-popover, var(--shadow-3));
   overflow: hidden;
-  z-index: 50;
+  position: relative;
+  /* Über Dialog (201) und Overlay (200): die Liste wird nach <body> teleportiert. */
+  z-index: 300;
 }
 
 .ai-model-picker__viewport {
-  max-block-size: min(360px, var(--reka-combobox-content-available-height, 360px));
+  max-block-size: max(160px, min(360px, var(--reka-combobox-content-available-height, 360px)));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 6px;

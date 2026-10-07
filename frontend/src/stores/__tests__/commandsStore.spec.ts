@@ -95,6 +95,33 @@ describe('commandsStore', () => {
     expect(cmds.length).toBeGreaterThanOrEqual(5)
   })
 
+  // Etappe 2 (#1797): die Navigationsbefehle zeigen auf die neuen Adressen,
+  // die Ids bleiben (gespeicherte „zuletzt benutzt“-Eintraege).
+  it.each([
+    ['nav:dashboard', 'NewRun'],
+    ['nav:runs', 'LibraryRuns'],
+    ['nav:graphs', 'LibraryGraphs'],
+    ['nav:history', 'ActivityJobs'],
+  ])('Befehl %s navigiert auf %s', (id, routeName) => {
+    const store = useCommandsStore()
+    const cmd = store.buildStaticCommands(routerMock as never).find((c) => c.id === id)
+    cmd?.action()
+    expect(routerMock.push).toHaveBeenCalledWith({ name: routeName })
+  })
+
+  // Etappe 3 (#1799): die Einstellungsbefehle führen direkt in den Abschnitt des
+  // Fensters, nicht über die alten (weitergeleiteten) Adressen.
+  it.each([
+    ['nav:settings-integrations', 'pipeline'],
+    ['nav:settings-llm-routing', 'profiles'],
+    ['nav:settings-llm-providers', 'providers'],
+    ['nav:settings-api-keys', 'access'],
+  ])('Befehl %s öffnet den Fensterabschnitt %s', (id, section) => {
+    const store = useCommandsStore()
+    store.buildStaticCommands(routerMock as never).find((c) => c.id === id)?.action()
+    expect(routerMock.push).toHaveBeenCalledWith({ name: 'SettingsWindow', params: { section } })
+  })
+
   it('filter() gibt alle Commands zurueck wenn query leer', () => {
     const store = useCommandsStore()
     const cmds = store.buildStaticCommands(routerMock as never)

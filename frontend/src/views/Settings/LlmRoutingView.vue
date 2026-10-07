@@ -13,6 +13,11 @@ import { listRuns } from '@/api/runs'
 import type { RunRecord } from '@/types/run'
 import type { RunDetail } from '@/contracts/runsContract'
 
+const props = withDefaults(defineProps<{
+  /** Im Einstellungsfenster eingebettet: kein eigener Seitenkopf. */
+  embedded?: boolean
+}>(), { embedded: false })
+
 // Settings is only an entrypoint; routing persistence remains bound to real run IDs.
 const SELECTED_RUN_STORAGE_KEY = 'agora.llmRouting.selectedRunId'
 const { t } = useI18n()
@@ -73,6 +78,7 @@ onMounted(() => {
 <template>
   <SettingsOverlay>
     <PageHeader
+      v-if="!props.embedded"
       :title="t('settings.v4.llmRouting.title')"
       :subtitle="t('settings.v4.llmRouting.subtitle')"
     />

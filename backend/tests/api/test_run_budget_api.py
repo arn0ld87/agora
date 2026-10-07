@@ -195,6 +195,19 @@ class TestPreflightEstimate:
         warnings = resp.get_json()["data"]["warnings"]
         assert not any("Standard-Tokendeckel" in w for w in warnings)
 
+    def test_estimate_has_no_abort_warning_when_default_enforcement_is_soft(
+        self, env, monkeypatch
+    ):
+        """Ein weicher Standarddeckel bricht nicht ab, die Schaetzung warnt davor nicht."""
+        monkeypatch.delenv("AGORA_SIM_DEFAULT_MAX_TOKENS", raising=False)
+        monkeypatch.setenv("AGORA_SIM_DEFAULT_BUDGET_ENFORCEMENT", "soft")
+        resp = env["client"].post(
+            "/api/simulation/preflight-estimate",
+            json={"num_agents": 52, "max_rounds": 24},
+        )
+        warnings = resp.get_json()["data"]["warnings"]
+        assert not any("Standard-Tokendeckel" in w for w in warnings)
+
 
 class TestRunDetailEnrichment:
     def test_detail_contains_budget_and_usage(self, env):

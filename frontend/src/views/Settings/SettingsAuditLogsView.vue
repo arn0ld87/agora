@@ -4,12 +4,14 @@ import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsOverlay from '@/components/v4/forms/SettingsOverlay.vue'
 import ComingSoonCard from '@/components/v4/forms/ComingSoonCard.vue'
 
+withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const { t } = useI18n()
 </script>
 
 <template>
   <SettingsOverlay>
     <PageHeader
+      v-if="!embedded"
       :title="t('settings.v4.auditLogs.title')"
       :subtitle="t('settings.v4.auditLogs.subtitle')"
     />

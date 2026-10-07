@@ -5,6 +5,7 @@ import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
 import type { ActivityMode } from '../contracts/simulationActivityContract'
 import type { AiModelRefPayload } from './report'
 import type { ApiEnvelope } from './envelope'
+import type { RunBudgetConfig } from '../contracts/runBudgetContract'
 import type { BranchOverrides as BranchOverridesContract } from '../contracts/branchOverrides'
 import {
   PostCreatedEventSchema,
@@ -48,6 +49,11 @@ export interface PrepareSimulationData {
   contested_question?: string
   /** Aktivitätsmodus (#1779); ohne Angabe gilt die Server-Einstellung. */
   activity_mode?: ActivityMode
+  /** Explizite Modellwahl (schliesst `llm_profile_id` aus). */
+  ai_model_ref?: AiModelRefPayload
+  llm_profile_id?: string
+  /** Eigenes Run-Budget; ohne Angabe gelten die Standardgrenzen der Instanz. */
+  budget?: RunBudgetConfig
 }
 
 /**

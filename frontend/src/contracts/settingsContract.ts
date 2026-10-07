@@ -13,6 +13,7 @@ export const SettingsSectionSchema = z.enum([
   'ui',
   'webtools',
   'oasis',
+  'budget',
   'security',
 ])
 export type SettingsSection = z.infer<typeof SettingsSectionSchema>

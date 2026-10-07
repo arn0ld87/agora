@@ -38,6 +38,16 @@ beforeEach(() => {
 })
 
 describe('WorkspaceProviderKeysView', () => {
+  it('eingebettet: kein eigenes h1, Anbieter bleiben sichtbar', async () => {
+    const wrapper = mount(WorkspaceProviderKeysView, { props: { embedded: true } })
+    await flushPromises()
+    expect(wrapper.find('h1').exists()).toBe(false)
+    expect(wrapper.text()).toContain('OpenAI')
+    const standalone = mount(WorkspaceProviderKeysView)
+    await flushPromises()
+    expect(standalone.find('h1').exists()).toBe(true)
+  })
+
   it('sends the entered key once and clears it without displaying it', async () => {
     api.save.mockResolvedValue({ provider_id: 'openai', configured: true, updated_at: null })
     const wrapper = mount(WorkspaceProviderKeysView)

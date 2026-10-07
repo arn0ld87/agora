@@ -95,6 +95,11 @@ const router = createRouter({
     { path: '/', name: 'Dashboard', component: { template: '<div/>' } },
     { path: '/runs', name: 'Runs', component: { template: '<div/>' } },
     { path: '/v4/history', name: 'HistoryV4', component: { template: '<div/>' } },
+    // Etappe 2 (#1797): Ziele der statischen Navigationsbefehle.
+    { path: '/library/runs', name: 'LibraryRuns', component: { template: '<div/>' } },
+    { path: '/library/runs/new', name: 'NewRun', component: { template: '<div/>' } },
+    { path: '/library/graphs', name: 'LibraryGraphs', component: { template: '<div/>' } },
+    { path: '/activity/jobs', name: 'ActivityJobs', component: { template: '<div/>' } },
     { path: '/settings/general', name: 'SettingsGeneral', component: { template: '<div/>' } },
     { path: '/settings/integrations', name: 'SettingsIntegrations', component: { template: '<div/>' } },
     { path: '/settings/llm-routing', name: 'SettingsLlmRouting', component: { template: '<div/>' } },
@@ -182,7 +187,8 @@ describe('CommandPalette', () => {
       expect(dashCmd).toBeDefined()
       if (dashCmd) {
         dashCmd.action()
-        expect(pushSpy).toHaveBeenCalledWith({ name: 'Dashboard' })
+        // `nav:dashboard` ist seit Etappe 2 der Einstieg „Neuer Lauf“.
+        expect(pushSpy).toHaveBeenCalledWith({ name: 'NewRun' })
       }
 
       // close wird nach pick aufgerufen

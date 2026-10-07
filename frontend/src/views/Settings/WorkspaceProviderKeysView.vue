@@ -12,6 +12,11 @@ import type {
   WorkspaceSupportedProvider,
 } from '../../contracts/workspaceProviderCredentialsContract'
 
+const props = withDefaults(defineProps<{
+  /** Im Einstellungsfenster eingebettet: kein eigener `<h1>`, schmaler Rand. */
+  embedded?: boolean
+}>(), { embedded: false })
+
 const { t } = useI18n()
 const auth = useAuthStore()
 // Die BYOK-Anbieterliste kommt aus der Backend-Registry (#1688), nie aus
@@ -103,8 +108,8 @@ onMounted(() => { if (auth.activeWorkspaceId) void load() })
 </script>
 
 <template>
-  <div class="workspace-keys">
-    <h1>{{ t('auth.workspaceProviderKeys.title') }}</h1>
+  <div class="workspace-keys" :class="{ 'workspace-keys--embedded': props.embedded }">
+    <h1 v-if="!props.embedded">{{ t('auth.workspaceProviderKeys.title') }}</h1>
     <p>{{ t('auth.workspaceProviderKeys.description') }}</p>
     <p v-if="!canEdit" role="status">{{ t('auth.workspaceProviderKeys.readOnly') }}</p>
     <p v-if="loading" role="status">{{ t('common.loading') }}</p>
@@ -112,7 +117,7 @@ onMounted(() => { if (auth.activeWorkspaceId) void load() })
     <p v-if="message" role="status">{{ message }}</p>
 
     <section v-for="provider in providers" :key="provider.provider_id" class="workspace-keys__provider">
-      <h2>{{ provider.display_name }}</h2>
+      <component :is="props.embedded ? 'h5' : 'h2'" class="workspace-keys__name">{{ provider.display_name }}</component>
       <p>{{ t(status[provider.provider_id]?.configured ? 'auth.workspaceProviderKeys.configured' : 'auth.workspaceProviderKeys.missing') }}</p>
       <form v-if="canEdit" @submit.prevent="save(provider.provider_id)">
         <label :for="`workspace-key-${provider.provider_id}`">{{ t('auth.workspaceProviderKeys.keyLabel', { provider: provider.display_name }) }}</label>
@@ -143,6 +148,8 @@ onMounted(() => { if (auth.activeWorkspaceId) void load() })
 
 <style scoped>
 .workspace-keys { max-width: 44rem; margin: 0 auto; padding: 2rem; }
+.workspace-keys--embedded { max-width: none; margin: 0; padding: 0; }
+.workspace-keys__name { margin: 0; font-size: 14px; }
 .workspace-keys__provider { border-top: 1px solid var(--hairline); padding: 1.5rem 0; }
 .workspace-keys__provider form { display: grid; gap: 0.75rem; }
 .workspace-keys__provider input { max-width: 30rem; padding: 0.65rem; }

@@ -239,8 +239,9 @@ def _effective_start_budget(
 
     Ein vom Nutzer (oder dem Demo-Limit) gesetztes Budget gewinnt immer und
     wird nicht ergaenzt -- auch dann nicht, wenn es keinen Tokendeckel enthaelt.
-    Ohne Nutzerbudget gilt der harte Standard-Tokendeckel
-    (``AGORA_SIM_DEFAULT_MAX_TOKENS``, ``0`` = abgeschaltet -> ``None``). Nur der
+    Ohne Nutzerbudget gilt das Standardbudget aus den Einstellungen
+    (``resolve_default_run_budget``: Tokens, Kosten, Laufzeit, Aufrufe; ``0`` =
+    kein Limit, alles auf 0 -> ``None``). Nur der
     Startpfad ruft das auf: Replay, Neustart und Branch geben das Budget des
     Ursprungslaufs weiter und bekommen keinen nachtraeglichen Deckel.
     """
@@ -251,8 +252,8 @@ def _effective_start_budget(
     default_budget = default_simulation_budget()
     if default_budget is not None:
         logger.info(
-            "Standard-Tokendeckel %s fuer %s gesetzt (kein Nutzerbudget)",
-            default_budget.max_tokens, run_id,
+            "Standardbudget %s fuer %s gesetzt (kein Nutzerbudget)",
+            default_budget.model_dump(mode="json", exclude_none=True), run_id,
         )
     return default_budget
 

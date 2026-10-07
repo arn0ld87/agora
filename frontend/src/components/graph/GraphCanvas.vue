@@ -12,7 +12,7 @@
       />
 
       <GraphDetailPanel
-        v-if="selectedItem"
+        v-if="selectedItem && !hideDetail"
         :item="selectedItem"
         :expanded-self-loops="expandedSelfLoops"
         @close="closeDetailPanel"
@@ -83,9 +83,12 @@ const props = defineProps({
   // Passed into useGraphRender so Auto-Freeze fires per committed batch.
   // Shape: { batch_count, total_batches, batch_at } | null
   batchSignal: { type: Object, default: null },
+  // Lesender Graph-Leser (#1797): zeigt die Auswahl in einer eigenen
+  // Detailspalte, das eingebaute Panel entfaellt dann. Default: unveraendert.
+  hideDetail: { type: Boolean, default: false },
 })
 
-defineEmits(['dismiss-finished-hint'])
+const emit = defineEmits(['dismiss-finished-hint', 'select'])
 
 const graphContainer = ref(null)
 const graphSvg = ref(null)
@@ -118,6 +121,38 @@ const {
   translateLabel: t,
   translateLabelExists: te,
   batchSignal: batchSignalRef,
+})
+
+// Auswahl im Netz nach aussen melden (Graph-Leser, #1797): { type: 'node'|'edge', data }.
+watch(selectedItem, (item) => {
+  emit('select', item ? { type: item.type, data: item.data } : null)
+})
+
+// Zentriert einen Knoten (uuid) bzw. eine Kante (Mitte zwischen ihren Knoten).
+// Liegen die Positionen noch nicht vor (Simulation laeuft an), wird das Ziel
+// vorgemerkt und beim ersten Positions-Update angesteuert.
+let pendingFocus = null
+function focusTarget(target = {}) {
+  const { nodeId = null, edgeSource = null, edgeTarget = null } = target
+  const pos = new Map(minimapNodes.value.map((n) => [n.id, n]))
+  const a = nodeId ? pos.get(nodeId) : null
+  if (a) {
+    pendingFocus = null
+    panToGraphPoint(a.x, a.y)
+    return true
+  }
+  const s = edgeSource ? pos.get(edgeSource) : null
+  const e = edgeTarget ? pos.get(edgeTarget) : null
+  if (s && e) {
+    pendingFocus = null
+    panToGraphPoint((s.x + e.x) / 2, (s.y + e.y) / 2)
+    return true
+  }
+  pendingFocus = target
+  return false
+}
+watch(minimapNodes, () => {
+  if (pendingFocus) focusTarget(pendingFocus)
 })
 
 // Issue #744 Phase 4b — Mini-Map click/drag centers the main viewport.
@@ -324,6 +359,8 @@ defineExpose({
   isPaused,
   togglePause,
   resetLayout,
+  focusTarget,
+  minimapNodes,
 })
 </script>
 

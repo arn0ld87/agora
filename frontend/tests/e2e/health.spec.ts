@@ -25,7 +25,9 @@ test.describe('M11.4a · Health-Smoke', () => {
     // M11.4b-Followup-3: 'domcontentloaded' statt 'networkidle'.
     // SPA-Root mit Pinia-Polling erreicht nie networkidle. 'domcontentloaded'
     // ist deterministisch; toHaveTitle(/Agora/) ist der Mount-Indikator.
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    // Seit Etappe 2 des Frontend-Umbaus leitet `/` auf die Bibliothek der Läufe
+    // weiter; der Smoke steuert die Startseite direkt an.
+    await page.goto('/library/runs', { waitUntil: 'domcontentloaded' });
     // Smoke-Niveau: Document/Bundle laden, kein Page-Error. Strenger
     // Mount-Check (Vue rendert erstes Kind in #app) wurde rausgenommen,
     // weil App.vue in CI-Headless ohne live Backend-Daten nicht zuverlässig

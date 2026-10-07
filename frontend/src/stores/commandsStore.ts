@@ -33,20 +33,27 @@ interface StaticCommandDef {
   labelDe: string
   labelEn: string
   routeName: string
+  /** Abschnitt des Einstellungsfensters (Route `SettingsWindow`). */
+  section?: string
   group: Command['group']
 }
 
 const STATIC_DEFS: StaticCommandDef[] = [
-  { id: 'nav:dashboard',              labelDe: 'Dashboard',      labelEn: 'Dashboard',      routeName: 'Dashboard',             group: 'nav' },
-  { id: 'nav:runs',                   labelDe: 'Runs',            labelEn: 'Runs',            routeName: 'Runs',                  group: 'nav' },
-  { id: 'nav:history',                labelDe: 'Historie',        labelEn: 'History',         routeName: 'HistoryV4',             group: 'nav' },
+  // Etappe 2 (#1797): die Ids bleiben (gespeicherte „zuletzt benutzt“-Eintraege),
+  // die Ziele sind die neuen Adressen. `nav:dashboard` ist der Einstieg „Neuer Lauf“.
+  { id: 'nav:dashboard',              labelDe: 'Neuer Lauf',      labelEn: 'New run',         routeName: 'NewRun',                group: 'nav' },
+  { id: 'nav:runs',                   labelDe: 'Läufe',           labelEn: 'Runs',            routeName: 'LibraryRuns',           group: 'nav' },
+  { id: 'nav:graphs',                 labelDe: 'Graphen',         labelEn: 'Graphs',          routeName: 'LibraryGraphs',         group: 'nav' },
+  { id: 'nav:history',                labelDe: 'Aktivität',       labelEn: 'Activity',        routeName: 'ActivityJobs',          group: 'nav' },
   { id: 'nav:settings-general',       labelDe: 'Einstellungen — Allgemein',    labelEn: 'Settings — General',       routeName: 'SettingsGeneral',       group: 'nav' },
-  { id: 'nav:settings-integrations',  labelDe: 'Einstellungen — Integrationen', labelEn: 'Settings — Integrations',  routeName: 'SettingsIntegrations',  group: 'nav' },
-  { id: 'nav:settings-llm-routing',   labelDe: 'Einstellungen — LLM-Routing', labelEn: 'Settings — LLM Routing',   routeName: 'SettingsLlmRouting',    group: 'nav' },
-  { id: 'nav:settings-llm-providers', labelDe: 'Einstellungen — LLM-Provider', labelEn: 'Settings — LLM Providers', routeName: 'SettingsLlmProviders',  group: 'nav' },
-  { id: 'nav:settings-api-keys',      labelDe: 'Einstellungen — API-Schlüssel', labelEn: 'Settings — API Keys',     routeName: 'SettingsApiKeys',       group: 'nav' },
-  { id: 'nav:settings-audit-logs',    labelDe: 'Einstellungen — Audit-Logs',  labelEn: 'Settings — Audit Logs',    routeName: 'SettingsAuditLogs',     group: 'nav' },
-  { id: 'nav:settings-users-teams',   labelDe: 'Einstellungen — Nutzer & Teams', labelEn: 'Settings — Users & Teams', routeName: 'SettingsUsersTeams',  group: 'nav' },
+  // Etappe 3 (#1799): die alten Einstellungsadressen sind Weiterleitungen; die
+  // Eintraege fuehren direkt in den Abschnitt des Einstellungsfensters. Die Ids
+  // bleiben (gespeicherte „zuletzt benutzt“-Eintraege); Audit-Protokoll und
+  // Nutzer & Teams liegen im Abschnitt „Zugang“ und haben keinen eigenen Eintrag mehr.
+  { id: 'nav:settings-integrations',  labelDe: 'Einstellungen — Pipeline',     labelEn: 'Settings — Pipeline',      routeName: 'SettingsWindow', section: 'pipeline',  group: 'nav' },
+  { id: 'nav:settings-llm-routing',   labelDe: 'Einstellungen — Profile',      labelEn: 'Settings — Profiles',      routeName: 'SettingsWindow', section: 'profiles',  group: 'nav' },
+  { id: 'nav:settings-llm-providers', labelDe: 'Einstellungen — Anbieter',     labelEn: 'Settings — Providers',     routeName: 'SettingsWindow', section: 'providers', group: 'nav' },
+  { id: 'nav:settings-api-keys',      labelDe: 'Einstellungen — Zugang',       labelEn: 'Settings — Access',        routeName: 'SettingsWindow', section: 'access',    group: 'nav' },
 ]
 
 /** Leitet einen lesbaren Label aus einem RunDetail ab. */
@@ -91,7 +98,9 @@ export const useCommandsStore = defineStore('commands', () => {
       label: locale === 'en' ? def.labelEn : def.labelDe,
       group: def.group,
       action: () => {
-        router.push({ name: def.routeName }).catch(() => {
+        router
+          .push(def.section ? { name: def.routeName, params: { section: def.section } } : { name: def.routeName })
+          .catch(() => {
           // Navigation-Fehler bei bereits aktiver Route ignorieren
         })
       },

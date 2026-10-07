@@ -102,21 +102,15 @@ describe('locale-coverage', () => {
     }
   })
 
-  it('sidebar.settings.* Keys existieren in beiden Locales (nur wire-Ziele)', () => {
-    // Fix #1713 (Befund 7): auditLogs/llmRouting sind jetzt Teil der einen
-    // Einstellungen-Navigationsebene (Sidebar-Gruppe) — die vorherige
-    // IA-Matrix-Regel "hide" ist damit aufgehoben.
-    const settingsIds = [
-      'label', 'general', 'integrations', 'apiKeys', 'llmProviders',
-      'embedding', 'profile', 'auditLogs', 'llmRouting',
-    ]
-    for (const id of settingsIds) {
-      expect(deKeys).toContain(`sidebar.settings.${id}`)
-      expect(enKeys).toContain(`sidebar.settings.${id}`)
+  it('sidebar.settings.label existiert in beiden Locales, die Abschnittsschluessel sind entfallen', () => {
+    // Etappe 3 (#1799): die Seitenleiste fuehrt nur noch eine Zeile „Einstellungen“;
+    // die Abschnitte stehen im Einstellungsfenster (views.settingsWindow.sections).
+    expect(deKeys).toContain('sidebar.settings.label')
+    expect(enKeys).toContain('sidebar.settings.label')
+    for (const id of ['general', 'integrations', 'usersTeams', 'apiKeys', 'llmProviders', 'embedding', 'llmRouting', 'auditLogs', 'profile']) {
+      expect(deKeys).not.toContain(`sidebar.settings.${id}`)
+      expect(enKeys).not.toContain(`sidebar.settings.${id}`)
     }
-    // usersTeams bleibt als i18n-Schluessel erhalten, wird aber nicht in der Sidebar gerendert
-    expect(deKeys).toContain('sidebar.settings.usersTeams')
-    expect(enKeys).toContain('sidebar.settings.usersTeams')
   })
 
   it('topbar.search existiert in beiden Locales', () => {

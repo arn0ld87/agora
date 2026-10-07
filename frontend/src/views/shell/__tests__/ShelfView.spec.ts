@@ -81,7 +81,7 @@ function makeRouter() {
     routes: [
       { path: '/ablage', name: 'Shelf', component: ShelfView },
       { path: '/ablage/:kind(lauf|bericht|personasatz|graph)/:objectId', name: 'ShelfObject', component: ShelfView },
-      { path: '/dashboard', name: 'Dashboard', component: { template: '<div/>' } },
+      { path: '/library/runs/new', name: 'NewRun', component: { template: '<div/>' } },
     ],
   })
 }

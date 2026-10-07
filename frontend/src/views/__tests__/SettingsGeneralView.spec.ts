@@ -17,7 +17,7 @@
  *     ensureLoaded-reject ohne Crash (selectedModel bleibt null)
  *  3. bettet SettingsOverlay ein (Redesign PR 9)
  *  4. zeigt PageHeader mit title + subtitle
- *  5. LlmProfileManager sichtbar
+ *  5. LlmProfileManager liegt nicht mehr hier (seit #1799 im Abschnitt Profile)
  *  6. AiModelPicker sichtbar
  *  7. i18n-Key: settings.v4.general.workspaceDefaultModel
  *  8. Capability-Filter: Picker bekommt mode='chat'
@@ -198,9 +198,9 @@ describe('SettingsGeneralView (Phase-1, Kanon-First via useEffectiveModelSelecti
     expect(ph.props('title')).toContain('Allgemein')
   })
 
-  it('LlmProfileManager sichtbar', async () => {
+  it('LlmProfileManager liegt nicht mehr hier (seit #1799 im Abschnitt Profile)', async () => {
     const w = await mountSettingsGeneral()
-    expect(w.find('[data-testid="llm-profile-manager"]').exists()).toBe(true)
+    expect(w.find('[data-testid="llm-profile-manager"]').exists()).toBe(false)
   })
 
   it('AiModelPicker sichtbar', async () => {

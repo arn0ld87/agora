@@ -7,7 +7,7 @@
     <div class="demo-preview__banner" role="status">
       <Icon name="settings" :size="16" :stroke="1.6" class="demo-preview__banner-icon" />
       <span class="demo-preview__banner-text">{{ t('demoPreview.banner.text') }}</span>
-      <RouterLink :to="{ name: 'WorkspaceProviderKeys' }" class="demo-preview__banner-link">
+      <RouterLink :to="{ name: 'SettingsWindow', params: { section: 'providers' } }" class="demo-preview__banner-link">
         {{ t('demoPreview.banner.manageKeys') }}
       </RouterLink>
     </div>
