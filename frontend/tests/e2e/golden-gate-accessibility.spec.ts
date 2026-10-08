@@ -149,7 +149,7 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   test.describe('Alte Einstellungsadressen leiten um (Etappe 3, #1799)', () => {
     const redirects: Array<[string, RegExp]> = [
       ['/settings/integrations', /\/settings\/pipeline$/],
-      ['/settings/profile', /\/settings\/access$/],
+      ['/settings/profile', /\/settings\/profile$/],
       ['/settings/users-teams', /\/settings\/access$/],
       ['/settings/api-keys', /\/settings\/access$/],
       ['/settings/audit-logs', /\/settings\/access$/],
