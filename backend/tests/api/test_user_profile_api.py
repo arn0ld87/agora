@@ -254,3 +254,27 @@ class TestPerUserProfileIsolation:
         owner = client.get("/api/profile/avatar", headers=headers_a)
         assert owner.status_code == 200
         assert owner.data.startswith(_PNG_MAGIC)
+
+    def test_delete_avatar_by_another_principal_does_not_remove_owner_avatar(self, app: Flask) -> None:
+        client = app.test_client()
+        headers_a = {"X-Test-User": self._USER_A}
+        headers_b = {"X-Test-User": self._USER_B}
+        client.put("/api/profile", json={"display_name": "A"}, headers=headers_a)
+        uploaded = client.post(
+            "/api/profile/avatar",
+            data={"file": (io.BytesIO(_MINIMAL_PNG), "avatar.png", "image/png")},
+            content_type="multipart/form-data",
+            headers=headers_a,
+        )
+        assert uploaded.status_code == 201
+
+        other_user_delete = client.delete("/api/profile/avatar", headers=headers_b)
+        assert other_user_delete.status_code == 409
+        assert other_user_delete.get_json()["code"] == "profile_required"
+
+        owner_avatar = client.get("/api/profile/avatar", headers=headers_a)
+        assert owner_avatar.status_code == 200
+        assert owner_avatar.data.startswith(_PNG_MAGIC)
+        other_user_avatar = client.get("/api/profile/avatar", headers=headers_b)
+        assert other_user_avatar.status_code == 404
+        assert other_user_avatar.get_json()["code"] == "avatar_not_found"
