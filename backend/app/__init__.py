@@ -580,19 +580,21 @@ def create_app(config_class=Config):
     ):
         install_blueprint_guard(bp)
     # Prozessweiter Zustand (Provider-Keys, LLM-Profile, API-Keys, Logs,
-    # Onboarding, Single-User-Profil, Modell-Stream): nur Betreiber, nie
-    # JWT-Nutzer (ADR-0018). LLM-Profile bleiben prozessweit, weil Laufzeit
-    # und Routing das Default-Profil ohne Workspace auflösen.
+    # Onboarding, Modell-Stream): nur Betreiber, nie JWT-Nutzer (ADR-0018).
+    # LLM-Profile bleiben prozessweit, weil Laufzeit und Routing das
+    # Default-Profil ohne Workspace auflösen.
     for bp in (
         logs_bp,
         settings_bp,
         llm_bp,
         llm_profiles_bp,
         api_keys_bp,
-        user_profile_bp,
         onboarding_bp,
     ):
         install_blueprint_guard(bp, tenant_access=False)
+    # Das Profil wird anhand der JWT-user_id je Nutzer getrennt gespeichert.
+    # Es ist damit tenant-sicher; das gemeinsame Onboarding bleibt operator-only.
+    install_blueprint_guard(user_profile_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')

@@ -22,14 +22,17 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from uuid import UUID
 
 from ..contracts.user_profile_contract import UserProfile, UserProfileUpdateRequest
 from ..utils.logger import get_logger
+from .data_dir import resolve_data_dir
 from .json_file_store import JsonFileStore
 
 logger = get_logger("agora.services.user_profile_store")
 
 _STORE_FILENAME = "user_profile.json"
+_USER_PROFILE_DIRNAME = "user_profiles"
 _AVATAR_DIRNAME = "avatars"
 
 
@@ -43,13 +46,26 @@ class UserProfileStore(JsonFileStore):
     Pfad, Prozess- und Dateisperre kommen aus ``JsonFileStore``.
     """
 
-    def __init__(self, *, data_dir: Optional[Path] = None) -> None:
-        super().__init__(_STORE_FILENAME, data_dir=data_dir)
+    def __init__(
+        self,
+        *,
+        data_dir: Optional[Path] = None,
+        user_id: UUID | None = None,
+    ) -> None:
+        if user_id is None:
+            profile_dir = data_dir
+        else:
+            base_dir = data_dir or resolve_data_dir()
+            profile_dir = base_dir / _USER_PROFILE_DIRNAME / str(user_id)
+        super().__init__(_STORE_FILENAME, data_dir=profile_dir)
+        self._user_id = user_id
 
     @property
     def avatar_dir(self) -> Path:
         directory = self._data_dir / _AVATAR_DIRNAME
-        os.makedirs(directory, exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self._user_id is not None:
+            os.chmod(directory, 0o700)
         return directory
 
     def load(self) -> Optional[UserProfile]:
@@ -89,7 +105,9 @@ class UserProfileStore(JsonFileStore):
             return None
 
     def _save_unlocked(self, profile: UserProfile) -> UserProfile:
-        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self._user_id is not None:
+            os.chmod(self._data_dir, 0o700)
         payload = profile.model_copy(update={"updated_at": _now()})
         serialized = json.dumps(
             payload.model_dump(mode="json"), indent=2, sort_keys=True
@@ -157,20 +175,25 @@ class UserProfileStore(JsonFileStore):
 
 
 
-_store_singleton: Optional[UserProfileStore] = None
+_store_singletons: dict[UUID | None, UserProfileStore] = {}
 _singleton_lock = threading.Lock()
 
 
-def get_user_profile_store() -> UserProfileStore:
-    global _store_singleton
-    if _store_singleton is None:
-        with _singleton_lock:
-            if _store_singleton is None:
-                _store_singleton = UserProfileStore()
-    return _store_singleton
+def get_user_profile_store(*, user_id: UUID | None = None) -> UserProfileStore:
+    """Return the legacy store or the store scoped to a verified user UUID.
+
+    Callers must derive user_id from the authenticated request principal,
+    never from request data. The no-argument store remains the shared local
+    profile used by legacy auth and the operator-only onboarding gate.
+    """
+    with _singleton_lock:
+        store = _store_singletons.get(user_id)
+        if store is None:
+            store = UserProfileStore(user_id=user_id)
+            _store_singletons[user_id] = store
+        return store
 
 
 def reset_user_profile_store_for_tests() -> None:
-    global _store_singleton
     with _singleton_lock:
-        _store_singleton = None
+        _store_singletons.clear()

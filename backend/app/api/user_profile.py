@@ -1,4 +1,4 @@
-"""User-Profile Blueprint (Onboarding Slice 2, Single-Workspace-Scope).
+"""User-Profile Blueprint with JWT owner scope and legacy single-user support.
 
 Endpunkte (hinter Standard-Blueprint-Guard, identisch zur restlichen
 ``/api/*``-Konvention):
@@ -22,11 +22,13 @@ import uuid
 from flask import Blueprint, request, send_from_directory
 from pydantic import ValidationError
 
+from ..contracts.auth_contract import AuthType
 from ..contracts.user_profile_contract import (
     ALLOWED_AVATAR_MIME_TYPES,
     MAX_AVATAR_BYTES,
     UserProfileUpdateRequest,
 )
+from ..security.principal_context import current_identity, current_principal
 from ..services.user_profile_store import get_user_profile_store
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.logger import get_logger
@@ -61,11 +63,42 @@ def _looks_like(content_type: str, data: bytes) -> bool:
     return False
 
 
+def _request_profile_store():
+    """Choose the profile store from trusted request authentication context.
+
+    JWT users are scoped by their verified Principal.user_id. A verified
+    identity without a workspace principal is rejected rather than falling
+    back to the legacy process-wide profile.
+    """
+    principal = current_principal()
+    if principal is None:
+        if current_identity() is not None:
+            return None, json_error(
+                "authenticated profile requires a workspace principal",
+                status=403,
+                code="profile_identity_required",
+            )
+        return get_user_profile_store(), None
+
+    if principal.auth_type is AuthType.JWT:
+        if principal.user_id is None:
+            return None, json_error(
+                "authenticated profile requires a user identity",
+                status=403,
+                code="profile_identity_required",
+            )
+        return get_user_profile_store(user_id=principal.user_id), None
+
+    return get_user_profile_store(), None
+
+
 @user_profile_bp.route("", methods=["GET"])
 @user_profile_bp.route("/", methods=["GET"])
 @handle_api_errors
 def get_profile():
-    store = get_user_profile_store()
+    store, error = _request_profile_store()
+    if error is not None:
+        return error
     profile = store.load()
     return json_success({"profile": profile.model_dump(mode="json") if profile else None})
 
@@ -84,7 +117,9 @@ def update_profile():
             code="invalid_request",
             extra={"errors": exc.errors(include_url=False)},
         )
-    store = get_user_profile_store()
+    store, error = _request_profile_store()
+    if error is not None:
+        return error
     try:
         updated = store.update(body)
     except ValueError:
@@ -103,7 +138,9 @@ def upload_avatar():
     if file_storage is None:
         return json_error("no file uploaded", status=400, code="missing_file")
 
-    store = get_user_profile_store()
+    store, error = _request_profile_store()
+    if error is not None:
+        return error
     profile = store.load()
     if profile is None:
         return json_error(
@@ -152,7 +189,9 @@ def upload_avatar():
 @user_profile_bp.route("/avatar", methods=["GET"])
 @handle_api_errors
 def get_avatar():
-    store = get_user_profile_store()
+    store, error = _request_profile_store()
+    if error is not None:
+        return error
     profile = store.load()
     if profile is None or not profile.avatar_ref:
         return json_error("no avatar set", status=404, code="avatar_not_found")
@@ -166,7 +205,9 @@ def get_avatar():
 @user_profile_bp.route("/avatar", methods=["DELETE"])
 @handle_api_errors
 def delete_avatar():
-    store = get_user_profile_store()
+    store, error = _request_profile_store()
+    if error is not None:
+        return error
     profile = store.load()
     if profile is None:
         return json_error(
