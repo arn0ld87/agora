@@ -11,7 +11,13 @@ import stat
 import pytest
 
 from app.contracts.user_profile_contract import UserProfileUpdateRequest
-from app.services.user_profile_store import UserProfileStore
+from uuid import UUID
+
+from app.services.user_profile_store import (
+    UserProfileStore,
+    get_user_profile_store,
+    reset_user_profile_store_for_tests,
+)
 
 
 @pytest.fixture
@@ -122,3 +128,39 @@ class TestPersistenceAcrossInstances:
         loaded = second.load()
         assert loaded is not None
         assert loaded.display_name == "Alex Schneider"
+from uuid import UUID
+
+from app.services.user_profile_store import (
+    get_user_profile_store,
+    reset_user_profile_store_for_tests,
+)
+
+class TestPerUserStores:
+    def test_legacy_no_arg_store_remains_a_singleton(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+        reset_user_profile_store_for_tests()
+        try:
+            first = get_user_profile_store()
+            second = get_user_profile_store()
+            assert first is second
+            first.update(UserProfileUpdateRequest(display_name="Onboarding"))
+            assert second.load().display_name == "Onboarding"
+        finally:
+            reset_user_profile_store_for_tests()
+
+    def test_user_profiles_are_persisted_in_separate_stores(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+        reset_user_profile_store_for_tests()
+        user_a = UUID("11111111-2222-4333-8444-555555555555")
+        user_b = UUID("22222222-3333-4444-8555-666666666666")
+        try:
+            store_a = get_user_profile_store(user_id=user_a)
+            store_b = get_user_profile_store(user_id=user_b)
+            assert store_a is not store_b
+            store_a.update(UserProfileUpdateRequest(display_name="User A"))
+            store_b.update(UserProfileUpdateRequest(display_name="User B"))
+            assert store_a.load().display_name == "User A"
+            assert store_b.load().display_name == "User B"
+            assert store_a.avatar_dir != store_b.avatar_dir
+        finally:
+            reset_user_profile_store_for_tests()

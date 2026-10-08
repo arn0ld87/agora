@@ -11,7 +11,12 @@ import io
 import re
 
 import pytest
-from flask import Flask
+from flask import Flask, request
+from uuid import UUID
+
+from app.contracts.auth_contract import AuthType, Principal
+from app.contracts.workspace_contract import DEFAULT_WORKSPACE_ID, WorkspaceRole
+from app.security.principal_context import set_principal
 
 from app.api import user_profile_bp
 from app.contracts.user_profile_contract import MAX_AVATAR_BYTES
@@ -36,6 +41,18 @@ def app() -> Flask:
     flask_app = Flask(__name__)
     flask_app.register_blueprint(user_profile_bp, url_prefix="/api/profile")
     flask_app.config["TESTING"] = True
+
+    @flask_app.before_request
+    def bind_test_principal() -> None:
+        raw_user_id = request.headers.get("X-Test-User")
+        if raw_user_id:
+            set_principal(Principal(
+                auth_type=AuthType.JWT,
+                user_id=UUID(raw_user_id),
+                workspace_id=DEFAULT_WORKSPACE_ID,
+                roles=frozenset({WorkspaceRole.MEMBER}),
+            ))
+
     return flask_app
 
 
@@ -199,3 +216,41 @@ class TestDeleteAvatar:
         # Datei tatsächlich entfernt: erneuter GET liefert wieder 404.
         follow_up = client.get("/api/profile/avatar")
         assert follow_up.status_code == 404
+
+
+class TestPerUserProfileIsolation:
+    _USER_A = "11111111-2222-4333-8444-555555555555"
+    _USER_B = "22222222-3333-4444-8555-666666666666"
+
+    def test_profile_reads_and_mutations_are_isolated_by_principal(self, app: Flask) -> None:
+        client = app.test_client()
+        headers_a = {"X-Test-User": self._USER_A}
+        headers_b = {"X-Test-User": self._USER_B}
+        assert client.put("/api/profile", json={"display_name": "A"}, headers=headers_a).status_code == 200
+        assert client.put("/api/profile", json={"display_name": "B"}, headers=headers_b).status_code == 200
+        assert client.put("/api/profile", json={"role": "Lead A"}, headers=headers_a).status_code == 200
+        profile_a = client.get("/api/profile", headers=headers_a).get_json()["data"]["profile"]
+        profile_b = client.get("/api/profile", headers=headers_b).get_json()["data"]["profile"]
+        assert profile_a["display_name"] == "A"
+        assert profile_a["role"] == "Lead A"
+        assert profile_b["display_name"] == "B"
+        assert profile_b["role"] is None
+
+    def test_avatar_uploaded_by_one_principal_is_unavailable_to_another(self, app: Flask) -> None:
+        client = app.test_client()
+        headers_a = {"X-Test-User": self._USER_A}
+        headers_b = {"X-Test-User": self._USER_B}
+        client.put("/api/profile", json={"display_name": "A"}, headers=headers_a)
+        uploaded = client.post(
+            "/api/profile/avatar",
+            data={"file": (io.BytesIO(_MINIMAL_PNG), "avatar.png", "image/png")},
+            content_type="multipart/form-data",
+            headers=headers_a,
+        )
+        assert uploaded.status_code == 201
+        other_user = client.get("/api/profile/avatar", headers=headers_b)
+        assert other_user.status_code == 404
+        assert other_user.get_json()["code"] == "avatar_not_found"
+        owner = client.get("/api/profile/avatar", headers=headers_a)
+        assert owner.status_code == 200
+        assert owner.data.startswith(_PNG_MAGIC)
