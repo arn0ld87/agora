@@ -54,6 +54,45 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 
 ---
 
+## Code- und Container-Ausnahmen (#1670)
+
+Der kanonische Vertrag [dependency-risk-exceptions.schema.json](../schemas/dependency-risk-exceptions.schema.json)
+unterscheidet `source: dependency | code | container`. Aktive Einträge (`open` oder
+`dismissed`) benötigen zusätzlich `evidence` (HTTPS-Link zum Scan/Advisory oder zur
+nachprüfbaren Gegenprobe), einen nichtleeren `owner`, `deadline`, eine sachliche
+`reason` und `approved_by: arn0ld87`. Der Maintainer gibt die Ausnahme im PR frei;
+das Feld dokumentiert die Freigabe und ersetzt keinen GitHub-Review. Historische
+`resolved`-Einträge bleiben lesbar. Jede aktive Frist wird unabhängig vom Scan geprüft.
+
+Echte Risiken erhalten `status: open`; ausschließlich der Maintainer darf sie
+akzeptieren. False Positives werden in GitHub mit Pflichtbegründung dismissed;
+wenn ein Container-Finding im Register abgeglichen werden muss, benötigt der
+Eintrag `status: dismissed`, `dismissal_reason: false_positive` und einen Evidence-Link
+zur Gegenprobe/GitHub-Dismissal. Die Frist gilt auch für diese Gegenprobe. Ein bloßer
+Dismissal-Status, ein anderer Freigebender oder eine fehlende Begründung reicht nicht.
+
+Container-Einträge enthalten zusätzlich die exakte `image`-Referenz und
+`version_constraint: ==<InstalledVersion>`. Der Trivy-Gate gleicht Quelle, Image,
+Paket, Advisory und Severity exakt ab; eine Dependency-Ausnahme kann keinen
+Container-Befund freistellen. **Echte Critical-Container-Befunde werden durch ein
+Image-Update behoben, niemals über Risikoakzeptanz.** High-Findings ohne Upstream-Fix
+können nach obiger Policy befristet akzeptiert werden. Ein vorhandener Fix wird eingespielt.
+
+Der Job `supabase-images` im [CVE Monitor](../.github/workflows/cve-monitor.yml)
+leitet alle neun aktuellen Image-Referenzen aus dem versionierten
+`supabase/docker-compose.yml` ab (einschließlich der dortigen Variablen-Defaults,
+unabhängig von lokalen Env-Overrides). Neue Images werden automatisch erfasst;
+fehlende, unaufgelöste oder bewegliche Tags wie `latest` brechen ab. Ein Versions-Tag
+ist ein Versions-Pin, kein unveränderlicher Digest. Trivy und die Setup-Action sind
+gepinnt. Der Scan umfasst HIGH/CRITICAL einschließlich ungefixter Befunde, ohne
+`.trivyignore`; rohe JSON-Reports und das Image-Inventar bleiben 30 Tage als
+Workflow-Artefakt verfügbar. Scan-/Downloadfehler und ungültige Reports failen geschlossen.
+
+Vor `0.10.0-rc.1` und erneut vor `1.0.0-rc.1` den CVE Monitor auf dem jeweiligen
+Release-Kandidaten ausführen und Commit, Run-URL, vollständiges Image-Inventar,
+Reports und freigegebene Ausnahmen dokumentieren. Die Implementierung des Jobs
+belegt noch keinen sauberen Stichtag-Scan; dessen Ergebnis wird separat festgehalten.
+
 ## Aktive Baseline
 
 Aktuell keine aktiven pip-audit-Ausnahmen. Die bisher einzigen Einträge betrafen

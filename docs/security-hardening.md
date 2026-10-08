@@ -9,6 +9,32 @@
 
 ---
 
+## Stichtag-Scans vor RC-Schnitten (#1670)
+
+Vor `0.10.0-rc.1` und erneut vor `1.0.0-rc.1` auf dem vorgesehenen
+Release-Commit ausführen:
+
+```bash
+gh workflow run cve-monitor.yml --ref <release-branch>
+gh run list --workflow cve-monitor.yml --branch <release-branch> --limit 1
+gh run view <run-id> --log-failed
+gh run download <run-id> --name supabase-image-cve-reports --dir <evidence-dir>
+```
+
+Den Run erst nach seinem Abschluss bewerten. Das Inventar muss sämtliche
+versionierten Images aus `supabase/docker-compose.yml` enthalten und jeder
+Inventarzeile muss ein JSON-Report zugeordnet sein. Commit-SHA, Run-URL,
+Trivy-Version, Inventar, Findings und freigegebene Ausnahmen als Release-Nachweis
+festhalten. Der Job scannt HIGH/CRITICAL einschließlich ungefixter Befunde ohne
+Ignore-Datei und führt danach den kanonischen Ausnahmeregister-Gate aus.
+
+Echte Critical-Befunde erfordern ein Image-Update. High-Befunde ohne Fix benötigen
+Evidence, Owner, Frist und Maintainerfreigabe; False Positives benötigen eine
+nachprüfbare Gegenprobe und dokumentierte GitHub-Dismissal-Begründung. Die
+vollständige Policy steht im [Dependency-Risk-Register](dependency-risk-register.md#code--und-container-ausnahmen-1670).
+Ein grüner Test der Workflow-Verdrahtung ersetzt keinen tatsächlichen Stichtag-Scan.
+Für den folgenden RC-Schnitt sind hier noch keine Scanresultate behauptet.
+
 ## Phase 1 — Config-Hardening
 
 ### Ziel

@@ -31,7 +31,32 @@
         "status"
       ],
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["open", "dismissed"]}}, "required": ["status"]},
+          "then": {"required": ["source", "evidence", "approved_by"]}
+        },
+        {
+          "if": {"properties": {"source": {"const": "container"}}, "required": ["source"]},
+          "then": {"required": ["image"]}
+        },
+        {
+          "if": {"properties": {"status": {"const": "dismissed"}}, "required": ["status"]},
+          "then": {"required": ["dismissal_reason"]}
+        },
+        {
+          "not": {
+            "properties": {"source": {"const": "container"}, "severity": {"const": "Critical"}, "status": {"const": "open"}},
+            "required": ["source", "severity", "status"]
+          }
+        }
+      ],
       "properties": {
+        "source": {"type": "string", "enum": ["dependency", "code", "container"]},
+        "evidence": {"type": "string", "minLength": 1, "pattern": "^https://\\S+$", "format": "uri"},
+        "approved_by": {"type": "string", "const": "arn0ld87"},
+        "image": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "dismissal_reason": {"type": "string", "const": "false_positive"},
         "advisory_id": {
           "type": "string",
           "description": "CVE- oder PYSEC-Bezeichner (z.B. CVE-2026-1839).",
@@ -65,6 +90,8 @@
         },
         "owner": {
           "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
           "description": "Verantwortliche Person oder Team."
         },
         "deadline": {
@@ -80,7 +107,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["open", "resolved"],
+          "enum": ["open", "resolved", "dismissed"],
           "description": "Aktueller Status der Ausnahme."
         }
       }
