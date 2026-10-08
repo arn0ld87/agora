@@ -150,6 +150,17 @@ describe('Betreiber-Routen im JWT-Modus', () => {
     expect(router.currentRoute.value.name).toBe('LibraryRuns')
   })
 
+  it('lets non-operators open profile but keeps the shared setup wizard restricted', async () => {
+    fakeAuth.operatorAccess = false
+    fakeAuth.demoPreview = false
+    await go('/settings/profile')
+    expect(router.currentRoute.value.path).toBe('/settings/profile')
+    expect(router.currentRoute.value.params.section).toBe('profile')
+
+    await go('/onboarding')
+    expect(router.currentRoute.value.name).toBe('LibraryRuns')
+  })
+
   it('lässt Betreiber (Master-Token in hybrid) auf die Einstellungen', async () => {
     fakeAuth.operatorAccess = true
     vi.mocked(getAgoraToken).mockReturnValue('master')

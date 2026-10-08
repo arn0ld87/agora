@@ -26,12 +26,6 @@ const PanelStub = defineComponent({
   props: { allowedSections: { type: Array, required: true } },
   template: '<div data-testid="security-stub" />',
 })
-const ProfileStub = defineComponent({
-  name: 'SettingsProfileView',
-  props: { embedded: { type: Boolean, default: false } },
-  template: '<div data-testid="profile-stub" />',
-})
-
 const KEY = {
   id: 'k1',
   label: 'CI',
@@ -47,7 +41,7 @@ const KEY = {
 function mountAccess() {
   return mount(SectionAccess, {
     global: {
-      stubs: { SettingsSectionPanel: PanelStub, SettingsProfileView: ProfileStub, ComingSoonCard: true },
+      stubs: { SettingsSectionPanel: PanelStub, ComingSoonCard: true },
     },
   })
 }
@@ -59,20 +53,18 @@ beforeEach(() => {
 })
 
 describe('SectionAccess', () => {
-  it('zeigt vier Gruppen mit h3 und ohne h1/h2', async () => {
+  it('zeigt drei Gruppen mit h3 und ohne h1/h2', async () => {
     const wrapper = mountAccess()
     await flushPromises()
     const titles = wrapper.findAll('h3.section-access__title').map((h) => h.text())
     expect(titles).toEqual([
       'views.settingsWindow.access.apiKeys',
       'views.settingsWindow.access.audit',
-      'views.settingsWindow.access.account',
       'views.settingsWindow.access.security',
     ])
     expect(wrapper.find('h1').exists()).toBe(false)
     expect(wrapper.findComponent(SettingsApiKeysView).props('embedded')).toBe(true)
     expect(wrapper.findComponent(SettingsAuditLogsView).props('embedded')).toBe(true)
-    expect(wrapper.findComponent(ProfileStub).props('embedded')).toBe(true)
     expect(wrapper.findComponent(PanelStub).props('allowedSections')).toEqual(['security'])
     expect(wrapper.text()).not.toContain('placeholderTitle')
   })
@@ -94,7 +86,7 @@ describe('SectionAccess', () => {
     expect(wrap.attributes('aria-label')).toBeTruthy()
   })
 
-  it('ohne Token/Sitzung: Konto und Sicherheit bleiben, Schlüssel und Audit nicht', async () => {
+  it('ohne Token/Sitzung: Schlüssel und Audit fallen aus, Sicherheit bleibt', async () => {
     auth.isAuthenticated = false
     const wrapper = mountAccess()
     await flushPromises()
@@ -102,7 +94,7 @@ describe('SectionAccess', () => {
     expect(wrapper.findComponent(SettingsAuditLogsView).exists()).toBe(false)
     expect(api.list).not.toHaveBeenCalled()
     expect(wrapper.findAll('[role="status"]')).toHaveLength(2)
-    expect(wrapper.find('[data-testid="profile-stub"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="profile-stub"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="security-stub"]').exists()).toBe(true)
   })
 

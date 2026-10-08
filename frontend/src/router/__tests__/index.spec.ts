@@ -872,7 +872,7 @@ describe('Router – Etappe 3 Einstellungsfenster (#1799)', () => {
 
   it.each([
     ['/settings/integrations', '/settings/pipeline'],
-    ['/settings/profile', '/settings/access'],
+    ['/settings/profile', '/settings/profile'],
     ['/settings/users-teams', '/settings/access'],
     ['/settings/api-keys', '/settings/access'],
     ['/settings/audit-logs', '/settings/access'],

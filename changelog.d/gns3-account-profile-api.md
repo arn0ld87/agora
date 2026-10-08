@@ -1,0 +1,1 @@
+Signierte Nutzer können ihr Konto-Profil und ihren Avatar über /api/profile lesen und ändern. Diese Daten werden nach der verifizierten Nutzer-ID getrennt gespeichert; das gemeinsame Operator-Onboarding bleibt geschützt. Bestehende Legacy-Profile werden keinem Supabase-Konto automatisch zugeordnet.

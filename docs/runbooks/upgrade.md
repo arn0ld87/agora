@@ -23,6 +23,11 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Persistenz-Änderungen, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).
 
+**JWT-Nutzerprofile und Avatare** (GNS3 account-profile API slice). Bei Requests mit einem verifizierten Supabase-Principal werden Profile und Avatare getrennt nach Principal.user_id unter AGORA_DATA_DIR/user_profiles/<user_id>/ gespeichert. user_profile.json und avatars/ liegen damit innerhalb desselben Nutzerverzeichnisses. Aufrufe mit Legacy-Authentifizierung behalten AGORA_DATA_DIR/user_profile.json und AGORA_DATA_DIR/avatars/; das gemeinsame Onboarding bleibt an diesen Legacy-Store gebunden und operator-only.
+
+- **Upgrade:** Keine Migration und kein manueller Schritt. Bestehende Legacy-Dateien werden nicht automatisch einem Supabase-Nutzer zugeordnet, da kein sicherer Eigentümer ableitbar ist. JWT-Nutzer erhalten ein eigenes Profil beim ersten Speichern.
+- **Rollback-Implikation:** Ein Rollback auf eine Version ohne nutzerspezifische Pfade lässt user_profiles/<user_id>/ liegen und liest weiter nur den Legacy-Store. Alte Versionen exponieren die neuen Dateien nicht über /api/profile; sie können nach erfolgreichem Backup manuell entfernt werden, wenn der Multi-User-Pfad endgültig verworfen wird.
+
 **Neuer `jev`-Eintrag im Provider-Secret-Store** (f005, Slice `jev-key-cli`). `backend/data/llm_provider_secrets.json` (Fernet-verschlüsselt mit `AGORA_SECRET_KEY`) bekommt neben den bestehenden LLM-Chat-Provider-Keys (`openai`, …) eine weitere, eigene Ref `jev` (`app.services.decisions.jev_provider.JEV_SECRET_REF`) für den TypeSafe-API-Key des Jev-Decision-Piloten.
 
 - **Provisionierung:** `backend/scripts/bind_decision_secret.py jev` (nie `llm-secrets-doctor.py`, das akzeptiert jede `provider_id` und könnte versehentlich einen LLM-Chat-Key überschreiben). Details, inklusive Container-Aufruf: [`decision-secrets.md`](decision-secrets.md).

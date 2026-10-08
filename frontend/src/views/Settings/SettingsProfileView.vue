@@ -15,12 +15,14 @@ import Card from '@/components/v4/forms/Card.vue'
 import Button from '@/components/v4/forms/Button.vue'
 import ProfileForm from '@/components/v4/forms/ProfileForm.vue'
 import { useUserProfileStore } from '@/store/userProfile'
+import { useOperatorAccess } from '@/composables/useOperatorAccess'
 import type { UserProfileUpdateRequest } from '@/contracts/userProfileContract'
 
 withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const { t } = useI18n()
 const router = useRouter()
 const store = useUserProfileStore()
+const operatorAccess = useOperatorAccess()
 
 const saving = ref(false)
 const saveError = ref<string | null>(null)
@@ -80,7 +82,7 @@ onMounted(() => {
 <template>
   <SettingsOverlay>
     <div v-if="embedded" class="settings-profile__actions">
-      <Button variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
+      <Button v-if="operatorAccess" variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
         {{ t('profileSettings.reopenOnboardingBtn') }}
       </Button>
     </div>
@@ -90,7 +92,7 @@ onMounted(() => {
       :subtitle="t('profileSettings.subtitle')"
     >
       <template #right>
-        <Button variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
+        <Button v-if="operatorAccess" variant="secondary" size="sm" type="button" @click="handleReopenOnboarding">
           {{ t('profileSettings.reopenOnboardingBtn') }}
         </Button>
       </template>
