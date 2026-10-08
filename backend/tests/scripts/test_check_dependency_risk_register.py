@@ -178,7 +178,7 @@ def test_deadline_today_not_expired(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("source", ["dependency", "code", "container"])
 def test_supported_source_with_evidence_is_accepted(tmp_path: Path, source: str) -> None:
-    result = _run(_write_exceptions(tmp_path, [{**_VALID_ENTRY, "source": source}]), date="2026-01-01")
+    result = _run(_write_exceptions(tmp_path, [{**_VALID_ENTRY, "source": source, "image": "supabase/postgres:17.6.1.136"}]), date="2026-01-01")
     assert result.returncode == 0, result.stderr
 
 

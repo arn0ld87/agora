@@ -20,12 +20,32 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
+
+from jsonschema import Draft202012Validator, FormatChecker
 from datetime import date
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EXCEPTIONS_FILE = REPO_ROOT / "docs" / "dependency-risk-exceptions.json"
+SCHEMA_FILE = REPO_ROOT / "schemas" / "dependency-risk-exceptions.schema.json"
+SCHEMA = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
+Draft202012Validator.check_schema(SCHEMA)
+VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker()).evolve(
+    schema={"$ref": "#/$defs/Exception", "$defs": SCHEMA["$defs"]}
+)
+LOGGER = logging.getLogger(__name__)
+
+
+def configure_logging() -> None:
+    info = logging.StreamHandler(sys.stdout)
+    info.addFilter(lambda record: record.levelno < logging.ERROR)
+    errors = logging.StreamHandler(sys.stderr)
+    errors.setLevel(logging.ERROR)
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.handlers = [info, errors]
+    LOGGER.propagate = False
 
 REQUIRED_FIELDS = {
     "advisory_id",
@@ -58,35 +78,37 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Referenzdatum im Format YYYY-MM-DD (default: heute). Für Tests.",
     )
+    p.add_argument("--trivy-report", type=Path, action="append", default=[],
+                   help="Trivy JSON image report; repeat for multiple images.")
     return p.parse_args()
 
 
 def load_exceptions(path: Path) -> list[dict]:
     if not path.is_file():
-        print(f"::error::Datei nicht gefunden oder kein reguläres File: {path}", file=sys.stderr)
+        LOGGER.error(f"::error::Datei nicht gefunden oder kein reguläres File: {path}")
         sys.exit(1)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        print(f"::error::JSON-Fehler in {path}: {exc}", file=sys.stderr)
+        LOGGER.error(f"::error::JSON-Fehler in {path}: {exc}")
         sys.exit(1)
     if not isinstance(data, dict) or "exceptions" not in data:
-        print(
+        LOGGER.error(
             f"::error::Ungültiges Format: Top-Level-Key 'exceptions' fehlt in {path}",
-            file=sys.stderr,
+            
         )
         sys.exit(1)
     entries = data["exceptions"]
     if not isinstance(entries, list):
-        print(
+        LOGGER.error(
             "::error::'exceptions' muss eine Liste sein.",
-            file=sys.stderr,
+            
         )
         sys.exit(1)
     if not all(isinstance(e, dict) for e in entries):
-        print(
+        LOGGER.error(
             "::error::Alle Einträge in 'exceptions' müssen JSON-Objekte sein.",
-            file=sys.stderr,
+            
         )
         sys.exit(1)
     return entries  # type: ignore[return-value]
@@ -101,6 +123,8 @@ def validate_entry(entry: dict, index: int) -> list[str]:
             f"Eintrag #{index} ({entry.get('advisory_id', '?')}): "
             f"Pflichtfelder fehlen: {', '.join(sorted(missing))}"
         )
+    for error in VALIDATOR.iter_errors(entry):
+        errors.append(f"Eintrag #{index} ({entry.get('advisory_id', '?')}): {error.message}")
     # Deadline-Format prüfen (wenn vorhanden)
     deadline_raw = entry.get("deadline", "")
     if deadline_raw:
@@ -116,7 +140,7 @@ def validate_entry(entry: dict, index: int) -> list[str]:
 
 def check_deadline(entry: dict, today: date) -> str | None:
     """Gibt Fehlermeldung zurück wenn abgelaufen, sonst None."""
-    if entry.get("status") != "open":
+    if entry.get("status") not in {"open", "dismissed"}:
         return None
     deadline_raw = entry.get("deadline", "")
     if not deadline_raw:
@@ -136,7 +160,58 @@ def check_deadline(entry: dict, today: date) -> str | None:
     return None
 
 
+def check_trivy_report(path: Path, entries: list[dict]) -> list[str]:
+    """Match actual image/package/version findings; malformed reports fail closed."""
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(report, dict) or not isinstance(report.get("ArtifactName"), str):
+            raise ValueError("ArtifactName fehlt")
+        image = report["ArtifactName"]
+        results = report.get("Results")
+        if not image.strip() or not isinstance(results, list):
+            raise ValueError("Results fehlt oder ist keine Liste")
+        findings = []
+        for result in results:
+            if not isinstance(result, dict):
+                raise ValueError("Ungültiges Result")
+            vulnerabilities = result.get("Vulnerabilities", [])
+            if not isinstance(vulnerabilities, list):
+                raise ValueError("Ungültige Vulnerabilities")
+            for finding in vulnerabilities:
+                if not isinstance(finding, dict) or not all(
+                    isinstance(finding.get(key), str) and finding[key].strip()
+                    for key in ("VulnerabilityID", "PkgName", "InstalledVersion", "Severity")
+                ):
+                    raise ValueError("Unvollständiges Finding")
+                findings.append(finding)
+    except (OSError, ValueError, TypeError) as exc:
+        return [f"Trivy-Report {path}: {exc}"]
+
+    errors = []
+    for finding in findings:
+        severity = finding["Severity"].upper()
+        if severity not in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"}:
+            errors.append(f"Unbekannter Schweregrad: {severity}")
+            continue
+        if severity not in {"HIGH", "CRITICAL"}:
+            continue
+        matches = [entry for entry in entries if
+            entry.get("source") == "container" and entry.get("image") == image
+            and entry.get("advisory_id") == finding["VulnerabilityID"]
+            and entry.get("package") == finding["PkgName"]
+            and entry.get("version_constraint") == f"=={finding['InstalledVersion']}"
+            and str(entry.get("severity", "")).upper() == severity
+            and entry.get("status") in {"open", "dismissed"}]
+        if severity == "CRITICAL":
+            matches = [entry for entry in matches if entry.get("status") == "dismissed"]
+        if not matches:
+            errors.append(f"{severity}: {image} / {finding['PkgName']} / "
+                          f"{finding['VulnerabilityID']}: keine gültige Ausnahme")
+    return errors
+
+
 def main() -> int:
+    configure_logging()
     args = parse_args()
 
     today: date
@@ -144,9 +219,9 @@ def main() -> int:
         try:
             today = date.fromisoformat(args.date)
         except ValueError:
-            print(
+            LOGGER.error(
                 f"::error::Ungültiges --date-Format '{args.date}' — erwartet YYYY-MM-DD",
-                file=sys.stderr,
+                
             )
             return 1
     else:
@@ -163,28 +238,31 @@ def main() -> int:
         if err:
             deadline_errors.append(err)
 
+    for report in args.trivy_report:
+        validation_errors.extend(check_trivy_report(report, entries))
+
     if validation_errors:
-        print("::error::Validierungsfehler in dependency-risk-exceptions.json:", file=sys.stderr)
+        LOGGER.error("::error::Validierungsfehler in dependency-risk-exceptions.json:")
         for e in validation_errors:
-            print(f"  - {e}", file=sys.stderr)
+            LOGGER.error(f"  - {e}")
 
     if deadline_errors:
-        print(
+        LOGGER.error(
             "::error::Abgelaufene Dependency-Risk-Ausnahmen müssen aufgelöst werden:",
-            file=sys.stderr,
+            
         )
         for e in deadline_errors:
-            print(f"  - {e}", file=sys.stderr)
-        print(
+            LOGGER.error(f"  - {e}")
+        LOGGER.error(
             "\nEskalationspfad: docs/dependency-risk-register.md → Abschnitt 'Eskalationspfad'.",
-            file=sys.stderr,
+            
         )
 
     if validation_errors or deadline_errors:
         return 1
 
     open_count = sum(1 for e in entries if e.get("status") == "open")
-    print(
+    LOGGER.info(
         f"OK: all dependency risk exceptions are valid and not expired "
         f"({open_count} open, {len(entries) - open_count} resolved, "
         f"reference date: {today})"
