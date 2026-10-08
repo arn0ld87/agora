@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPT_PATH = _REPO_ROOT / "backend" / "scripts" / "check_dependency_risk_register.py"
 
@@ -26,6 +28,9 @@ _VALID_ENTRY: dict = {
     "deadline": "2099-12-31",
     "issue": "https://github.com/arn0ld87/agora/issues/999",
     "status": "open",
+    "source": "dependency",
+    "evidence": "https://github.com/advisories/GHSA-aaaa-bbbb-cccc",
+    "approved_by": "arn0ld87",
 }
 
 
@@ -169,3 +174,75 @@ def test_deadline_today_not_expired(tmp_path: Path) -> None:
     p = _write_exceptions(tmp_path, [today_entry])
     result = _run(p, date="2026-06-10")
     assert result.returncode == 0, f"stderr={result.stderr!r}"
+
+
+@pytest.mark.parametrize("source", ["dependency", "code", "container"])
+def test_supported_source_with_evidence_is_accepted(tmp_path: Path, source: str) -> None:
+    result = _run(_write_exceptions(tmp_path, [{**_VALID_ENTRY, "source": source}]), date="2026-01-01")
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("field", ["source", "evidence", "owner", "deadline", "approved_by"])
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_invalid_acceptance_metadata_fails_closed(tmp_path: Path, field: str, value: object) -> None:
+    entry = {**_VALID_ENTRY, field: value}
+    result = _run(_write_exceptions(tmp_path, [entry]), date="2026-01-01")
+    assert result.returncode == 1, result.stdout
+
+
+@pytest.mark.parametrize("field", ["evidence", "owner", "deadline", "approved_by"])
+def test_missing_acceptance_metadata_fails_closed(tmp_path: Path, field: str) -> None:
+    entry = {**_VALID_ENTRY}
+    del entry[field]
+    result = _run(_write_exceptions(tmp_path, [entry]), date="2026-01-01")
+    assert result.returncode == 1, result.stdout
+
+
+@pytest.mark.parametrize("change", [
+    {"source": "unsupported"}, {"approved_by": "other-user"},
+    {"source": "container", "severity": "Critical"},
+    {"status": "dismissed", "dismissal_reason": ""},
+    {"status": "dismissed", "dismissal_reason": "accepted_risk"},
+])
+def test_policy_violation_fails_closed(tmp_path: Path, change: dict) -> None:
+    result = _run(_write_exceptions(tmp_path, [{**_VALID_ENTRY, **change}]), date="2026-01-01")
+    assert result.returncode == 1, result.stdout
+
+
+def test_documented_false_positive_is_accepted(tmp_path: Path) -> None:
+    entry = {**_VALID_ENTRY, "status": "dismissed", "dismissal_reason": "false_positive"}
+    result = _run(_write_exceptions(tmp_path, [entry]), date="2026-01-01")
+    assert result.returncode == 0, result.stderr
+
+
+def _run_trivy(tmp_path: Path, entries: list[dict], *, severity: str = "HIGH", artifact: str = "supabase/postgres:17.6.1.136") -> subprocess.CompletedProcess[str]:
+    report = tmp_path / "trivy.json"
+    report.write_text(json.dumps({"ArtifactName": artifact, "Results": [{"Vulnerabilities": [{
+        "VulnerabilityID": "CVE-2099-9999", "PkgName": "example-pkg",
+        "InstalledVersion": "1.0.0", "Severity": severity,
+    }]}]}), encoding="utf-8")
+    return subprocess.run([sys.executable, str(SCRIPT_PATH), "--exceptions-file",
+        str(_write_exceptions(tmp_path, entries)), "--date", "2026-01-01",
+        "--trivy-report", str(report)], capture_output=True, text=True)
+
+
+def test_trivy_container_finding_requires_matching_image_exception(tmp_path: Path) -> None:
+    entry = {**_VALID_ENTRY, "source": "container", "severity": "High", "image": "supabase/postgres:17.6.1.136"}
+    assert _run_trivy(tmp_path, [entry]).returncode == 0
+    assert _run_trivy(tmp_path, [{**entry, "image": "supabase/gotrue:v2.188.1"}]).returncode == 1
+    assert _run_trivy(tmp_path, [{**entry, "version_constraint": "==0.9.0"}]).returncode == 1
+    assert _run_trivy(tmp_path, [{**entry, "source": "dependency"}]).returncode == 1
+    assert _run_trivy(tmp_path, []).returncode == 1
+
+
+def test_trivy_critical_cannot_use_real_risk_exception(tmp_path: Path) -> None:
+    entry = {**_VALID_ENTRY, "source": "container", "severity": "High", "image": "supabase/postgres:17.6.1.136"}
+    assert _run_trivy(tmp_path, [entry], severity="CRITICAL").returncode == 1
+
+
+def test_trivy_malformed_report_fails_closed(tmp_path: Path) -> None:
+    report = tmp_path / "trivy.json"
+    report.write_text("{}", encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT_PATH), "--exceptions-file",
+        str(_write_exceptions(tmp_path, [])), "--trivy-report", str(report)], capture_output=True, text=True)
+    assert result.returncode == 1
