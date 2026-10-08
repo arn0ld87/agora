@@ -43,12 +43,15 @@
               <span class="user-menu__role">{{ t(`topbar.userMenu.role.${ws.role}`) }}</span>
             </DropdownMenuItem>
           </div>
+          <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'profile' } }) }">
+            {{ t('topbar.userMenu.profile') }}
+          </DropdownMenuItem>
           <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'providers' } }) }">
             {{ t('topbar.userMenu.providerKeys') }}
           </DropdownMenuItem>
         </template>
-        <!-- Profil und Einstellungen sind prozessweiter Betreiber-Zustand
-             (operator_only): für Supabase-Nutzer ausgeblendet (#1617). -->
+        <!-- Allgemeine Betreiber-Einstellungen bleiben im Legacy-Modus;
+             angemeldete Konten erhalten den eigenen Profilabschnitt. -->
         <template v-else>
           <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'access' } }) }">
             {{ t('topbar.userMenu.profile') }}

@@ -2,19 +2,15 @@
 /**
  * Zugang — API-Schlüssel, Audit-Protokoll, Konto, Sicherheit als Gruppen
  * untereinander (keine zweite Navigationsebene). Inhalte der bisherigen
- * Ansichten `settings/api-keys`, `audit-logs`, `profile` und des
- * Settings-Abschnitts `security`.
+ * Ansichten `settings/api-keys`, `audit-logs` und des Settings-Abschnitts `security`.
  *
- * Zugang: Konto und Sicherheit brauchen keine Anmeldung (wie
- * `settings/profile`), Schlüssel und Audit-Protokoll nur mit Token oder
- * Sitzung (wie `settings/api-keys` / `audit-logs`). Betreiber-Sperre und
- * Demo-Vorschau liefert das Fenster für den ganzen Abschnitt.
+ * Der gesamte Abschnitt bleibt Betreiberbereich. API-Schlüssel und
+ * Audit-Protokoll prüfen zusätzlich Token oder Sitzung.
  */
 import { useI18n } from 'vue-i18n'
 import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
 import SettingsApiKeysView from '@/views/Settings/SettingsApiKeysView.vue'
 import SettingsAuditLogsView from '@/views/Settings/SettingsAuditLogsView.vue'
-import SettingsProfileView from '@/views/Settings/SettingsProfileView.vue'
 import { useHasCredentials } from '../access/useHasCredentials'
 
 const { t } = useI18n()
@@ -42,13 +38,6 @@ const SECURITY_SECTIONS = ['security'] as const
       <p v-else class="section-access__needs-auth" role="status">
         {{ t('views.settingsWindow.access.needsAuth') }}
       </p>
-    </section>
-
-    <section class="section-access__group" aria-labelledby="access-account-title">
-      <h3 id="access-account-title" class="section-access__title">
-        {{ t('views.settingsWindow.access.account') }}
-      </h3>
-      <SettingsProfileView embedded />
     </section>
 
     <section class="section-access__group" aria-labelledby="access-security-title">

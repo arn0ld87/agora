@@ -2161,6 +2161,7 @@
       "sections": {
         "general": "General",
         "appearance": "Appearance",
+        "profile": "Profile",
         "providers": "Providers",
         "profiles": "Profiles",
         "embedding": "Embedding",

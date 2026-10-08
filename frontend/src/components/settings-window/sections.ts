@@ -14,9 +14,9 @@
  *  - profiles     ← settings/llm-routing    (operatorOnly + requiresAuth)
  *  - embedding    ← settings/embedding      (operatorOnly + requiresAuth)
  *  - pipeline     ← settings/integrations   (operatorOnly)
- *  - access       ← settings/api-keys, audit-logs, profile (operatorOnly). `requiresAuth`
- *                   bewusst aus: `settings/profile` war ohne Token erreichbar; die
- *                   Gruppen Schlüssel und Audit-Protokoll prüfen Token/Sitzung selbst.
+ *  - profile      <- settings/profile (pro Nutzer, offen für reguläre Konten)
+ *  - access       <- settings/api-keys, audit-logs und Sicherheitsverwaltung (operatorOnly).
+ *                   API-Schlüssel und Audit-Protokoll prüfen Token/Sitzung zusätzlich.
  *  - appearance, system: bisher nirgends als Einstellung geführt, nur lokale
  *    Darstellung bzw. Lesezugriff auf den Systemzustand — offen.
  *  - budgets: neu, schreibt Standardgrenzen des Betreibers — operatorOnly.
@@ -26,6 +26,7 @@ import { defineAsyncComponent, type Component } from 'vue'
 export const SETTINGS_SECTION_IDS = [
   'general',
   'appearance',
+  'profile',
   'providers',
   'profiles',
   'embedding',
@@ -73,6 +74,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     labelKey: 'views.settingsWindow.sections.appearance',
     glyph: 'Aa',
     component: lazy(() => import('./sections/SectionAppearance.vue')),
+    operatorOnly: false,
+    requiresAuth: false,
+  },
+  {
+    id: 'profile',
+    labelKey: 'views.settingsWindow.sections.profile',
+    glyph: '◉',
+    component: lazy(() => import('./sections/SectionProfile.vue')),
     operatorOnly: false,
     requiresAuth: false,
   },

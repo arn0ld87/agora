@@ -115,9 +115,8 @@ const routes: RouteRecordRaw[] = [
   // erhalten. Die Zugangsregeln gelten am Ziel (sections.ts), nicht an der
   // alten Adresse. Statische Adressen gewinnen gegen `/settings/:section`.
   { path: '/settings/integrations', name: 'SettingsIntegrations', redirect: settingsWindowRedirect('pipeline') },
-  { path: '/settings/profile', name: 'SettingsProfile', redirect: settingsWindowRedirect('access') },
-  // Sidebar-IA-Fix (Onboarding-Epic): "Users & Teams" wurde durch das
-  // Profil-Setting ersetzt, das heute im Abschnitt „Zugang“ liegt.
+  { path: '/settings/profile', name: 'SettingsProfile', redirect: settingsWindowRedirect('profile') },
+  // Legacy-Adresse für die persönliche Profilansicht im eigenen Abschnitt.
   { path: '/settings/users-teams', name: 'SettingsUsersTeams', redirect: settingsWindowRedirect('access') },
   { path: '/settings/api-keys', name: 'SettingsApiKeys', redirect: settingsWindowRedirect('access') },
   { path: '/settings/audit-logs', name: 'SettingsAuditLogs', redirect: settingsWindowRedirect('access') },

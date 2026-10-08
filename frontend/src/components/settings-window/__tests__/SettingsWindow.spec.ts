@@ -26,6 +26,9 @@ vi.mock('@/views/Settings/SettingsGeneralView.vue', () => ({
 vi.mock('@/views/Settings/EmbeddingConfigurationsView.vue', () => ({
   default: { name: 'EmbeddingViewStub', template: '<div data-testid="embedding-stub">Embedding-Inhalt</div>' },
 }))
+vi.mock('@/views/Settings/SettingsProfileView.vue', () => ({
+  default: { name: 'ProfileViewStub', template: '<div data-testid="profile-stub">Profil-Inhalt</div>' },
+}))
 
 import SettingsWindow from '../SettingsWindow.vue'
 
@@ -82,6 +85,7 @@ const listLabels = () => qa('.sw__label').map((a) => a.textContent)
 const LABEL_DE: Record<string, string> = {
   general: 'Allgemein',
   appearance: 'Aussehen',
+  profile: 'Profil',
   providers: 'Anbieter',
   profiles: 'Profile',
   embedding: 'Embedding',
@@ -135,7 +139,7 @@ describe('SettingsWindow', () => {
 
   it('nur genau ein Eintrag der Liste trägt aria-current', async () => {
     await mountWindow('/settings/pipeline')
-    expect(qa('.sw__item')).toHaveLength(9)
+    expect(qa('.sw__item')).toHaveLength(10)
     expect(qa('.sw__item[aria-current]')).toHaveLength(1)
   })
 
@@ -201,9 +205,9 @@ describe('SettingsWindow', () => {
   })
 
   describe('Zugangsregel je Abschnitt', () => {
-    it('Betreiber sieht alle neun Abschnitte, keiner ist gesperrt', async () => {
+    it('Betreiber sieht alle zehn Abschnitte, keiner ist gesperrt', async () => {
       await mountWindow('/settings/general')
-      expect(qa('.sw__item')).toHaveLength(9)
+      expect(qa('.sw__item')).toHaveLength(10)
       expect(q('.sw__locked')).toBeNull()
     })
 
@@ -211,12 +215,19 @@ describe('SettingsWindow', () => {
       await mountWindow('/settings/appearance', () => setVisitor(false))
       const open = SETTINGS_SECTIONS.filter((s) => !s.operatorOnly).map((s) => LABEL_DE[s.id])
       expect(listLabels()).toEqual(open)
-      expect(open).toEqual(['Aussehen', 'Anbieter', 'System'])
+      expect(open).toEqual(['Aussehen', 'Profil', 'Anbieter', 'System'])
+    })
+
+    it('reguläre Nutzer öffnen ihr Profil, während Zugang weiter Betreiberbereich bleibt', async () => {
+      await mountWindow('/settings/profile', () => setVisitor(false))
+      expect(q('.sw__locked')).toBeNull()
+      expect(q('[data-testid="profile-stub"]')).not.toBeNull()
+      expect(q('[data-testid="settings-section-access"]')).toBeNull()
     })
 
     it('Besucher auf der Demo-Instanz sieht Betreiber-Abschnitte nur als gesperrte Vorschau', async () => {
       await mountWindow('/settings/pipeline', () => setVisitor(true))
-      expect(qa('.sw__item')).toHaveLength(9)
+      expect(qa('.sw__item')).toHaveLength(10)
       expect(q('.sw__locked')?.textContent).toContain('gehört dem Betreiber')
       expect(q('.sw__content')?.textContent).not.toContain('kommt in dieser Etappe')
     })
@@ -228,6 +239,7 @@ describe('SettingsWindow', () => {
       expect(rules).toEqual({
         general: [true, false],
         appearance: [false, false],
+        profile: [false, false],
         providers: [false, true],
         profiles: [true, true],
         embedding: [true, true],
