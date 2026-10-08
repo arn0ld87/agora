@@ -90,6 +90,7 @@ function handleGoBack(): void {
   void router.push({
     name: 'StepGraphBuild',
     params: { projectId: props.projectId },
+    query: { ...route.query },
   })
 }
 

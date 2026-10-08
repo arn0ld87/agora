@@ -14,7 +14,7 @@ const pipeline = vi.hoisted(() => ({
   },
 }))
 const routerPush = vi.hoisted(() => vi.fn())
-const simulationApi = vi.hoisted(() => ({ createSimulation: vi.fn() }))
+const simulationApi = vi.hoisted(() => ({ createSimulation: vi.fn(), getSimulation: vi.fn() }))
 
 vi.mock('@/composables/useGraphBuildPipeline', async () => {
   const { ref } = await import('vue')
@@ -47,11 +47,38 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
 }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
-vi.mock('../../../../api/simulation', () => ({ createSimulation: simulationApi.createSimulation }))
+vi.mock('../../../../api/simulation', () => ({
+  createSimulation: simulationApi.createSimulation,
+  getSimulation: simulationApi.getSimulation,
+}))
 
 import Step1GraphBuild from '../../../../components/Step1GraphBuild.vue'
-import { createSimulation } from '../../../../api/simulation'
+import { createSimulation, getSimulation } from '../../../../api/simulation'
 import StepGraphBuildView from '../StepGraphBuildView.vue'
+
+
+function simulationStatus(simulationId: string, projectId: string, graphId: string) {
+  return {
+    simulation_id: simulationId,
+    project_id: projectId,
+    graph_id: graphId,
+    enable_twitter: true,
+    enable_reddit: true,
+    status: 'ready',
+    entities_count: 1,
+    profiles_count: 0,
+    entity_types: [],
+    config_generated: false,
+    config_reasoning: '',
+    current_round: 0,
+    twitter_status: '',
+    reddit_status: '',
+    created_at: '2026-10-08T00:00:00Z',
+    updated_at: '2026-10-08T00:00:00Z',
+    branch_depth: 0,
+    interview_env_alive: false,
+  }
+}
 
 describe('StepGraphBuildView', () => {
   beforeEach(() => {
@@ -61,6 +88,7 @@ describe('StepGraphBuildView', () => {
     pipeline.graphIncomplete = false
     route.query = {}
     simulationApi.createSimulation.mockReset()
+    simulationApi.getSimulation.mockReset()
     routerPush.mockReset()
   })
 
@@ -124,6 +152,70 @@ describe('StepGraphBuildView', () => {
       name: 'StepEnvSetup',
       params: { projectId: 'project_42' },
       query: { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}', simulationId: 'sim_42' },
+    })
+  })
+
+
+  it('verwendet nach Persona-Setup-Zurueck dieselbe passende Simulation erneut', async () => {
+    route.query = { maxRounds: '25', simulationId: 'sim_42' }
+    simulationApi.getSimulation.mockResolvedValue({
+      success: true,
+      data: simulationStatus('sim_42', 'project_42', 'graph_42'),
+    })
+    const wrapper = mount(Step1GraphBuild, {
+      props: {
+        currentPhase: 2,
+        projectData: { project_id: 'project_42', graph_id: 'graph_42' },
+        graphData: { graph_id: 'graph_42', nodes: [{ id: 'entity_1' }], edges: [{ id: 'relation_1' }] },
+        systemLogs: [],
+      },
+    })
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(getSimulation).toHaveBeenCalledWith('sim_42')
+    expect(createSimulation).not.toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'StepEnvSetup',
+      params: { projectId: 'project_42' },
+      query: { maxRounds: '25', simulationId: 'sim_42' },
+    })
+  })
+
+  it('legt bei einer Simulation mit anderem Projekt oder Graphen eine neue an', async () => {
+    route.query = { simulationId: 'sim_stale' }
+    simulationApi.getSimulation.mockResolvedValue({
+      success: true,
+      data: simulationStatus('sim_stale', 'other_project', 'graph_42'),
+    })
+    simulationApi.createSimulation.mockResolvedValue({
+      success: true,
+      data: { simulation_id: 'sim_new' },
+    })
+    const wrapper = mount(Step1GraphBuild, {
+      props: {
+        currentPhase: 2,
+        projectData: { project_id: 'project_42', graph_id: 'graph_42' },
+        graphData: { graph_id: 'graph_42', nodes: [{ id: 'entity_1' }], edges: [{ id: 'relation_1' }] },
+        systemLogs: [],
+      },
+    })
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(getSimulation).toHaveBeenCalledWith('sim_stale')
+    expect(createSimulation).toHaveBeenCalledWith({
+      project_id: 'project_42',
+      graph_id: 'graph_42',
+      enable_twitter: true,
+      enable_reddit: true,
+    })
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'StepEnvSetup',
+      params: { projectId: 'project_42' },
+      query: { simulationId: 'sim_new' },
     })
   })
 

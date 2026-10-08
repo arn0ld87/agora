@@ -11,7 +11,7 @@
  * ihre Inhalte sind eigenstaendige Slice-H-Folge-Tests.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { useShellStore } from '@/stores/shell'
@@ -201,6 +201,7 @@ async function mountView<T extends object>(
         Step2EnvSetup: {
           name: 'Step2EnvSetup',
           props: ['simulationId'],
+          emits: ['go-back'],
           template: '<div class="stub-step2" />',
         },
         // Sidebar stub (Slice F, nicht angefasst)
@@ -260,6 +261,24 @@ describe('StepEnvSetupView', () => {
     )
     expect(w.getComponent({ name: 'Step2EnvSetup' }).props('simulationId')).toBe('sim-42')
     expect(JSON.stringify(useShellStore().breadcrumbs)).toContain('project-42')
+  })
+
+
+  it('erhaelt Projekt- und Simulations-ID beim Zurueckgehen zum Graph-Build', async () => {
+    const w = await mountView(
+      StepEnvSetupView,
+      { projectId: 'project-42' },
+      '/v4/env-setup/project-42?simulationId=sim-42&maxRounds=25',
+    )
+    const step = w.getComponent({ name: 'Step2EnvSetup' })
+    expect(step.props('simulationId')).toBe('sim-42')
+
+    await step.vm.$emit('go-back')
+    await flushPromises()
+
+    expect(router.currentRoute.value.name).toBe('StepGraphBuild')
+    expect(router.currentRoute.value.params.projectId).toBe('project-42')
+    expect(router.currentRoute.value.query).toEqual({ simulationId: 'sim-42', maxRounds: '25' })
   })
 
   it('setzt Brotkrumen in die zentrale Huelle', async () => {
