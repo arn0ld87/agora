@@ -272,3 +272,47 @@ def test_workflow_scans_and_gates_every_image_without_suppression() -> None:
     assert '--ignore-unfixed=false --ignorefile /dev/null --exit-code 0' in scan
     assert 'check_dependency_risk_register.py "${reports[@]}"' in scan
     assert not any(step.get("continue-on-error") for step in steps)
+
+
+def test_workflow_inventory_and_scan_happy_path(tmp_path: Path) -> None:
+    import os
+    import yaml
+
+    workflow = yaml.safe_load((_REPO_ROOT / ".github/workflows/cve-monitor.yml").read_text())
+    steps = workflow["jobs"]["supabase-images"]["steps"]
+    inventory = next(step["run"] for step in steps if step["name"] == "Derive pinned Supabase image inventory")
+    inventory = inventory.split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    inventory_path = tmp_path / "images.txt"
+    inventory = inventory.replace("/tmp/supabase-images.txt", str(inventory_path))
+    result = subprocess.run([sys.executable, "-c", inventory], cwd=_REPO_ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    images = inventory_path.read_text().splitlines()
+    compose = yaml.safe_load((_REPO_ROOT / "supabase/docker-compose.yml").read_text())
+    expected = [service["image"].split(":-", 1)[1].removesuffix("}") for service in compose["services"].values() if "image" in service]
+    assert images == list(dict.fromkeys(expected))
+    assert len(images) >= 9
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "calls.jsonl"
+    trivy = fake_bin / "trivy"
+    trivy.write_text(f"#!{sys.executable}\n" +
+        "import json, sys\nfrom pathlib import Path\n" +
+        f"with Path({str(calls)!r}).open('a') as f: f.write(json.dumps(sys.argv[1:]) + chr(10))\n" +
+        "Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps({'ArtifactName': sys.argv[-1], 'Results': []}))\n")
+    trivy.chmod(0o755)
+    exceptions = _write_exceptions(tmp_path, [])
+    uv = fake_bin / "uv"
+    uv.write_text(f"#!{sys.executable}\n" +
+        "import os, sys\n" +
+        f"os.execv({sys.executable!r}, [{sys.executable!r}, {str(SCRIPT_PATH)!r}, '--exceptions-file', {str(exceptions)!r}] + sys.argv[sys.argv.index('scripts/check_dependency_risk_register.py')+1:])\n")
+    uv.chmod(0o755)
+    scan = next(step["run"] for step in steps if step["name"] == "Scan every tracked Supabase image")
+    scan = scan.replace("/tmp/supabase-images.txt", str(inventory_path))
+    env = {**os.environ, "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", "")}
+    result = subprocess.run(["/bin/bash", "-c", scan], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    scans = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert [call[-1] for call in scans] == images
+    assert len(list((tmp_path / "supabase-scan").glob("*.json"))) == len(images)
+    assert all(call[0] == "image" and "--ignore-unfixed=false" in call for call in scans)

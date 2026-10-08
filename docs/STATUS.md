@@ -45,7 +45,7 @@ Die Testzähler in diesem Markerblock werden **nur durch `scripts/sync-status.sh
 
 Zusätzliche aktuelle Nachweise:
 
-- **08.10.2026, #1670:** Ausnahmeschema und Checker erfassen Dependency-, Code- und Container-Quellen mit Evidence, Owner, Frist und dokumentierter Maintainerfreigabe. Der Supabase-CVE-Job leitet das vollständige Image-Inventar aus Compose ab und prüft HIGH/CRITICAL ohne Ignore-Unterdrückung gegen den Register-Gate. 47 gezielte Checker-/Workflow-Tests sind lokal grün; ein echter Stichtag-Scan mit Run-URL bleibt als Release-Nachweis erforderlich.
+- **08.10.2026, #1670:** Ausnahmeschema und Checker erfassen Dependency-, Code- und Container-Quellen mit Evidence, Owner, Frist und dokumentierter Maintainerfreigabe. Der Supabase-CVE-Job leitet das vollständige Image-Inventar aus Compose ab und prüft HIGH/CRITICAL ohne Ignore-Unterdrückung gegen den Register-Gate. 48 gezielte Checker-/Workflow-Tests sind lokal grün; ein echter Stichtag-Scan mit Run-URL bleibt als Release-Nachweis erforderlich.
 
 - PR #1461 dokumentiert einen vollständigen Backend-Lauf mit **6177 passed, 8 skipped, 1 xfailed** nach der Budget-Reservierungs-Härtung.
 - PR #1480 dokumentiert danach ein grünes `pre-push-gate.sh backend`, nachdem eine durch #1475 sichtbar gewordene Testdouble-Lücke repariert wurde.
