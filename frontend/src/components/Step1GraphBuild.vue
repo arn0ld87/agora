@@ -1,13 +1,15 @@
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { createSimulation } from '../api/simulation'
+import { createSimulation, getSimulation } from '../api/simulation'
+import { SimulationStatusResponseSchema } from '@/contracts/simulationStatusContract'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 
 const props = defineProps({
@@ -54,6 +56,27 @@ async function enterEnvSetup() {
   if (!props.projectData?.project_id || !props.projectData?.graph_id) return
   creatingSimulation.value = true
   try {
+    const requestedSimulationId = route.query.simulationId
+    if (typeof requestedSimulationId === 'string' && requestedSimulationId.length > 0) {
+      const existing = await getSimulation(requestedSimulationId)
+      const parsed = existing.success
+        ? SimulationStatusResponseSchema.safeParse(existing.data)
+        : null
+      if (
+        parsed?.success &&
+        parsed.data.simulation_id === requestedSimulationId &&
+        parsed.data.project_id === props.projectData.project_id &&
+        parsed.data.graph_id === props.projectData.graph_id
+      ) {
+        router.push({
+          name: 'StepEnvSetup',
+          params: { projectId: props.projectData.project_id },
+          query: { ...route.query, simulationId: requestedSimulationId },
+        })
+        return
+      }
+    }
+
     const res = await createSimulation({
       project_id: props.projectData.project_id,
       graph_id: props.projectData.graph_id,
@@ -61,7 +84,11 @@ async function enterEnvSetup() {
       enable_reddit: true
     })
     if (res.success && res.data?.simulation_id) {
-      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id } })
+      router.push({
+        name: 'StepEnvSetup',
+        params: { projectId: props.projectData.project_id },
+        query: { ...route.query, simulationId: res.data.simulation_id },
+      })
     } else {
       alert(t('errors.unknown') + ': ' + (res.error || ''))
     }

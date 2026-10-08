@@ -4,6 +4,7 @@ import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
 import type { ActivityMode } from '../contracts/simulationActivityContract'
 import type { AiModelRefPayload } from './report'
+import type { SimulationStatusResponse } from '@/contracts/simulationStatusContract'
 import type { ApiEnvelope } from './envelope'
 import type { RunBudgetConfig } from '../contracts/runBudgetContract'
 import {
@@ -360,7 +361,7 @@ export const getPrepareStatus = (data: TaskStatusData): Promise<ApiEnvelope<Task
  * Get simulation status
  * @param simulationId
  */
-export const getSimulation = (simulationId: string): Promise<ApiEnvelope<SimulationRecord>> => {
+export const getSimulation = (simulationId: string): Promise<ApiEnvelope<SimulationStatusResponse>> => {
   return service.get(`/api/simulation/${simulationId}`)
 }
 

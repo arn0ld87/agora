@@ -13,7 +13,7 @@
     </PageHeader>
     <PipelineStepper :current-step="2" />
     <Step2EnvSetup
-      :simulation-id="projectId"
+      :simulation-id="simulationId"
       @next-step="handleNextStep"
       @go-back="handleGoBack"
     />
@@ -38,6 +38,12 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const simulationId = computed(() => {
+  const querySimulationId = route.query.simulationId
+  return typeof querySimulationId === 'string' && querySimulationId.length > 0
+    ? querySimulationId
+    : props.projectId
+})
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: 'Runs', path: '/library/runs' },
@@ -84,6 +90,7 @@ function handleGoBack(): void {
   void router.push({
     name: 'StepGraphBuild',
     params: { projectId: props.projectId },
+    query: { ...route.query },
   })
 }
 
