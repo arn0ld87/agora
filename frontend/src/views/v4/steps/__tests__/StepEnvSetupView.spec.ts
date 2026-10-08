@@ -3,10 +3,15 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const routerPush = vi.hoisted(() => vi.fn())
+const routeMock = vi.hoisted(() => ({
+  name: 'StepEnvSetup',
+  params: {},
+  query: {} as Record<string, string>,
+}))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPush }),
-  useRoute: () => ({ name: 'StepEnvSetup', params: {} }),
+  useRoute: () => routeMock,
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -20,6 +25,7 @@ describe('StepEnvSetupView — Navigation', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     routerPush.mockClear()
+    routeMock.query = {}
   })
 
   it('leitet next-step mit simulationId auf den Feed der Simulation weiter', async () => {
@@ -97,6 +103,8 @@ describe('StepEnvSetupView — Navigation', () => {
       },
     })
 
+    routeMock.query = { simulationId: 'sim_x', maxRounds: '3' }
+
     await wrapper
       .getComponent({ name: 'Step2EnvSetup' })
       .vm.$emit('go-back')
@@ -105,6 +113,7 @@ describe('StepEnvSetupView — Navigation', () => {
     expect(routerPush).toHaveBeenCalledWith({
       name: 'StepGraphBuild',
       params: { projectId: 'project_42' },
+      query: { simulationId: 'sim_x', maxRounds: '3' },
     })
   })
 })

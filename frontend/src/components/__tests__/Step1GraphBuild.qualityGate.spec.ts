@@ -12,7 +12,10 @@ import de from '@/i18n/locales/de.json'
  * frei; der Report scheiterte Minuten später an fehlender Evidenz.
  */
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useRoute: () => ({ name: 'StepGraphBuild', params: {}, query: {} }),
+}))
 vi.mock('../../api/simulation', () => ({ createSimulation: vi.fn() }))
 
 import Step1GraphBuild from '../Step1GraphBuild.vue'
