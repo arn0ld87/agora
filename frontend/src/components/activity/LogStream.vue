@@ -114,7 +114,28 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const lines = ref<string[]>([])
-const level = ref('')
+const level = ref('info')
+const severityRank: Record<string, number> = { debug: 10, info: 20, warn: 30, warning: 30, error: 40, critical: 50, fatal: 50 }
+
+function isVisibleAtSelectedLevel(line: string): boolean {
+  if (!level.value) return true
+  let name: string | undefined
+  if (line.trimStart().startsWith('{')) {
+    try {
+      const record: unknown = JSON.parse(line)
+      if (record && typeof record === 'object' && 'level' in record && typeof record.level === 'string') {
+        name = record.level.toLowerCase()
+      }
+    } catch { /* text format or malformed JSON; inspect the standard text prefix below */ }
+  }
+  if (!name) {
+    const match = line.match(/^\s*(?:\[[^\]]+\]\s*)?(?:.*?\s-\s.*?\s-\s)?(DEBUG|INFO|WARN(?:ING)?|ERROR|CRITICAL|FATAL)\b/i)
+    name = match?.[1]?.toLowerCase()
+  }
+  // Keep multiline continuations and legacy lines without a parseable level.
+  if (!name || severityRank[name] === undefined) return true
+  return severityRank[name] >= severityRank[level.value]
+}
 const search = ref('')
 const paused = ref(false)
 const showAll = ref(false)
@@ -159,6 +180,7 @@ const displayLines = computed(() => {
 
 const filteredLines = computed(() => {
   let out: string[] = displayLines.value
+  out = out.filter(isVisibleAtSelectedLevel)
   if (scopeActive.value) out = filterLinesByScope(out, props.scopeId)
   if (kindActive.value && props.kindFilter) {
     const kinds = props.kindFilter.kinds
@@ -197,7 +219,7 @@ async function reload() {
   errorMessage.value = null
   fileNotice.value = null
   try {
-    const res: unknown = await fetchLogs({ tail: 500, level: level.value || null })
+    const res: unknown = await fetchLogs({ tail: 500, level: null })
     const parsed = parseLogTail(res)
     if (parsed.ok) {
       lines.value = parsed.data.lines
@@ -234,7 +256,7 @@ async function startStream() {
   streamReconnecting.value = false
   lastFrameAt = Date.now()
   const generation = ++streamGeneration
-  const url = await buildLogsStreamUrl(level.value || null, lastOffset)
+  const url = await buildLogsStreamUrl(null, lastOffset)
   if (generation !== streamGeneration) return
   try {
     eventSource = new EventSource(url)
