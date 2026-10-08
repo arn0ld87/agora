@@ -198,7 +198,11 @@ async function mountView<T extends object>(
       stubs: {
         // Step-Komponenten als Stubs — ihre Inhalte sind Folge-Slice
         Step1GraphBuild: { template: '<div class="stub-step1" />' },
-        Step2EnvSetup: { template: '<div class="stub-step2" />' },
+        Step2EnvSetup: {
+          name: 'Step2EnvSetup',
+          props: ['simulationId'],
+          template: '<div class="stub-step2" />',
+        },
         // Sidebar stub (Slice F, nicht angefasst)
         Sidebar: { template: '<nav class="stub-sidebar" />' },
         // Model-Override-Chip (Slice E) — eigene Spec; hier nur Shell getestet
@@ -246,6 +250,16 @@ describe('StepEnvSetupView', () => {
   it('mountet ohne Crash', async () => {
     const w = await mountView(StepEnvSetupView, { projectId: 'proj-42' }, '/v4/env-setup/proj-42')
     expect(w.exists()).toBe(true)
+  })
+
+  it('reicht die Simulations-ID separat von der Projekt-ID an Schritt 2 weiter', async () => {
+    const w = await mountView(
+      StepEnvSetupView,
+      { projectId: 'project-42' },
+      '/v4/env-setup/project-42?simulationId=sim-42',
+    )
+    expect(w.getComponent({ name: 'Step2EnvSetup' }).props('simulationId')).toBe('sim-42')
+    expect(JSON.stringify(useShellStore().breadcrumbs)).toContain('project-42')
   })
 
   it('setzt Brotkrumen in die zentrale Huelle', async () => {

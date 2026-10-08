@@ -14,6 +14,7 @@ const pipeline = vi.hoisted(() => ({
   },
 }))
 const routerPush = vi.hoisted(() => vi.fn())
+const simulationApi = vi.hoisted(() => ({ createSimulation: vi.fn() }))
 
 vi.mock('@/composables/useGraphBuildPipeline', async () => {
   const { ref } = await import('vue')
@@ -46,7 +47,10 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
 }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('../../../../api/simulation', () => ({ createSimulation: simulationApi.createSimulation }))
 
+import Step1GraphBuild from '../../../../components/Step1GraphBuild.vue'
+import { createSimulation } from '../../../../api/simulation'
 import StepGraphBuildView from '../StepGraphBuildView.vue'
 
 describe('StepGraphBuildView', () => {
@@ -56,6 +60,8 @@ describe('StepGraphBuildView', () => {
     pipeline.degradations = { schema_version: 1, events: [] }
     pipeline.graphIncomplete = false
     route.query = {}
+    simulationApi.createSimulation.mockReset()
+    routerPush.mockReset()
   })
 
   it('bindet den Graph-Build-Pipelinezustand an Step1GraphBuild und macht Fehler zugänglich', () => {
@@ -87,6 +93,38 @@ describe('StepGraphBuildView', () => {
       systemLogs: [{ time: '10:00:00.000', msg: 'building' }],
     })
     expect(wrapper.get('[role="alert"]').text()).toContain('Graph build failed')
+  })
+
+
+  it('legt die Simulation an und führt vom Graph-Build in das Persona-Setup', async () => {
+    route.query = { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}' }
+    simulationApi.createSimulation.mockResolvedValue({
+      success: true,
+      data: { simulation_id: 'sim_42' },
+    })
+    const wrapper = mount(Step1GraphBuild, {
+      props: {
+        currentPhase: 2,
+        projectData: { project_id: 'project_42', graph_id: 'graph_42' },
+        graphData: { graph_id: 'graph_42', nodes: [{ id: 'entity_1' }], edges: [{ id: 'relation_1' }] },
+        systemLogs: [],
+      },
+    })
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(createSimulation).toHaveBeenCalledWith({
+      project_id: 'project_42',
+      graph_id: 'graph_42',
+      enable_twitter: true,
+      enable_reddit: true,
+    })
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'StepEnvSetup',
+      params: { projectId: 'project_42' },
+      query: { maxRounds: '25', budget: '{"schema_version":1,"max_tokens":5000}', simulationId: 'sim_42' },
+    })
   })
 
   it('initialisiert den neuen Projektpfad nur einmal, auch nachdem die konkrete ID die Route ersetzt', async () => {

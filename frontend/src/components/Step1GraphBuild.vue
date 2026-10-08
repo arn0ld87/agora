@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createSimulation } from '../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
@@ -8,6 +8,7 @@ import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 
 const props = defineProps({
@@ -61,7 +62,11 @@ async function enterEnvSetup() {
       enable_reddit: true
     })
     if (res.success && res.data?.simulation_id) {
-      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id } })
+      router.push({
+        name: 'StepEnvSetup',
+        params: { projectId: props.projectData.project_id },
+        query: { ...route.query, simulationId: res.data.simulation_id },
+      })
     } else {
       alert(t('errors.unknown') + ': ' + (res.error || ''))
     }
