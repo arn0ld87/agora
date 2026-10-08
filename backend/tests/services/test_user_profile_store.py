@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import json
 import stat
+from uuid import UUID
 
 import pytest
 
 from app.contracts.user_profile_contract import UserProfileUpdateRequest
-from uuid import UUID
 
 from app.services.user_profile_store import (
     UserProfileStore,
@@ -128,13 +128,6 @@ class TestPersistenceAcrossInstances:
         loaded = second.load()
         assert loaded is not None
         assert loaded.display_name == "Alex Schneider"
-from uuid import UUID
-
-from app.services.user_profile_store import (
-    get_user_profile_store,
-    reset_user_profile_store_for_tests,
-)
-
 class TestPerUserStores:
     def test_legacy_no_arg_store_remains_a_singleton(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))

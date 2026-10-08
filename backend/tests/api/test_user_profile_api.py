@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import io
 import re
+from uuid import UUID
 
 import pytest
 from flask import Flask, request
-from uuid import UUID
 
 from app.contracts.auth_contract import AuthType, Principal
 from app.contracts.workspace_contract import DEFAULT_WORKSPACE_ID, WorkspaceRole
