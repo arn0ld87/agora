@@ -246,3 +246,29 @@ def test_trivy_malformed_report_fails_closed(tmp_path: Path) -> None:
     result = subprocess.run([sys.executable, str(SCRIPT_PATH), "--exceptions-file",
         str(_write_exceptions(tmp_path, [])), "--trivy-report", str(report)], capture_output=True, text=True)
     assert result.returncode == 1
+
+
+@pytest.mark.parametrize("reference", ["supabase/postgres", "supabase/postgres:latest", "supabase/postgres:nightly", "${IMAGE}", "${POSTGRES_IMAGE:-supabase/postgres:latest}"])
+def test_workflow_inventory_rejects_unpinned_refs(tmp_path: Path, reference: str) -> None:
+    import yaml
+
+    workflow = yaml.safe_load((_REPO_ROOT / ".github/workflows/cve-monitor.yml").read_text())
+    steps = workflow["jobs"]["supabase-images"]["steps"]
+    script = next(step["run"] for step in steps if step["name"] == "Derive pinned Supabase image inventory")
+    script = script.split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    (tmp_path / "supabase").mkdir()
+    (tmp_path / "supabase/docker-compose.yml").write_text(f"services:\n  db:\n    image: {reference}\n")
+    result = subprocess.run([sys.executable, "-c", script], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode != 0
+
+
+def test_workflow_scans_and_gates_every_image_without_suppression() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((_REPO_ROOT / ".github/workflows/cve-monitor.yml").read_text())
+    steps = workflow["jobs"]["supabase-images"]["steps"]
+    scan = next(step["run"] for step in steps if step["name"] == "Scan every tracked Supabase image")
+    assert 'for i in "${!images[@]}"' in scan
+    assert '--ignore-unfixed=false --ignorefile /dev/null --exit-code 0' in scan
+    assert 'check_dependency_risk_register.py "${reports[@]}"' in scan
+    assert not any(step.get("continue-on-error") for step in steps)
