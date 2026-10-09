@@ -366,6 +366,19 @@ def _phase_generate_profiles(
         entities = _expand_entities_for_quota(filtered.entities, quota_plan)
         if quota_plan is None:
             entities = _apply_persona_floor_to_entities(entities, minimum=persona_floor)
+        # UAT-001: Der Floor-Aufschlag wiederholt vorhandene Entitaeten, er
+        # erzeugt keine neuen. Die Nachruecker-Reserve ist aber genau das, was
+        # der ``max_agents``-Cap weggeschnitten hat — ist der Pool kleiner als
+        # der Cap (der Fall, fuer den der Aufschlag existiert), ist sie leer.
+        # Jede Ablehnung des Generators (LLM-Eignungs- oder Kohaerenz-Gate)
+        # faellt dann ersatzlos unter den Floor, den der Report-Contract
+        # verlangt. Produktionsbeleg: Pool 9 -> 20 Plaetze, 2 Ablehnungen,
+        # ``Reserve: 0 Kandidaten``, 18 Personas erzeugt -> Bericht INCOMPLETE.
+        # Der aufgefuellte Pool traegt die Reserve deshalb selbst: die
+        # vorhandenen Entitaeten sind die einzigen moeglichen Nachruecker.
+        current_reserve = getattr(filtered, "reserve_entities", None) or []
+        if len(entities) > len(filtered.entities) and not current_reserve:
+            filtered.reserve_entities = list(filtered.entities)
         # Issue #1034: Der Nenner des Fortschrittszählers kommt aus derselben
         # Funktion, die auch die Preview-Antwort füllt. Vorher stand hier
         # ``len(entities)`` — richtig, aber eben nur hier: die UI bekam den

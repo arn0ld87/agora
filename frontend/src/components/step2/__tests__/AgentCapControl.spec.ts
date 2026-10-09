@@ -99,3 +99,58 @@ describe('AgentCapControl (Issue #586)', () => {
     }
   })
 })
+
+/**
+ * UAT-001 — Der Dialog nannte als einzige Mindestzahl 10 (Untergrenze des
+ * Feldes) und nie die Schwelle, an der der Bericht gemessen wird. Der Lauf
+ * endete mit „18/20 Personas vorhanden" und ohne Berichtstext.
+ */
+describe('AgentCapControl — wirksame Persona-Schwelle (UAT-001)', () => {
+  const messages = {
+    de: {
+      step2: {
+        agentCap: {
+          label: 'Max. Anzahl Agenten begrenzen',
+          sliderLabel: 'Personas-Obergrenze, Schieberegler',
+          numberLabel: 'Personas-Obergrenze, Zahl',
+          unit: 'Agenten',
+          minimumHint: 'Die Obergrenze muss mindestens 10 Agenten betragen.',
+          unlimitedHint: 'Ohne Begrenzung …',
+          reportFloor: 'Für einen Bericht braucht die DACH-Persona-Tabelle mindestens {floor} Agenten.',
+        },
+      },
+    },
+    en: {},
+  }
+  const realI18n = createI18n({
+    legacy: false,
+    locale: 'de',
+    missingWarn: false,
+    fallbackWarn: false,
+    messages,
+  })
+
+  function mountWithMessages(props: Record<string, unknown>) {
+    return mount(AgentCapControl, {
+      props: { useAgentCap: false, maxAgents: 50, ...props },
+      global: { plugins: [realI18n] },
+    })
+  }
+
+  it('nennt ohne Obergrenze die Contract-Schwelle 20', () => {
+    const wrapper = mountWithMessages({ useAgentCap: false })
+    expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('20')
+  })
+
+  it('nennt mit Obergrenze 10 die gesenkte Schwelle 10', () => {
+    const wrapper = mountWithMessages({ useAgentCap: true, maxAgents: 10 })
+    expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('10')
+  })
+
+  it('nennt mit Obergrenze 30 weiterhin 20 (Contract deckelt)', () => {
+    const wrapper = mountWithMessages({ useAgentCap: true, maxAgents: 30 })
+    const text = wrapper.get('[data-testid="agent-cap-report-floor"]').text()
+    expect(text).toContain('20')
+    expect(text).not.toContain('30')
+  })
+})

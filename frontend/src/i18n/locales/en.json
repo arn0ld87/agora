@@ -415,8 +415,9 @@
       "sliderLabel": "Persona limit, slider",
       "numberLabel": "Persona limit, number",
       "unit": "Agents",
-      "minimumHint": "Minimum for the DACH persona table: 10 agents.",
-      "unlimitedHint": "Without a limit, one agent is created per eligible graph entity — but never fewer than the report needs for its persona table."
+      "minimumHint": "The upper limit must be at least 10 agents.",
+      "unlimitedHint": "Without a limit, one agent is created per eligible graph entity — but never fewer than the report needs for its persona table.",
+      "reportFloor": "A report needs at least {floor} agents for the DACH persona table."
     },
     "activityMode": {
       "label": "Agent activity",

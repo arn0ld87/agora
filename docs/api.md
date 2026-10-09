@@ -199,6 +199,12 @@ Eine zweite parallele Report-Generierung für dieselbe Simulation wird mit HTTP 
 
 Nach Completion (`completed`, `failed`, `stopped`) ist ein neuer Start wieder erlaubt. Ein bereits existierender, abgeschlossener Report (`COMPLETED`) wird bei `force_regenerate=false` weiterhin wiederverwendet — der Guard läuft dabei zuerst, die Wiederverwendung wird erst danach geprüft.
 
+#### Persona-Untergrenze (Vorabprüfung)
+
+`POST /api/report/generate` prüft seit UAT-001 vor dem Anlegen des Runs, ob der Lauf die Persona-Untergrenze des Report-Contracts erreicht: `persona_count >= persona_floor`, mit `persona_floor = min(MIN_PERSONA_TABLE_ROWS, max_agents)` aus dem Prepare-Status (`state.persona_floor`). Unterschreitet die Zahl gespeicherter Personas (`reddit_profiles`) diese Schwelle, antwortet der Endpunkt mit HTTP `400` und einer Meldung, die Anzahl und wirksame Schwelle nennt; es entstehen **kein** Run, **kein** Task und keine LLM-Kosten. Zuvor lief die Planung vollständig durch und der Lauf endete erst danach im Report-Gate als `INCOMPLETE` ohne Text (Produktionsfall: 18 von 20 Personas).
+
+Ist die Persona-Zahl nicht lesbar (Store-Aussetzer), unterbleibt die Prüfung: ein Infrastrukturfehler darf einen möglichen Bericht nicht blockieren. Die Prüfung nutzt dieselben Funktionen wie das Gate (`report_agent/workflow.py::load_persona_count_for`/`load_persona_floor_for`), damit die Erklärung vor dem Start nicht von der später angewandten Schwelle abweicht.
+
 #### Reportstatus
 
 `COMPLETED` und `INCOMPLETE` sind fachlich verschieden. Ein nutzbarer Teilreport kann `INCOMPLETE` sein und trotzdem ausgeliefert werden. Cancel-, Section-Failure-, Requirement- und Fallback-Outline-Degradierungen dürfen nicht durch einen generischen „completed“-Status verschluckt werden (#1479).

@@ -136,19 +136,37 @@ def _load_persona_count(agent: Any) -> int:
         if isinstance(value, list):
             return len(value)
 
+    # ``or 0`` ist die Gate-Semantik: "nicht ermittelbar" darf hier nicht
+    # durchrutschen (UAT-001). Die Vorabpruefung beim Report-Start nutzt
+    # dagegen ``load_persona_count_for`` direkt und unterscheidet None von 0.
+    return load_persona_count_for(getattr(agent, "simulation_id", None)) or 0
+
+
+def load_persona_count_for(simulation_id: Any) -> Optional[int]:
+    """Anzahl gespeicherter Personas eines Laufs — ``None``, wenn nicht lesbar.
+
+    Einzige Quelle fuer das Gate (``_load_persona_count``) und die
+    Vorabpruefung beim Report-Start (``report_generation``, UAT-001), damit
+    beide dieselbe Zahl sehen und die Erklaerung vor dem Start nicht von der
+    Schwelle abweicht, an der der Lauf sonst spaeter scheitert.
+
+    ``None`` heisst "nicht ermittelbar", nicht "null": ein Lesefehler am
+    Store darf eine Vorabpruefung nicht als Floor-Unterschreitung auslegen
+    und damit einen moeglichen Bericht blockieren.
+    """
     try:
         profiles = resolve_default_store().read_json(
-            agent.simulation_id,
+            simulation_id,
             "reddit_profiles",
             default=[],
         )
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "persona-floor check: failed to read profiles for simulation %s: %r",
-            getattr(agent, "simulation_id", "<unknown>"),
+            simulation_id,
             exc,
         )
-        return 0
+        return None
     return len(profiles) if isinstance(profiles, list) else 0
 
 
@@ -325,16 +343,27 @@ def _load_persona_floor(agent: Any) -> int:
     MIN_PERSONA_TABLE_ROWS; ein persistierter Wert kann den Floor nur
     senken, nie über den Contract anheben.
     """
+    return load_persona_floor_for(getattr(agent, "simulation_id", None))
+
+
+def load_persona_floor_for(simulation_id: Any) -> int:
+    """Wirksamer Persona-Floor eines Laufs — Gate und Vorabpruefung (UAT-001).
+
+    Dieselbe Aufloesung wie ``_load_persona_floor``: persistierter
+    ``persona_floor`` aus dem Simulation-State, gedeckelt durch
+    ``MIN_PERSONA_TABLE_ROWS``. Ein nicht lesbarer State faellt auf den
+    Contract-Wert zurueck — der Floor ist die Zusage, nicht der Istzustand.
+    """
     try:
         data = resolve_default_store().read_json(
-            agent.simulation_id,
+            simulation_id,
             "state",
             default=None,
         )
     except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
         logger.warning(
             "persona-floor check: failed to read state for simulation %s: %r",
-            getattr(agent, "simulation_id", "<unknown>"),
+            simulation_id,
             exc,
         )
         return MIN_PERSONA_TABLE_ROWS

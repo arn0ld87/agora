@@ -415,8 +415,9 @@
       "sliderLabel": "Personas-Obergrenze, Schieberegler",
       "numberLabel": "Personas-Obergrenze, Zahl",
       "unit": "Agenten",
-      "minimumHint": "Mindestmenge für die DACH-Persona-Tabelle: 10 Agenten.",
-      "unlimitedHint": "Ohne Begrenzung entsteht pro geeigneter Graph-Entität ein Agent — mindestens jedoch so viele, wie der Report für seine Persona-Tabelle braucht."
+      "minimumHint": "Die Obergrenze muss mindestens 10 Agenten betragen.",
+      "unlimitedHint": "Ohne Begrenzung entsteht pro geeigneter Graph-Entität ein Agent — mindestens jedoch so viele, wie der Report für seine Persona-Tabelle braucht.",
+      "reportFloor": "Für einen Bericht braucht die DACH-Persona-Tabelle mindestens {floor} Agenten."
     },
     "activityMode": {
       "label": "Aktivität der Agenten",

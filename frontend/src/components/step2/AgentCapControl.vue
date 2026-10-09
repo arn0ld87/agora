@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+
+import { effectivePersonaFloor } from '@/constants/personaFloor'
 
 const { t } = useI18n()
 const sliderId = useId()
 const numberId = useId()
 const hintId = useId()
 
-defineProps({
+const props = defineProps({
   useAgentCap: { type: Boolean, required: true },
   maxAgents: { type: Number, required: true },
   isPreparing: { type: Boolean, default: false },
@@ -16,6 +18,18 @@ defineProps({
 })
 
 const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
+
+/**
+ * Wirksame Report-Schwelle des aktuell eingestellten Werts (UAT-001).
+ *
+ * Ohne Obergrenze gilt `MIN_PERSONA_TABLE_ROWS`; mit Obergrenze deren Wert,
+ * wenn er kleiner ist — exakt die Auflösung, mit der das Backend den
+ * `persona_floor` persistiert. Der Dialog darf keine andere Mindestzahl
+ * nennen als die, an der der Bericht gemessen wird.
+ */
+const reportFloor = computed(() =>
+  effectivePersonaFloor(props.useAgentCap ? props.maxAgents : null),
+)
 </script>
 
 <template>
@@ -59,6 +73,13 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
       <span :id="hintId" class="sr-only">{{ t('step2.agentCap.minimumHint') }}</span>
       <span class="meta">{{ t('step2.agentCap.unit') }}</span>
     </div>
+    <!-- UAT-001: Der Dialog nannte als einzige Mindestzahl 10 (die Untergrenze
+         des Feldes) und nie die Schwelle, an der der Bericht gemessen wird.
+         Der Hinweis nennt genau den Wert, den das Backend als `persona_floor`
+         persistiert: min(20, Obergrenze). -->
+    <p class="hint" data-testid="agent-cap-report-floor">
+      {{ t('step2.agentCap.reportFloor', { floor: reportFloor }) }}
+    </p>
     <p v-if="belowQuotaWarning" class="hint hint--warn" role="alert">
       {{ t('step2.personaPool.belowQuotaWarning', { pool: maxAgents, quota: quotaTotal }) }}
     </p>
