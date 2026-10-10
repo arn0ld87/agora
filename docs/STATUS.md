@@ -302,7 +302,7 @@ Offen bleibt LLM-gestützte Koreferenz (#1470, laut Plan außerhalb des Scopes).
 
 ### Statuswahrheit
 
-- **Modellgeplante Gliederung (#1832, vorbereitet für 0.10.0-rc.1):** Freie Titel werden strukturell geprüft; Standardplanung erzwingt keinen Titelsatz und erzeugt bei Planungsfehlern kein Ersatzschema. Explizite Titelvorgaben bleiben möglich. Historische Ersatzgliederungen werden beim Resume neu geplant; Requirement-/Evidence-Gates bleiben aktiv. Backend-, Frontend- und Schema-Gates lokal grün; Deployment und vollständiger neuer Bericht noch ausstehend. [Verifikation](plans/run-quality-1831/01-VERIFICATION.md).
+- **Modellgeplante Gliederung (#1832, vorbereitet für 0.10.0-rc.1):** Freie Titel werden strukturell geprüft; Standardplanung erzwingt keinen Titelsatz und erzeugt bei Planungsfehlern kein Ersatzschema. Explizite Titelvorgaben bleiben möglich. Historische Ersatzgliederungen werden beim Resume neu geplant; Requirement-/Evidence-Gates bleiben aktiv. Backend-, Frontend- und Schema-Gates lokal grün; Deployment und vollständiger neuer Bericht noch ausstehend. [Verifikation](plans/run-quality-1831/01-VERIFICATION.md). Der gespeicherte Abschnitts-Kind wird beim Zurücklesen eines Berichts übernommen, sodass ein Resume nicht auf die Titel-Heuristik zurückfällt; Altbestand ohne Feld bleibt `generic`.
 
 - Contract-invalid Reports dürfen nicht als normal `completed` ausgeliefert werden.
 - Teilberichte aus Cancel-, Section-Failure- oder Fallback-Outline-Pfaden werden als `INCOMPLETE` klassifiziert; Resume bewahrt die Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).

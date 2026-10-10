@@ -68,6 +68,45 @@ def test_update_progress_and_save_report_use_readable_json(tmp_path, monkeypatch
     assert loaded.status == ReportStatus.COMPLETED
 
 
+def test_get_report_liest_abschnitts_kind_zurueck(tmp_path, monkeypatch):
+    """#1832: Der gespeicherte Kind ueberlebt das Zuruecklesen; Altbestand bleibt generic."""
+    monkeypatch.setattr(ReportManager, 'REPORTS_DIR', str(tmp_path))
+    report_id = 'report_abcdef123456'
+    report = Report(
+        report_id=report_id,
+        simulation_id='sim_abcdef123456',
+        graph_id='graph_abcdef123456',
+        simulation_requirement='Test requirement',
+        status=ReportStatus.COMPLETED,
+        outline=ReportOutline(
+            title='Demo',
+            summary='Summary',
+            sections=[
+                ReportSection(title='Wer spricht', content='Body', kind='stakeholder_voices'),
+                ReportSection(title='Lage', content='Body'),
+            ],
+        ),
+        markdown_content='# Demo\n\nBody',
+        created_at='2026-04-23T00:00:00',
+        completed_at='2026-04-23T00:05:00',
+    )
+    ReportManager.save_report(report)
+
+    loaded = ReportManager.get_report(report_id)
+    assert loaded is not None and loaded.outline is not None
+    assert [s.kind for s in loaded.outline.sections] == ['stakeholder_voices', 'generic']
+
+    meta_path = tmp_path / report_id / 'meta.json'
+    raw = json.loads(meta_path.read_text(encoding='utf-8'))
+    for section in raw['outline']['sections']:
+        section.pop('kind')
+    meta_path.write_text(json.dumps(raw), encoding='utf-8')
+
+    legacy = ReportManager.get_report(report_id)
+    assert legacy is not None and legacy.outline is not None
+    assert [s.kind for s in legacy.outline.sections] == ['generic', 'generic']
+
+
 def test_is_claim_candidate_filters_markdown_headers_and_bold_titles():
     """S3a: Überschriften und Bold-Section-Titel sind keine Claims."""
     is_claim = ReportAgent._is_claim_candidate
