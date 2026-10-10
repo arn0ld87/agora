@@ -1,0 +1,3 @@
+### Changed
+
+- **Frontend-Coverage-Gate mit Ratchet und Integritätsprüfung (#1672).** Die Schwellen für Lines (83,57 %) und Branches (73,32 %) liegen jetzt in `frontend/coverage-baseline.json` (gemessen 84,57 % / 74,32 % auf `main@9cc4afd3`) statt pauschal bei 28 %. `frontend/scripts/check-coverage-integrity.mjs` lässt das Release-Gate rot werden, wenn der Mess-Scope aus `vite.config.js` vom Soll-Scope abweicht, ein Skip-Marker ohne Eintrag in `coverage-skip-allowlist.json` auftaucht oder die Schwellen bzw. der Scope gegenüber `origin/main` abgesenkt werden. Das Pendant zum Backend-Ratchet (#1671).

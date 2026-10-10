@@ -1,0 +1,11 @@
+{
+  "_comment": [
+    "Erlaubte Skip-Marker in frontend/src und frontend/tests (Issue #1672).",
+    "Ein Skip (it|test|describe mit .skip oder .todo, xit, xtest, xdescribe, skipIf, runIf)",
+    "ist nur zulaessig, wenn genau diese Stelle hier steht: file (relativ zu frontend/),",
+    "kind (Marker wie im Quelltext, z. B. \"it.skip\", \"xtest\", \"skipIf\" ohne Punkt), count (Anzahl in dieser Datei),",
+    "reason (Begruendung). Faellt ein Marker weg, muss der Eintrag mit; veraltete",
+    "Eintraege lassen das Gate rot werden. Start 2026-10-10: leer."
+  ],
+  "entries": []
+}

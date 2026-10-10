@@ -4,6 +4,10 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+const coverageBaseline = JSON.parse(
+  readFileSync(resolve(__dirname, 'coverage-baseline.json'), 'utf-8'),
+)
+
 // https://vite.dev/config/
 export default defineConfig({
   resolve: {
@@ -80,13 +84,15 @@ export default defineConfig({
         'src/router/**',
         'src/types/**',
       ],
-      // M11.3 Step2 (2026-06-10): Schwellen auf 28 % angehoben.
-      // Ist-Werte 2026-05-10: statements=50.46 %, branches=39.56 %,
-      // functions=38.59 %, lines=52.50 % — alle vier deutlich ueber 28 %.
+      // Issue #1672: lines/branches kommen aus coverage-baseline.json (Messung
+      // 2026-10-10: lines 84.57 %, branches 74.32 %, je 1 Punkt Puffer). Der
+      // Ratchet und die Scope-Pruefung laufen in
+      // scripts/check-coverage-integrity.mjs. functions/statements bleiben
+      // bei den M11.3-Step2-Werten (28 %).
       thresholds: {
-        lines: 28,
+        lines: coverageBaseline.line_min,
         functions: 28,
-        branches: 28,
+        branches: coverageBaseline.branch_min,
         statements: 28,
       },
     },
