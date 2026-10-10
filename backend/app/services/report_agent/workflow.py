@@ -9,11 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from pydantic import ValidationError
 
 from ...config import Config
-from ...contracts.report_contract import (
-    ReportOutlineModel,
-    ReportOutlineSectionModel,
-    ReportSectionKind,
-)
+from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...llm.tokens import PROMPT_HEADROOM_TOKENS
 from ...contracts.report_v3 import (
     DEFAULT_REPORT_MODE,
@@ -62,6 +58,7 @@ from .tool_circuit_breaker import breaker_for
 
 from .planning import plan_outline as plan_outline_impl
 from .postprocess_timing import PostprocessPhaseTracker
+from .section_kinds import coerce_section_kind
 from .section_pipeline import (
     SectionContext,
     SectionResult,
@@ -1885,7 +1882,9 @@ def _validate_outline_structure(outline: Any) -> None:
                 description=section.description,
                 # #1832: Kind aus der persistierten Section uebernehmen; alte
                 # Bestandsdaten ohne Kind fallen auf generic zurueck.
-                section_kind=getattr(section, "kind", None) or ReportSectionKind.generic,
+                # #1832: tolerant gegen Bestandsdaten und Fremdobjekte — jeder
+                # Wert ausserhalb des Enums wird zu generic normalisiert.
+                section_kind=coerce_section_kind(getattr(section, "kind", None)),
             )
             for section in outline.sections
         ],
