@@ -104,6 +104,12 @@
       "kind": "skip",
       "count": 1,
       "reason": "Plattform-Guard (#1688): /dev/fd fehlt ausserhalb von Linux/macOS"
+    },
+    {
+      "file": "tests/scripts/test_reply_targets_and_visible_context.py",
+      "kind": "skip",
+      "count": 1,
+      "reason": "Strikter xfail mit raises=AssertionError (#1835): hält fest, dass der inaktive ReAct-Loop parent_comment_id verwirft; der Test läuft und wird rot, sobald die Lücke geschlossen ist"
     }
   ]
 }
