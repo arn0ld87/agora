@@ -27,7 +27,7 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 **Quellenidentität im Prepare-Checkpoint (#1833).** Jedes Profil im `prepare_persona_checkpoint.json` trägt neu den optionalen Schlüssel `identity_binding` (Herkunft der Identität: Quellperson, Quellkollektiv, erfundener Vertreter oder synthetische Ergänzung). Die Plattform-Profildateien (`reddit_profiles.json`, `twitter_profiles.csv`) und alle API-Antworten bleiben unverändert.
 
-- **Upgrade:** Keine Migration und kein manueller Schritt. Ein Checkpoint eines älteren Stands wird weiter gelesen; der Schlüssel fehlt dort und gilt als leer (`None`).
+- **Upgrade:** Keine Migration und kein manueller Schritt. Ein Checkpoint eines älteren Stands wird weiter gelesen; der Schlüssel fehlt dort und gilt als leer (`None`). Beim Resume wird die fehlende Bindung aus der Entität nachgetragen; Text und Name der übernommenen Profile bleiben unverändert.
 - **Rollback-Implikation:** Ein älterer Code-Stand überspringt Checkpoint-Einträge mit dem Schlüssel als nicht rekonstruierbar und generiert diese Profile beim Resume neu. Das kostet Modellaufrufe im Budget und bricht nicht ab.
 
 Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Persistenz-Änderungen, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).

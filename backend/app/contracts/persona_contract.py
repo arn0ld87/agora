@@ -354,6 +354,11 @@ def role_compatible_age(age: int, role_text: Optional[str]) -> int:
     return adjusted
 
 
+def has_retirement_marker(text: Optional[str]) -> bool:
+    """Ob der Text einen Ruhestands- oder Ehemaligen-Status nennt (``_RETIRED_MARKER``)."""
+    return bool(_RETIRED_MARKER.search(text or ""))
+
+
 def role_titles_in(text: Optional[str]) -> list[str]:
     """Rollentitel im Text (``_FEMALE_TITLE``/``_MALE_TITLE``), in Reihenfolge, ohne Dubletten."""
     source = text or ""

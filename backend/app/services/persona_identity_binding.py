@@ -21,6 +21,7 @@ from ..contracts.persona_contract import (
     documented_age,
     documented_gender,
     gender_from_role_title,
+    has_retirement_marker,
     role_titles_in,
 )
 from ..contracts.persona_identity_contract import (
@@ -28,6 +29,7 @@ from ..contracts.persona_identity_contract import (
     IDENTITY_ORIGIN_ATTRIBUTE,
     MAX_FUNCTION_CHARS,
     SYNTHETIC_SUPPLEMENT_MARKER,
+    FunctionEvidence,
     GenderEvidence,
     PersonaIdentityBinding,
     UnverifiableReason,
@@ -168,7 +170,7 @@ def resolve_identity_binding(
         and semantic_class in (SemanticEntityClass.PERSON, SemanticEntityClass.OTHER)
         and has_signal
     ):
-        return _source_person_binding(common, attributes)
+        return _source_person_binding(common, attributes, summary)
 
     reasons: list[UnverifiableReason] = []
     if person_shaped and not has_signal:
@@ -181,20 +183,28 @@ def resolve_identity_binding(
 def _source_person_binding(
     common: dict[str, Any],
     attributes: Optional[Mapping[str, Any]],
+    summary: Optional[str],
 ) -> PersonaIdentityBinding:
     reasons: list[UnverifiableReason] = []
     function = _function_attribute(attributes)
-    function_evidence = "attribute" if function else "none"
+    function_evidence: FunctionEvidence = "attribute" if function else "none"
     if function:
         if not role_titles_in(function):
             reasons.append("role_check_not_possible")
     else:
-        reasons.append("function_not_documented")
+        # Nur die eigene Zusammenfassung der Entität, nicht der weitere Kontext,
+        # der fremde Rollen nennt.
+        titles = role_titles_in(summary)
+        if titles:
+            function = ", ".join(titles)[:MAX_FUNCTION_CHARS]
+            function_evidence = "summary"
+        else:
+            reasons.append("function_not_documented")
 
     gender_evidence: GenderEvidence = "none"
     if documented_gender(attributes) is not None:
         gender_evidence = "attribute"
-    elif function and gender_from_role_title(function) == "female":
+    elif function_evidence == "attribute" and gender_from_role_title(function) == "female":
         gender_evidence = "role_title"
     else:
         reasons.append("gender_not_documented")
@@ -404,3 +414,75 @@ def source_person_fallback_fields(
         bio = f"{bio} | Spricht für {affiliation}"
         persona += f" Spricht für {affiliation}."
     return {"bio": bio, "persona": persona, "profession": function}
+
+
+# --------------------------------------------------------------------------
+# Rollenabweichung der Modellantwort
+# --------------------------------------------------------------------------
+
+#: Ausbildungsstatus im Feld ``profession`` der Modellantwort.
+_TRAINEE_STATUS = re.compile(
+    r"\b(?:azubi|auszubildend\w*|in ausbildung|praktikant\w*|student\w*"
+    r"|schüler\w*|schueler\w*|trainee\w*)",
+    re.IGNORECASE,
+)
+_UMLAUT_FOLD = (
+    ("ä", "a"), ("ö", "o"), ("ü", "u"), ("ß", "ss"), ("ae", "a"), ("oe", "o"), ("ue", "u"),
+)
+
+
+def _fold_title(title: str) -> str:
+    """Kleinschreibung, Umlautfaltung, ohne feminine Endung „in“."""
+    folded = title.casefold()
+    for source, target in _UMLAUT_FOLD:
+        folded = folded.replace(source, target)
+    if folded.endswith("in") and len(folded) > 4:
+        folded = folded[:-2]
+    return folded
+
+
+def _titles_compatible(profession: str, function: str) -> bool:
+    """Ein Titel der einen Seite steckt im Titel der anderen; nennt der Beruf
+    keinen erkannten Titel, genügt ein belegter Titel als Teilwort. Kein
+    Synonymwissen: „Oberarzt“ ist zu „Chefarzt“ eine Abweichung."""
+    documented = [_fold_title(t) for t in role_titles_in(function)]
+    claimed = [_fold_title(t) for t in role_titles_in(profession)]
+    if claimed:
+        return any(c in d or d in c for c in claimed for d in documented)
+    folded_profession = _fold_title(profession)
+    return any(d in folded_profession for d in documented)
+
+
+def role_deviation_reason(
+    *,
+    binding: PersonaIdentityBinding,
+    profession: Optional[str],
+    source_summary: Optional[str],
+) -> Optional[str]:
+    """Grund, warum der Beruf der Modellantwort der Quelle widerspricht, sonst ``None``.
+
+    Nur für ``source_person`` und nur auf dem Feld ``profession``. Zwei
+    deterministische Regeln:
+
+    * Statusregel: ein Ausbildungs- oder Ruhestands-/Ehemaligen-Status, den
+      weder die belegte Funktion noch die eigene Zusammenfassung nennt.
+    * Funktionsregel: die belegte Funktion trägt einen Rollentitel, der Beruf
+      ist nicht leer, und kein belegter Titel verträgt sich mit dem Beruf.
+
+    Ohne Rollentitel in der Funktion greift nur die Statusregel. Der Grund ist
+    ein kurzer Satz ohne Personennamen.
+    """
+    if binding.origin != "source_person":
+        return None
+    claimed = _single_line(profession or "")
+    if not claimed:
+        return None
+    known = " ".join(part for part in (binding.documented_function, source_summary) if part)
+    if _TRAINEE_STATUS.search(claimed) and not _TRAINEE_STATUS.search(known):
+        return "Beruf der Modellantwort nennt einen Ausbildungsstatus, den die Quelle nicht belegt."
+    if has_retirement_marker(claimed) and not has_retirement_marker(known):
+        return "Beruf der Modellantwort nennt einen Ruhestandsstatus, den die Quelle nicht belegt."
+    function = binding.documented_function or ""
+    if role_titles_in(function) and not _titles_compatible(claimed, function):
+        return "Beruf der Modellantwort verträgt sich nicht mit der belegten Funktion."
+    return None

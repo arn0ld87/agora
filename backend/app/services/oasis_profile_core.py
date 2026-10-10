@@ -23,6 +23,7 @@ from .entity_reader import EntityNode
 from .persona_identity_binding import (
     build_identity_prompt_block,
     resolve_identity_binding,
+    role_deviation_reason,
     source_gender,
     source_person_fallback_fields,
 )
@@ -147,6 +148,47 @@ context :str ,
     return f"{block }\n\n{context }"if block else context
 
 
+def _discard_deviating_answer (
+self: Any ,
+binding :PersonaIdentityBinding ,
+entity :EntityNode ,
+profile_data :dict [str ,Any ],
+demographic_slot :Optional [PersonaDemographicSlot ],
+)->tuple [dict [str ,Any ],PersonaIdentityBinding ]:
+    """Verwirft eine Modellantwort, deren Beruf der Quelle widerspricht (#1833).
+
+    Der Beruf nennt einen nicht belegten Ausbildungs- oder Ruhestandsstatus oder
+    eine andere Rolle als die belegte Funktion — auch innerhalb derselben
+    Domaene, die die Drift-Pruefung nicht erkennt. Die Person bleibt mit
+    Quellnamen im Personasatz, Bio, Persona und Beruf stammen nur aus der Quelle,
+    und der Rueckfall ist ueber ``generation_error`` (Praefix
+    ``source_role_deviation``) als ``PERSONA_RULE_BASED_FALLBACK`` sichtbar.
+    Kein zweiter Modellaufruf.
+    """
+    reason =role_deviation_reason (
+    binding =binding ,profession =profile_data .get ("profession"),source_summary =entity .summary
+    )
+    if reason is None :
+        return profile_data ,binding
+    _legacy .logger .warning (
+    "persona identity: source role deviation, Modellantwort verworfen type=%s",
+    entity .get_entity_type ()or "Entity",
+    )
+    deviating =PersonaIdentityBinding .model_validate ({**binding .model_dump (),"role_deviation":reason })
+    return (
+    self ._generate_profile_rule_based (
+    entity_name =entity .name ,
+    entity_type =entity .get_entity_type ()or "Entity",
+    entity_summary =entity .summary ,
+    entity_attributes =entity .attributes ,
+    generation_error =f"source_role_deviation: {reason }"[:200 ],
+    demographic_slot =demographic_slot ,
+    affiliation =entity .affiliation ,
+    ),
+    deviating ,
+    )
+
+
 def _apply_source_person_demographics (
 profile_data :dict [str ,Any ],
 binding :PersonaIdentityBinding ,
@@ -203,6 +245,125 @@ bio :Optional [str ],
     if candidate is None :
         return None
     return role_compatible_age (candidate ," ".join (part for part in (profession ,bio )if part ))
+
+
+def _raise_if_ineligible (profile_data :dict [str ,Any ],name :str ,entity_type :str )->None :
+    """Issue #1247: Das Modell darf die Entitaet zurueckweisen (``PersonaIneligible``)."""
+    if not profile_data .get ("ineligible"):
+        return
+    reason =(profile_data .get ("ineligible_reason")or "").strip ()or (
+    "vom Persona-Generator als nicht personenfaehig zurueckgewiesen"
+    )
+    _legacy .logger .info (
+    "Persona-Eligibility (LLM): Entitaet abgelehnt name=%s type=%s reason=%s",
+    name ,
+    entity_type ,
+    reason ,
+    )
+    raise PersonaIneligible (name ,entity_type ,reason )
+
+
+def _model_identity (
+self: Any ,
+profile_data :dict [str ,Any ],
+binding :PersonaIdentityBinding ,
+name :str ,
+user_name :str ,
+)->tuple [str ,str ]:
+    """Anzeigename und Handle: das Modell darf sie setzen, ausser bei gesperrtem Namen.
+
+    Fuer Kollektive bleibt der Entitaetsname stehen (der Traeger spricht als
+    Traeger), eine Quellperson behaelt ihren Quellnamen (#1833).
+    """
+    if binding .origin =="source_collective"or binding .name_is_locked :
+        return name ,user_name
+    display_name =(profile_data .get ("display_name")or "").strip ()
+    if display_name :
+        name =display_name
+    handle =(profile_data .get ("handle")or "").strip ()
+    if handle :
+        user_name =self ._generate_username (handle )
+    return name ,user_name
+
+
+def _checked_answer (
+self: Any ,
+binding :PersonaIdentityBinding ,
+entity :EntityNode ,
+profile_data :dict [str ,Any ],
+demographic_slot :Optional [PersonaDemographicSlot ],
+use_llm :bool ,
+)->tuple [dict [str ,Any ],PersonaIdentityBinding ,bool ]:
+    """Prueft die Modellantwort einer Quellperson auf Rollenabweichung (#1833).
+
+    Rueckgabe: Antwort, Bindung und ob die Antwort (noch) vom Modell stammt.
+    """
+    answer_from_model =use_llm and profile_data .get ("generation_source","llm")!="rule_based"
+    if binding .origin =="source_person"and answer_from_model :
+        profile_data ,binding =_discard_deviating_answer (
+        self ,binding ,entity ,profile_data ,demographic_slot
+        )
+        answer_from_model =profile_data .get ("generation_source","llm")!="rule_based"
+    return profile_data ,binding ,answer_from_model
+
+
+def _apply_demographics (
+profile_data :dict [str ,Any ],
+binding :PersonaIdentityBinding ,
+entity :EntityNode ,
+demographic_slot :Optional [PersonaDemographicSlot ],
+answer_from_model :bool ,
+)->None :
+    """Demografie und Quellentext je Herkunft (Issue #1246, #1759 A2, #1833)."""
+    is_collective =binding .origin =="source_collective"
+    if is_collective :
+        profile_data ["age"]=None
+        profile_data ["gender"]=None
+        profile_data ["mbti"]=None
+        # Eine Kollektiv-Persona hat keinen Beruf. "Dozent und
+        # Betriebsratsmitglied" war aus einem Bildungstraeger nicht
+        # ableitbar, sondern eine plausible Vita.
+        profile_data ["profession"]=None
+    elif binding .origin =="source_person":
+        _apply_source_person_demographics (profile_data ,binding ,entity .attributes ,demographic_slot )
+    elif demographic_slot is not None :
+        profile_data ["age"]=demographic_slot .age
+        profile_data ["gender"]=demographic_slot .gender
+        profile_data ["mbti"]=demographic_slot .mbti
+    _apply_documented_demographics (profile_data ,entity .attributes ,is_collective )
+    if binding .origin =="source_person":
+        _apply_source_person_text (profile_data ,binding ,entity ,answer_from_model )
+
+
+def _finish_source_person_age (
+profile_data :dict [str ,Any ],
+binding :PersonaIdentityBinding ,
+attributes :Optional [Mapping [str ,Any ]],
+slot :Optional [PersonaDemographicSlot ],
+answer_from_model :bool ,
+profession :Optional [str ],
+bio :Optional [str ],
+)->None :
+    """Alter zuletzt, mit endgueltigem Beruf und endgueltiger Bio (#1833).
+
+    Dieselben Eingaben wie die Batch-Pruefung der Rollenplausibilitaet.
+    """
+    if binding .origin =="source_person":
+        profile_data ["age"]=_source_person_age (
+        attributes ,profile_data ,slot ,answer_from_model ,profession ,bio
+        )
+
+
+def _log_identity_binding (entity_type :str ,binding :PersonaIdentityBinding )->None :
+    """Strukturierte Logzeile ohne Personen- oder Organisationsnamen (#1833)."""
+    _legacy .logger .info (
+    "persona identity: type=%s origin=%s function_evidence=%s gender_evidence=%s unverifiable=%s",
+    entity_type ,
+    binding .origin ,
+    binding .function_evidence ,
+    binding .gender_evidence ,
+    ",".join (binding .unverifiable_reasons )or "-",
+    )
 
 
 def generate_profile_from_entity (
@@ -301,17 +462,7 @@ taken_names :Optional [List [str ]]=None ,
         # Issue #1247: Das Modell darf die Entitaet zurueckweisen, statt eine
         # Persona zu erfinden. Bewusst als Ausnahme und nicht als stilles
         # Ueberspringen — der Aufrufer muss den Slot nachbesetzen koennen.
-    if profile_data .get ("ineligible"):
-        reason =(profile_data .get ("ineligible_reason")or "").strip ()or (
-        "vom Persona-Generator als nicht personenfaehig zurueckgewiesen"
-        )
-        _legacy .logger .info (
-        "Persona-Eligibility (LLM): Entitaet abgelehnt name=%s type=%s reason=%s",
-        name ,
-        entity_type ,
-        reason ,
-        )
-        raise PersonaIneligible (name ,entity_type ,reason )
+    _raise_if_ineligible (profile_data ,name ,entity_type )
 
         # Issue #1246: Der Kollektiv-Zweig ist bewusst hier sichtbar und nicht
         # in den Individuenpfad eingebettet. Eine Organisation bekommt keine
@@ -319,38 +470,17 @@ taken_names :Optional [List [str ]]=None ,
         # keinen MBTI-Typ, den man ihr zuschreiben koennte, und jeder Wert an
         # dieser Stelle waere eine Erfindung.
     persona_kind ="collective"if is_collective else "individual"
-    answer_from_model =use_llm and profile_data .get ("generation_source","llm")!="rule_based"
-
-    if is_collective :
-        profile_data ["age"]=None
-        profile_data ["gender"]=None
-        profile_data ["mbti"]=None
-        # Eine Kollektiv-Persona hat keinen Beruf. "Dozent und
-        # Betriebsratsmitglied" war aus einem Bildungstraeger nicht
-        # ableitbar, sondern eine plausible Vita.
-        profile_data ["profession"]=None
-    elif is_source_person :
-        _apply_source_person_demographics (profile_data ,binding ,entity .attributes ,demographic_slot )
-    elif demographic_slot is not None :
-        profile_data ["age"]=demographic_slot .age
-        profile_data ["gender"]=demographic_slot .gender
-        profile_data ["mbti"]=demographic_slot .mbti
-    _apply_documented_demographics (profile_data ,entity .attributes ,is_collective )
-    if is_source_person :
-        _apply_source_person_text (profile_data ,binding ,entity ,answer_from_model )
+    profile_data ,binding ,answer_from_model =_checked_answer (
+    self ,binding ,entity ,profile_data ,demographic_slot ,use_llm
+    )
+    _apply_demographics (profile_data ,binding ,entity ,demographic_slot ,answer_from_model )
 
         # LLM/Rule-based darf display_name (echter Name) + handle (kurzes Social-Handle)
         # überschreiben. So wird aus Entity "GraphRAG" z.B. Person "Lena Hoffmann" mit
         # Handle "lena_hoffmann". Fuer Kollektive bleibt der Entitaetsname stehen:
         # der Traeger spricht als Traeger, nicht als erfundener Mitarbeiter.
         # Issue #1833: Eine Quellperson behaelt ihren Quellnamen.
-    if not is_collective and not binding .name_is_locked :
-        display_name =(profile_data .get ("display_name")or "").strip ()
-        if display_name :
-            name =display_name
-        handle =(profile_data .get ("handle")or "").strip ()
-        if handle :
-            user_name =self ._generate_username (handle )
+    name ,user_name =_model_identity (self ,profile_data ,binding ,name ,user_name )
 
             # Issue #1246 (P1): Der Freitext muss dieselbe Person beschreiben, die
             # oben benannt ist. Fuer Kollektive entfaellt die Frage.
@@ -395,23 +525,13 @@ taken_names :Optional [List [str ]]=None ,
         # (Chefaerztin/Chefarzt) schlaegt den gewuerfelten Slot-Wert; ein
         # im Dokument belegtes Geschlecht bleibt unangetastet.
         _apply_role_gender (profile_data ,entity .attributes ,profession ,bio )
-    if is_source_person :
-    # Zuletzt, mit endgueltigem Beruf und endgueltiger Bio: dieselben Eingaben
-    # wie die Batch-Pruefung der Rollenplausibilitaet.
-        profile_data ["age"]=_source_person_age (
-        entity .attributes ,profile_data ,demographic_slot ,answer_from_model ,profession ,bio
-        )
+    _finish_source_person_age (
+    profile_data ,binding ,entity .attributes ,demographic_slot ,answer_from_model ,profession ,bio
+    )
     generation_error =_merge_generation_error (
     profile_data .get ("generation_error"),resolution .generation_error
     )
-    _legacy .logger .info (
-    "persona identity: type=%s origin=%s function_evidence=%s gender_evidence=%s unverifiable=%s",
-    entity_type ,
-    binding .origin ,
-    binding .function_evidence ,
-    binding .gender_evidence ,
-    ",".join (binding .unverifiable_reasons )or "-",
-    )
+    _log_identity_binding (entity_type ,binding )
 
     # Segment = entity_type string for PersonaQuotaPlan validation.
     # entity_type is already resolved above (get_entity_type() or "Entity").

@@ -2,14 +2,35 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, List, Optional
 
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan, PersonaTargetContract
+from ..contracts.persona_identity_contract import (
+    IDENTITY_ORIGIN_ATTRIBUTE,
+    SYNTHETIC_SUPPLEMENT_MARKER,
+)
 from ..utils.logger import get_logger
 from .oasis_profile_generator import OasisAgentProfile
 from .report_agent import MIN_PERSONA_TABLE_ROWS
 
 logger = get_logger("agora.prepare")
+
+
+def _synthetic_supplement_copy(entity: Any) -> Any:
+    """Flache Kopie der Entität, ausdrücklich als synthetische Ergänzung markiert (#1833).
+
+    Die Kopie behält Quell-UUID und Name der Entität; das Attribut
+    ``identity_origin`` sorgt dafür, dass der Generator sie nicht als
+    in der Quelle genannte Person behandelt. Die Quellentität bleibt unverändert.
+    """
+    replica = copy.copy(entity)
+    replica.attributes = {
+        **(getattr(entity, "attributes", None) or {}),
+        IDENTITY_ORIGIN_ATTRIBUTE: SYNTHETIC_SUPPLEMENT_MARKER,
+    }
+    return replica
+
 
 def _expand_entities_for_quota(
     entities: List[Any],
@@ -30,7 +51,11 @@ def _expand_entities_for_quota(
     bekommt jede Persona einen eigenen ``user_id`` (durch Position in
     der Generator-Loop) und nutzt die bestehende Display-Name-/User-Name-
     Dedup-Logik im Generator (s. ``oasis_profile_generator.py`` Z. 1269+),
-    die LLM-Name-Kollisionen abfängt.
+    die LLM-Name-Kollisionen abfängt. Das erste Vorkommen bleibt
+    quellengebunden; jede Wiederholung ist eine Kopie mit dem Marker
+    ``identity_origin=synthetic_supplement`` (#1833): eine ausdrücklich
+    synthetische Zusatzstimme, die die Quell-UUID behält, nie den Namen der
+    Quellperson trägt und keine unabhängige Quelle ist.
     """
     if plan is None:
         return entities
@@ -53,7 +78,11 @@ def _expand_entities_for_quota(
                 f"Ontologie um den fehlenden Type erweitern."
             )
         for i in range(target):
-            expanded.append(pool[i % len(pool)])
+            # Das erste Vorkommen bleibt die quellengebundene Entität, jede
+            # Wiederholung (Position ab der Poolgröße) ist eine ausdrücklich
+            # synthetische Zusatzstimme (#1833).
+            entity = pool[i % len(pool)]
+            expanded.append(entity if i < len(pool) else _synthetic_supplement_copy(entity))
 
     return expanded
 
@@ -68,7 +97,9 @@ def _apply_persona_floor_to_entities(
     The generator creates a distinct profile per input position. When the graph
     has fewer entities than the output contract requires, repeat the existing
     entity pool in deterministic round-robin order instead of inventing
-    synthetic entities.
+    synthetic entities. The first pass keeps the source-bound entities; each
+    repeat is a copy marked as an explicit synthetic supplement (#1833): it
+    keeps the source UUID but never counts as the source person.
     """
     if not entities or len(entities) >= minimum:
         return entities
@@ -78,7 +109,12 @@ def _apply_persona_floor_to_entities(
         len(entities),
         minimum,
     )
-    return [entities[i % len(entities)] for i in range(minimum)]
+    # Der erste Durchlauf bleibt quellengebunden, Wiederholungen sind
+    # ausdrücklich synthetische Zusatzstimmen (#1833).
+    return [
+        entities[i] if i < len(entities) else _synthetic_supplement_copy(entities[i % len(entities)])
+        for i in range(minimum)
+    ]
 
 
 def _apply_persona_floor_to_quota_plan(

@@ -18,14 +18,18 @@ from typing import Any
 
 import pytest
 
+from app.contracts import PersonaQuotaPlan
 from app.contracts.persona_contract import (
+    has_retirement_marker,
     persona_role_plausibility_reason,
     role_compatible_age,
 )
+from app.contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from app.contracts.persona_identity_contract import (
     SYNTHETIC_SUPPLEMENT_MARKER,
     PersonaIdentityBinding,
 )
+from app.services.degradation_collector import DegradationCollector
 from app.services.entity_reader import EntityNode
 from app.services.entity_semantic_class import SemanticEntityClass, classify_entity
 from app.services.oasis_profile_generator import (
@@ -38,6 +42,10 @@ from app.services.persona_identity_binding import (
     resolve_identity_binding,
 )
 from app.services.prepare_checkpoint import profile_from_dict, profile_to_dict
+from app.services.prepare_quota import (
+    _apply_persona_floor_to_entities,
+    _expand_entities_for_quota,
+)
 
 CHIEF_ATTRS = {"role": "Chefarzt der Klinik für Geburtshilfe"}
 
@@ -71,6 +79,7 @@ def _stub_llm(
     calls: list | None = None,
     age: int | None = None,
     gender: str | None = None,
+    bio: str | None = None,
 ) -> None:
     """Ersetzt den Modellaufruf: festes Profil, protokolliert die Aufrufe."""
 
@@ -84,7 +93,7 @@ def _stub_llm(
                 f"{display_name} arbeitet als {profession} und äußert sich "
                 "regelmäßig zur Klinikschließung."
             ),
-            "bio": f"{profession}, Hollerau",
+            "bio": bio if bio is not None else f"{profession}, Hollerau",
             "profession": profession,
             "interested_topics": [],
         }
@@ -599,3 +608,410 @@ def test_checkpoint_profile_without_identity_binding_loads_with_default_none(gen
     restored = profile_from_dict(data)
 
     assert restored.identity_binding is None
+
+
+# ================================================== Task 2: Rollenabweichung
+
+MAYOR_ATTRS = {"role": "Bürgermeister"}
+
+
+def _assert_visible_role_deviation(profile: OasisAgentProfile, entity: EntityNode) -> None:
+    assert profile.name == entity.name
+    assert profile.source_entity_uuid == entity.uuid
+    assert profile.generation_source == "rule_based"
+    assert profile.generation_error is not None
+    assert profile.generation_error.startswith("source_role_deviation")
+    assert profile.identity_binding is not None
+    assert profile.identity_binding["role_deviation"]
+
+
+def test_source_chief_physician_trainee_answer_falls_back_as_visible_role_deviation(generator):
+    """Ursache abweichende Antwort: Chefarzt als „Azubi zum Notfallsanitäter“."""
+    entity = _entity("Dr. Frank Oltmann", "Person", CHIEF_ATTRS)
+    slot = PersonaDemographicSlot(age=20, gender="male", mbti="ENFP")
+    _stub_llm(
+        generator,
+        "Maria Fremdname",
+        "Auszubildender zum Notfallsanitäter",
+        age=20,
+        gender="male",
+    )
+
+    profile = generator.generate_profile_from_entity(
+        entity, user_id=1, use_llm=True, demographic_slot=slot
+    )
+
+    _assert_visible_role_deviation(profile, entity)
+    assert profile.profession == CHIEF_ATTRS["role"]
+    assert profile.age is not None and profile.age >= 36
+    assert "Auszubildend" not in profile.bio and "Auszubildend" not in profile.persona
+    assert "Notfallsanitäter" not in profile.persona
+
+
+def test_source_mayor_pensioner_answer_falls_back_as_visible_role_deviation(generator):
+    entity = _entity("Heiko Dirks", "Person", MAYOR_ATTRS)
+    slot = PersonaDemographicSlot(age=70, gender="male", mbti="ISTJ")
+    _stub_llm(generator, "Maria Fremdname", "pensionierter Verwaltungsmitarbeiter")
+
+    profile = generator.generate_profile_from_entity(
+        entity, user_id=1, use_llm=True, demographic_slot=slot
+    )
+
+    _assert_visible_role_deviation(profile, entity)
+    assert profile.profession == "Bürgermeister"
+    assert not has_retirement_marker(profile.bio)
+    assert not has_retirement_marker(profile.persona)
+    assert profile.age is not None
+    # Eine Obergrenze wird nicht geprüft: „Bürgermeister“ steht nicht in
+    # _EMPLOYEE_ROLE, 70 ist nach den bestehenden Regeln zulässig.
+    assert persona_role_plausibility_reason(profile.age, profile.profession, profile.bio) is None
+
+
+def test_role_deviation_profile_is_reported_as_rule_based_fallback(generator):
+    slot = PersonaDemographicSlot(age=70, gender="male", mbti="ISTJ")
+    _stub_llm(generator, "Maria Fremdname", "pensionierter Verwaltungsmitarbeiter")
+    deviating = generator.generate_profile_from_entity(
+        _entity("Heiko Dirks", "Person", MAYOR_ATTRS),
+        user_id=1,
+        use_llm=True,
+        demographic_slot=slot,
+    )
+    _stub_llm(generator, "Anna Muster", "Pflegekraft", age=30, gender="female")
+    normal = generator.generate_profile_from_entity(
+        _entity("Pflegekraft", "Nurse"),
+        user_id=2,
+        use_llm=True,
+        demographic_slot=PersonaDemographicSlot(age=30, gender="female", mbti="ISFJ"),
+    )
+    collector = DegradationCollector()
+
+    generator._report_persona_degradation([deviating, normal], collector)
+
+    events = collector.report().events
+    assert len(events) == 1
+    assert events[0].kind is DegradationKind.PERSONA_RULE_BASED_FALLBACK
+    assert events[0].severity is DegradationSeverity.WARNING
+    assert events[0].context["fallback_personas"] == 1
+    assert "source_role_deviation" in events[0].detail
+
+
+def test_role_deviation_triggers_no_second_model_call(generator):
+    calls: list = []
+    _stub_llm(generator, "Maria Fremdname", "Auszubildender", calls)
+
+    def _no_second_call(**kwargs: Any) -> None:
+        raise AssertionError("Rückfall darf keinen weiteren Modellaufruf auslösen")
+
+    generator._regenerate_persona_after_drift = _no_second_call  # type: ignore[method-assign]
+
+    profile = generator.generate_profile_from_entity(
+        _entity("Dr. Frank Oltmann", "Person", CHIEF_ATTRS),
+        user_id=1,
+        use_llm=True,
+        demographic_slot=PersonaDemographicSlot(age=20, gender="male", mbti="ENFP"),
+    )
+
+    assert len(calls) == 1
+    assert profile.generation_source == "rule_based"
+
+
+def test_status_rule_without_documented_function(generator):
+    attrs = {"alter": 50}
+
+    _stub_llm(generator, "Maria Fremdname", "Auszubildender")
+    entity = _entity("Heiko Dirks", "Person", attrs)
+    trainee = generator.generate_profile_from_entity(
+        entity, user_id=1, use_llm=True, demographic_slot=None
+    )
+    _assert_visible_role_deviation(trainee, entity)
+    assert trainee.identity_binding["function_evidence"] == "none"
+
+    # Nennt die Zusammenfassung den Status selbst, ist es keine Abweichung.
+    _stub_llm(generator, "Maria Fremdname", "ehemaliger Landrat")
+    former = generator.generate_profile_from_entity(
+        _entity("Heiko Dirks", "Person", attrs, summary="Heiko Dirks ist ehemaliger Landrat."),
+        user_id=2,
+        use_llm=True,
+        demographic_slot=None,
+    )
+    assert former.generation_source == "llm"
+    assert former.generation_error is None
+
+    # Ein Ausbildungswort nur in der Bio ist keine Abweichung (geprüft wird allein „profession“).
+    _stub_llm(
+        generator,
+        "Maria Fremdname",
+        "Ausbilder",
+        bio="Bildet Auszubildende aus, Hollerau",
+    )
+    mentor = generator.generate_profile_from_entity(
+        _entity("Heiko Dirks", "Person", attrs), user_id=3, use_llm=True, demographic_slot=None
+    )
+    assert mentor.generation_source == "llm"
+    assert mentor.generation_error is None
+
+
+@pytest.mark.parametrize(
+    "profession",
+    ["Oberarzt", "Pflegedienstleiter", "Ärztlicher Direktor", "Notfallsanitäter"],
+)
+def test_function_rule_treats_other_title_as_deviation(generator, profession):
+    entity = _entity("Dr. Frank Oltmann", "Person", {"role": "Chefarzt"})
+    _stub_llm(generator, "Maria Fremdname", profession)
+
+    profile = generator.generate_profile_from_entity(
+        entity, user_id=1, use_llm=True, demographic_slot=None
+    )
+
+    _assert_visible_role_deviation(profile, entity)
+    assert profile.profession == "Chefarzt"
+
+
+@pytest.mark.parametrize(
+    "profession", ["Chefärztin der Geburtshilfe", "Chefarzt", "Leitender Arzt"]
+)
+def test_function_rule_accepts_same_title_in_other_form(generator, profession):
+    _stub_llm(generator, "Maria Fremdname", profession)
+
+    profile = generator.generate_profile_from_entity(
+        _entity("Dr. Frank Oltmann", "Person", {"role": "Chefarzt"}),
+        user_id=1,
+        use_llm=True,
+        demographic_slot=None,
+    )
+
+    assert profile.generation_source == "llm"
+    assert profile.generation_error is None
+    assert profile.profession == "Chefarzt", "bei Evidenz 'attribute' gilt der belegte Wortlaut"
+
+
+def test_function_only_in_summary_is_summary_evidence_and_protected(generator):
+    summary = "Dr. Frank Oltmann ist Chefarzt der Klinik für Geburtshilfe in Hollerau."
+    entity = _entity("Dr. Frank Oltmann", "Person", summary=summary)
+    slot = PersonaDemographicSlot(age=20, gender="male", mbti="ENFP")
+    calls: list = []
+
+    binding = _binding(generator, entity)
+    assert binding.function_evidence == "summary"
+    assert binding.documented_function == "Chefarzt"
+    assert "function_not_documented" not in binding.unverifiable_reasons
+
+    _stub_llm(generator, "Maria Fremdname", "Auszubildender zum Notfallsanitäter", calls)
+    deviating = generator.generate_profile_from_entity(
+        entity, user_id=1, use_llm=True, demographic_slot=slot
+    )
+    context = calls[0]["context"]
+    assert "Belegte Funktion laut Quelle: Chefarzt." in context
+    assert "Orientierungswert 36" in context, "Orientierungswert ist rollenplausibel"
+    _assert_visible_role_deviation(deviating, entity)
+
+    _stub_llm(generator, "Maria Fremdname", "Chefarzt der Geburtshilfe")
+    compatible = generator.generate_profile_from_entity(
+        entity, user_id=2, use_llm=True, demographic_slot=slot
+    )
+    assert compatible.generation_source == "llm"
+    assert compatible.profession == "Chefarzt der Geburtshilfe", "Beruf des Modells bleibt stehen"
+
+
+def test_collective_clinic_stays_collective_despite_person_answer(generator):
+    entity = _entity("Klinikum Hollerau-Nord", "Hospital")
+    _stub_llm(generator, "Tobias Neumann", "Notfallsanitäter", age=35, gender="male")
+
+    profile = generator.generate_profile_from_entity(
+        entity,
+        user_id=1,
+        use_llm=True,
+        demographic_slot=PersonaDemographicSlot(age=35, gender="male", mbti="ESTJ"),
+    )
+
+    assert profile.persona_kind == "collective"
+    assert profile.name == "Klinikum Hollerau-Nord"
+    assert profile.age is None
+    assert profile.gender is None
+    assert profile.mbti is None
+    assert profile.profession is None
+    assert profile.identity_binding is not None
+    assert profile.identity_binding["origin"] == "source_collective"
+    assert profile.generation_error is None
+
+
+# ----------------------------------------------------------------- Batch
+
+
+def _dispatch_stub(generator, names: dict[str, tuple[str, str]], calls: list | None = None):
+    """Stub je Entität: ``{entity_name: (fremder Anzeigename, Beruf)}``."""
+
+    def fake(**kwargs: Any) -> dict[str, Any]:
+        if calls is not None:
+            calls.append(kwargs)
+        display_name, profession = names[kwargs["entity_name"]]
+        return {
+            "display_name": display_name,
+            "handle": display_name.lower().replace(" ", "_"),
+            # Eröffnung „Name, Alter, …“ wie im Persona-Prompt: so zieht der
+            # Generator den Freitext auf den Quellnamen.
+            "persona": f"{display_name}, 44, arbeitet als {profession} in Hollerau.",
+            "bio": f"{profession}, Hollerau",
+            "profession": profession,
+            "interested_topics": [],
+        }
+
+    generator._generate_profile_with_llm = fake  # type: ignore[method-assign]
+
+
+def _slots(count: int) -> list[PersonaDemographicSlot]:
+    return [PersonaDemographicSlot(age=30 + i, gender="female", mbti="ISFJ") for i in range(count)]
+
+
+def test_batch_keeps_source_names_and_uuids_and_renames_only_the_representative(generator):
+    representative = _entity("Pflegekraft", "Nurse")
+    svenja = _entity("Svenja Meyer", "Person", {"role": "Hebamme"})
+    lars = _entity("Lars Peters", "Person", {"alter": 44})
+    _dispatch_stub(
+        generator,
+        {
+            "Pflegekraft": ("Jonas Meyer", "Pflegekraft"),
+            "Svenja Meyer": ("Fremd Eins", "Hebamme"),
+            "Lars Peters": ("Fremd Zwei", "Pflegekraft"),
+        },
+    )
+
+    profiles = generator.generate_profiles_from_entities(
+        entities=[representative, svenja, lars],
+        use_llm=True,
+        parallel_count=1,
+        demographic_slots=_slots(3),
+    )
+
+    by_uuid = {p.source_entity_uuid: p for p in profiles}
+    assert by_uuid[svenja.uuid].name == "Svenja Meyer"
+    assert by_uuid[lars.uuid].name == "Lars Peters"
+    renamed = by_uuid[representative.uuid]
+    assert renamed.name != "Jonas Meyer"
+    assert "Meyer" not in renamed.name.split()
+    assert len({p.user_name for p in profiles}) == 3
+
+
+def test_two_source_persons_with_same_surname_keep_both_names(generator):
+    first = _entity("Svenja Meyer", "Person", {"alter": 40})
+    second = _entity("Anke Meyer", "Person", {"alter": 52})
+    _dispatch_stub(
+        generator,
+        {
+            "Svenja Meyer": ("Fremd Eins", "Pflegekraft"),
+            "Anke Meyer": ("Fremd Zwei", "Pflegekraft"),
+        },
+    )
+
+    profiles = generator.generate_profiles_from_entities(
+        entities=[first, second], use_llm=True, parallel_count=1, demographic_slots=_slots(2)
+    )
+
+    assert sorted(p.name for p in profiles) == ["Anke Meyer", "Svenja Meyer"]
+    assert len({p.user_name for p in profiles}) == 2
+
+
+def test_resumed_profile_without_binding_gets_it_backfilled(generator):
+    entity = _entity("Dr. Frank Oltmann", "Person", CHIEF_ATTRS)
+    cached = OasisAgentProfile(
+        user_id=0,
+        user_name="frank_oltmann_123",
+        name="Dr. Frank Oltmann",
+        bio="Chefarzt, Hollerau",
+        persona="Dr. Frank Oltmann ist Chefarzt der Klinik.",
+        source_entity_uuid=entity.uuid,
+        source_entity_type="Person",
+    )
+    assert cached.identity_binding is None
+    calls: list = []
+    _stub_llm(generator, "Maria Fremdname", "Chefarzt", calls)
+
+    profiles = generator.generate_profiles_from_entities(
+        entities=[entity],
+        use_llm=True,
+        parallel_count=1,
+        demographic_slots=_slots(1),
+        already_done={0: cached},
+    )
+
+    assert calls == [], "kein erneuter Modellaufruf für ein übernommenes Profil"
+    assert profiles[0].identity_binding is not None
+    assert profiles[0].identity_binding["origin"] == "source_person"
+    assert profiles[0].name == "Dr. Frank Oltmann"
+    assert profiles[0].persona == "Dr. Frank Oltmann ist Chefarzt der Klinik."
+    assert profiles[0].bio == "Chefarzt, Hollerau"
+
+
+# ------------------------------------------------- synthetische Ergänzung
+
+
+def test_quota_and_floor_replicas_are_marked_copies():
+    first = _entity("Dr. Frank Oltmann", "Person", CHIEF_ATTRS)
+    second = _entity("Heiko Dirks", "Person", MAYOR_ATTRS)
+
+    plan = PersonaQuotaPlan(targets={"Person": 3}, total=3)
+    expanded = _expand_entities_for_quota([first, second], plan)
+    assert expanded[0] is first and expanded[1] is second
+    assert "identity_origin" not in first.attributes
+    replica = expanded[2]
+    assert replica is not first
+    assert replica.uuid == first.uuid and replica.name == first.name
+    assert replica.attributes["identity_origin"] == SYNTHETIC_SUPPLEMENT_MARKER
+    assert "identity_origin" not in first.attributes, "Quellentität wird nicht mutiert"
+
+    floored = _apply_persona_floor_to_entities([first, second], minimum=5)
+    assert floored[0] is first and floored[1] is second
+    assert all(
+        r.attributes["identity_origin"] == SYNTHETIC_SUPPLEMENT_MARKER for r in floored[2:]
+    )
+    assert [r.uuid for r in floored[2:]] == [first.uuid, second.uuid, first.uuid]
+    assert "identity_origin" not in second.attributes
+
+
+def test_quota_replica_is_synthetic_supplement_and_never_takes_the_source_name(
+    generator, monkeypatch
+):
+    prompts: list[str] = []
+
+    class _FakeClient:
+        def __init__(self, **kwargs: Any) -> None:
+            pass
+
+        def chat_json(self, *, messages, **kwargs):
+            prompts.append(messages[1]["content"])
+            return {
+                "display_name": "Hanna Neumann",
+                "handle": "hanna_neumann",
+                "bio": "Pflegekraft in Hollerau",
+                "persona": "Hanna Neumann arbeitet als Pflegekraft in Hollerau.",
+                "age": 41,
+                "gender": "male",
+                "mbti": "INTJ",
+                "country": "DE",
+                "profession": "Pflegekraft",
+                "interested_topics": [],
+                "voice_register": "neutral-de",
+            }
+
+    monkeypatch.setattr("app.llm.client.LLMClient", _FakeClient)
+    source = _entity("Dr. Frank Oltmann", "Person", CHIEF_ATTRS)
+    replica = _expand_entities_for_quota(
+        [source], PersonaQuotaPlan(targets={"Person": 2}, total=2)
+    )[1]
+    slot = PersonaDemographicSlot(age=29, gender="female", mbti="ENFP")
+
+    profile = generator.generate_profile_from_entity(
+        replica, user_id=2, use_llm=True, demographic_slot=slot
+    )
+
+    assert profile.name == "Hanna Neumann"
+    assert profile.name != source.name
+    assert (profile.age, profile.gender, profile.mbti) == (29, "female", "ENFP")
+    assert profile.source_entity_uuid == source.uuid
+    assert profile.identity_binding is not None
+    assert profile.identity_binding["origin"] == "synthetic_supplement"
+    prompt = prompts[0]
+    assert "### Synthetische Ergänzung" in prompt
+    assert '- display_name darf nicht "Dr. Frank Oltmann" sein.' in prompt
+    assert "### Zugewiesener Demografie-Slot (verbindlich)" in prompt
+    assert "Quellenbindung" not in prompt
