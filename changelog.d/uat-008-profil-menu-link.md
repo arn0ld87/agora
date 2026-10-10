@@ -1,0 +1,3 @@
+### Fixed
+
+- **Nutzermenü-Eintrag „Profil" öffnete im Legacy-Modus die Betreiber-Zugangsverwaltung statt des eigenen Profils (UAT-008, 10.10.2026).** Ohne Supabase-Session routete der Eintrag auf den Access-Abschnitt (`/settings/access`: API-Schlüssel, Audit-Protokoll, Sicherheit) statt auf den eigenen Profilabschnitt. Der Legacy-Zweig von `UserMenu.vue` zeigt jetzt wie der Session-Zweig auf `/settings/profile`; der Access-Abschnitt bleibt über die Betreiber-Einstellungen erreichbar und das Session-Verhalten ist unverändert.
