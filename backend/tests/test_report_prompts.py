@@ -103,7 +103,9 @@ def test_all_prompt_names_in_dunder_all():
         "DEFAULT_REPORT_SECTIONS",
         "RECOMMENDATION_SECTION_DESCRIPTION",
         "RECOMMENDATION_SECTION_TITLE",
+        "SECTION_KIND_PROMPT_LINES",
         "format_required_sections",
+        "format_section_kinds",
     }
     assert set(report_prompts.__all__) == expected
 
@@ -147,32 +149,6 @@ class TestPromptSemantics:
                     f"Forbidden phrase '{phrase}' found in prompt. "
                     "Use 'scenario' vocabulary instead (Sub-Slice 09)."
                 )
-
-    def test_default_outline_in_report_agent_has_no_forecast_marketing(self):
-        """Sub-Slice 09 Erweiterung: Default Fallback-Outline (report_agent.py Z. 775–782).
-
-        Source-Scan-Test: Prüft den echten Code, nicht ein Mock-Objekt.
-        Der Fallback wird bei Planning-Fehler genutzt.
-        """
-        from pathlib import Path
-        from app.services import report_agent
-        src = Path(report_agent.__file__).read_text(encoding="utf-8")
-
-        forbidden_phrases = [
-            "Future Prediction Report",
-            "Future trends and risk analysis based on simulation predictions",
-            "Prediction Scenario and Core Findings",
-            "Crowd Behavior Prediction Analysis",
-        ]
-        for phrase in forbidden_phrases:
-            assert phrase not in src, (
-                f"Forbidden phrase {phrase!r} still in report_agent.py "
-                "(Sub-Slice 09 Erweiterung — scenario-Vokabular Pflicht)."
-            )
-
-        # Positive: neuer Wortlaut muss vorhanden sein (Wording-Glossar v1, Slice C)
-        assert "Scenario Evaluation Report" in src
-        assert "Evaluation Scenario and Core Findings" in src
 
     def test_graph_tools_to_text_has_no_forecast_marketing(self):
         """Sub-Slice 09 Erweiterung: InsightForgeResult.to_text() Heading-Block (Z. 168–177).

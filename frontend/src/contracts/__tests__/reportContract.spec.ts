@@ -489,6 +489,72 @@ describe('ReportOutlineSchema (Drift-Guard max-sections)', () => {
     description: `Beschreibung für ${title}.`,
   });
 
+  it('trimmt freie Titel und erzwingt die Drei-Zeichen-Untergrenze der Abschnitte (#1832)', () => {
+    const parsed = ReportOutlineSchema.parse({
+      title: ' A ',
+      summary: ' Zusammenfassung. ',
+      sections: [{ title: ' XYZ ', description: ' Beschreibung. ' }],
+    });
+    expect(parsed).toEqual({
+      title: 'A',
+      summary: 'Zusammenfassung.',
+      sections: [{ title: 'XYZ', description: 'Beschreibung.', section_kind: 'generic' }],
+    });
+    expect(Object.keys(ReportOutlineSchema.shape)).toEqual(['title', 'summary', 'sections']);
+  });
+
+  it('lehnt zu kurze Abschnittstitel ab (kein Drift zur Evidenz-Persistenz, #1832)', () => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [{ title: 'KI', description: 'Kurz.' }],
+    }).success).toBe(false);
+  });
+
+  it('nimmt section_kind an und defaultet fehlende Angaben auf generic (#1832)', () => {
+    const parsed = ReportOutlineSchema.parse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [
+        { title: 'Stimmen aus dem Kreißsaal', description: 'Persona-Stimmen.', section_kind: 'stakeholder_voices' },
+        { title: 'Ohne Angabe', description: 'Bestandsdaten.' },
+      ],
+    });
+    expect(parsed.sections[0].section_kind).toBe('stakeholder_voices');
+    expect(parsed.sections[1].section_kind).toBe('generic');
+  });
+
+  it.each(['title', 'summary'] as const)('lehnt leeres Outline-Feld %s nach Trimmen ab', (field) => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [makeSection('Konflikt')], [field]: ' \t\n ',
+    }).success).toBe(false);
+  });
+
+  it.each(['title', 'description'] as const)('lehnt leeres Abschnittsfeld %s nach Trimmen ab', (field) => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [{ ...makeSection('Konflikt'), [field]: ' \t\n ' }],
+    }).success).toBe(false);
+  });
+
+  it.each([
+    ['Personal  und\tKapazitaet', ' personal und kapazitaet '],
+    ['Großhandel', 'GROSSHANDEL'],
+    ['ﬁnanzen', 'Finanzen'],
+  ])('lehnt normalisiert doppelte Abschnittstitel %s / %s ab', (first, second) => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [makeSection(first), makeSection(second)],
+    }).success).toBe(false);
+  });
+
+  it('behaelt Binnenabstaende freier Titel und unterscheidet Fullwidth-Zeichen', () => {
+    const parsed = ReportOutlineSchema.parse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [makeSection('Personal  und Kapazitaet'), makeSection('Ａufsicht'), makeSection('Aufsicht')],
+    });
+    expect(parsed.sections[0].title).toBe('Personal  und Kapazitaet');
+  });
+
   it('akzeptiert 11 Sections (Stub-Pflichtabschnitte)', () => {
     const outline = {
       title: 'Stub-Report',

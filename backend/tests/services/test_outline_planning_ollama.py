@@ -3,12 +3,13 @@ Tests fuer Smoke-02-Fixes in plan_outline():
 - max_tokens=16384 wird an chat_json uebergeben
 - force_no_thinking=True wird an chat_json uebergeben
 - Retry-Loop bei leerem/invalidem Response (len=0)
-- Fallback nach zwei aufeinanderfolgenden Fehlern liefert 3-Sections-Default
+- Fehlerpropagation nach zwei aufeinanderfolgenden Fehlern (kein Fallback mehr, #1832)
 """
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 
 from app.services.report_agent.planning import plan_outline
 
@@ -129,23 +130,55 @@ def test_plan_outline_retries_on_empty_response():
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Fallback nach zwei Fehlern -> Default-Outline mit 3 Sections
+# Test 4: Fehlerpropagation nach zwei Fehlern (kein Fallback mehr, #1832)
 # ---------------------------------------------------------------------------
 
-def test_plan_outline_falls_back_after_two_failures():
-    """Beide chat_json-Calls raisen -> plan_outline() liefert Default-Outline (3 Sections)."""
+def test_plan_outline_propagates_after_two_failures():
+    """Beide chat_json-Calls raisen -> plan_outline() propagiert den Fehler.
+
+    Seit #1832 plant das Modell die Outline frei; eine Ersatzgliederung gibt es
+    nicht mehr. Der zweite Fehler erreicht unveraendert den Aufrufer, damit der
+    Workflow in den FAILED-Pfad laeuft statt mit Default-Sections weiterzumachen.
+    """
     agent = _make_agent()
     agent.llm.chat_json.side_effect = [
         ValueError("Invalid JSON format from LLM (len=0; likely truncated). Head: "),
         ValueError("Invalid JSON format from LLM (len=0; likely truncated). Head: "),
     ]
 
+    with pytest.raises(ValueError, match="Invalid JSON format from LLM"):
+        plan_outline(agent)
+
+    assert agent.llm.chat_json.call_count == 2, (
+        f"Erwartet 2 chat_json-Aufrufe (Erstversuch + Retry), erhalten: {agent.llm.chat_json.call_count}"
+    )
+
+
+def test_plan_outline_propagates_section_kind():
+    """#1832: Der section_kind aus der LLM-Antwort landet in der Domain-Section.
+
+    Ein unbekanntes Kind wird auf 'generic' normalisiert, statt die Planung zu
+    kippen (Bestandsverhalten fuer Consumer bleibt der Titel-Fallback).
+    """
+    agent = _make_agent()
+    agent.llm.chat_json.return_value = {
+        "title": "Smoke-02 Report",
+        "summary": "Rauchtest Zusammenfassung",
+        "sections": [
+            {
+                "title": "Stimmen aus dem Kreißsaal",
+                "description": "Persona-Stimmen",
+                "section_kind": "stakeholder_voices",
+            },
+            {
+                "title": "Beliebiger Abschnitt",
+                "description": "Ohne bekannten Kind",
+                "section_kind": "unbekannt-xyz",
+            },
+        ],
+    }
+
     outline = plan_outline(agent)
 
-    assert len(outline.sections) == 3, (
-        f"Erwartet Default-Fallback mit 3 Sections, erhalten: {len(outline.sections)}"
-    )
-    for section in outline.sections:
-        assert section.description, (
-            f"Fallback-Section '{section.title}' hat leere description"
-        )
+    assert outline.sections[0].kind == "stakeholder_voices"
+    assert outline.sections[1].kind == "generic"

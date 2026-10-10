@@ -23,6 +23,8 @@ from ...contracts import (
     DataGap,
     Threshold,
 )
+from ...contracts.report_contract import ReportOutlineModel, ReportSectionKind
+from .section_kinds import coerce_section_kind, legacy_kind_for_schema
 from .takeaway_confidence import normalize_takeaway_confidence
 from ..evidence_migrations import (
     CURRENT_SCHEMA_VERSION,
@@ -57,14 +59,21 @@ class PlanSection(BaseModel):
 
     model_config = _STRICT
 
-    title: str = Field(min_length=1, description="Abschnittstitel")
+    title: str = Field(min_length=3, description="Abschnittstitel (frei formuliert)")
+    section_kind: ReportSectionKind = Field(
+        default=ReportSectionKind.generic,
+        description=(
+            "Stabile semantische Rolle des Abschnitts; Consumer (DTO-Auswahl, "
+            "Zitat-Validierung) lesen sie statt den Titel zu matchen."
+        ),
+    )
     description: str = Field(
         default="—",
         description="Kurze Inhaltsbeschreibung des Abschnitts (mind. 1 Zeichen)",
     )
 
 
-class PlanResponse(BaseModel):
+class PlanResponse(ReportOutlineModel):
     """Strukturierte LLM-Antwort für die Report-Outline-Planung.
 
     Wird als ``schema=PlanResponse`` an :func:`LLMClient.chat_json` übergeben.
@@ -72,17 +81,6 @@ class PlanResponse(BaseModel):
     bei Fallback-Providern greift llm_client.py automatisch auf json_object zurück.
     """
 
-    model_config = _STRICT
-
-    title: str = Field(min_length=1, description="Reporttitel")
-    summary: str = Field(
-        default="—",
-        description="Kurze Zusammenfassung des Reports",
-    )
-    sections: list[PlanSection] = Field(
-        default_factory=list,
-        description="Liste der geplanten Abschnitte",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,38 +172,45 @@ class SectionMetadata(BaseModel):
 # Section-type → DTO mapper (M11.8d)
 # ---------------------------------------------------------------------------
 
-_SECTION_TITLE_MAP: dict[str, type[BaseModel]] = {
+_SECTION_KIND_MAP: dict[ReportSectionKind, type[BaseModel]] = {
     # ReportV3 Pflichtabschnitt-DTOs
-    "segment-tabelle": _make_table_metadata(Segment),
-    "persona-tabelle": _make_table_metadata(Persona),
-    "multiplikator-auswertung": _make_table_metadata(Multiplier),
-    "top 10 reibungspunkte": _make_table_metadata(FrictionPoint),
-    "top 10 vertrauenssignale": _make_table_metadata(TrustSignal),
-    "top 10 änderungen": _make_table_metadata(ChangeRecommendation),
-    "projektwirkung": _make_table_metadata(ProjectImpact),
-    "positionierung": _make_table_metadata(PositioningVariant),
-    "content-ideen": _make_table_metadata(ContentIdea),
-    "datenlücken": _make_table_metadata(DataGap),
+    ReportSectionKind.segment_table: _make_table_metadata(Segment),
+    ReportSectionKind.persona_table: _make_table_metadata(Persona),
+    ReportSectionKind.multiplier_analysis: _make_table_metadata(Multiplier),
+    ReportSectionKind.friction_points: _make_table_metadata(FrictionPoint),
+    ReportSectionKind.trust_signals: _make_table_metadata(TrustSignal),
+    ReportSectionKind.change_recommendations: _make_table_metadata(ChangeRecommendation),
+    ReportSectionKind.project_impact: _make_table_metadata(ProjectImpact),
+    ReportSectionKind.positioning: _make_table_metadata(PositioningVariant),
+    ReportSectionKind.content_ideas: _make_table_metadata(ContentIdea),
+    ReportSectionKind.data_gaps: _make_table_metadata(DataGap),
 }
 
 
-def _section_schema_for(section_title: str) -> type[BaseModel]:
-    """Liefert das passende Pydantic-DTO für einen Abschnittstitel.
+def _section_schema_for(
+    section_title: str,
+    section_kind: ReportSectionKind | str | None = None,
+) -> type[BaseModel]:
+    """Liefert das passende Pydantic-DTO fuer einen Abschnitt.
 
-    Mappt nur bekannte Pflichtabschnitt-Titel auf ReportV3-DTOs. Freie
-    Abschnittstitel wie ``Persona Reaction Analysis`` bekommen bewusst das
-    generische :class:`SectionMetadata`, statt ein vollständiges Persona-Objekt
-    zu erzwingen.
+    #1832: Massgeblich ist der stabile ``section_kind`` aus dem Outline-Vertrag;
+    der Titel bleibt frei formuliert. Nur fuer Bestandsdaten ohne spezifische
+    Rolle (``generic``) greift der historische Preset-Titel-Mapper. Alles
+    Unbekannte bekommt bewusst das generische :class:`SectionMetadata`, statt
+    ein vollstaendiges DTO zu erzwingen.
 
     Args:
-        section_title: Titel des generierten Abschnitts.
+        section_title: Titel des generierten Abschnitts (Bestands-Fallback).
+        section_kind: Stabiler Kind aus der modellgeplanten Outline.
 
     Returns:
-        Pydantic-Modell-Klasse, die als ``schema=`` an ``chat_json`` übergeben
+        Pydantic-Modell-Klasse, die als ``schema=`` an ``chat_json`` uebergeben
         werden kann.
     """
-    lower = section_title.strip().lower()
-    return _SECTION_TITLE_MAP.get(lower, SectionMetadata)
+    kind = coerce_section_kind(section_kind)
+    if kind is ReportSectionKind.generic:
+        kind = legacy_kind_for_schema(section_title)
+    return _SECTION_KIND_MAP.get(kind, SectionMetadata)
 
 
 __all__ = [

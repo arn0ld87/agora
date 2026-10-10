@@ -257,6 +257,9 @@ def test_get_report_returns_contract_shaped_payload(env):
     assert payload["outline"]["sections"][0] == {
         "title": "Executive Summary",
         "description": "Maximal 12 Sätze, was die Simulation gezeigt hat.",
+        # #1832: Der API-Vertrag traegt die stabile semantische Rolle mit;
+        # Bestands-Sections ohne Kind defaulten auf generic.
+        "section_kind": "generic",
     }
     assert "content" not in payload["outline"]["sections"][0]
 

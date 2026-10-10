@@ -10,7 +10,9 @@ from .planning import (
     PLAN_USER_PROMPT_TEMPLATE,
     RECOMMENDATION_SECTION_DESCRIPTION,
     RECOMMENDATION_SECTION_TITLE,
+    SECTION_KIND_PROMPT_LINES,
     format_required_sections,
+    format_section_kinds,
 )
 from .sections import (
     SECTION_SYSTEM_PROMPT_TEMPLATE,
@@ -38,7 +40,9 @@ __all__ = [
     "RECOMMENDATION_SECTION_TITLE",
     "PLAN_SYSTEM_PROMPT_TEMPLATE",
     "PLAN_USER_PROMPT_TEMPLATE",
+    "SECTION_KIND_PROMPT_LINES",
     "format_required_sections",
+    "format_section_kinds",
     # Sections
     "SECTION_SYSTEM_PROMPT_TEMPLATE",
     "SECTION_USER_PROMPT_TEMPLATE",

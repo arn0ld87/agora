@@ -64,6 +64,9 @@ export function buildReportReaderView(input: ReportReaderViewInput): ReportReade
           sections: input.evidenceSections.map((section) => ({
             title: section.section_title,
             description: section.section_summary || section.section_title,
+            // #1832: Reader-Fallback kennt die Semantik der Ursprungs-Outline
+            // nicht; generic haelt den Contract und ueberlaesst die Rolle dem Backend.
+            section_kind: 'generic' as const,
           })),
         },
         sectionHtml: input.sectionHtml,
@@ -79,7 +82,7 @@ export function buildReportReaderView(input: ReportReaderViewInput): ReportReade
     outline: {
       title: input.outline?.title || input.fallbackTitle,
       summary: input.outline?.summary || '',
-      sections: [{ title: input.fullReportLabel, description: '' }],
+      sections: [{ title: input.fullReportLabel, description: '', section_kind: 'generic' as const }],
     },
     sectionHtml: { 1: input.reportHtml },
   }
