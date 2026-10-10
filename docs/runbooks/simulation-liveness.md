@@ -211,6 +211,16 @@ Haltung, kein Streitauftrag.
   Persona-Galerie, Interviews und Report weiter die unveränderte Persona
   sehen. Für `SinglePlatformRunner` wird nicht zusätzlich augmentiert — die
   Haltung stünde sonst zweimal im Kontext desselben Agenten.
+- Haltungsanker je Aktivierung ([#1779](https://github.com/arn0ld87/agora/issues/1779)):
+  Die Haltung im System-Prompt verblasst über die Runden gegen den Feed, ohne
+  verloren zu gehen. `agent_feed.py::install_stance_anchor` hängt deshalb je
+  Agent einen kurzen Absatz (`agent_tools.py::build_stance_anchor`, derselbe
+  Haltungssatz) an den Feed-Text jeder Aktivierung; die beiden Plattformschleifen
+  in `run_parallel_simulation.py` nutzen die an die OASIS-Positionen
+  ausgerichtete Konfiguration. `SinglePlatformRunner` setzt den Anker nur ohne
+  ReAct-Loop, weil dieser die Haltung je Runde selbst in den Prompt schreibt.
+  `observer` und `neutral` tragen keine Verbotsformel mehr, sondern neigen nach
+  dem Vorzeichen von `sentiment_bias`.
 - Twitter-Profildateien führen keine Profession-Spalte
   (`_save_twitter_csv`); die Haltungssatz-Rolle fällt dort wie im
   ReAct-Pfad auf „Unknown" zurück (`agent.profession` ist auf keinem der

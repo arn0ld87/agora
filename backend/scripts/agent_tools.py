@@ -665,12 +665,59 @@ def wrap_untrusted(label: str, text: str, limit: int) -> str:
 # aber nie — Konsens/Echo nach einer Runde. `_describe_stance` formuliert die
 # Haltung als Disposition ("du siehst ... kritisch"), nie als Verhaltens-
 # vorhersage ("du wirst ... widersprechen").
+#
+# #1779: Nur noch Seiten tragen eine Tönung ("positiv"/"kritisch"). observer und
+# neutral bekamen früher Formeln wie "ohne aktiv Position zu beziehen"; das Modell
+# befolgte sie (25 observer + 13 neutral von 54 Agenten ohne Position im Lauf
+# sim_c8c6b30aa652). Sie neigen jetzt nach dem Vorzeichen von ``sentiment_bias``.
 _STANCE_ATTITUDE = {
     "supportive": "positiv",
     "opposing": "kritisch",
-    "neutral": "abwägend",
-    "observer": "beobachtend",
 }
+
+#: Ab diesem Betrag zählt ``sentiment_bias`` als Neigung (kleiner: Rauschen).
+_LEAN_THRESHOLD = 0.1
+
+#: Lesbare Rollen für die technischen Entitätstypen der Ontologie (CamelCase,
+#: englisch). Schlüssel casefold. Unbekannte CamelCase-Typen entfallen im Satz,
+#: statt roh im System-Prompt zu stehen.
+_ROLE_LABELS_DE = {
+    "person": "Einzelperson",
+    "organization": "Organisation",
+    "company": "Unternehmen",
+    "hospital": "Krankenhaus",
+    "governmentagency": "Behörde",
+    "healthcareprovidergroup": "Gruppe von Leistungserbringern",
+    "politicalgroup": "politische Gruppierung",
+    "communitygroup": "Gruppe aus der Bevölkerung",
+    "mediaoutlet": "Medium",
+    "university": "Hochschule",
+    "association": "Verband",
+    "union": "Gewerkschaft",
+    "publicfigure": "Person des öffentlichen Lebens",
+    "expert": "Fachperson",
+}
+
+
+def _stance_lean(sentiment_bias: Optional[float]) -> Optional[str]:
+    """``"dafür"``/``"dagegen"`` aus dem Vorzeichen von ``sentiment_bias``, sonst ``None``."""
+    if sentiment_bias is None or abs(sentiment_bias) < _LEAN_THRESHOLD:
+        return None
+    return "dafür" if sentiment_bias > 0 else "dagegen"
+
+
+def _readable_role(agent_role: str) -> str:
+    """Rolle für den Haltungssatz: bekannte Entitätstypen auf Deutsch, technische
+    CamelCase-Namen ohne Übersetzung entfallen, lesbare Berufe bleiben."""
+    role = (agent_role or "").strip()
+    if not role:
+        return ""
+    label = _ROLE_LABELS_DE.get(role.casefold())
+    if label:
+        return label
+    if re.search(r"[a-z][A-Z]", role):
+        return ""
+    return role
 
 
 def _describe_stance(
@@ -687,46 +734,60 @@ def _describe_stance(
     Hat der Lauf eine Streitfrage (#1778), bezieht sich der Satz auf genau
     diese Aussage statt auf "das Vorhaben": dieselbe Aussage, auf die sich
     Startkonfiguration und Interview beziehen.
+
+    ``observer`` und ``neutral`` (#1779) bekommen keine Verbotsformel; sie neigen
+    nach dem Vorzeichen von ``sentiment_bias`` ("neigst eher dafür/dagegen") oder
+    sind ohne Vorzeichen noch nicht festgelegt. Die Aufforderung, die Seite
+    erkennbar zu machen, steht einmal im Abschnitt (``build_stance_section``).
     """
     bias = sentiment_bias if sentiment_bias is not None else 0.0
     intensity = "sehr " if abs(bias) >= 0.5 else ""
+    lean = _stance_lean(sentiment_bias)
     if contested_statement:
+        question = f"„{contested_statement}\""
         if stance == "observer":
-            return (
-                f"Die Streitfrage „{contested_statement}\" beobachtest du, "
-                "ohne selbst Partei zu sein."
-            )
+            if lean:
+                return f"Die Streitfrage {question} verfolgst du aufmerksam; du neigst eher {lean}."
+            return f"Die Streitfrage {question} verfolgst du aufmerksam; du hast dich noch nicht festgelegt."
         if stance == "supportive":
-            return f"Zur Streitfrage „{contested_statement}\" bist du {intensity}dafür."
+            return f"Zur Streitfrage {question} bist du {intensity}dafür."
         if stance == "opposing":
-            return f"Zur Streitfrage „{contested_statement}\" bist du {intensity}dagegen."
-        return f"Zur Streitfrage „{contested_statement}\" bist du noch unentschieden."
+            return f"Zur Streitfrage {question} bist du {intensity}dagegen."
+        if lean:
+            return f"Zur Streitfrage {question} bist du noch nicht festgelegt, neigst aber eher {lean}."
+        return f"Zur Streitfrage {question} bist du noch unentschieden."
     # Ohne bekannte Rolle kein Platzhalter wie "als Unknown" im System-Prompt.
-    role = (agent_role or "").strip()
+    role = _readable_role(agent_role)
     role_clause = (
         f" aus deiner Rolle als {role}"
         if role and role.lower() not in {"unknown", "none", "n/a"}
         else ""
     )
     if stance == "observer":
-        return (
-            f"Du beobachtest das Geschehen{role_clause} eher, "
-            "ohne aktiv Position zu beziehen."
-        )
-    if stance == "neutral" or stance not in _STANCE_ATTITUDE:
-        return (
-            f"Du bist in dieser Frage{role_clause} noch "
-            "unentschieden und wägst ab."
-        )
+        if lean:
+            return f"Du verfolgst das Geschehen{role_clause} aufmerksam und neigst eher {lean}."
+        return f"Du verfolgst das Geschehen{role_clause} aufmerksam und hast dich noch nicht festgelegt."
+    if stance not in _STANCE_ATTITUDE:
+        if lean:
+            return f"Du bist in dieser Frage{role_clause} noch nicht festgelegt, neigst aber eher {lean}."
+        return f"Du bist in dieser Frage{role_clause} noch unentschieden."
     attitude = _STANCE_ATTITUDE[stance]
     return f"Du siehst das Vorhaben{role_clause} {intensity}{attitude}."
 
 
 def _describe_posting_tendency(
-    posts_per_hour: Optional[float], comments_per_hour: Optional[float]
+    posts_per_hour: Optional[float],
+    comments_per_hour: Optional[float],
+    stance_bearing: bool = False,
 ) -> str:
     """Beitragsneigung relativ aus posts_per_hour/comments_per_hour, ohne die
-    Rohzahlen aus dem Material wörtlich zu übernehmen."""
+    Rohzahlen aus dem Material wörtlich zu übernehmen.
+
+    ``stance_bearing`` (#1779): Agenten mit Seite oder Neigung werden nicht auf
+    Reaktionen festgelegt. Im Lauf sim_c8c6b30aa652 sagte der Satz allen 50
+    Personas "eher Reaktionen", und nur 3 von 410 Beiträgen waren eigene — die
+    Haltung wurde fast nie unabhängig vom Feed gesetzt.
+    """
     if posts_per_hour is None or comments_per_hour is None:
         return ""
     if posts_per_hour <= 0 and comments_per_hour <= 0:
@@ -735,6 +796,11 @@ def _describe_posting_tendency(
     if posts_per_hour > comments_per_hour * ratio_threshold:
         return "Du meldest dich eher mit eigenen Beiträgen zu Wort als mit Reaktionen."
     if comments_per_hour > posts_per_hour * ratio_threshold:
+        if stance_bearing:
+            return (
+                "Du antwortest oft auf andere, schreibst aber auch einen eigenen Beitrag, "
+                "wenn du etwas Eigenes zur Streitfrage zu sagen hast."
+            )
         return "Du meldest dich eher mit Reaktionen auf andere zu Wort als mit eigenen Beiträgen."
     return "Du beteiligst dich etwa gleich häufig mit eigenen Beiträgen wie mit Reaktionen."
 
@@ -767,13 +833,15 @@ def build_stance_section(
     stance_sentence = _describe_stance(
         stance, sentiment_bias, agent_role, contested_statement
     )
-    posting_sentence = _describe_posting_tendency(posts_per_hour, comments_per_hour)
+    stance_bearing = stance in _STANCE_ATTITUDE or _stance_lean(sentiment_bias) is not None
+    posting_sentence = _describe_posting_tendency(posts_per_hour, comments_per_hour, stance_bearing)
     return (
         "## Deine Haltung\n"
         f"{stance_sentence}"
         + (f" {posting_sentence}" if posting_sentence else "")
         + "\nReaktionen dürfen zustimmen oder widersprechen, je nachdem was zu "
-        "deiner Haltung passt. Wiederhole keine Formulierungen aus deiner Bio "
+        "deiner Haltung passt. Mach in deinem Beitrag erkennbar, auf welcher Seite du "
+        "stehst oder wohin du neigst. Wiederhole keine Formulierungen aus deiner Bio "
         "oder der Beobachtung wörtlich — ordne Zahlen und Fakten aus deinen "
         "Quellen mit deiner eigenen Einschätzung ein.\n"
     )

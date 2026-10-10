@@ -262,7 +262,9 @@ def test_build_agent_prompt_stance_section_describes_attitude_not_forecast():
     section = _haltung_section(prompt)
     assert "Betriebsrätin" in section
     assert "sehr kritisch" in section
-    assert "eher mit Reaktionen" in section
+    # #1779: ein Agent mit Seite wird nicht auf Reaktionen festgelegt.
+    assert "eigenen Beitrag" in section
+    assert "eher mit Reaktionen" not in section
     assert "zustimmen oder widersprechen" in section
     # Keine Verhaltensvorhersage ("du wirst ...").
     assert "du wirst" not in section.lower()
@@ -275,7 +277,11 @@ def test_build_agent_prompt_stance_section_describes_attitude_not_forecast():
         ("supportive", 0.2, " positiv"),
         ("opposing", -0.2, " kritisch"),
         ("neutral", 0.0, "unentschieden"),
-        ("observer", 0.0, "ohne aktiv Position zu beziehen"),
+        ("neutral", -0.3, "neigst aber eher dagegen"),
+        ("neutral", 0.3, "neigst aber eher dafür"),
+        ("observer", 0.0, "noch nicht festgelegt"),
+        ("observer", -0.3, "neigst eher dagegen"),
+        ("observer", 0.3, "neigst eher dafür"),
         ("unknown-legacy-value", 0.0, "unentschieden"),
     ],
 )
@@ -392,8 +398,92 @@ def test_build_stance_section_matches_prompt_builder_block() -> None:
     )
     assert section.startswith("## Deine Haltung\n")
     assert "sehr kritisch" in section
-    assert "eher mit Reaktionen" in section
+    assert "eigenen Beitrag" in section and "eher mit Reaktionen" not in section
     assert "zustimmen oder widersprechen" in section
+
+
+# ── Issue #1779, Schritt 4: Haltungssatz ohne Bremse ──
+
+_PROHIBITION_PHRASES = (
+    "ohne aktiv Position",
+    "ohne selbst Partei",
+    "keine Position",
+    "nicht positionieren",
+    "raushalten",
+    "zurückhalten",
+)
+
+
+@pytest.mark.parametrize("statement", [None, "Der Kreistag schließt den Kreißsaal."])
+@pytest.mark.parametrize("bias", [-0.8, -0.3, 0.0, 0.3, 0.8, None])
+@pytest.mark.parametrize("stance", ["observer", "neutral", "unknown-legacy-value"])
+def test_non_committal_stance_sentences_carry_no_prohibition(
+    stance: str, bias: float | None, statement: str | None
+) -> None:
+    sentence = agent_tools._describe_stance(stance, bias, "Analyst", statement)
+    for phrase in _PROHIBITION_PHRASES:
+        assert phrase not in sentence
+    section = agent_tools.build_stance_section(stance, bias, "Analyst", 0.2, 1.0, statement)
+    for phrase in _PROHIBITION_PHRASES:
+        assert phrase not in section
+    # Der Abschnitt bittet darum, die Seite im Beitrag erkennbar zu machen.
+    assert "erkennbar" in section
+
+
+@pytest.mark.parametrize("stance", ["observer", "neutral"])
+def test_non_committal_stance_leans_with_the_sign_of_sentiment_bias(stance: str) -> None:
+    against = agent_tools._describe_stance(stance, -0.4, "Analyst", "X wird geschlossen.")
+    in_favour = agent_tools._describe_stance(stance, 0.4, "Analyst", "X wird geschlossen.")
+    none = agent_tools._describe_stance(stance, 0.0, "Analyst", "X wird geschlossen.")
+    assert "X wird geschlossen." in against and "eher dagegen" in against and "dafür" not in against
+    assert "X wird geschlossen." in in_favour and "eher dafür" in in_favour and "dagegen" not in in_favour
+    assert "dafür" not in none and "dagegen" not in none
+
+
+@pytest.mark.parametrize(
+    "raw_role,expected",
+    [
+        ("GovernmentAgency", "Behörde"),
+        ("HealthcareProviderGroup", "Gruppe von Leistungserbringern"),
+        ("Hospital", "Krankenhaus"),
+        ("Person", "Einzelperson"),
+        ("SomethingUnmappedCamelCase", ""),
+    ],
+)
+def test_stance_sentence_uses_a_readable_role_instead_of_the_raw_entity_type(
+    raw_role: str, expected: str
+) -> None:
+    import re
+
+    for stance in ("supportive", "opposing", "neutral", "observer"):
+        sentence = agent_tools._describe_stance(stance, -0.4, raw_role)
+        assert re.search(r"[a-z][A-Z]", sentence) is None, sentence
+        assert raw_role not in sentence
+        if expected:
+            assert f"aus deiner Rolle als {expected}" in sentence
+        else:
+            assert "aus deiner Rolle" not in sentence
+
+
+def test_stance_sentence_keeps_a_readable_role_and_does_not_leak_foreign_names() -> None:
+    sentence = agent_tools._describe_stance("opposing", -0.7, "Betriebsrätin")
+    assert sentence == "Du siehst das Vorhaben aus deiner Rolle als Betriebsrätin sehr kritisch."
+    assert sentence.count("Betriebsrätin") == 1
+
+
+@pytest.mark.parametrize(
+    "stance,bias",
+    [("supportive", 0.5), ("opposing", -0.5), ("neutral", -0.4), ("observer", 0.4)],
+)
+def test_posting_tendency_does_not_pin_stance_agents_to_reactions(stance: str, bias: float) -> None:
+    section = agent_tools.build_stance_section(stance, bias, "Analyst", posts_per_hour=0.2, comments_per_hour=1.4)
+    assert "eher mit Reaktionen" not in section
+    assert "eigenen Beitrag" in section
+
+
+def test_posting_tendency_stays_relative_for_agents_without_a_side() -> None:
+    section = agent_tools.build_stance_section("neutral", 0.0, "Analyst", posts_per_hour=0.2, comments_per_hour=1.4)
+    assert "eher mit Reaktionen" in section
 
 
 def test_build_stance_section_empty_without_stance() -> None:
