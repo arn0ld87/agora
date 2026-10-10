@@ -14,7 +14,7 @@
  * dort stand „10", während die wirksame Schwelle 20 war), und kein
  * Konfigurations-Endpunkt liefert sie aus. Bei einer Änderung im Backend ist
  * dieser Wert mitzuziehen; derselbe Spiegel existiert bereits für
- * {@link MIN_SIMULATION_AGENTS} (`simulation_prepare_contracts.py`).
+ * {@link MIN_SIMULATION_AGENTS} (`report_agent/contract_constants.py`).
  */
 export const MIN_PERSONA_TABLE_ROWS = 20
 
@@ -29,7 +29,7 @@ export const MIN_PERSONA_TABLE_ROWS = 20
 export const MIN_SIMULATION_AGENTS = 10
 
 /**
- * Effektive Report-Schwelle für eine Obergrenze: `min(20, maxAgents)`.
+ * Effektive Report-Schwelle: `min(20, max(10, maxAgents))`, wie im Backend.
  *
  * `null`/`0` steht für „keine Obergrenze" (Backend: `max_agents` nicht gesetzt)
  * — dann gilt der Contract-Wert unverkürzt.
@@ -38,5 +38,5 @@ export function effectivePersonaFloor(maxAgents: number | null | undefined): num
   if (maxAgents === null || maxAgents === undefined || maxAgents <= 0) {
     return MIN_PERSONA_TABLE_ROWS
   }
-  return Math.min(MIN_PERSONA_TABLE_ROWS, maxAgents)
+  return Math.min(MIN_PERSONA_TABLE_ROWS, Math.max(MIN_SIMULATION_AGENTS, maxAgents))
 }

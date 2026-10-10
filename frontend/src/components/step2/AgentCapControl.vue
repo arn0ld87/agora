@@ -2,7 +2,7 @@
 import { computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { effectivePersonaFloor } from '@/constants/personaFloor'
+import { effectivePersonaFloor, MIN_SIMULATION_AGENTS } from '@/constants/personaFloor'
 
 const { t } = useI18n()
 const sliderId = useId()
@@ -28,7 +28,9 @@ const emit = defineEmits(['update:useAgentCap', 'update:maxAgents'])
  * nennen als die, an der der Bericht gemessen wird.
  */
 const reportFloor = computed(() =>
-  effectivePersonaFloor(props.useAgentCap ? props.maxAgents : null),
+  effectivePersonaFloor(
+    props.useAgentCap ? Math.max(MIN_SIMULATION_AGENTS, props.maxAgents) : null,
+  ),
 )
 </script>
 

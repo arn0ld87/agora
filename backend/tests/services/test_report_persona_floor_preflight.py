@@ -187,3 +187,41 @@ class TestSingleSourceOfTruth:
             assert workflow._load_persona_count(agent) == workflow.load_persona_count_for(
                 "sim_same"
             )
+
+
+@pytest.mark.parametrize("payload", [None, "{broken", "null", "{}", '"profiles"'])
+def test_unknown_profiles_fail_open_with_real_store(tmp_path, monkeypatch, payload):
+    """The real adapter returns its default instead of raising on read failures."""
+    from types import SimpleNamespace
+
+    from app.services.artifact_store import LocalFilesystemArtifactStore
+    from app.services.report_agent import workflow
+
+    store = LocalFilesystemArtifactStore(simulations_root=str(tmp_path))
+    if payload is not None:
+        folder = tmp_path / "sim_unknown"
+        folder.mkdir()
+        (folder / "reddit_profiles.json").write_text(payload, encoding="utf-8")
+    monkeypatch.setattr(workflow, "resolve_default_store", lambda: store)
+
+    assert workflow.load_persona_count_for("sim_unknown") is None
+    ReportGenerationService._reject_if_persona_floor_not_reached("sim_unknown")
+    # Unknown counts still fail closed at the later report contract gate.
+    assert workflow._load_persona_count(SimpleNamespace(simulation_id="sim_unknown")) == 0
+
+
+@pytest.mark.parametrize("count", [0, 18, MIN_PERSONA_TABLE_ROWS])
+def test_known_profiles_preserve_floor_with_real_store(tmp_path, monkeypatch, count):
+    from app.services.artifact_store import LocalFilesystemArtifactStore
+    from app.services.report_agent import workflow
+
+    store = LocalFilesystemArtifactStore(simulations_root=str(tmp_path))
+    store.write_json("sim_known", "reddit_profiles", [{"agent_id": i} for i in range(count)])
+    monkeypatch.setattr(workflow, "resolve_default_store", lambda: store)
+
+    assert workflow.load_persona_count_for("sim_known") == count
+    if count < MIN_PERSONA_TABLE_ROWS:
+        with pytest.raises(ValueError, match=f"{count} von mindestens"):
+            ReportGenerationService._reject_if_persona_floor_not_reached("sim_known")
+    else:
+        ReportGenerationService._reject_if_persona_floor_not_reached("sim_known")

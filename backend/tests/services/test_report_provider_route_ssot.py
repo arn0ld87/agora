@@ -96,9 +96,10 @@ def _google_workspace_default() -> RuntimeLlmRouting:
 
 
 @pytest.fixture
-def report_env(monkeypatch, tmp_path):
+def report_env(monkeypatch, tmp_path, report_personas):
     """Verdrahtet ``start_generation`` mit In-Memory-Stubs und fängt den
     ``LLMClient`` ab, den ``GraphToolsService``/``ReportAgent`` bekommen."""
+    report_personas("sim_abc")
     run_root = tmp_path / "runs"
     run_root.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(

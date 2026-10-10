@@ -26,6 +26,12 @@ describe('effectivePersonaFloor', () => {
     expect(effectivePersonaFloor(15)).toBe(15)
   })
 
+  it('eine positive Obergrenze unter 10 folgt dem Backend-Minimum', () => {
+    expect(effectivePersonaFloor(1)).toBe(MIN_SIMULATION_AGENTS)
+    expect(effectivePersonaFloor(5)).toBe(MIN_SIMULATION_AGENTS)
+    expect(effectivePersonaFloor(9)).toBe(MIN_SIMULATION_AGENTS)
+  })
+
   it('eine größere Obergrenze hebt die Schwelle nicht über den Contract', () => {
     expect(effectivePersonaFloor(30)).toBe(MIN_PERSONA_TABLE_ROWS)
     expect(effectivePersonaFloor(500)).toBe(MIN_PERSONA_TABLE_ROWS)

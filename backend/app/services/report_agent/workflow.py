@@ -158,7 +158,7 @@ def load_persona_count_for(simulation_id: Any) -> Optional[int]:
         profiles = resolve_default_store().read_json(
             simulation_id,
             "reddit_profiles",
-            default=[],
+            default=None,
         )
     except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
@@ -167,7 +167,7 @@ def load_persona_count_for(simulation_id: Any) -> Optional[int]:
             exc,
         )
         return None
-    return len(profiles) if isinstance(profiles, list) else 0
+    return len(profiles) if isinstance(profiles, list) else None
 
 
 def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, Any]]:

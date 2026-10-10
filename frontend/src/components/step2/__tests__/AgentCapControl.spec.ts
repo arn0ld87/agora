@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import AgentCapControl from '../AgentCapControl.vue'
+import de from '../../../i18n/locales/de.json'
+import en from '../../../i18n/locales/en.json'
 
 const localStorageMock = (() => {
   const store: Record<string, string> = {}
@@ -28,14 +30,14 @@ const i18n = createI18n({
   messages: { de: {}, en: {} },
 })
 
-function mountComponent(props = {}) {
+function mountComponent(props = {}, plugin = i18n) {
   return mount(AgentCapControl, {
     props: {
       useAgentCap: false,
       maxAgents: 50,
       ...props,
     },
-    global: { plugins: [i18n] },
+    global: { plugins: [plugin] },
   })
 }
 
@@ -106,51 +108,33 @@ describe('AgentCapControl (Issue #586)', () => {
  * endete mit „18/20 Personas vorhanden" und ohne Berichtstext.
  */
 describe('AgentCapControl — wirksame Persona-Schwelle (UAT-001)', () => {
-  const messages = {
-    de: {
-      step2: {
-        agentCap: {
-          label: 'Max. Anzahl Agenten begrenzen',
-          sliderLabel: 'Personas-Obergrenze, Schieberegler',
-          numberLabel: 'Personas-Obergrenze, Zahl',
-          unit: 'Agenten',
-          minimumHint: 'Die Obergrenze muss mindestens 10 Agenten betragen.',
-          unlimitedHint: 'Ohne Begrenzung …',
-          reportFloor: 'Für einen Bericht braucht die DACH-Persona-Tabelle mindestens {floor} Agenten.',
-        },
-      },
-    },
-    en: {},
-  }
   const realI18n = createI18n({
     legacy: false,
     locale: 'de',
     missingWarn: false,
     fallbackWarn: false,
-    messages,
+    messages: { de, en },
   })
 
-  function mountWithMessages(props: Record<string, unknown>) {
-    return mount(AgentCapControl, {
-      props: { useAgentCap: false, maxAgents: 50, ...props },
-      global: { plugins: [realI18n] },
-    })
-  }
-
   it('nennt ohne Obergrenze die Contract-Schwelle 20', () => {
-    const wrapper = mountWithMessages({ useAgentCap: false })
+    const wrapper = mountComponent({ useAgentCap: false }, realI18n)
     expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('20')
   })
 
   it('nennt mit Obergrenze 10 die gesenkte Schwelle 10', () => {
-    const wrapper = mountWithMessages({ useAgentCap: true, maxAgents: 10 })
+    const wrapper = mountComponent({ useAgentCap: true, maxAgents: 10 }, realI18n)
     expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('10')
   })
 
   it('nennt mit Obergrenze 30 weiterhin 20 (Contract deckelt)', () => {
-    const wrapper = mountWithMessages({ useAgentCap: true, maxAgents: 30 })
+    const wrapper = mountComponent({ useAgentCap: true, maxAgents: 30 }, realI18n)
     const text = wrapper.get('[data-testid="agent-cap-report-floor"]').text()
     expect(text).toContain('20')
     expect(text).not.toContain('30')
+  })
+
+  it.each([-1, 0, 5, 9])('nennt bei Eingabe %i das beim Submit wirksame Minimum', (maxAgents) => {
+    const wrapper = mountComponent({ useAgentCap: true, maxAgents }, realI18n)
+    expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('10')
   })
 })

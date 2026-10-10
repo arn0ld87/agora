@@ -8,8 +8,19 @@ from app.contracts.ai_provider_contract import ProviderConnectionUpsertRequest
 from app.contracts.llm_routing_contract import StageLLMRoute
 from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
 from app.services.provider_connection_store import ProviderConnectionStore
+from app.services import settings_layer
 from app.services.workspace_routing_store import WorkspaceRoutingStore
 from scripts.bootstrap_public_demo_providers import bootstrap_public_demo_providers
+
+
+@pytest.fixture(autouse=True)
+def settings_file(tmp_path, monkeypatch):
+    """The bootstrap reads file settings as well as env; isolate both layers."""
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(
+        settings_layer, "_default_service", settings_layer.SettingsService(instance_path=path)
+    )
+    return path
 
 
 def _clear_all_forbidden_vars(monkeypatch):
@@ -45,6 +56,18 @@ def test_bootstrap_seeds_secret_free_connections_and_default(tmp_path, monkeypat
     }
     assert all(connection.secret_ref is None for connection in connections)
     assert WorkspaceRoutingStore().load().global_default.provider_id == "openai"
+
+
+def test_bootstrap_refuses_operator_key_in_settings_file(tmp_path, monkeypatch, settings_file):
+    monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+    _clear_all_forbidden_vars(monkeypatch)
+    settings_file.write_text('{"OPENAI_API_KEY": "unit-test-operator-key"}', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="instance/settings.json:OPENAI_API_KEY") as excinfo:
+        bootstrap_public_demo_providers()
+
+    assert "unit-test-operator-key" not in str(excinfo.value)
+    assert ProviderConnectionStore().list_connections() == []
 
 
 def test_bootstrap_refuses_existing_operator_connection(tmp_path, monkeypatch):
