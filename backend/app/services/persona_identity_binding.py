@@ -13,8 +13,9 @@ der Quelle kommt; die Form allein genügt bewusst nicht („Sozialer Dienst“).
 """
 from __future__ import annotations
 
+import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Optional
 
 from ..contracts.persona_contract import (
@@ -32,8 +33,11 @@ from ..contracts.persona_identity_contract import (
     FunctionEvidence,
     GenderEvidence,
     PersonaIdentityBinding,
+    PersonaIdentityBindingEntry,
+    PersonaIdentityBindingManifest,
     UnverifiableReason,
 )
+from ..utils.json_io import write_json_atomic
 from .entity_semantic_class import SemanticEntityClass, classify_entity
 
 #: Obergrenze für den in den Prompt eingesetzten Quellnamen (Größenordnung der
@@ -486,3 +490,40 @@ def role_deviation_reason(
     if role_titles_in(function) and not _titles_compatible(claimed, function):
         return "Beruf der Modellantwort verträgt sich nicht mit der belegten Funktion."
     return None
+
+
+# --------------------------------------------------------------------------
+# Laufartefakt
+# --------------------------------------------------------------------------
+
+#: Dateiname des Laufartefakts neben den Profildateien.
+IDENTITY_BINDING_MANIFEST_FILENAME = "persona_identity_bindings.json"
+
+
+def build_identity_binding_manifest(
+    simulation_id: str, profiles: Sequence[Any]
+) -> PersonaIdentityBindingManifest:
+    """Ein vertragsgeprüfter Eintrag je Profil mit Bindung; Profile ohne Bindung fehlen."""
+    entries = [
+        PersonaIdentityBindingEntry(
+            user_id=profile.user_id,
+            user_name=profile.user_name,
+            persona_kind=profile.persona_kind,
+            binding=PersonaIdentityBinding.model_validate(profile.identity_binding),
+        )
+        for profile in profiles
+        if profile is not None and isinstance(getattr(profile, "identity_binding", None), Mapping)
+    ]
+    return PersonaIdentityBindingManifest(simulation_id=simulation_id, entries=entries)
+
+
+def write_identity_binding_manifest(
+    sim_dir: str, simulation_id: str, profiles: Sequence[Any]
+) -> PersonaIdentityBindingManifest:
+    """Schreibt ``persona_identity_bindings.json`` atomar; Schreibfehler werden nicht geschluckt."""
+    manifest = build_identity_binding_manifest(simulation_id, profiles)
+    write_json_atomic(
+        os.path.join(sim_dir, IDENTITY_BINDING_MANIFEST_FILENAME),
+        manifest.model_dump(mode="json"),
+    )
+    return manifest

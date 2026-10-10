@@ -1,0 +1,164 @@
+{
+  "$defs": {
+    "PersonaIdentityBinding": {
+      "additionalProperties": false,
+      "description": "Herkunft und Belegstand der Identit\u00e4t einer Persona.",
+      "properties": {
+        "documented_function": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Documented Function"
+        },
+        "function_evidence": {
+          "default": "none",
+          "enum": [
+            "attribute",
+            "summary",
+            "none"
+          ],
+          "title": "Function Evidence",
+          "type": "string"
+        },
+        "gender_evidence": {
+          "default": "none",
+          "enum": [
+            "attribute",
+            "role_title",
+            "none"
+          ],
+          "title": "Gender Evidence",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "source_person",
+            "source_collective",
+            "synthetic_representative",
+            "synthetic_supplement"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "role_deviation": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role Deviation"
+        },
+        "source_entity_uuid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Entity Uuid"
+        },
+        "source_name": {
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "unverifiable_reasons": {
+          "items": {
+            "enum": [
+              "person_status_unconfirmed",
+              "function_not_documented",
+              "role_check_not_possible",
+              "gender_not_documented"
+            ],
+            "type": "string"
+          },
+          "title": "Unverifiable Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "origin",
+        "source_name"
+      ],
+      "title": "PersonaIdentityBinding",
+      "type": "object"
+    },
+    "PersonaIdentityBindingEntry": {
+      "additionalProperties": false,
+      "description": "Eine Persona des Personasatzes mit ihrer Bindung.",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/PersonaIdentityBinding"
+        },
+        "persona_kind": {
+          "enum": [
+            "individual",
+            "collective"
+          ],
+          "title": "Persona Kind",
+          "type": "string"
+        },
+        "user_id": {
+          "title": "User Id",
+          "type": "integer"
+        },
+        "user_name": {
+          "title": "User Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id",
+        "user_name",
+        "persona_kind",
+        "binding"
+      ],
+      "title": "PersonaIdentityBindingEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/persona-identity-bindings.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Laufartefakt ``persona_identity_bindings.json`` neben den Profildateien.\n\nBackend-intern, ohne Zod-Spiegel (Pr\u00e4zedenz: ``persona-entity-context``).\nUnpr\u00fcfbare Bindungen tragen einen Grund (``unverifiable_reasons``),\nRollenabweichungen stehen in ``binding.role_deviation``.",
+  "properties": {
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/PersonaIdentityBindingEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "simulation_id": {
+      "minLength": 1,
+      "title": "Simulation Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "simulation_id"
+  ],
+  "title": "PersonaIdentityBindingManifest",
+  "type": "object"
+}

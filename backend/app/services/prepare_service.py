@@ -37,6 +37,7 @@ from .settings_layer import get_default_service as _get_settings
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_eligibility import filter_eligible_entities as filter_eligible_entities
+from .persona_identity_binding import write_identity_binding_manifest
 from .persona_quota_defaults import default_dach_industry_quota
 from .report_agent import MIN_PERSONA_TABLE_ROWS
 from .simulation_config_generator import SimulationConfigGenerator
@@ -313,6 +314,32 @@ def _build_profile_checkpoint_hooks(
     return already_done, _on_profile_saved, demographic_slots
 
 
+def _persist_identity_bindings(
+    state: SimulationState, sim_dir: str, profiles: List[OasisAgentProfile]
+) -> None:
+    """Schreibt das Laufartefakt ``persona_identity_bindings.json`` (Issue #1833).
+
+    Direkt nach dem abschließenden Speichern der Profildateien. Storage- und
+    Berechtigungsfehler werden bewusst nicht abgefangen. ``isinstance``, nicht
+    blosse Truthiness: Test-Doubles tragen nicht zwingend eine ``simulation_id``.
+    Das Log nennt Zählungen, keine Personen- oder Organisationsnamen.
+    """
+    simulation_id = getattr(state, "simulation_id", None)
+    if not isinstance(simulation_id, str) or not simulation_id:
+        return
+    manifest = write_identity_binding_manifest(sim_dir, simulation_id, profiles)
+    by_origin: Dict[str, int] = {}
+    for entry in manifest.entries:
+        by_origin[entry.binding.origin] = by_origin.get(entry.binding.origin, 0) + 1
+    logger.info(
+        "persona identity bindings: entries=%d by_origin=%s unverifiable=%d role_deviations=%d",
+        len(manifest.entries),
+        by_origin,
+        sum(1 for entry in manifest.entries if not entry.binding.is_verifiable),
+        sum(1 for entry in manifest.entries if entry.binding.role_deviation),
+    )
+
+
 def _phase_generate_profiles(
     state: SimulationState,
     storage: Any,
@@ -532,6 +559,9 @@ def _phase_generate_profiles(
             file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
             platform="twitter",
         )
+
+    # Issue #1833: Herkunft der Identität jeder Persona als Laufartefakt.
+    _persist_identity_bindings(state, sim_dir, profiles)
 
     if progress_callback:
         progress_callback(

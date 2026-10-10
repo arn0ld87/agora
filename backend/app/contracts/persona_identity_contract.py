@@ -104,3 +104,29 @@ class PersonaIdentityBinding(BaseModel):
     def is_verifiable(self) -> bool:
         """Keine offenen Gründe, die eine Prüfung der Bindung verhindern."""
         return not self.unverifiable_reasons
+
+
+class PersonaIdentityBindingEntry(BaseModel):
+    """Eine Persona des Personasatzes mit ihrer Bindung."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    user_id: int
+    user_name: str
+    persona_kind: Literal["individual", "collective"]
+    binding: PersonaIdentityBinding
+
+
+class PersonaIdentityBindingManifest(BaseModel):
+    """Laufartefakt ``persona_identity_bindings.json`` neben den Profildateien.
+
+    Backend-intern, ohne Zod-Spiegel (Präzedenz: ``persona-entity-context``).
+    Unprüfbare Bindungen tragen einen Grund (``unverifiable_reasons``),
+    Rollenabweichungen stehen in ``binding.role_deviation``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    simulation_id: str = Field(..., min_length=1)
+    entries: list[PersonaIdentityBindingEntry] = Field(default_factory=list)

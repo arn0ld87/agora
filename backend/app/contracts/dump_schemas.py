@@ -37,6 +37,7 @@ from app.contracts.graph_edit_contract import (
 )
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
+from app.contracts.persona_identity_contract import PersonaIdentityBindingManifest
 from app.contracts.persona_set_contract import (
     PersonaDraftExamplePost,
     PersonaDraftRequest,
@@ -231,6 +232,8 @@ CONTRACTS: dict[str, type] = {
     "graph-lock-user.schema.json": GraphLockUser,
     "graph-lock-state.schema.json": GraphLockState,
     "persona-entity-context.schema.json": PersonaEntityContext,
+    # Quellenidentität der Personas eines Laufs (Issue #1833), Backend-intern
+    "persona-identity-bindings.schema.json": PersonaIdentityBindingManifest,
     # Pipeline-Degradierung (Issue #1029)
     "pipeline-degradation.schema.json": PipelineDegradationModel,
     "pipeline-degradation-report.schema.json": PipelineDegradationReport,
