@@ -112,4 +112,44 @@ describe.each(['canvas', 'reader'] as const)('GraphML download via %s', (surface
       expect(wrapper!.get('[role="alert"]').text()).toContain('Export unavailable')
     }
   })
+
+  it('does not download an empty Blob export response', async () => {
+    const payload = new Blob([], { type: 'application/xml' })
+    const adapter = vi.fn<AxiosAdapter>(async (config) => ({
+      data: payload, status: 200, statusText: 'OK', headers: {}, config,
+    }))
+    service.defaults.adapter = adapter
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await startDownload(surface)
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(downloaded).toBeUndefined()
+    expect(filename).toBeUndefined()
+    if (surface === 'canvas') {
+      expect(errorSpy).toHaveBeenCalledWith('GraphML export failed', expect.objectContaining({ message: 'GraphML export was empty' }))
+    } else {
+      expect(wrapper!.get('[role="alert"]').text()).toContain('GraphML export was empty')
+    }
+  })
+
+  it('does not download a non-Blob export response payload', async () => {
+    const payload = { success: true, data: '<graphml/>' } as unknown as Blob
+    const adapter = vi.fn<AxiosAdapter>(async (config) => ({
+      data: payload, status: 200, statusText: 'OK', headers: {}, config,
+    }))
+    service.defaults.adapter = adapter
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await startDownload(surface)
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(downloaded).toBeUndefined()
+    expect(filename).toBeUndefined()
+    if (surface === 'canvas') {
+      expect(errorSpy).toHaveBeenCalledWith('GraphML export failed', expect.objectContaining({ message: 'GraphML export was empty' }))
+    } else {
+      expect(wrapper!.get('[role="alert"]').text()).toContain('GraphML export was empty')
+    }
+  })
 })

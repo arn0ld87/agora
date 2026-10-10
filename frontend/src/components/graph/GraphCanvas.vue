@@ -197,6 +197,9 @@ async function downloadGraphml() {
   try {
     // The API interceptor already unwraps the Blob; reading .data again loses its bytes.
     const blob = await exportGraphMl(gid)
+    if (!(blob instanceof Blob) || blob.size === 0) {
+      throw new Error('GraphML export was empty')
+    }
     _triggerBlobDownload(blob, `agora-graph-${gid}.graphml`)
   } catch (e) {
     console.error('GraphML export failed', e)
