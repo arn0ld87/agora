@@ -752,8 +752,10 @@ class TestRollenPlausibilitaet:
         _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe")
         slot = PersonaDemographicSlot(age=45, gender="male", mbti="INTJ")
 
+        # #1833: Der Entitätsname ist ein Rollenlabel in Klammern und kein
+        # personenförmiger Quellname; hier geht es um den erfundenen Vertreter.
         profile = generator.generate_profile_from_entity(
-            _entity_with("Chefärztin Geburtshilfe", "Person"),
+            _entity_with("Chefärztin (Geburtshilfe)", "Person"),
             user_id=1,
             use_llm=True,
             demographic_slot=slot,
@@ -781,8 +783,9 @@ class TestRollenPlausibilitaet:
         calls: list = []
         _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe", calls)
         slot = PersonaDemographicSlot(age=28, gender="male", mbti="INTJ")
+        # #1833: Rollenlabel statt personenförmigem Quellnamen (erfundener Vertreter).
         entity = _entity_with(
-            "Chefärztin Geburtshilfe", "Person", {"age": 52, "gender": "weiblich"}
+            "Chefärztin (Geburtshilfe)", "Person", {"age": 52, "gender": "weiblich"}
         )
 
         generator.generate_profile_from_entity(
@@ -798,8 +801,9 @@ class TestRollenPlausibilitaet:
         _stub_llm(generator, "Birgit Sander", "Chefärztin der Geburtshilfe", calls)
         slot = PersonaDemographicSlot(age=45, gender="female", mbti="INTJ")
 
+        # #1833: Rollenlabel statt personenförmigem Quellnamen (erfundener Vertreter).
         generator.generate_profile_from_entity(
-            _entity_with("Chefärztin Geburtshilfe", "Person"),
+            _entity_with("Chefärztin (Geburtshilfe)", "Person"),
             user_id=1,
             use_llm=True,
             demographic_slot=slot,
@@ -828,7 +832,8 @@ class TestRollenPlausibilitaet:
         degradations = DegradationCollector()
 
         profiles = generator.generate_profiles_from_entities(
-            entities=[_entity_with("Chefärztin Geburtshilfe", "Person")],
+            # #1833: Rollenlabel statt personenförmigem Quellnamen (erfundener Vertreter).
+            entities=[_entity_with("Chefärztin (Geburtshilfe)", "Person")],
             use_llm=True,
             parallel_count=1,
             degradations=degradations,

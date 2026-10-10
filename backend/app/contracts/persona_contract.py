@@ -329,6 +329,48 @@ def persona_role_plausibility_reason(
     return f"{reason} ('{(profession or bio or '').strip()[:80]}'). Profil abgelehnt (#1759 A2)."
 
 
+def role_compatible_age(age: int, role_text: Optional[str]) -> int:
+    """Alter, das zur Rolle passt (Issue #1833).
+
+    Bleibt das Alter plausibel, ändert sich nichts. Unter dem Mindestalter der
+    Rolle wird auf das höchste passende Mindestalter angehoben; im Rentenalter
+    einer angestellten Rolle ohne Ruhestandshinweis auf ``RETIREMENT_AGE - 1``
+    gesenkt. Nutzt ausschließlich die vorhandenen Tabellen
+    (``_ROLE_MIN_AGE``, ``_EMPLOYEE_ROLE``, ``_RETIRED_MARKER``). Das Alter ist
+    eine synthetische Angabe; es soll nur die belegte Rolle nicht mehr bestimmen.
+    """
+    text = role_text or ""
+    minimum = max(
+        (floor for pattern, floor in _ROLE_MIN_AGE if pattern.search(text)),
+        default=0,
+    )
+    adjusted = max(age, minimum)
+    if (
+        adjusted >= RETIREMENT_AGE
+        and _EMPLOYEE_ROLE.search(text)
+        and not _RETIRED_MARKER.search(text)
+    ):
+        adjusted = RETIREMENT_AGE - 1
+    return adjusted
+
+
+def role_titles_in(text: Optional[str]) -> list[str]:
+    """Rollentitel im Text (``_FEMALE_TITLE``/``_MALE_TITLE``), in Reihenfolge, ohne Dubletten."""
+    source = text or ""
+    found: list[tuple[int, str]] = [
+        (match.start(), match.group()) for match in _FEMALE_TITLE.finditer(source)
+    ]
+    # Weibliche Treffer ausblenden (gleiche Länge), damit „Chefärztin“ nicht
+    # zusätzlich als männlicher Titel zählt.
+    masked = _FEMALE_TITLE.sub(lambda m: " " * len(m.group()), source)
+    found.extend((match.start(), match.group()) for match in _MALE_TITLE.finditer(masked))
+    titles: list[str] = []
+    for _, title in sorted(found, key=lambda item: item[0]):
+        if title not in titles:
+            titles.append(title)
+    return titles
+
+
 class PersonaQuotaPlan(BaseModel):
     """
     Soll-Plan für Persona-Generation. Erzwingt exakte Counts pro Segment.
