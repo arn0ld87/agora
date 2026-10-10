@@ -58,6 +58,63 @@ def test_medium_ohne_agent_quote_faellt_auf_low():
     assert decision["action"] == "downgraded_to_low"
 
 
+def test_medium_mit_zwei_aktionsstimmen_bleibt():
+    """ADR-0002-Nachtrag 2026-10-10 (#1778): zwei Stimmen tragen medium."""
+    claim = _claim("medium", [
+        _evidence("ev_a", "agent_action", voice_key="agent:1"),
+        _evidence("ev_b", "agent_action", voice_key="agent:2"),
+    ])
+
+    decision = downgrade_medium_without_agent_grounded(claim)
+
+    assert claim["confidence_label"] == "medium"
+    assert decision is None
+
+
+def test_medium_mit_zwei_aktionsstimmen_ueber_evidence_index_bleibt():
+    """Stimme am Record, ``supports_claim`` am Binding."""
+    index = {
+        "ev_a": {"evidence_id": "ev_a", "source_kind": "agent_action", "voice_key": "agent:1"},
+        "ev_b": {"evidence_id": "ev_b", "source_kind": "agent_action", "voice_key": "agent:2"},
+    }
+    claim = _claim("medium", [
+        {"evidence_id": "ev_a", "supports_claim": True},
+        {"evidence_id": "ev_b", "supports_claim": True},
+    ])
+
+    assert downgrade_medium_without_agent_grounded(claim, evidence_index=index) is None
+    assert claim["confidence_label"] == "medium"
+
+
+def test_medium_mit_zwei_aktionen_derselben_stimme_faellt_auf_low():
+    claim = _claim("medium", [
+        _evidence("ev_a", "agent_action", voice_key="agent:1"),
+        _evidence("ev_b", "agent_action", voice_key="agent:1"),
+    ])
+
+    decision = downgrade_medium_without_agent_grounded(claim)
+
+    assert claim["confidence_label"] == "low"
+    assert decision is not None
+
+
+def test_medium_mit_einer_aktionsstimme_ohne_seed_faellt_auf_low():
+    claim = _claim("medium", [_evidence("ev_a", "agent_action", voice_key="agent:1")])
+
+    assert downgrade_medium_without_agent_grounded(claim) is not None
+    assert claim["confidence_label"] == "low"
+
+
+def test_medium_mit_nicht_stuetzender_zweiter_stimme_faellt_auf_low():
+    claim = _claim("medium", [
+        _evidence("ev_a", "agent_action", voice_key="agent:1"),
+        _evidence("ev_b", "agent_action", voice_key="agent:2", supports_claim=False),
+    ])
+
+    assert downgrade_medium_without_agent_grounded(claim) is not None
+    assert claim["confidence_label"] == "low"
+
+
 def test_medium_mit_agent_quote_und_seed_corpus_bleibt():
     claim = _claim("medium", [
         _evidence("ev_a", "agent_quote"),

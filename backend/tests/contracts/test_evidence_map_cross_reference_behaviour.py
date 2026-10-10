@@ -215,6 +215,57 @@ def test_medium_needs_a_quote_text_not_just_the_source_kind() -> None:
         EvidenceMapModel.model_validate(payload)
 
 
+# ── medium: zwei Aktionsstimmen (ADR-0002-Nachtrag 2026-10-10, #1778) ─────
+
+EV_ACTION_A = "ev_000000000000000000000000000000a1"
+EV_ACTION_B = "ev_000000000000000000000000000000a2"
+
+
+def _action(evidence_id: str, voice_key: str) -> dict[str, Any]:
+    return {
+        "evidence_id": evidence_id,
+        "producer_key": f"simulation-action:{voice_key}",
+        "type": "agent_action",
+        "source": "simulation_actions",
+        "snippet": f"Beitrag von {voice_key} in der Simulation.",
+        "source_kind": "agent_action",
+        "voice_key": voice_key,
+    }
+
+
+def test_medium_accepts_two_action_voices() -> None:
+    records = {EV_ACTION_A: _action(EV_ACTION_A, "agent:1"), EV_ACTION_B: _action(EV_ACTION_B, "agent:2")}
+    payload = _map(records, [_binding(EV_ACTION_A), _binding(EV_ACTION_B)], label="medium", score=0.7)
+
+    assert EvidenceMapModel.model_validate(payload).sections[0].claims[0].confidence_label == "medium"
+
+
+def test_medium_rejects_two_actions_of_the_same_voice() -> None:
+    records = {EV_ACTION_A: _action(EV_ACTION_A, "agent:1"), EV_ACTION_B: _action(EV_ACTION_B, "agent:1")}
+    payload = _map(records, [_binding(EV_ACTION_A), _binding(EV_ACTION_B)], label="medium", score=0.7)
+
+    with pytest.raises(ValidationError, match="medium verlangt agent_quote und seed_corpus"):
+        EvidenceMapModel.model_validate(payload)
+
+
+def test_medium_rejects_a_non_supporting_second_action_voice() -> None:
+    records = {EV_ACTION_A: _action(EV_ACTION_A, "agent:1"), EV_ACTION_B: _action(EV_ACTION_B, "agent:2")}
+    payload = _map(
+        records, [_binding(EV_ACTION_A), _binding(EV_ACTION_B, supports=False)], label="medium", score=0.7
+    )
+
+    with pytest.raises(ValidationError, match="medium verlangt agent_quote und seed_corpus"):
+        EvidenceMapModel.model_validate(payload)
+
+
+def test_high_stays_blocked_for_two_action_voices() -> None:
+    records = {EV_ACTION_A: _action(EV_ACTION_A, "agent:1"), EV_ACTION_B: _action(EV_ACTION_B, "agent:2")}
+    payload = _map(records, [_binding(EV_ACTION_A), _binding(EV_ACTION_B)], label="high")
+
+    with pytest.raises(ValidationError, match="high/verified verlangt zwei stuetzende Stakeholder-Gruppen"):
+        EvidenceMapModel.model_validate(payload)
+
+
 # ── high/verified: inferred ist unzulaessig ───────────────────────────────
 
 

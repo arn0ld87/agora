@@ -11,7 +11,11 @@ if TYPE_CHECKING:  # pragma: no cover — nur fuer die Typannotation
 from pydantic import ValidationError
 
 from ...contracts import EvidenceRecordModel
-from ...contracts.report_contract import SEED_DOC_ANCHOR_PREFIX, counts_for_confidence
+from ...contracts.report_contract import (
+    SEED_DOC_ANCHOR_PREFIX,
+    counts_for_confidence,
+    has_two_action_voices,
+)
 from ..confidence_calculator import _count_independent_sources
 from ..evidence_identity import build_evidence_id
 from ..evidence_migrations import normalize_persisted_evidence_map
@@ -329,7 +333,10 @@ def has_agent_grounded_evidence(
 ) -> bool:
     """True, wenn die Evidence mind. 1 ``agent_quote`` (mit nicht-leerem
     ``quote``-Feld) UND mind. 1 ``seed_corpus`` enthält (ADR-0002 Stufe
-    agent_grounded → rechtfertigt ``medium``). Spiegelt
+    agent_grounded → rechtfertigt ``medium``) ODER stützende ``agent_action``-
+    Belege von mind. zwei verschiedenen Stimmen (``voice_key``; ADR-0002-
+    Nachtrag 2026-10-10, #1778, geteilter Helper ``has_two_action_voices``).
+    Spiegelt
     ``ReportClaimModel.agent_grounded_for_medium`` (Issue #906 Defekt 1).
     ``supports_claim`` wird hier nicht gefordert — analog zum medium-Validator.
     Das Quote-Feld ist Pflicht (ADR-0002 Z. 54; Codex PR-Review #961 P2): ein
@@ -349,6 +356,7 @@ def has_agent_grounded_evidence(
     """
     has_agent_quote = False
     has_seed_corpus = False
+    action_voices: List[Tuple[Any, Any]] = []
     index = evidence_index or {}
     for entry in evidence or []:
         if not isinstance(entry, dict):
@@ -362,7 +370,12 @@ def has_agent_grounded_evidence(
             has_agent_quote = True
         elif sk == "seed_corpus":
             has_seed_corpus = True
-    return has_agent_quote and has_seed_corpus
+        # ADR-0002-Nachtrag 2026-10-10 (#1778): stützende Aktionsbelege
+        # zählen als Stimmen. ``supports_claim`` ist ein Binding-Feld, daher
+        # hat der Eintrag Vorrang, ersatzweise der Record.
+        if entry.get("supports_claim", source.get("supports_claim")):
+            action_voices.append((sk, source.get("voice_key")))
+    return (has_agent_quote and has_seed_corpus) or has_two_action_voices(action_voices)
 
 
 def _resolved_evidence(
@@ -512,7 +525,9 @@ def downgrade_medium_without_agent_grounded(
     """Senkt ``medium`` auf ``low``, wenn ADR-0002 Stufe agent_grounded fehlt.
 
     ``medium`` verlangt mind. 1 ``agent_quote`` (mit nicht-leerem Zitat) UND
-    mind. 1 ``seed_corpus``. Der Claim-Builder prüfte das lange nicht — ein
+    mind. 1 ``seed_corpus`` ODER stützende ``agent_action``-Belege von mind.
+    zwei verschiedenen Stimmen (ADR-0002-Nachtrag 2026-10-10, #1778). Der
+    Claim-Builder prüfte das lange nicht — ein
     medium-Claim ohne diese Komposition erreichte den
     ``ReportClaimModel``-Validator und ließ die gesamte EvidenceMap-Validierung
     scheitern: Report abgebrochen statt Claim abgestuft. Der Reparaturlauf in
@@ -548,7 +563,8 @@ def downgrade_medium_without_agent_grounded(
         )
     detail = (
         "medium verlangt agent_quote (mit Zitat) UND seed_corpus "
-        "(ADR-0002 Stufe agent_grounded) — Komposition nicht "
+        "(ADR-0002 Stufe agent_grounded) oder stützende agent_action-Belege "
+        "von mindestens zwei verschiedenen Stimmen — Komposition nicht "
         "erfüllt, Claim als low geführt."
     )
     return {

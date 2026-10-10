@@ -9,6 +9,15 @@ MAI-14: Zusätzliche Tests für Sentiment-Contradiction-Penalty.
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
+from app.contracts.report_contract import (
+    ConfidenceLabel,
+    EvidenceSourceKind,
+    EvidenceType,
+    ReportClaimModel,
+)
 from app.services.confidence_calculator import (
     _has_contradiction,
     compute_claim_confidence,
@@ -363,3 +372,110 @@ def test_items_without_voice_key_count_as_before():
     ]
     score, _label = compute_confidence(items)
     assert score <= 0.59
+
+
+# ---------------------------------------------------------------------------
+# #1778 Medium-Regel: zwei Aktionsstimmen (Maintainer-Entscheidung 05.10.2026)
+# ---------------------------------------------------------------------------
+
+
+def _action(match_score: float, voice: int | None) -> dict:
+    """Stützender Simulationsbeitrag; ``voice=None`` lässt den ``voice_key`` weg."""
+    item: dict = {
+        "type": "agent_action",
+        "source": "simulation_actions",
+        "snippet": f"Beitrag der Stimme {voice}",
+        "supports_claim": True,
+        "match_score": match_score,
+    }
+    if voice is not None:
+        item["voice_key"] = f"agent:{voice}"
+    return item
+
+
+@pytest.mark.parametrize("match_score", [0.55, 0.7, 0.8])
+def test_two_action_voices_lift_the_single_source_cap(match_score):
+    """Zwei Aktionsbelege verschiedener Stimmen heben den Deckel 0.59 (D-01)."""
+    items = [_action(match_score, 1), _action(match_score, 2)]
+    score, label = compute_confidence(items)
+    assert score > 0.59
+    claim_score, claim_label, _penalties = compute_claim_confidence(items)
+    assert (claim_score, claim_label) == (score, label)
+
+
+def test_two_action_voices_reach_medium_band_at_match_07():
+    score, label = compute_confidence([_action(0.7, 1), _action(0.7, 2)])
+    assert label == "medium"
+    assert 0.65 <= score <= 0.84
+
+
+@pytest.mark.parametrize("match_score", [0.55, 0.7, 0.8])
+def test_two_action_items_same_voice_stay_at_single_source_cap(match_score):
+    """Gleiche Stimme bleibt eine Quelle: Deckel 0.59 unverändert (D-04)."""
+    score, _label = compute_confidence([_action(match_score, 1), _action(match_score, 1)])
+    assert score == 0.59
+
+
+def test_two_action_items_without_voice_key_stay_capped():
+    """Ohne ``voice_key`` zählen Aktionsbelege weiter nach Typ und Herkunft."""
+    score, _label = compute_confidence([_action(0.7, None), _action(0.7, None)])
+    assert score <= 0.59
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [_action(0.9, 1), _action(0.9, 2)],
+        [_action(0.95, 1), _action(0.95, 2), _action(0.95, 3)],
+    ],
+    ids=["zwei-stimmen", "drei-stimmen"],
+)
+def test_action_voices_never_reach_high_or_verified(items):
+    """Reine Aktionsbelege bleiben im Rechner unter der high-Schwelle (D-02)."""
+    score, label = compute_confidence(items)
+    assert score <= 0.84
+    assert label not in {"high", "verified"}
+
+
+def _contract_action(idx: int) -> dict:
+    return {
+        "type": EvidenceType.agent_action.value,
+        "source": "simulation_actions",
+        "snippet": f"Beitrag {idx} aus der Simulation.",
+        "source_kind": EvidenceSourceKind.agent_action.value,
+        "supports_claim": True,
+        "voice_key": f"agent:{idx}",
+    }
+
+
+def _contract_claim(label: ConfidenceLabel) -> dict:
+    return {
+        "claim_id": "claim_01",
+        "claim_text": "Die Umschulung braucht verbindliche Absprachen.",
+        "confidence_label": label,
+        "confidence_score": 0.9 if label == ConfidenceLabel.high else 0.3,
+        "evidence": [_contract_action(1), _contract_action(2)],
+    }
+
+
+def test_high_stays_blocked_in_contract_for_two_action_voices():
+    """Der Vertrag lehnt high für reine Aktionsstimmen weiter ab (Anker 4)."""
+    # Gegenprobe: dieselbe Evidence validiert mit low, der Fehler kommt also
+    # nicht aus einem Fixture-Fehler.
+    ReportClaimModel.model_validate(_contract_claim(ConfidenceLabel.low))
+    with pytest.raises(ValidationError) as excinfo:
+        ReportClaimModel.model_validate(_contract_claim(ConfidenceLabel.high))
+    assert "Stakeholder-Rollenfamilien" in str(excinfo.value)
+
+
+def test_action_voices_ceiling_spares_mixed_evidence():
+    """Gemischte Evidence (Seed-Beleg plus Aktionsstimmen) bleibt unberührt."""
+    seed = {
+        "type": "graph_fact",
+        "source": "report_tool",
+        "snippet": "Seed-Fakt",
+        "supports_claim": True,
+        "match_score": 0.9,
+    }
+    score, _label = compute_confidence([seed, _action(0.9, 1), _action(0.9, 2)])
+    assert score > 0.84
