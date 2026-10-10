@@ -1,6 +1,6 @@
 # ADR-0022: Manuelle Herkunft im Wissensgraphen
 
-- Status: Vorgeschlagen (die Annahme erfolgt durch den Maintainer beim Merge von Etappe 8)
+- Status: Angenommen (2026-10-07, mit dem Merge von Etappe 8, [PR #1812](https://github.com/arn0ld87/agora/pull/1812) — so definiert der ADR selbst die Annahme)
 - Datum: 2026-10-07
 - Bezug: [#1808](https://github.com/arn0ld87/agora/issues/1808) (Etappe 8, Graphen bearbeiten), [#1790](https://github.com/arn0ld87/agora/issues/1790) (Frontend-Umbau), [ADR-0002](0002-evidence-gating.md), [ADR-0011](0011-evidence-entailment-and-provenance.md), [ADR-0013](0013-seed-corpus-document-anchor.md); Bauplan [`docs/plans/active/frontend-umbau.md`](../plans/active/frontend-umbau.md) §4.3, §7.1, §7.2
 
