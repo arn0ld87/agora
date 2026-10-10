@@ -1,0 +1,43 @@
+# Bito Code Review Agent — schlanke Repository-Konfiguration
+# Zur Aktivierung als .bito.yaml im Root des PR-Quellbranches ablegen.
+# Im Bito-Dashboard muss "Allow config file settings" aktiviert sein.
+# Dokumentation: https://docs.bito.ai/ai-code-reviews-in-git/agent-settings/repo-level-settings
+
+# Kritische Befunde inline, weitere Hinweise in der Zusammenfassung.
+suggestion_mode: "essential"
+exclude_draft_pr: true
+
+# Bestehenden Branch- und Label-Filter beibehalten.
+include_source_branches: ""
+include_target_branches: ""
+labels_excluded: ""
+
+# Nur Abhaengigkeiten, Caches und Coverage-Ausgaben ausschliessen.
+# Konfiguration, Dokumentation, Tests und Lockfiles bleiben im Review.
+exclude_files: "**/node_modules/**, **/.venv/**, **/__pycache__/**, **/coverage/**"
+
+# Vorhandene AGENTS.md / CLAUDE.md und andere Agent-Regeln verwenden.
+# Keine leeren custom_guidelines: Workspace-Guidelines weiter erben.
+repo_level_guidelines_enabled: true
+
+# Sicherheits- und Qualitaetspruefungen beibehalten.
+secret_scanner_feedback: true
+dependency_check.enabled: true
+linters_feedback: true
+static_analysis.fb_infer.enabled: true
+negative_rules_enabled: true
+
+# Bestehenden Request-changes-Modus beibehalten.
+# Achtung: Bito aktiviert damit auf GitHub auch Auto-Approve nach Aufloesung.
+post_as_request_changes: true
+
+# Dateiliste beibehalten; PR-Beschreibung und Diagramme nicht automatisch ergaenzen.
+post_changelist: true
+post_description: false
+sequence_diagram_enabled: false
+
+# Erst bei bestaetigter Jira-Integration einschalten.
+functional_validation_enabled: false
+
+# pr_metadata_validation ausgelassen: <nil> ist kein YAML-Nullwert.
+# Fehlende Optionen erben die Workspace-Einstellung.
