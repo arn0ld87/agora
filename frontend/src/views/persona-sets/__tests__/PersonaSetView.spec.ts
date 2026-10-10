@@ -293,6 +293,18 @@ describe('PersonaSetView', () => {
       wrapper.unmount()
     })
 
+    it('Nach dem Löschen bleibt der Fokus in der Symbolleiste, obwohl der Löschknopf wieder deaktiviert ist', async () => {
+      api.deletePersonaSetEntries.mockResolvedValue({ removed_entry_ids: ['c'], set: {} })
+      const { wrapper } = await mountView()
+      await wrapper.findAll(`[data-testid="${Id.cardSelect}"]`)[2].setValue(true)
+      await wrapper.get(`[data-testid="${Id.deleteSelected}"]`).trigger('click')
+      await wrapper.get(`[data-testid="${Id.deleteConfirmYes}"]`).trigger('click')
+      await flushPromises()
+      expect(wrapper.get(`[data-testid="${Id.deleteSelected}"]`).attributes('disabled')).toBeDefined()
+      expect(document.activeElement).toBe(wrapper.get(`[data-testid="${Id.add}"]`).element)
+      wrapper.unmount()
+    })
+
     it('Umbenennen sendet Name und Beschreibung an updatePersonaSet', async () => {
       api.updatePersonaSet.mockResolvedValue({ ...setRecord(), name: 'Satz Zwei' })
       const { wrapper } = await mountView()
