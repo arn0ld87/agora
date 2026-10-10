@@ -281,25 +281,25 @@ describe('PersonaSetView', () => {
       wrapper.unmount()
     })
 
-    it('Einzelnes Löschen über Auswahl und Rückfrage ruft deletePersonaSetEntries mit genau einer ID auf', async () => {
+    async function deleteThirdEntry() {
       api.deletePersonaSetEntries.mockResolvedValue({ removed_entry_ids: ['c'], set: {} })
       const { wrapper } = await mountView()
       await wrapper.findAll(`[data-testid="${Id.cardSelect}"]`)[2].setValue(true)
       await wrapper.get(`[data-testid="${Id.deleteSelected}"]`).trigger('click')
       await wrapper.get(`[data-testid="${Id.deleteConfirmYes}"]`).trigger('click')
       await flushPromises()
+      return wrapper
+    }
+
+    it('Einzelnes Löschen über Auswahl und Rückfrage ruft deletePersonaSetEntries mit genau einer ID auf', async () => {
+      const wrapper = await deleteThirdEntry()
       expect(api.deletePersonaSetEntries).toHaveBeenCalledWith('s1', ['c'])
       expect(wrapper.findAll(`[data-testid="${Id.card}"]`)).toHaveLength(3)
       wrapper.unmount()
     })
 
     it('Nach dem Löschen bleibt der Fokus in der Symbolleiste, obwohl der Löschknopf wieder deaktiviert ist', async () => {
-      api.deletePersonaSetEntries.mockResolvedValue({ removed_entry_ids: ['c'], set: {} })
-      const { wrapper } = await mountView()
-      await wrapper.findAll(`[data-testid="${Id.cardSelect}"]`)[2].setValue(true)
-      await wrapper.get(`[data-testid="${Id.deleteSelected}"]`).trigger('click')
-      await wrapper.get(`[data-testid="${Id.deleteConfirmYes}"]`).trigger('click')
-      await flushPromises()
+      const wrapper = await deleteThirdEntry()
       expect(wrapper.get(`[data-testid="${Id.deleteSelected}"]`).attributes('disabled')).toBeDefined()
       expect(document.activeElement).toBe(wrapper.get(`[data-testid="${Id.add}"]`).element)
       wrapper.unmount()
