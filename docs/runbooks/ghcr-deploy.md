@@ -58,20 +58,28 @@ docker pull ghcr.io/arn0ld87/agora-proxy:edge
 
 3. **Bind-Mount-Quellverzeichnisse vorbereiten.** Die Compose-Dateien binden
    `./backend/data`, `./backend/instance`, `./backend/uploads` und
-   `./backend/.cache/huggingface` aus dem Arbeitsverzeichnis ein. Ein frischer
-   Klon bringt sie mit (getrackte `.gitkeep`-Platzhalter), ein älterer Bestand
-   möglicherweise nicht: fehlt ein Quellverzeichnis, legt der Docker-Daemon es
-   als `root:root` an, und der Container-User (uid 1000) kann nicht
-   hineinschreiben — Symptome sind `PermissionError` auf
-   `/home/agora/.cache/huggingface/hub` bzw. `TwhinCacheError` beim
-   Simulationsstart. Vor dem Start prüfen und reparieren:
+   `./backend/.cache/huggingface` aus dem Arbeitsverzeichnis ein. Fehlt ein
+   Quellverzeichnis, legt der Docker-Daemon es als `root:root` an, und der
+   Container-User (uid 1000) kann nicht hineinschreiben — Symptome sind
+   `PermissionError` auf `/home/agora/.cache/huggingface/hub` bzw.
+   `TwhinCacheError` beim Simulationsstart. Getrackte `.gitkeep`-Platzhalter
+   gibt es nur für `backend/data` und `backend/.cache/huggingface`;
+   `backend/instance` und `backend/uploads` legt das Deployment an (die
+   Container-CI bereitet `uploads` per ACL vor). Auch ein als root oder mit
+   fremder UID erstellter Checkout besitzt die Verzeichnisse nicht als uid 1000
+   — deshalb Besitz/Beschreibbarkeit prüfen und reparieren, statt sich auf den
+   Klon zu verlassen:
 
    ```bash
-   ls -ld backend/.cache/huggingface backend/data backend/instance backend/uploads
-   sudo chown -R 1000:1000 backend/.cache/huggingface   # nur falls root:root
+   for d in backend/data backend/instance backend/uploads backend/.cache/huggingface; do
+     mkdir -p "$d"
+     [ "$(stat -c '%u' "$d")" = "1000" ] || sudo chown -R 1000:1000 "$d"
+   done
    ```
 
-   Im Container hilft kein `chown` — der Stack läuft mit `cap_drop: ALL`.
+   Ohne Besitzerwechsel geht auch `sudo setfacl -m u:1000:rwx <verzeichnis>`
+   (dasselbe Muster nutzt die CI für `backend/uploads`). Im Container hilft kein
+   `chown` — der Stack läuft mit `cap_drop: ALL`.
    Details: [`../deployment-dev.md`](../deployment-dev.md), Abschnitt
    „Bind-Mount-Rechte".
 
