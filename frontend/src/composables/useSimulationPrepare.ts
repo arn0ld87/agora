@@ -61,6 +61,14 @@ export interface SimulationPrepareState {
    * Nenner willkürlich, wenn sieben Entitäten fünfzig Personas ergeben.
    */
   personaFloorApplied: Ref<boolean>
+  /**
+   * Backend-autoritativer Mindestanzahl-Wert aus dem Prepare-Vertrag
+   * (`persona_target.floor`, UAT-004) — genau die Zahl, an der das
+   * Report-Gate misst. Keine clientseitige Nachberechnung: Die Doppelquelle
+   * aus Client-Hint vs. Backend erzeugte den widersprüchlichen Abschluss.
+   * null, wenn das Backend keinen persona_target-Vertrag liefert.
+   */
+  personaFloor: Ref<number | null>
   simulationConfig: Ref<Record<string, unknown> | null>
   error: Ref<string | null>
   /**
@@ -95,6 +103,8 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   const profiles = ref<ProfileRecord[]>([])
   const expectedTotal = ref<number | null>(null)
   const personaFloorApplied = ref(false)
+  /** Backend-autoritativer Mindestanzahl-Wert (persona_target.floor) — UAT-004. */
+  const personaFloor = ref<number | null>(null)
   const simulationConfig = ref<Record<string, unknown> | null>(null)
   const error = ref<string | null>(null)
   const degradations = ref<PipelineDegradationReport>(EMPTY_DEGRADATION_REPORT)
@@ -226,6 +236,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     profiles.value = []
     expectedTotal.value = null
     personaFloorApplied.value = false
+    personaFloor.value = null
     simulationConfig.value = null
     error.value = null
     degradations.value = EMPTY_DEGRADATION_REPORT
@@ -296,10 +307,17 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
         if (target) {
           expectedTotal.value = target.persona_target_count
           personaFloorApplied.value = target.floor_applied
-        } else if (res.data.expected_entities_count) {
-          // Ältere Backends ohne `persona_target`: lieber die alte Zahl
-          // als gar keine — sie ist nur dann falsch, wenn der Floor greift.
-          expectedTotal.value = res.data.expected_entities_count
+          personaFloor.value = target.floor
+        } else {
+          // Kein persona_target-Vertrag (ältere Backends ohne `floor`): den
+          // Floor-Wert des VORHERIGEN Laufs verwerfen statt einen stale
+          // Mindestanzahl-Wert anzuzeigen (UAT-004).
+          personaFloor.value = null
+          if (res.data.expected_entities_count) {
+            // Ältere Backends ohne `persona_target`: lieber die alte Zahl
+            // als gar keine — sie ist nur dann falsch, wenn der Floor greift.
+            expectedTotal.value = res.data.expected_entities_count
+          }
         }
 
         void prepareStatusPolling.start()
@@ -355,6 +373,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     profiles,
     expectedTotal,
     personaFloorApplied,
+    personaFloor,
     simulationConfig,
     error,
     degradations,
