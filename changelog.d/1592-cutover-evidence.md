@@ -1,0 +1,3 @@
+### Changed
+
+- **STATUS.md trennt die Cutover-Evidenz zu #1592** — `docs/STATUS.md` führt den Metadaten-Cutover auf armserver (25.09.2026, Sammelprüfung 8/8 `OK`, `/readyz` mit `postgres: ok`) als historische Evidenz mit Datum. Ausstehend sind laut Issue weiterhin das Beobachtungsprotokoll bis 02.10.2026, ein neuer Lauf auf armserver und der Live-Nachweis eines Modellwechsels aus #1417 (per Code geschlossen, live nicht belegt). Der Restore-Drill auf frischem Host liegt allein bei #766. Reine Dokumentation: Es wurde nichts neu ausgeführt, kein Deployment verifiziert und `0.10.0-rc.1` nicht freigegeben. (#1592)
