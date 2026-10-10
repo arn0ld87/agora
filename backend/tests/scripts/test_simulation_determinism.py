@@ -165,3 +165,141 @@ def test_seeding_returns_the_seed_it_applied() -> None:
     expected = [random.random() for _ in range(3)]
     seed_simulation_rng(config)
     assert [random.random() for _ in range(3)] == expected
+
+
+class _FirstKRng:
+    """Deterministische Ziehung: alle sind Kandidat, ``sample`` nimmt die ersten ``k``."""
+
+    def uniform(self, a: float, b: float) -> float:
+        return b
+
+    def random(self) -> float:
+        return 0.0
+
+    def sample(self, population, k: int):
+        return list(population)[:k]
+
+
+_LEGACY_TIME_CONFIG = {
+    "agents_per_hour_min": 4,
+    "agents_per_hour_max": 4,
+    "peak_hours": [],
+    "off_peak_hours": [],
+}
+
+
+def _legacy_agent_configs(count: int = 6) -> list[dict]:
+    return [{"agent_id": i, "activity_level": 1.0, "active_hours": list(range(24))} for i in range(count)]
+
+
+def test_legacy_selection_skips_ids_without_agent() -> None:
+    """#1779: ``target_count`` wird nicht von Agenten ohne OASIS-Agent verbraucht.
+
+    Der Altpfad zog früher aus ALLEN Konfigurationen und verwarf nicht
+    auflösbare IDs erst danach (Runner: ``except Exception: pass``). Mit den
+    IDs 1 und 4 ohne Agent blieben von der Zielzahl 4 nur 2 übrig.
+    """
+    from app.services import simulation_activity_policy as policy
+
+    existing = {0, 2, 3, 5}
+
+    selected = policy.select_active_agent_ids(
+        _LEGACY_TIME_CONFIG, _legacy_agent_configs(), 12, _FirstKRng(), existing
+    )
+
+    assert selected == [0, 2, 3, 5]
+
+
+def test_legacy_selection_without_existing_ids_is_unchanged() -> None:
+    from app.services import simulation_activity_policy as policy
+
+    selected = policy.select_active_agent_ids(
+        _LEGACY_TIME_CONFIG, _legacy_agent_configs(), 12, _FirstKRng()
+    )
+
+    assert selected == [0, 1, 2, 3]
+
+
+def test_missing_agents_are_logged_once_per_set() -> None:
+    from app.services import simulation_activity_policy as policy
+
+    policy._REPORTED_MISSING_AGENTS.clear()
+    for _ in range(3):
+        policy.select_active_agent_ids(
+            _LEGACY_TIME_CONFIG, _legacy_agent_configs(), 12, _FirstKRng(), {0, 2, 3, 5}
+        )
+
+    assert policy._REPORTED_MISSING_AGENTS == {(1, 4)}
+
+
+class _Graph:
+    def __init__(self, ids: list[int]) -> None:
+        self._agents = {i: object() for i in ids}
+
+    def get_agents(self):
+        return list(self._agents.items())
+
+    def get_agent(self, agent_id: int):
+        return self._agents[agent_id]
+
+
+class _Env:
+    def __init__(self, ids: list[int]) -> None:
+        self.agent_graph = _Graph(ids)
+
+
+def test_parallel_runner_selection_fills_the_target_with_existing_agents() -> None:
+    import run_parallel_simulation as rps  # type: ignore[import-not-found]
+
+    config = {"time_config": dict(_LEGACY_TIME_CONFIG), "agent_configs": _legacy_agent_configs()}
+    random.seed(0)
+
+    active = rps.get_active_agents_for_round(_Env([0, 2, 3, 5]), config, 12, 3)
+
+    assert sorted(agent_id for agent_id, _ in active) == [0, 2, 3, 5]
+
+
+def test_single_platform_runner_selection_fills_the_target_with_existing_agents() -> None:
+    platform_runner = pytest.importorskip("sim_runtime.platform_runner")
+    runner = platform_runner.SinglePlatformRunner.__new__(platform_runner.SinglePlatformRunner)
+    runner.config = {"time_config": dict(_LEGACY_TIME_CONFIG), "agent_configs": _legacy_agent_configs()}
+    runner.random_seed = 0
+    random.seed(0)
+
+    active = runner._get_active_agents_for_round(_Env([0, 2, 3, 5]), 12, 3)
+
+    assert sorted(agent_id for agent_id, _ in active) == [0, 2, 3, 5]
+
+
+def test_parallel_runner_logs_an_agent_that_cannot_be_activated() -> None:
+    """Der stille ``except Exception: pass`` ist weg: ein unerwartet fehlender Agent steht im Log."""
+    import logging
+
+    import run_parallel_simulation as rps  # type: ignore[import-not-found]
+
+    records: list[logging.LogRecord] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    runner_logger = logging.getLogger("agora.run_parallel_simulation")
+    handler = _Collect(level=logging.WARNING)
+    runner_logger.addHandler(handler)
+
+    class _BrokenGraph(_Graph):
+        def get_agent(self, agent_id: int):
+            raise KeyError(agent_id)
+
+    env = _Env([0, 1, 2, 3])
+    env.agent_graph = _BrokenGraph([0, 1, 2, 3])
+    config = {"time_config": dict(_LEGACY_TIME_CONFIG), "agent_configs": _legacy_agent_configs(4)}
+
+    try:
+        active = rps.get_active_agents_for_round(env, config, 12, 0)
+    finally:
+        runner_logger.removeHandler(handler)
+
+    assert active == []
+    assert len(records) == 4
+    assert all("nicht aktivierbar" in record.getMessage() for record in records)

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Collection
 from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
 
 from ..utils.logger import get_logger
@@ -205,11 +206,52 @@ class RandomLike(Protocol):
     def sample(self, population: Sequence[int], k: int) -> List[int]: ...
 
 
+#: Mengen fehlender Agenten, die schon gemeldet wurden: die Auswahl läuft je
+#: Runde und Plattform, die Meldung soll einmal je Menge im Log stehen.
+_REPORTED_MISSING_AGENTS: set[Tuple[int, ...]] = set()
+
+
+def exclude_missing_agents(
+    agent_configs: Iterable[Dict[str, Any]],
+    existing_agent_ids: Collection[int],
+) -> Tuple[List[Dict[str, Any]], List[int]]:
+    """Trennt Konfigurations-Agenten ohne OASIS-Agent vom Kandidatenpool (#1779).
+
+    Rückgabe: ``(Konfigurationen mit Agent, IDs ohne Agent)``. Ein Agent ohne
+    Profil existiert in OASIS nicht; zog die Auswahl ihn trotzdem, verbrauchte
+    er einen Platz der Zielzahl und die Runde blieb kleiner als geplant.
+    """
+    kept: List[Dict[str, Any]] = []
+    missing: List[int] = []
+    for cfg in agent_configs:
+        agent_id = cfg.get("agent_id", 0)
+        if agent_id in existing_agent_ids:
+            kept.append(cfg)
+        else:
+            missing.append(agent_id)
+    return kept, missing
+
+
+def _report_missing_agents(missing: List[int], total: int) -> None:
+    key = tuple(sorted(missing))
+    if not key or key in _REPORTED_MISSING_AGENTS:
+        return
+    _REPORTED_MISSING_AGENTS.add(key)
+    logger.warning(
+        "%d von %d Konfigurations-Agenten haben keinen OASIS-Agenten (kein Profil) und "
+        "werden vor der Ziehung aus dem Kandidatenpool genommen: agent_ids=%s",
+        len(key),
+        total,
+        ", ".join(str(agent_id) for agent_id in key),
+    )
+
+
 def select_active_agent_ids(
     time_config: Dict[str, Any],
     agent_configs: Iterable[Dict[str, Any]],
     current_hour: int,
     rng: RandomLike = random,
+    existing_agent_ids: Optional[Collection[int]] = None,
 ) -> List[int]:
     """Waehlt aktive Agent-IDs fuer eine Simulationsrunde.
 
@@ -227,7 +269,17 @@ def select_active_agent_ids(
     ueber die Eingabewerte (``enforce_agents_per_hour_floor``,
     ``enforce_activity_level_floor``, ``enforce_active_hours_floor``), nicht
     ueber einen Override hier.
+
+    ``existing_agent_ids`` (#1779): IDs, zu denen der Runner einen OASIS-Agenten
+    hat. Konfigurationen ohne Agent kommen VOR der Ziehung aus dem
+    Kandidatenpool und werden einmal je Menge protokolliert; ohne den Parameter
+    (``None``) bleibt die Auswahl unveraendert.
     """
+    if existing_agent_ids is not None:
+        agent_configs = list(agent_configs)
+        agent_configs, missing = exclude_missing_agents(agent_configs, existing_agent_ids)
+        _report_missing_agents(missing, len(agent_configs) + len(missing))
+
     base_min = time_config.get("agents_per_hour_min", 5)
     base_max = time_config.get("agents_per_hour_max", 20)
 

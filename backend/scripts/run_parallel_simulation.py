@@ -219,6 +219,7 @@ from app.services.simulation_activity_model import (
     activity_limits_sentence,
     activity_platforms,
     activity_runtime_context,
+    agent_ids_in_graph,
     for_platform,
     select_round_agent_ids_from_config,
 )
@@ -1498,11 +1499,14 @@ def get_active_agents_for_round(
     # Geteilte Auswahl-Logik mit platform_runner.py (#1713 Slice S4). Mit
     # ``time_config.activity_model`` waehlt sie nach Rate, eine Ziehung je Runde
     # fuer beide Plattformen (#1779); ohne das Feld gilt der bisherige Pfad.
+    # Konfigurationen ohne OASIS-Agent (kein Profil) kommen im Altpfad vor der
+    # Ziehung aus dem Kandidatenpool (#1779).
     selected_ids = select_round_agent_ids_from_config(
         config,
         current_hour,
         round_num,
         fallback_seed=derive_simulation_seed(config),
+        existing_agent_ids=agent_ids_in_graph(env.agent_graph),
     )
 
     active_agents = []
@@ -1510,9 +1514,14 @@ def get_active_agents_for_round(
         try:
             agent = env.agent_graph.get_agent(agent_id)
             active_agents.append((agent_id, agent))
-        except Exception:
-            pass
-    
+        except Exception as exc:
+            # Nach der Vorfilterung ist ein fehlender Agent unerwartet; nicht
+            # still verwerfen, sondern sichtbar machen (#1779).
+            logging.getLogger("agora.run_parallel_simulation").warning(
+                "Runde %s: Agent %s nicht aktivierbar (%s: %s)",
+                round_num, agent_id, type(exc).__name__, exc,
+            )
+
     return active_agents
 
 

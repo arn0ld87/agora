@@ -27,6 +27,7 @@ denselben Lauf, weil die Antworten der Sprachmodelle nicht festgelegt sind.
 from __future__ import annotations
 
 import random
+from collections.abc import Collection
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 from ..contracts.simulation_activity_contract import (
@@ -433,6 +434,7 @@ def select_round_agent_ids(
     platform: str,
     platforms: Sequence[str],
     rng: Any = random,
+    existing_agent_ids: Optional[Collection[int]] = None,
 ) -> List[int]:
     """Gemeinsamer Einstieg beider Runner für die Auswahl der aktiven Agenten.
 
@@ -440,12 +442,19 @@ def select_round_agent_ids(
     Feld (Konfigurationen vor #1779) gilt unverändert
     ``select_active_agent_ids`` mit ``rng`` (Standard: globales ``random``,
     geseedet über ``seed_simulation_rng``).
+
+    ``existing_agent_ids``: IDs mit OASIS-Agent. Sie wirken nur im Altpfad —
+    dort verbrauchte ein Agent ohne Profil einen Platz der Zielzahl. Die Auswahl
+    nach Rate zieht je Agent unabhängig; ein Filter würde dort nur die Folge der
+    Ziehungen verschieben.
     """
     time_config = config.get("time_config") or {}
     agent_configs = config.get("agent_configs") or []
     model = activity_model_from_time_config(time_config)
     if model is None:
-        return select_active_agent_ids(time_config, agent_configs, current_hour, rng)
+        return select_active_agent_ids(
+            time_config, agent_configs, current_hour, rng, existing_agent_ids
+        )
     return select_active_agent_ids_for_platform(
         model,
         agent_configs,
@@ -494,11 +503,13 @@ def select_round_agent_ids_from_config(
     *,
     fallback_seed: int,
     rng: Any = random,
+    existing_agent_ids: Optional[Collection[int]] = None,
 ) -> List[int]:
     """Auswahl für eine Runde aus der Konfiguration samt Laufzeitkontext.
 
     Fehlt der Kontext (alte Aufrufer), gilt eine einzelne Plattform ``twitter``
     und ``fallback_seed``; mit Altkonfiguration ist beides ohne Wirkung.
+    ``existing_agent_ids``: siehe :func:`select_round_agent_ids`.
     """
     platform = str(config.get(RUNTIME_PLATFORM_KEY) or "twitter")
     platforms = config.get(RUNTIME_PLATFORMS_KEY) or [platform]
@@ -511,7 +522,24 @@ def select_round_agent_ids_from_config(
         platform=platform,
         platforms=platforms,
         rng=rng,
+        existing_agent_ids=existing_agent_ids,
     )
+
+
+def agent_ids_in_graph(agent_graph: Any) -> Optional[set[int]]:
+    """IDs der Agenten, die der OASIS-Agentengraph tatsächlich kennt (#1779).
+
+    ``None``, wenn der Graph sie nicht herausgibt: der Aufrufer filtert dann
+    nicht, statt alle Agenten zu verwerfen.
+    """
+    get_agents = getattr(agent_graph, "get_agents", None)
+    if get_agents is None:
+        return None
+    try:
+        return {int(agent_id) for agent_id, _ in get_agents()}
+    except (TypeError, ValueError):
+        logger.warning("Agentengraph liefert keine lesbaren Agenten-IDs; keine Vorfilterung")
+        return None
 
 
 # --- Satz für den Agenten-Prompt ---------------------------------------------------------

@@ -98,6 +98,7 @@ from app.services.simulation_activity_policy import (
 )
 from app.services.simulation_activity_model import (
     RUNTIME_PLATFORMS_KEY,
+    agent_ids_in_graph,
     for_platform,
     select_round_agent_ids_from_config,
 )
@@ -409,6 +410,9 @@ class SinglePlatformRunner:
             current_hour,
             round_num,
             fallback_seed=self.random_seed,
+            # Konfigurationen ohne OASIS-Agent (kein Profil) kommen im Altpfad
+            # vor der Ziehung aus dem Kandidatenpool (#1779).
+            existing_agent_ids=agent_ids_in_graph(env.agent_graph),
         )
 
         # Convert to Agent objects
@@ -417,8 +421,13 @@ class SinglePlatformRunner:
             try:
                 agent = env.agent_graph.get_agent(agent_id)
                 active_agents.append((agent_id, agent))
-            except Exception:
-                pass
+            except Exception as exc:
+                # Nach der Vorfilterung ist ein fehlender Agent unerwartet;
+                # nicht still verwerfen (#1779).
+                logger.warning(
+                    "Runde %s: Agent %s nicht aktivierbar (%s: %s)",
+                    round_num, agent_id, type(exc).__name__, exc,
+                )
 
         return active_agents
 
