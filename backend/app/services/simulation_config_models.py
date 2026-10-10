@@ -57,6 +57,14 @@ class AgentActivityConfig:
     # Auswahl aber nur noch in Konfigurationen ohne ``time_config.activity_model``.
     actor_class: str = "individual"
 
+    # Herkunft des Eintrags (#1779): ``llm`` (Antwort des Konfigurationsmodells),
+    # ``rule_fallback`` (Regel-Defaults, weil die Modellantwort für diesen Agenten
+    # fehlte oder der Batch ausfiel) oder ``synthetic_skeptic`` (Quotenregel). Die
+    # Regel erfindet keine Haltung; das Feld macht den Rückfall im Artefakt
+    # sichtbar, statt ihn als normalen Eintrag durchgehen zu lassen. Konfigurationen
+    # vor diesem Feld lesen sich als ``llm``.
+    config_source: str = "llm"
+
 
 @dataclass
 class TimeSimulationConfig:

@@ -213,3 +213,30 @@ class TestBatchingMath:
         assert [e.name for e in captured[0]] == [f"Entity {i}" for i in range(0, 5)]
         assert [e.name for e in captured[5]] == [f"Entity {i}" for i in range(5, 10)]
         assert [e.name for e in captured[10]] == [f"Entity {i}" for i in range(10, 12)]
+
+
+def test_missing_llm_entry_marks_rule_fallback_visibly() -> None:
+    """#1779: Fehlt ein Agent in der LLM-Antwort, ist der Rückfall im Ergebnis sichtbar.
+
+    Der Eintrag trägt ``config_source="rule_fallback"`` und der Sammler des Laufs
+    bekommt ``agent_config_rule_fallback``; die Regel erfindet keine Haltung.
+    """
+    from app.contracts.pipeline_degradation_contract import DegradationKind
+    from app.services.degradation_collector import DegradationCollector
+
+    with patch("app.llm.client.OpenAI"):
+        gen = SimulationConfigGenerator(api_key="test-key", base_url="http://localhost:11434/v1")
+    collector = DegradationCollector()
+    gen._degradations = collector
+    entities = [
+        EntityNode(uuid=f"e-{i}", name=f"Entity {i}", labels=["Person"], summary="", attributes={})
+        for i in range(2)
+    ]
+    answer = {"agent_configs": [{"agent_id": 0, "stance": "opposing", "sentiment_bias": -0.4}]}
+
+    with patch.object(gen, "_call_llm_with_retry", return_value=answer):
+        configs = gen._generate_agent_configs_batch("ctx", entities, 0, "Frage")
+
+    assert [c.config_source for c in configs] == ["llm", "rule_fallback"]
+    assert configs[1].stance == "neutral"
+    assert [e.kind for e in collector.report().events] == [DegradationKind.AGENT_CONFIG_RULE_FALLBACK]

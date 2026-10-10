@@ -28,6 +28,7 @@ export const DEGRADATION_KINDS = [
   'stance_position_unrepresented',
   'initial_post_stance_conflict',
   'entity_selection_actors_omitted',
+  'agent_config_rule_fallback',
 ] as const;
 
 export const DegradationKindSchema = z.enum(DEGRADATION_KINDS);

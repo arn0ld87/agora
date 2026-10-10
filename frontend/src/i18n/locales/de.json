@@ -1470,7 +1470,8 @@
       "ontology_topic_type_missing": "Kein Streitgegenstand-Typ in der Ontologie",
       "stance_position_unrepresented": "Belegte Position von keinem Agenten vertreten",
       "initial_post_stance_conflict": "Startpost widerspricht der Haltung seines Absenders",
-      "entity_selection_actors_omitted": "Belegte Akteure ohne Persona-Platz"
+      "entity_selection_actors_omitted": "Belegte Akteure ohne Persona-Platz",
+      "agent_config_rule_fallback": "Agenten mit Regel-Defaults statt Modellkonfiguration"
     },
     "action": {
       "embedding_unavailable": "Embedding-Dienst starten und den Graphen neu aufbauen, sonst bleibt die Vektorsuche wirkungslos.",
@@ -1482,7 +1483,8 @@
       "ontology_topic_type_missing": "Positionen bleiben an den Akteuren; die Ontologie neu erzeugen, wenn der Graph Positionskanten braucht.",
       "stance_position_unrepresented": "Die Simulation läuft weiter, bildet diese Position aber nicht ab; den Personasatz um einen passenden Akteur ergänzen.",
       "initial_post_stance_conflict": "Startpost und Absender im Personasatz prüfen, bevor der Lauf startet.",
-      "entity_selection_actors_omitted": "Agentenlimit erhöhen oder die fehlenden Akteure manuell ergänzen, sonst fehlen sie im Lauf."
+      "entity_selection_actors_omitted": "Agentenlimit erhöhen oder die fehlenden Akteure manuell ergänzen, sonst fehlen sie im Lauf.",
+      "agent_config_rule_fallback": "Diese Agenten beziehen keine Position (neutral, Medien beobachtend); Konfiguration mit einem stärkeren Modell neu erzeugen, wenn sie Stellung beziehen sollen."
     },
     "occurrences": "{count}× aufgetreten"
   },

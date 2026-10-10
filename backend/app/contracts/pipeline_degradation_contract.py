@@ -90,6 +90,14 @@ class DegradationKind(str, Enum):
     ``round_robin_fallback`` = Auswahl ohne Bezug zur Simulationsfrage, Grund
     steht in ``detail``). Ohne diesen Eintrag fehlte ein Akteur still."""
 
+    AGENT_CONFIG_RULE_FALLBACK = "agent_config_rule_fallback"
+    """Ein Agent der Simulationskonfiguration kam aus den Regel-Defaults statt
+    aus der Antwort des Modells (Issue #1779): fehlender Eintrag in der
+    Batch-Antwort oder ausgefallener Batch. Die Regel erfindet keine Haltung —
+    ohne Graph-Kante gilt ``neutral`` (nur Medien ``observer``). Ohne diesen
+    Eintrag liefe der Agent still als unentschieden mit Rate und Zeitfenster
+    eines Typ-Defaults."""
+
 
 class DegradationSeverity(str, Enum):
     """Wie schwer der Ausfall wiegt.

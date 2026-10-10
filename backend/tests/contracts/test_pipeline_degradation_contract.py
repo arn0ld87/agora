@@ -144,6 +144,7 @@ class TestEnumValues:
             "persona_role_implausible",
             "ontology_topic_type_missing",
             "entity_selection_actors_omitted",
+            "agent_config_rule_fallback",
         }
 
     def test_severity_values_are_stable(self):
