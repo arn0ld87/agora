@@ -415,6 +415,19 @@ jobs:
         working-directory: frontend
         run: bun run typecheck
 
+      # Issue #1672: Scope-/Skip-/Ratchet-Waechter vor dem Coverage-Lauf.
+      # Der Ratchet vergleicht gegen origin/main (flacher Fetch wie im Backend).
+      - name: Referenz main holen
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Coverage-Waechter testen (Issue #1672)
+        working-directory: frontend
+        run: bun test ./scripts/check-coverage-integrity.test.mjs
+
+      - name: Coverage-Integritaet und Ratchet pruefen (Issue #1672)
+        working-directory: frontend
+        run: bun scripts/check-coverage-integrity.mjs
+
       - name: Run frontend tests with coverage gate (M11.3)
         working-directory: frontend
         run: bun run test:coverage
@@ -622,6 +635,18 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: bun run typecheck
+
+      # Issue #1672: Scope-/Skip-/Ratchet-Waechter auf jedem PR.
+      - name: Referenz main holen
+        run: git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Coverage-Waechter testen (Issue #1672)
+        working-directory: frontend
+        run: bun test ./scripts/check-coverage-integrity.test.mjs
+
+      - name: Coverage-Integritaet und Ratchet pruefen (Issue #1672)
+        working-directory: frontend
+        run: bun scripts/check-coverage-integrity.mjs
 
       - name: Unit tests
         working-directory: frontend

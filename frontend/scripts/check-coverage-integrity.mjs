@@ -70,8 +70,6 @@ export function readActiveScope(configSource) {
   return { include, exclude }
 }
 
-const sorted = (items) => [...items].sort()
-
 function checkScope(configSource, baseline) {
   const errors = []
   const active = readActiveScope(configSource)
