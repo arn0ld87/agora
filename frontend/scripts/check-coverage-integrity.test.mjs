@@ -95,6 +95,16 @@ describe('Scope', () => {
     const result = checkIntegrity({ root, readBase: noBase })
     expect(result.errors.join('\n')).toContain('coverage.exclude darf nur String-Literale')
   })
+
+  test('Glob mit eckiger Klammer im Literal wird vollstaendig gelesen', () => {
+    const config = viteConfig().replace("'src/main.{js,ts}',", "'src/main.{js,ts}', 'src/[ab]/**',")
+    expect(config).toContain("'src/[ab]/**'")
+    setup({ config })
+    const result = checkIntegrity({ root, readBase: noBase })
+    const text = result.errors.join('\n')
+    expect(text).toContain('src/[ab]/**')
+    expect(text).not.toContain('darf nur String-Literale')
+  })
 })
 
 describe('Schwellen-Quelle', () => {
@@ -153,9 +163,12 @@ describe('Skip-Marker', () => {
   })
 
   test.each(['skipIf', 'runIf'])('%s wird erkannt', (kind) => {
-    setup({ files: { 'src/c.test.js': `it.${kind}(true)('x', () => {})\n` } })
-    const result = checkIntegrity({ root, readBase: noBase })
-    expect(result.errors.join('\n')).toContain(kind)
+    const files = { 'src/c.test.js': `it.${kind}(true)('x', () => {})\n` }
+    setup({ files })
+    expect(checkIntegrity({ root, readBase: noBase }).errors.join('\n')).toContain(kind)
+    // Der Allowlist-Schluessel ist der Marker ohne fuehrenden Punkt.
+    setup({ files, allowlist: { entries: [{ file: 'src/c.test.js', kind, count: 1, reason: 'bedingt' }] } })
+    expect(checkIntegrity({ root, readBase: noBase }).errors).toEqual([])
   })
 })
 

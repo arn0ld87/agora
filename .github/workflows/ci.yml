@@ -422,11 +422,11 @@ jobs:
 
       - name: Coverage-Waechter testen (Issue #1672)
         working-directory: frontend
-        run: bun test ./scripts/check-coverage-integrity.test.mjs
+        run: bun run test:coverage-integrity
 
       - name: Coverage-Integritaet und Ratchet pruefen (Issue #1672)
         working-directory: frontend
-        run: bun scripts/check-coverage-integrity.mjs
+        run: bun run coverage:integrity
 
       - name: Run frontend tests with coverage gate (M11.3)
         working-directory: frontend
@@ -642,11 +642,11 @@ jobs:
 
       - name: Coverage-Waechter testen (Issue #1672)
         working-directory: frontend
-        run: bun test ./scripts/check-coverage-integrity.test.mjs
+        run: bun run test:coverage-integrity
 
       - name: Coverage-Integritaet und Ratchet pruefen (Issue #1672)
         working-directory: frontend
-        run: bun scripts/check-coverage-integrity.mjs
+        run: bun run coverage:integrity
 
       - name: Unit tests
         working-directory: frontend

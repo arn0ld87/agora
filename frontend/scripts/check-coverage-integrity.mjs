@@ -30,7 +30,7 @@ const SCAN_EXT = /\.(?:[cm]?[jt]s|vue)$/
 const SKIP_PATTERNS = [
   /\b(?:it|test|describe)\.(?:skip|todo)\b/g,
   /\bx(?:it|test|describe)(?=\s*\()/g,
-  /\.(?:skipIf|runIf)\b/g,
+  /(?<=\.)(?:skipIf|runIf)\b/g,
 ]
 
 function readJson(path) {
@@ -45,11 +45,25 @@ function stringLiterals(text) {
   return out
 }
 
+/** Position der schliessenden Klammer; ein ] in einem String-Literal (Glob wie 'src/[ab]/**') zaehlt nicht. */
+function closingBracket(source, start) {
+  let quote = null
+  for (let i = start; i < source.length; i += 1) {
+    const ch = source[i]
+    if (quote) {
+      if (ch === '\\') i += 1
+      else if (ch === quote) quote = null
+    } else if (ch === "'" || ch === '"') quote = ch
+    else if (ch === ']') return i
+  }
+  return -1
+}
+
 function arrayAfter(source, key) {
   const keyMatch = new RegExp(`\\b${key}\\s*:\\s*\\[`).exec(source)
   if (!keyMatch) return null
   const start = keyMatch.index + keyMatch[0].length
-  const end = source.indexOf(']', start)
+  const end = closingBracket(source, start)
   if (end === -1) return null
   const body = source
     .slice(start, end)
