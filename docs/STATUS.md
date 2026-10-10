@@ -47,6 +47,8 @@ Zusätzliche aktuelle Nachweise:
 
 - **10.10.2026, UAT-003:** GraphML-Downloads in GraphCanvas und GraphReader übernehmen den bereits entpackten API-Blob direkt. Die Regression prüft mit echtem Axios-Interceptor XML-Inhalt und Downloadnamen für Einzelknoten, eine Beziehung und 12 Entitäten/15 Beziehungen; Fehlerantworten erzeugen keinen Download. Rücknahme des Fixes reproduziert Nullbyte-Dateien, Wiederanwendung erhält die XML-Bytes. Der erneute Live-UAT bleibt ausstehend.
 
+- **10.10.2026, UAT-007:** Die Interview-Seite validiert `contested_question` im Frontend-Config-Schema per Contract-Spiegel (`ContestedQuestionSchema`) statt als veralteten reinen String; das Contract-Objekt (seit #1778 kanonisch) parst ohne Pseudo-Fehler „Konfiguration: Antwort entspricht nicht dem Vertrag". Der reine String bleibt als Legacy-Form zugelassen, ein dritter Typ bleibt Vertragsverstoß. Regressionen laufen lokal grün (`bunx vitest run` für `useRunPersonas.spec.ts`); der erneute Live-UAT bleibt ausstehend.
+
 - **08.10.2026, #1670:** Ausnahmeschema und Checker erfassen Dependency-, Code- und Container-Quellen mit Evidence, Owner, Frist und dokumentierter Maintainerfreigabe. Der Supabase-CVE-Job leitet das vollständige Image-Inventar aus Compose ab und prüft HIGH/CRITICAL ohne Ignore-Unterdrückung gegen den Register-Gate. 48 gezielte Checker-/Workflow-Tests sind lokal grün; ein echter Stichtag-Scan mit Run-URL bleibt als Release-Nachweis erforderlich.
 
 - PR #1461 dokumentiert einen vollständigen Backend-Lauf mit **6177 passed, 8 skipped, 1 xfailed** nach der Budget-Reservierungs-Härtung.
