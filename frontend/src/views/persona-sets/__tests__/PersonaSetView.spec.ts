@@ -254,4 +254,168 @@ describe('PersonaSetView', () => {
     expect((wrapper.get(`[data-testid="${Id.editorName}"]`).element as HTMLInputElement).value).toBe('Person b')
     wrapper.unmount()
   })
+
+  // Abnahme Etappe 7 (Evidenzlücken): Bearbeiten, Sperre im Editor, Umbenennen,
+  // Tastatur und zugängliche Namen.
+  describe('Abnahme Etappe 7', () => {
+    it('Bearbeiten einer bestehenden Persona ruft updatePersonaSetEntry mit Satz, Eintrag und Profil auf', async () => {
+      api.updatePersonaSetEntry.mockResolvedValue(entry('b', 'manual', { name: 'Neuer Name', username: 'u_b' }))
+      const { wrapper } = await mountView()
+      const open = wrapper.findAll(`[data-testid="${Id.cardOpen}"]`)[1]
+      ;(open.element as HTMLButtonElement).focus()
+      await open.trigger('click')
+      await wrapper.get(`[data-testid="${Id.editorName}"]`).setValue('Neuer Name')
+      const form = document.body.querySelector<HTMLFormElement>(`[data-testid="${Id.editor}"] form`)
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushPromises()
+      expect(api.addPersonaSetEntry).not.toHaveBeenCalled()
+      expect(api.updatePersonaSetEntry).toHaveBeenCalledTimes(1)
+      const [setId, entryId, body] = api.updatePersonaSetEntry.mock.calls[0]
+      expect(setId).toBe('s1')
+      expect(entryId).toBe('b')
+      expect(body.profile.name).toBe('Neuer Name')
+      expect(body.profile.persona_kind).toBe('collective')
+      expect(body.origin).toBeUndefined()
+      expect(wrapper.find(`[data-testid="${Id.editor}"]`).exists()).toBe(false)
+      expect(document.activeElement).toBe(open.element)
+      wrapper.unmount()
+    })
+
+    async function deleteThirdEntry() {
+      api.deletePersonaSetEntries.mockResolvedValue({ removed_entry_ids: ['c'], set: {} })
+      const { wrapper } = await mountView()
+      await wrapper.findAll(`[data-testid="${Id.cardSelect}"]`)[2].setValue(true)
+      await wrapper.get(`[data-testid="${Id.deleteSelected}"]`).trigger('click')
+      await wrapper.get(`[data-testid="${Id.deleteConfirmYes}"]`).trigger('click')
+      await flushPromises()
+      return wrapper
+    }
+
+    it('Einzelnes Löschen über Auswahl und Rückfrage ruft deletePersonaSetEntries mit genau einer ID auf', async () => {
+      const wrapper = await deleteThirdEntry()
+      expect(api.deletePersonaSetEntries).toHaveBeenCalledWith('s1', ['c'])
+      expect(wrapper.findAll(`[data-testid="${Id.card}"]`)).toHaveLength(3)
+      wrapper.unmount()
+    })
+
+    it('Nach dem Löschen bleibt der Fokus in der Symbolleiste, obwohl der Löschknopf wieder deaktiviert ist', async () => {
+      const wrapper = await deleteThirdEntry()
+      expect(wrapper.get(`[data-testid="${Id.deleteSelected}"]`).attributes('disabled')).toBeDefined()
+      expect(document.activeElement).toBe(wrapper.get(`[data-testid="${Id.add}"]`).element)
+      wrapper.unmount()
+    })
+
+    it('Umbenennen sendet Name und Beschreibung an updatePersonaSet', async () => {
+      api.updatePersonaSet.mockResolvedValue({ ...setRecord(), name: 'Satz Zwei' })
+      const { wrapper } = await mountView()
+      await wrapper.get(`[data-testid="${Id.rename}"]`).trigger('click')
+      await wrapper.get(`[data-testid="${Id.nameInput}"]`).setValue('  Satz Zwei  ')
+      await wrapper.get(`[data-testid="${Id.nameSave}"]`).trigger('submit')
+      await flushPromises()
+      expect(api.updatePersonaSet).toHaveBeenCalledWith('s1', { name: 'Satz Zwei', description: 'Beschreibung' })
+      wrapper.unmount()
+    })
+
+    it('gesperrt: Duplizieren bleibt als Ausweg im Kopf und im Sperrhinweis erreichbar und führt auf die Kopie', async () => {
+      api.getPersonaSet.mockResolvedValue(setRecord(true))
+      api.duplicatePersonaSet.mockResolvedValue({ ...setRecord(), id: 's3' })
+      const { wrapper, router } = await mountView()
+      const lockDuplicate = wrapper.get<HTMLButtonElement>(`[data-testid="${Id.lockDuplicate}"]`)
+      expect(wrapper.get(`[data-testid="${Id.duplicate}"]`).attributes('disabled')).toBeUndefined()
+      expect(lockDuplicate.attributes('disabled')).toBeUndefined()
+      expect(lockDuplicate.text()).toBe('Duplizieren und bearbeiten')
+      expect(wrapper.get(`[data-testid="${Id.lockNotice}"]`).attributes('role')).toBe('status')
+      await lockDuplicate.trigger('click')
+      await flushPromises()
+      expect(api.duplicatePersonaSet).toHaveBeenCalledWith('s1', { name: 'Satz Eins (Kopie)' })
+      expect(router.currentRoute.value.params.setId).toBe('s3')
+      wrapper.unmount()
+    })
+
+    it('gesperrt: der Editor öffnet nur lesbar, nennt den Grund und speichert nicht', async () => {
+      api.getPersonaSet.mockResolvedValue(setRecord(true))
+      const { wrapper } = await mountView()
+      await wrapper.findAll(`[data-testid="${Id.cardOpen}"]`)[0].trigger('click')
+      expect(wrapper.get(`[data-testid="${Id.editorLockedReason}"]`).text()).toContain('Gesperrt')
+      expect(wrapper.get(`[data-testid="${Id.editorName}"]`).attributes('readonly')).toBeDefined()
+      expect(wrapper.get(`[data-testid="${Id.editorUsername}"]`).attributes('readonly')).toBeDefined()
+      const form = document.body.querySelector<HTMLFormElement>(`[data-testid="${Id.editor}"] form`)
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flushPromises()
+      expect(api.updatePersonaSetEntry).not.toHaveBeenCalled()
+      expect(api.addPersonaSetEntry).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('Tastatur: Escape schließt den Editor ohne Änderung, mit Änderung fragt er erst nach und Escape bricht die Rückfrage ab', async () => {
+      const { wrapper } = await mountView()
+      const open = wrapper.findAll(`[data-testid="${Id.cardOpen}"]`)[0]
+      ;(open.element as HTMLButtonElement).focus()
+      await open.trigger('click')
+      await wrapper.get(`[data-testid="${Id.editor}"]`).trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      expect(wrapper.find(`[data-testid="${Id.editor}"]`).exists()).toBe(false)
+      expect(document.activeElement).toBe(open.element)
+
+      await open.trigger('click')
+      await wrapper.get(`[data-testid="${Id.editorName}"]`).setValue('Geändert')
+      await wrapper.get(`[data-testid="${Id.editor}"]`).trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      expect(wrapper.find(`[data-testid="${Id.editor}"]`).exists()).toBe(true)
+      expect(wrapper.find(`[data-testid="${Id.editorConfirm}"]`).exists()).toBe(true)
+      await wrapper.get(`[data-testid="${Id.editor}"]`).trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      expect(wrapper.find(`[data-testid="${Id.editorConfirm}"]`).exists()).toBe(false)
+      expect(wrapper.find(`[data-testid="${Id.editor}"]`).exists()).toBe(true)
+      expect(api.updatePersonaSetEntry).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('Tastatur: Escape im Umbenennen-Formular verwirft die Eingabe und gibt den Fokus an den Umbenennen-Knopf', async () => {
+      const { wrapper } = await mountView()
+      await wrapper.get(`[data-testid="${Id.rename}"]`).trigger('click')
+      const input = wrapper.get(`[data-testid="${Id.nameInput}"]`)
+      await input.setValue('Verworfen')
+      await input.trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      expect(wrapper.find(`[data-testid="${Id.nameInput}"]`).exists()).toBe(false)
+      expect(api.updatePersonaSet).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(wrapper.get(`[data-testid="${Id.rename}"]`).element)
+      wrapper.unmount()
+    })
+
+    it('zugängliche Namen: Symbolleiste, Kartenliste, Auswahlfelder und Rückfrage sind benannt', async () => {
+      const { wrapper } = await mountView()
+      expect(wrapper.get('[role="toolbar"]').attributes('aria-label')).toBe('Aktionen für Personas')
+      expect(wrapper.get(`[data-testid="${Id.cards}"]`).attributes('aria-label')).toBe('Personas')
+      const labels = wrapper.findAll(`[data-testid="${Id.cardSelect}"]`).map((b) => b.attributes('aria-label'))
+      expect(labels).toEqual(['Person a auswählen', 'Person b auswählen', 'Person c auswählen', 'Person d auswählen'])
+      expect(wrapper.get(`[data-testid="${Id.add}"]`).text()).toBe('+ Persona')
+      await wrapper.findAll(`[data-testid="${Id.cardSelect}"]`)[0].setValue(true)
+      expect(wrapper.get(`[data-testid="${Id.deleteSelected}"]`).text()).toBe('Löschen (1)')
+      await wrapper.get(`[data-testid="${Id.deleteSelected}"]`).trigger('click')
+      const dialog = wrapper.get(`[data-testid="${Id.deleteConfirm}"]`)
+      expect(dialog.attributes('role')).toBe('alertdialog')
+      expect(dialog.attributes('aria-label')).toBe('Löschen bestätigen')
+      expect(wrapper.get(`[data-testid="${Id.deleteConfirmYes}"]`).text()).toBe('Endgültig löschen')
+      expect(wrapper.get(`[data-testid="${Id.deleteConfirmNo}"]`).text()).toBe('Abbrechen')
+      wrapper.unmount()
+    })
+
+    it('zugängliche Namen: Editor ist ein modaler Dialog mit Titel, Tabliste und Abschnittsnavigation', async () => {
+      const { wrapper } = await mountView()
+      await wrapper.findAll(`[data-testid="${Id.cardOpen}"]`)[1].trigger('click')
+      const dialog = wrapper.get(`[data-testid="${Id.editor}"]`)
+      expect(dialog.attributes('role')).toBe('dialog')
+      expect(dialog.attributes('aria-modal')).toBe('true')
+      const titleId = dialog.attributes('aria-labelledby')!
+      expect(document.getElementById(titleId)?.textContent).toContain('Persona bearbeiten: Person b')
+      expect(wrapper.find('[role="tablist"]').exists()).toBe(true)
+      expect(wrapper.get('nav').attributes('aria-label')).toBe('Abschnitte der Persona')
+      const tabs = wrapper.findAll(`[data-testid="${Id.editorTab}"]`)
+      expect(tabs).toHaveLength(5)
+      expect(tabs.filter((t) => t.attributes('aria-selected') === 'true')).toHaveLength(1)
+      wrapper.unmount()
+    })
+  })
 })
