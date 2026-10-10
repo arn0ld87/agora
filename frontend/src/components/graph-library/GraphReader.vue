@@ -180,6 +180,9 @@ async function exportGraphml(): Promise<void> {
   try {
     // The API interceptor already unwraps the Blob; reading .data again loses its bytes.
     const blob = await exportGraphMl(props.graphData.graph_id)
+    if (!(blob instanceof Blob) || blob.size === 0) {
+      throw new Error('GraphML export was empty')
+    }
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

@@ -45,7 +45,7 @@ Die Testzähler in diesem Markerblock werden **nur durch `scripts/sync-status.sh
 
 Zusätzliche aktuelle Nachweise:
 
-- **10.10.2026, UAT-003:** GraphML-Downloads in GraphCanvas und GraphReader übernehmen den bereits entpackten API-Blob direkt. Die Regression prüft mit echtem Axios-Interceptor XML-Inhalt und Downloadnamen für Einzelknoten, eine Beziehung und 12 Entitäten/15 Beziehungen; Fehlerantworten erzeugen keinen Download. Rücknahme des Fixes reproduziert Nullbyte-Dateien, Wiederanwendung erhält die XML-Bytes. Der erneute Live-UAT bleibt ausstehend.
+- **10.10.2026, UAT-003:** GraphML-Downloads in GraphCanvas und GraphReader übernehmen den bereits entpackten API-Blob direkt. Die Regression prüft mit echtem Axios-Interceptor XML-Inhalt und Downloadnamen für Einzelknoten, eine Beziehung und 12 Entitäten/15 Beziehungen; Fehlerantworten erzeugen keinen Download. Rücknahme des Fixes reproduziert Nullbyte-Dateien, Wiederanwendung erhält die XML-Bytes. Zusätzlich fangen beide Export-Trigger leere oder Blob-fremde Antworten mit einem Guard ab, der sichtbar fehlschlägt, statt eine Nullbyte-Datei abzulegen. Der erneute Live-UAT bleibt ausstehend.
 
 - **08.10.2026, #1670:** Ausnahmeschema und Checker erfassen Dependency-, Code- und Container-Quellen mit Evidence, Owner, Frist und dokumentierter Maintainerfreigabe. Der Supabase-CVE-Job leitet das vollständige Image-Inventar aus Compose ab und prüft HIGH/CRITICAL ohne Ignore-Unterdrückung gegen den Register-Gate. 48 gezielte Checker-/Workflow-Tests sind lokal grün; ein echter Stichtag-Scan mit Run-URL bleibt als Release-Nachweis erforderlich.
 
