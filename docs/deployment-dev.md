@@ -202,6 +202,15 @@ Beispiel auf Linux:
 sudo chown -R "$USER":"$(id -gn)" backend/.cache
 ```
 
+Umgekehrt gilt: **fehlt** ein Bind-Mount-Quellverzeichnis im Klon, legt der Docker-Daemon (auf Linux, nicht auf Docker Desktop/macOS) es host-seitig als `root:root` an — der Container-User (uid 1000) kann dann nicht hineinschreiben. Deshalb liegen die Quellverzeichnisse mit einem `.gitkeep` im Repo (`backend/data/.gitkeep`, `backend/.cache/huggingface/.gitkeep`); der Klon besitzt sie mit der UID des Klonenden. Der Fall ist sonst nur container-seitig sichtbar (`PermissionError` auf `/home/agora/.cache/huggingface/hub`, `TwhinCacheError` beim Simulationsstart), weil der Cache-Pfad im Container heißt wie der Mount-Punkt. Reparatur auf dem Host:
+
+```bash
+sudo chown -R 1000:1000 backend/.cache/huggingface
+```
+
+Ein `chown` **im** Container hilft nicht: der Stack läuft mit `cap_drop: ALL` und `no-new-privileges` (siehe `docker-compose.yml`), ein `docker exec -u 0` hat kein `CAP_CHOWN`.
+
+
 ---
 
 ## 6. Tests und Gates

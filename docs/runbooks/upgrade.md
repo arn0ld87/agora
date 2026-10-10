@@ -79,6 +79,16 @@ Nicht jede neue persistierte Ablage gehört zu `0.9.x → 0.10` oder `0.10 → 1
 - **Aufräumen:** Bei einem Fehler entfernt der Job Zielgraph und Zielprojekt selbst. Ein Prozess-Neustart während des Jobs lässt die Teilkopie stehen (der Job steht danach auf `failed/process_restart`); sie lässt sich über `DELETE /api/graph/delete/<graph_id>` (Graph) und `DELETE /api/graph/project/<project_id>` (Projekt) entfernen, die Kennungen stehen im Job (`GET /api/runs/<run_id>`, `linked_ids`).
 - **Rollback-Implikation:** Ältere Versionen kennen den Run-Typ `graph_duplicate` nicht und zeigen ihn als unbekannten Job; die kopierten Projekte und Graphen sind gewöhnliche Projekte und Graphen und bleiben benutzbar.
 
+**HuggingFace-Cache-Verzeichnis im Repository** (TwhinCacheError auf gns3, 2026-10-10). `backend/.cache/huggingface/` ist Bind-Mount-Quelle für `/home/agora/.cache/huggingface` (`docker-compose.yml`) und liegt jetzt mit einem `.gitkeep` getrackt im Repo — die `.gitignore`-Regel `backend/.cache/` wurde dafür auf `backend/.cache/*` plus zwei Ausnahmen umgestellt. Der Cache-Inhalt selbst bleibt ignoriert.
+
+- **Upgrade:** Auf einem frischen Klon kein Schritt nötig. Bestehende Deployments, in denen der Docker-Daemon das Verzeichnis bereits als `root:root` angelegt hat, scheitern beim nächsten `git pull` einmalig an der neuen Platzhalterdatei (`EACCES`); vorher räumen oder umschreiben:
+  ```bash
+  sudo rm -rf backend/.cache/huggingface    # regenerierbarer Cache, ~1,1 GB Nachladen
+  sudo chown -R 1000:1000 backend/.cache/huggingface   # Alternative ohne Cache-Verlust
+  ```
+  Ohne den Schritt bleibt der Simulationsstart auf einem Linux-Host mit `TwhinCacheError` stehen, weil der Container-User (uid 1000) im Verzeichnis nicht schreiben kann. Im Container hilft kein `chown` — der Stack läuft mit `cap_drop: ALL`.
+- **Rollback-Implikation:** Ältere Stände kennen die Platzhalterdatei nicht und ignorieren sie; sie mounten weiter dasselbe Verzeichnis. Ein Revert der `.gitignore`-Regel lässt den Cache-Inhalt erneut ignoriert, verliert aber das Verzeichnis aus dem Klon — der ursprüngliche Fehler kommt dann zurück.
+
 ## Env-Default-Änderungen außerhalb des Versionssprungs
 
 Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0` — dieser Abschnitt sammelt Env-Defaults, die ein PR unabhängig vom Postgres-Umstieg eingeführt hat (AGENTS.md, Abschnitt „Arbeitsweise“, Punkt 6).

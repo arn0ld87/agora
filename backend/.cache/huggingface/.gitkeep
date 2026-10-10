@@ -1,0 +1,8 @@
+# Placeholder — Bind-Mount-Quellpfad des HuggingFace-Caches
+# (docker-compose.yml: ./backend/.cache/huggingface -> /home/agora/.cache/huggingface).
+# Das Verzeichnis muss im Klon existieren: fehlt es, legt der Docker-Daemon den
+# Bind-Mount-Source host-seitig als root:root an, und der Container-User
+# (uid 1000) kann Twitter/twhin-bert-base nicht dorthin schreiben -> TwhinCacheError.
+# Der Besitz muss uid 1000 sein: ein Checkout als root oder fremder UID braucht
+# host-seitig chown/setfacl (docs/runbooks/ghcr-deploy.md, Schritt 3).
+# Alles andere unter backend/.cache/ bleibt ignoriert (siehe .gitignore).

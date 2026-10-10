@@ -124,8 +124,16 @@ backend/logs/
 # Lokal hilfreich zum Debuggen, aber nie einchecken.
 .ci-trace/
 
-# Persistent caches mounted into the agora container
-backend/.cache/
+# Persistent caches mounted into the agora container.
+# Ausnahme: der Bind-Mount-Quellpfad backend/.cache/huggingface bleibt mit einem
+# .gitkeep getrackt (analog zu backend/data/.gitkeep). Fehlt das Verzeichnis im
+# Klon, erzeugt der Docker-Daemon es host-seitig als root:root, und der
+# Container-User (uid 1000) kann den HF-Cache nicht schreiben (TwhinCacheError).
+# Alles andere unter backend/.cache/ bleibt ignoriert.
+backend/.cache/*
+!backend/.cache/huggingface/
+backend/.cache/huggingface/*
+!backend/.cache/huggingface/.gitkeep
 
 # Runtime artifacts and local instances
 /instance/

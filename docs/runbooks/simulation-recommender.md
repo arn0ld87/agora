@@ -79,6 +79,17 @@ an — auch wenn der Checkpoint längst lokal vorliegt.
   des 256-MB-`tmpfs` unter `/home/agora/.cache`. `HF_HOME` zeigt seit diesem
   Slice explizit dorthin — unabhängig vom (im OASIS-Subprozess teils
   isolierten) `$HOME`.
+- **Schreibrechte am Cache:** Das Quellverzeichnis liegt mit
+  `backend/.cache/huggingface/.gitkeep` im Repo, damit jeder Klon es besitzt.
+  Existiert es im Klon **nicht**, legt der Docker-Daemon es host-seitig als
+  `root:root` an; der Container-User (uid 1000) kann dann keine Blobs
+  schreiben, `ensure_twhin_cache()` bricht mit `TwhinCacheError` ab, und die
+  Hub-Warnungen davor (`Fetching 8 files: 100%`, `EACCES` auf `refs/`,
+  `trees/`) sind irreführend — im Cache landet nichts. Reparatur host-seitig:
+  `sudo chown -R 1000:1000 backend/.cache/huggingface`. Im Container hilft
+  kein `chown`: der Stack läuft mit `cap_drop: ALL`. Details:
+  [`../deployment-dev.md`](../deployment-dev.md), Abschnitt „Bind-Mount-Rechte".
+
 - **Warmup + Offline:** `ensure_twhin_cache()`
   (`backend/scripts/_sim_common.py`, aufgerufen aus
   `install_bert_memory_profile`, das alle drei Runner-Skripte ohnehin vor dem
