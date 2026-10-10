@@ -40,6 +40,12 @@ Die Heuristik greift in compute_confidence automatisch, sobald mindestens
 zusätzlich zum extern übergebenen contradiction_penalty aufaddiert.
 compute_claim_confidence() ist die erweiterte Variante für Aufrufer,
 die applied_penalties auswerten wollen.
+
+#1778 Medium-Regel: Unabhängigkeit hängt an der Stimme (``voice_key``). Zwei
+Aktionsbelege (``agent_action``) verschiedener Stimmen heben den
+Ein-Quellen-Deckel 0.59; reine Aktionsbelege bleiben bei höchstens 0.84, also
+nie ``high``/``verified``. Das Label ``medium`` in der Berichtspipeline ist
+ADR-0002-seitig geregelt (siehe ``docs/decisions/0002-supersedes.md``).
 """
 
 from __future__ import annotations
@@ -76,6 +82,12 @@ _CONTRADICTION_RANGE_HIGH: float = 0.3
 _GENERIC_ENTITY_TYPES: frozenset[str] = frozenset(
     {"person", "organization", "entity", "node", "unknown", "other"}
 )
+
+#: #1778: Belegtyp der Simulationsbeiträge (Aktionsstimmen).
+_ACTION_EVIDENCE_TYPE: str = "agent_action"
+#: #1778: Obergrenze für reine Aktionsbelege mehrerer Stimmen — knapp unter der
+#: high-Schwelle 0.85. Eigene Konstante, nicht an ``_ECHO_CAP_MAX_SCORE`` gekoppelt.
+_ACTION_VOICES_MAX_SCORE: float = 0.84
 
 
 def _has_contradiction(sentiment_scores: List[float]) -> bool:
@@ -213,6 +225,28 @@ def _apply_single_source_cap(
     return score
 
 
+def _apply_action_voices_ceiling(score: float, evidence: List[Dict[str, Any]]) -> float:
+    """Deckelt reine Aktionsbelege mehrerer Stimmen unter die high-Schwelle (#1778).
+
+    D-01: Zwei Aktionsbelege verschiedener Stimmen gelten über
+    ``_independence_key`` als quasi-unabhängige Quellen und heben den
+    Ein-Quellen-Deckel. D-02: Allein aus Aktionsstimmen entsteht trotzdem nie
+    ``high`` oder ``verified`` — ein Aktionsbeleg ist nie ``agent_quote`` und
+    kann Anker 4 (``cross_stakeholder_for_high``) nie erfüllen.
+
+    Gemischte Evidence und Belege ohne ``voice_key`` bleiben unberührt. Die
+    Vertragsvalidatoren werden dadurch weder ersetzt noch verändert.
+    """
+    if not evidence:
+        return score
+    if any(str(e.get("type") or "") != _ACTION_EVIDENCE_TYPE for e in evidence):
+        return score
+    voices = {str(e["voice_key"]) for e in evidence if e.get("voice_key")}
+    if len(voices) < 2:
+        return score
+    return min(score, _ACTION_VOICES_MAX_SCORE)
+
+
 def partition_by_entailment(evidence: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """Teilt Evidence in (stützend, widersprechend, nur verwandt).
 
@@ -302,6 +336,7 @@ def _compute_confidence_with_penalties(
     score = _apply_single_source_cap(
         score, unique_sources=unique_sources, has_strong_match=has_strong_match
     )
+    score = _apply_action_voices_ceiling(score, evidence)
 
     # Task 08: Medium-Cap — kein Claim darf "high" sein, wenn alle
     # match_scores unter 0.55 liegen.
