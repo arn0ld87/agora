@@ -56,7 +56,26 @@ docker pull ghcr.io/arn0ld87/agora-proxy:edge
    gh attestation verify oci://ghcr.io/arn0ld87/agora-proxy:$AGORA_IMAGE_TAG --repo arn0ld87/agora
    ```
 
-3. **Ziehen und starten.** Das Overlay `deploy/compose/docker-compose.ghcr.yml` kommt als **letztes** `-f`, damit `build: !reset` die `build`-Blöcke der vorherigen Dateien entfernt. Es definiert nginx nicht selbst, deshalb muss vorher ein Overlay stehen, das den Service anlegt (`deploy/compose/docker-compose.prod-with-proxy.yml` oder ein Host-Overlay):
+3. **Bind-Mount-Quellverzeichnisse vorbereiten.** Die Compose-Dateien binden
+   `./backend/data`, `./backend/instance`, `./backend/uploads` und
+   `./backend/.cache/huggingface` aus dem Arbeitsverzeichnis ein. Ein frischer
+   Klon bringt sie mit (getrackte `.gitkeep`-Platzhalter), ein älterer Bestand
+   möglicherweise nicht: fehlt ein Quellverzeichnis, legt der Docker-Daemon es
+   als `root:root` an, und der Container-User (uid 1000) kann nicht
+   hineinschreiben — Symptome sind `PermissionError` auf
+   `/home/agora/.cache/huggingface/hub` bzw. `TwhinCacheError` beim
+   Simulationsstart. Vor dem Start prüfen und reparieren:
+
+   ```bash
+   ls -ld backend/.cache/huggingface backend/data backend/instance backend/uploads
+   sudo chown -R 1000:1000 backend/.cache/huggingface   # nur falls root:root
+   ```
+
+   Im Container hilft kein `chown` — der Stack läuft mit `cap_drop: ALL`.
+   Details: [`../deployment-dev.md`](../deployment-dev.md), Abschnitt
+   „Bind-Mount-Rechte".
+
+4. **Ziehen und starten.** Das Overlay `deploy/compose/docker-compose.ghcr.yml` kommt als **letztes** `-f`, damit `build: !reset` die `build`-Blöcke der vorherigen Dateien entfernt. Es definiert nginx nicht selbst, deshalb muss vorher ein Overlay stehen, das den Service anlegt (`deploy/compose/docker-compose.prod-with-proxy.yml` oder ein Host-Overlay):
 
    ```bash
    COMPOSE="docker compose \
@@ -74,7 +93,7 @@ docker pull ghcr.io/arn0ld87/agora-proxy:edge
 
    Weitere Overlays wie `deploy/compose/docker-compose.codex-cli.yml` oder das Host-Overlay stehen **vor** dem GHCR-Overlay. Die Reihenfolge der übrigen Dateien bleibt, wie sie ist.
 
-4. **Verifizieren:**
+5. **Verifizieren:**
 
    ```bash
    docker inspect agora --format '{{.Config.Image}}'
@@ -85,7 +104,7 @@ docker pull ghcr.io/arn0ld87/agora-proxy:edge
 
 ## Rollback
 
-`AGORA_IMAGE_TAG` auf den vorherigen `sha-<7>`-Tag setzen, dann Schritt 3 wiederholen. Es wird nichts gebaut, der Rollback dauert so lange wie der Pull.
+`AGORA_IMAGE_TAG` auf den vorherigen `sha-<7>`-Tag setzen, dann Schritt 4 wiederholen. Es wird nichts gebaut, der Rollback dauert so lange wie der Pull.
 
 Datenmigrationen macht das nicht rückgängig. Hat der neue Stand eine Alembic-Revision angewendet, gelten die Rückwege aus dem jeweiligen Umstellungs-Runbook.
 
@@ -95,6 +114,6 @@ Das GHCR-Overlay weglassen und mit `--build` starten wie bisher. Das ist auch de
 
 ## Grenzen
 
-- Auf `main` ist das Gate Build plus Trivy, nicht der End-to-End-Smoke. Ein Image kann sauber bauen und trotzdem nicht starten. Deshalb den Health-Check aus Schritt 4 nicht auslassen und den vorherigen Tag für den Rollback notieren.
+- Auf `main` ist das Gate Build plus Trivy, nicht der End-to-End-Smoke. Ein Image kann sauber bauen und trotzdem nicht starten. Deshalb den Health-Check aus Schritt 5 nicht auslassen und den vorherigen Tag für den Rollback notieren.
 - Host-spezifische Build-Args außer den Dockerfile-Defaults werden ignoriert, weil nichts gebaut wird.
 - Die Images sind öffentlich. Sie enthalten keine Secrets. Konfiguration und Schlüssel kommen weiter aus `.env` und den Mounts des Hosts.
