@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import os
 import uuid
+
+import pytest
 from unittest.mock import MagicMock, patch
 
 from app.models.report import Report, ReportOutline, ReportSection, ReportStatus
@@ -168,25 +170,17 @@ def test_mark_fallback_outline_used_sets_the_event_flag():
     assert events_for(agent).fallback_outline_used is True
 
 
-def test_plan_outline_marks_fallback_outline_used_on_planning_failure():
-    """``plan_outline`` muss den Rückfallpfad am Agenten markieren — sonst
-    weiss der spätere Bericht nichts von der Ersatz-Gliederung."""
+def test_planning_failure_is_not_marked_as_a_fallback():
     from app.services.report_agent.planning import plan_outline
 
     agent = MagicMock()
     agent.graph_id = "graph_test"
     agent.simulation_requirement = "Test requirement"
-    agent.graph_tools.get_simulation_context.return_value = {
-        "graph_statistics": {"total_nodes": 0, "total_edges": 0, "entity_types": {}},
-        "total_entities": 0,
-        "related_facts": [],
-    }
+    agent.graph_tools.get_simulation_context.return_value = {}
     agent.llm.chat_json.side_effect = RuntimeError("LLM nicht erreichbar")
-
-    outline = plan_outline(agent)
-
-    assert len(outline.sections) == 3  # festes Ersatzschema
-    assert events_for(agent).fallback_outline_used is True
+    with pytest.raises(RuntimeError, match="LLM nicht erreichbar"):
+        plan_outline(agent)
+    assert events_for(agent).fallback_outline_used is False
 
 
 def test_fallback_outline_warning_does_not_downgrade_status_alone(tmp_path):

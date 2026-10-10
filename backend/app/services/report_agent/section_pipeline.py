@@ -35,9 +35,15 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from ...contracts.report_contract import ReportSectionKind
 from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode
 from ...utils.logger import get_logger
 from .evidence import validate_quote_anchors
+from .section_kinds import (
+    coerce_section_kind,
+    legacy_kind_for_quotes,
+    section_kind_expects_quotes,
+)
 from .manager import ReportManager
 from .output_contract import is_fallback_content
 from .postprocess_timing import PostprocessPhaseTracker
@@ -50,30 +56,18 @@ from .text_verification import verify_prose
 
 logger = get_logger('agora.report_agent')
 
-# M11.8e — Section-Typen, die Persona-Zitate enthalten können/sollen.
-# Für diese Sections wird validate_quote_anchors mit strict-Repair-Retry ausgeführt.
-# Meta-Sections (Plan, Executive Summary, Datenlücken) sind ausgenommen.
-_QUOTE_REQUIRED_SECTION_KEYWORDS = frozenset({
-    "persona",
-    "personas",
-    "zielgrupp",
-    "segment",
-    "multipli",
-    "multiplier",
-    "friction",
-    "reibung",
-    "trust",
-    "vertrauen",
-    "interview",
-    "reaktion",
-    "reaction",
-})
+def _section_expects_quotes(section_title: str, section_kind: str | None = None) -> bool:
+    """Gibt True zurück wenn der Abschnittstyp Persona-Zitate erwarten lässt.
 
-
-def _section_expects_quotes(section_title: str) -> bool:
-    """Gibt True zurück wenn der Abschnittstyp Persona-Zitate erwarten lässt."""
-    lower = section_title.lower()
-    return any(kw in lower for kw in _QUOTE_REQUIRED_SECTION_KEYWORDS)
+    #1832: Massgeblich ist der stabile ``section_kind`` (ReportSectionKind) aus
+    der modellgeplanten Outline — der Titel ist frei formuliert. Nur für
+    Bestandsdaten ohne spezifische Rolle (``generic``) greift die historische
+    Titel-Keyword-Heuristik; beides lebt in :mod:`.section_kinds`.
+    """
+    kind = coerce_section_kind(section_kind)
+    if kind is ReportSectionKind.generic:
+        kind = legacy_kind_for_quotes(section_title)
+    return section_kind_expects_quotes(kind)
 
 
 @dataclass
@@ -374,7 +368,7 @@ def _validate_quotes_with_repair(
     des Artefakts sah damit nicht, welcher Beleg zitiert, aber nie gebunden
     wurde — genau die Information, die den ``incomplete``-Status erklärt.
     """
-    if not _section_expects_quotes(section.title) or ctx.report_mode == "explorative":
+    if not _section_expects_quotes(section.title, getattr(section, "kind", None)) or ctx.report_mode == "explorative":
         return content, False, []
 
     evidence_map_for_validation = agent.evidence_map or {}

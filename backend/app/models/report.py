@@ -25,16 +25,20 @@ class ReportStatus(str, Enum):
 
 @dataclass
 class ReportSection:
-    """Report section"""
+    """Represents a section in the report"""
     title: str
     content: str = ""
     description: str = ""
+    # #1832: stabile semantische Rolle (ReportSectionKind-Wert). Der Titel ist
+    # frei formuliert; Consumer (DTO-Auswahl, Zitat-Validierung) lesen den Kind.
+    kind: str = "generic"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "title": self.title,
             "content": self.content,
             "description": self.description,
+            "kind": self.kind,
         }
 
     def to_markdown(self, level: int = 2) -> str:
