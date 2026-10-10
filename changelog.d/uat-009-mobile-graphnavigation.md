@@ -1,0 +1,3 @@
+# UAT-009 — Mobile Graphansicht ohne Überlagerung
+
+Bei 400 px lief der lange Lauf-Crumb unter die Topbar-Aktionen hinaus und wurde von ihnen übermalt; die Breadcrumb-Kette kürzt jetzt an der verfügbaren Breite mit Ellipsis (`Breadcrumbs.vue`, CSS-Only). Bei ≤1023 px reiht der GraphReader die Netzansicht vor die Filter-/Entitätenspalte (`GraphReader.vue`, `order` im bestehenden Mobile-Stack). Die Entitätenliste bleibt darunter mit interner Scroll-Höhe.
