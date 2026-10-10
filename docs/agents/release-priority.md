@@ -6,7 +6,7 @@
 
 ## Nächste Arbeit
 
-1. **Frontend-Coverage (#1672):** letztes Vor-Freeze-Gate mit Implementierungsbedarf.
+1. **Frontend-Coverage (#1672):** gelandet. Baseline 83,57 % Line / 73,32 % Branch in `frontend/coverage-baseline.json`, Scope-, Skip- und Ratchet-Wächter auf jedem PR. Kein Vor-Freeze-Gate mit Implementierungsbedarf mehr offen.
 2. **Ausnahmeregister (#1670):** Implementierung ist gelandet (#1817); ausstehend ist nur noch der operative Nachweis — der erste tatsächliche Stichtag-Scan vor `0.10.0-rc.1` mit Rohberichten als CI-Artefakten (Runbook: `docs/security-hardening.md`).
 3. **Frontend-Umbau #1790, operativer Rest:** Docker-e2e für die Satz-Bibliothek (Etappe 7), Verifikation der Graph-Schreibpfade gegen eine echte Neo4j (Etappe 8), Bauplan-Punkt 11f (Reiter „Personas" am Lauf).
 4. **Operative Abnahme #1592:** produktiver Metadaten-Cutover ist dokumentiert; formale Beobachtungs-/Drill-Nachweise und echter Embedding-Modellwechsel bleiben offen. Hostzugriff ist nötig.

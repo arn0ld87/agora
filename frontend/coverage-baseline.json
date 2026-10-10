@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Frontend-Coverage-Baseline und Ratchet (Issue #1672), Gegenstueck zu",
+    "backend/coverage-baseline.json. vite.config.js liest line_min/branch_min",
+    "von hier (thresholds.lines/branches); functions/statements bleiben dort bei 28.",
+    "",
+    "Die Schwellen liegen je einen Prozentpunkt unter dem gemessenen Wert. Das ist",
+    "Puffer fuer Umgebungsunterschiede (Bun-/Node-/V8-Version, Laufzeit-Jitter),",
+    "kein Spielraum zum Absinken. Wer neuen Code ohne Tests einbringt, soll rot werden.",
+    "Nach einem echten Anstieg der Messwerte die Schwellen mit anheben (nie nach unten).",
+    "",
+    "Geprueft von",
+    "  bun run coverage:integrity",
+    "(frontend/scripts/check-coverage-integrity.mjs), ohne Coverage-Lauf:",
+    "- Der aktive Scope (coverage.include/exclude in vite.config.js) ist identisch",
+    "  mit dem Soll-Scope unter \"scope\" unten. Neue exclude-Muster oder ein engeres",
+    "  include fallen durch.",
+    "- Skip-Marker (it.skip, test.skip, describe.skip, .todo, xit, xdescribe,",
+    "  skipIf, runIf) in src/ und tests/ nur mit Eintrag in",
+    "  coverage-skip-allowlist.json (Datei, Art, Anzahl, Begruendung). Veraltete",
+    "  Eintraege lassen das Gate rot werden.",
+    "- Ratchet gegen origin/main: line_min/branch_min sinken nicht, der Soll-Scope",
+    "  wird nicht weiter. Eine Absenkung braucht lowering_approval = {approved_by,",
+    "  reason, line_min und/oder branch_min} mit Freigabe des Maintainers; sie gilt",
+    "  nur bis zu den genannten Werten. Existiert die Datei auf origin/main noch",
+    "  nicht (Erstanlage), wird der Ratchet uebersprungen."
+  ],
+  "measured": {
+    "line": 84.57,
+    "branch": 74.32,
+    "statements": 82.65,
+    "functions": 79.99,
+    "measured_at": "2026-10-10",
+    "command": "bun run test:coverage (= vitest run --coverage, Provider v8)",
+    "bun_version": "1.3.14",
+    "test_files": 334,
+    "ci_run_id": "38063469476",
+    "ci_job_id": "114246258637",
+    "commit_sha": "9cc4afd3e0178fcc705e6d6aaa3d5bf81ae3c981"
+  },
+  "line_min": 83.57,
+  "branch_min": 73.32,
+  "lowering_approval": null,
+  "scope": {
+    "include": [
+      "src/**/*.{js,ts,vue}"
+    ],
+    "exclude": [
+      "src/**/*.{test,spec}.{js,ts}",
+      "src/**/__mocks__/**",
+      "src/main.{js,ts}",
+      "src/router/**",
+      "src/types/**"
+    ]
+  }
+}

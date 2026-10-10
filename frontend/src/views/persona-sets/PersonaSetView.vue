@@ -44,6 +44,7 @@ const announcement = ref('')
 const duplicateError = ref<string | null>(null)
 const duplicating = ref(false)
 const deleteButton = ref<HTMLButtonElement | null>(null)
+const addButton = ref<HTMLButtonElement | null>(null)
 
 const issuesByEntry = computed(() => {
   const map = new Map<string, readonly PersonaSetQualityIssue[]>()
@@ -99,7 +100,10 @@ async function confirmDelete(): Promise<void> {
     void loadQuality()
   }
   await nextTick()
-  deleteButton.value?.focus()
+  // Nach erfolgreichem Löschen ist die Auswahl leer und der Löschknopf deaktiviert;
+  // ein deaktivierter Knopf nimmt keinen Fokus an, der Fokus fiele auf <body>.
+  const target = deleteButton.value?.disabled ? addButton.value : deleteButton.value
+  target?.focus()
 }
 
 function openNew(): void {
@@ -209,7 +213,7 @@ async function duplicate(): Promise<void> {
       </template>
 
       <div class="pset__toolbar" role="toolbar" :aria-label="t('views.personaSets.detail.toolbar.label')">
-        <button type="button" :disabled="mutationBlocked" :aria-describedby="isLocked ? Id.lockedReason : undefined" :data-testid="Id.add" @click="openNew">
+        <button ref="addButton" type="button" :disabled="mutationBlocked" :aria-describedby="isLocked ? Id.lockedReason : undefined" :data-testid="Id.add" @click="openNew">
           {{ t('views.personaSets.detail.toolbar.add') }}
         </button>
         <label v-if="entries.length > 0">

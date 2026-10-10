@@ -309,4 +309,119 @@ describe('GraphEditView', () => {
     release({ uuid: EXTRACTED_NODE })
     await flushPromises()
   })
+
+  // Abnahme Etappe 8 (Evidenzlücken): Sperre ohne Schreibweg, Herkunft unabhängig
+  // von der Sperre, fail-closed bei unklarem Sperrzustand, Bedienung und Namen.
+  describe('Abnahme Etappe 8', () => {
+    async function mountLocked() {
+      api.getGraphLock.mockResolvedValue({ graph_id: editableGraphFixture().graph_id, locked: true, used_by: [sim] })
+      const wrapper = await mountView()
+      await flushPromises()
+      return wrapper
+    }
+
+    it('gesperrt: Auswahl zeigt nur lesbare Details, kein Formular, kein Löschen, kein Zusammenführen', async () => {
+      const wrapper = await mountLocked()
+      await wrapper.get(`[data-entity-id="${MANUAL_NODE}"] button`).trigger('click')
+      const note = wrapper.get('[data-testid="graph-edit-detail-readonly"]')
+      expect(note.attributes('role')).toBe('status')
+      expect(note.text()).toContain('gesperrt und nicht bearbeitbar')
+      for (const id of [
+        GraphEditTestId.createEntity,
+        GraphEditTestId.createRelation,
+        GraphEditTestId.entityForm,
+        GraphEditTestId.entityName,
+        GraphEditTestId.entityDelete,
+        GraphEditTestId.mergeOpen,
+      ]) {
+        expect(wrapper.find(`[data-testid="${id}"]`).exists()).toBe(false)
+      }
+      for (const fn of [api.createEntity, api.updateEntity, api.deleteEntity, api.mergeEntities, api.createRelation, api.updateRelation, api.deleteRelation]) {
+        expect(fn).not.toHaveBeenCalled()
+      }
+      wrapper.unmount()
+    })
+
+    it('gesperrt: Band nennt Zustand, Grund und Ausweg als Statusmeldung', async () => {
+      const wrapper = await mountLocked()
+      const banner = wrapper.get(`[data-testid="${GraphEditTestId.lockBanner}"]`)
+      expect(banner.attributes('role')).toBe('status')
+      expect(wrapper.get(`[data-testid="${GraphEditTestId.lockBadge}"]`).text()).toContain('Gesperrt')
+      expect(banner.text()).toContain('Zum Bearbeiten eine unabhängige Kopie anlegen')
+      expect(wrapper.get(`[data-testid="${GraphEditTestId.duplicateStart}"]`).text()).toBe('Kopie anlegen')
+      wrapper.unmount()
+    })
+
+    it('gesperrt: die Herkunftsmarken bleiben sichtbar, auch die Handkante im Netz', async () => {
+      const wrapper = await mountLocked()
+      expect(
+        wrapper.find(`[data-entity-id="${MANUAL_NODE}"] [data-testid="${GraphEditTestId.markManual}"]`).text(),
+      ).toContain('manuell')
+      expect(wrapper.get('[data-testid="canvas-stub"]').attributes('data-dashed')).toBe('1')
+      wrapper.unmount()
+    })
+
+    it('Herkunft: extrahierte Knoten tragen in der Liste keine Marke, die Legende erklärt die gestrichelte Kante', async () => {
+      const wrapper = await mountView()
+      await flushPromises()
+      const extracted = wrapper.get(`[data-entity-id="${EXTRACTED_NODE}"]`)
+      expect(extracted.find(`[data-testid="${GraphEditTestId.markManual}"]`).exists()).toBe(false)
+      expect(extracted.find(`[data-testid="${GraphEditTestId.markEdited}"]`).exists()).toBe(false)
+      expect(wrapper.text()).toContain('Gestrichelte Kante: von Hand angelegt oder von Hand geändert.')
+      wrapper.unmount()
+    })
+
+    it('unklarer Sperrzustand: fail-closed, Meldung als Alert, kein Schreibwerkzeug', async () => {
+      api.getGraphLock.mockRejectedValue(new Error('lock down'))
+      const wrapper = await mountView()
+      await flushPromises()
+      expect(wrapper.get(`[data-testid="${GraphEditTestId.lockBanner}"]`).attributes('role')).toBe('alert')
+      expect(wrapper.get('[data-testid="graph-edit-lock-reload"]').text()).toBe('Sperrzustand neu laden')
+      expect(wrapper.find(`[data-testid="${GraphEditTestId.toolbar}"]`).exists()).toBe(false)
+      expect(wrapper.find(`[data-testid="${GraphEditTestId.createEntity}"]`).exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('Löschen: Rückfrage allein löst nichts aus, erst die Bestätigung ruft deleteEntity', async () => {
+      const wrapper = await mountView()
+      await flushPromises()
+      await wrapper.get(`[data-entity-id="${SECOND_NODE}"] button`).trigger('click')
+      await wrapper.get(`[data-testid="${GraphEditTestId.entityDelete}"]`).trigger('click')
+      expect(wrapper.find(`[data-testid="${GraphEditTestId.entityDeleteConfirm}"]`).exists()).toBe(true)
+      expect(api.deleteEntity).not.toHaveBeenCalled()
+      wrapper.unmount()
+    })
+
+    it('Bedienung: Liste und Umschalter sind benannte Schaltflächen mit Zustand', async () => {
+      const wrapper = await mountView()
+      await flushPromises()
+      const select = wrapper.get(`[data-entity-id="${SECOND_NODE}"] button`)
+      expect(select.element.tagName).toBe('BUTTON')
+      await select.trigger('click')
+      expect(select.attributes('aria-current')).toBe('true')
+      const group = wrapper.get(`[data-testid="${GraphEditTestId.viewToggle}"]`)
+      expect(group.attributes('role')).toBe('group')
+      expect(group.attributes('aria-label')).toBe('Graph bearbeiten')
+      expect(wrapper.get(`[data-testid="${GraphEditTestId.viewNet}"]`).text()).toBe('Netz')
+      expect(wrapper.get(`[data-testid="${GraphEditTestId.viewTable}"]`).text()).toBe('Tabelle')
+      expect(wrapper.get(`[data-testid="${GraphEditTestId.viewNet}"]`).attributes('aria-pressed')).toBe('true')
+      expect(wrapper.get('section').attributes('aria-label')).toBe('Graph bearbeiten')
+      wrapper.unmount()
+    })
+
+    it('Bedienung: die Felder des Entitätsformulars sind über Beschriftungen benannt', async () => {
+      const wrapper = await mountView()
+      await flushPromises()
+      await wrapper.get(`[data-testid="${GraphEditTestId.createEntity}"]`).trigger('click')
+      const labelOf = (testId: string) => {
+        const el = wrapper.get(`[data-testid="${testId}"]`).element
+        const wrapped = el.closest('label')?.textContent ?? ''
+        const byFor = el.id ? (wrapper.find(`label[for="${el.id}"]`).exists() ? wrapper.get(`label[for="${el.id}"]`).text() : '') : ''
+        return `${wrapped} ${byFor} ${el.getAttribute('aria-label') ?? ''}`
+      }
+      expect(labelOf(GraphEditTestId.entityName)).toContain('Name')
+      expect(labelOf(GraphEditTestId.entityType)).toContain('Typ')
+      wrapper.unmount()
+    })
+  })
 })

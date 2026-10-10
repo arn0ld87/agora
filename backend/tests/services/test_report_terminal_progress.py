@@ -19,7 +19,7 @@ from app.models.report import ReportOutline, ReportSection, ReportStatus
 
 def _make_outline(n_sections: int = 3) -> ReportOutline:
     sections = [
-        ReportSection(title=f"Section {i + 1}", content="", description="")
+        ReportSection(title=f"Section {i + 1}", content="", description="Szenariobezogene Analyse")
         for i in range(n_sections)
     ]
     return ReportOutline(title="Test Report", summary="Test summary", sections=sections)
@@ -71,7 +71,6 @@ def test_generate_report_emits_incomplete_stage_when_required_section_fails(tmp_
         patch("app.services.report_agent.workflow.generate_section_metadata", return_value={}),
         patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
         patch("app.services.report_agent.workflow.plan_outline_impl", return_value=outline),
-        patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
         patch("app.services.report_agent.workflow._load_persona_count", return_value=100),
         patch("app.services.report_agent.workflow.MIN_PERSONA_TABLE_ROWS", 0),
         patch("app.services.report_agent.workflow.validate_quote_anchors", return_value=MagicMock(valid=True)),
@@ -160,7 +159,6 @@ def test_generate_report_emits_completed_stage_when_all_sections_succeed(tmp_pat
         patch("app.services.report_agent.workflow.generate_section_metadata", return_value={}),
         patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
         patch("app.services.report_agent.workflow.plan_outline_impl", return_value=outline),
-        patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
         patch("app.services.report_agent.workflow._load_persona_count", return_value=100),
         patch("app.services.report_agent.workflow.MIN_PERSONA_TABLE_ROWS", 0),
         patch("app.services.report_agent.workflow.validate_quote_anchors", return_value=MagicMock(valid=True)),

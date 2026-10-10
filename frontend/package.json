@@ -19,6 +19,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "coverage:integrity": "bun scripts/check-coverage-integrity.mjs",
+    "test:coverage-integrity": "bun test ./scripts/check-coverage-integrity.test.mjs",
     "typecheck": "vue-tsc --noEmit",
     "check": "bun run lint && bun run typecheck && bun run test:coverage && bun run build"
   },

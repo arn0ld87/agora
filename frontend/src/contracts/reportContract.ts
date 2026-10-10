@@ -332,22 +332,56 @@ export const ReportSectionSchema = z.object({
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
+// #1832: stabile semantische Rolle eines Abschnitts — spiegelt
+// backend/app/contracts/report_contract.py::ReportSectionKind.
+export const ReportSectionKindSchema = z.enum([
+  'stakeholder_voices',
+  'segment_table',
+  'persona_table',
+  'multiplier_analysis',
+  'friction_points',
+  'trust_signals',
+  'change_recommendations',
+  'project_impact',
+  'positioning',
+  'content_ideas',
+  'data_gaps',
+  'generic',
+]);
+export type ReportSectionKind = z.infer<typeof ReportSectionKindSchema>;
+
 export const ReportOutlineSectionSchema = z.object({
-  title: z.string().min(3),
-  // max(2000) — spiegelt backend/app/contracts/report_contract.py
-  // (Smoke-Live 2026-05-15: 500 brach reale Outline-Beschreibungen).
-  description: z.string().min(1).max(2000),
+  // #1832/Review: min(3) spiegelt ReportSectionModel.section_title — ein
+  // kuerzerer Titel wuerde in der Evidenz-Persistenz failen (Contract-Drift).
+  title: z.string().trim().min(3),
+  // max(2000) — spiegelt backend/app/contracts/report_contract.py.
+  description: z.string().trim().min(1).max(2000),
+  // #1832: Consumer (DTO-Auswahl, Zitat-Validierung) lesen den Kind statt den
+  // Titel zu matchen; der Titel bleibt frei formulierbar.
+  section_kind: ReportSectionKindSchema.default('generic'),
 }).strict();
 
 export const ReportOutlineSchema = z.object({
-  title: z.string().min(3),
-  summary: z.string().min(1),
-  // M11.4b-Followup-4: max auf 15 angehoben — spiegelt backend/app/contracts/report_contract.py
-  // ReportOutlineModel.sections (min_length=1, max_length=15, angehoben in M11.4b-Followup-2).
-  // War 5: Stub liefert 11 Pflichtabschnitte, Zod-Parse warf → schemaError gesetzt →
-  // reportOutline blieb null → ol.outline nie gerendert → E2E-Smoke schlug fehl.
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  // #1832: freie modellgeplante Titel, Backend-Grenzen 1..15.
   sections: z.array(ReportOutlineSectionSchema).min(1).max(15),
-}).strict();
+}).strict().superRefine((outline, ctx) => {
+  const titles = new Set<string>();
+  for (const [index, section] of outline.sections.entries()) {
+    // Gemeinsame Whitespace-/casefold-Naeherung; Unicode-Grenzen sind
+    // bei _stakeholderGroupKey dokumentiert. Keine NFKC-Normalisierung.
+    const key = _stakeholderGroupKey(section.title);
+    if (titles.has(key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sections', index, 'title'],
+        message: 'ReportOutlineModel enthält doppelte normalisierte Abschnittstitel',
+      });
+    }
+    titles.add(key);
+  }
+});
 export type ReportOutline = z.infer<typeof ReportOutlineSchema>;
 
 /**

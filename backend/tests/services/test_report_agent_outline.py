@@ -1,234 +1,95 @@
-"""
-TDD-Tests fuer plan_outline() in ReportAgent (Issue #274).
-
-Prueft:
-- happy-path: LLM-Response mit description -> ReportOutlineModel-valide Sections
-- edge-case leeres description aus LLM -> Default-Fill, kein ValidationError
-- fallback-Pfad (LLM raised) -> valides Outline mit description >= 1 Zeichen
-"""
-from __future__ import annotations
-
+"""Issue #1832: freie Szenariotitel und ehrliche Planungsfehler."""
 from unittest.mock import MagicMock
 
+import pytest
+from pydantic import ValidationError
+
 from app.contracts.report_contract import ReportOutlineModel
-from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
+from app.services.report_agent.planning import plan_outline
+from app.services.report_agent.run_degradation import events_for
+from app.services.run_budget import BudgetExceededError
 
 
-# ---------------------------------------------------------------------------
-# Helper: minimaler ReportAgent ohne echten LLM-Call
-# ---------------------------------------------------------------------------
-
-def _make_agent() -> object:
-    from app.services.report_agent import ReportAgent
-
-    agent = ReportAgent.__new__(ReportAgent)
-    agent.graph_id = "graph_274"
-    agent.simulation_id = "sim_274"
-    agent.simulation_requirement = "Test-Outline-Requirement"
-    agent.llm = MagicMock()
-    agent.web_tools = MagicMock()
-    agent.graph_tools = MagicMock()
+def _make_agent():
+    agent = MagicMock()
+    agent.graph_id = "graph_outline"
+    agent.simulation_requirement = "Geburtshilfe bündeln: Rettungswege und Hebammenwechsel prüfen."
     agent.graph_tools.get_simulation_context.return_value = {
-        "graph_statistics": {
-            "total_nodes": 10,
-            "total_edges": 5,
-            "entity_types": {"Person": 3},
-        },
+        "graph_statistics": {"total_nodes": 10, "total_edges": 5, "entity_types": {}},
         "total_entities": 10,
-        "related_facts": [],
+        "related_facts": ["Nur zwei von sieben Hebammen wollen wechseln."],
     }
-    agent.tools = {}
-    agent.report_logger = None
-    agent.console_logger = None
-    agent.evidence_map = None
-    agent._active_section_evidence = []
-    agent._current_section_index = None
-    agent._embed_cache = None
     return agent
 
 
-def _to_contract_dict(outline_dict: dict) -> dict:
-    """Mappe ReportOutline.to_dict() auf ReportOutlineModel-konformes Dict.
-
-    ReportSection.to_dict() emittiert 'content' (fuer den Markdown-Generator);
-    ReportOutlineSectionModel erwartet 'description' und verbietet 'content'
-    (extra='forbid'). Die API-Schicht (_map_outline_for_contract) macht dieselbe
-    Umformung. Hier bilden wir sie nach, damit die Tests den Contract-Pfad pruefen.
-    """
-    sections = []
-    for raw in outline_dict.get("sections", []):
-        sections.append({
-            "title": raw.get("title") or "Section",
-            "description": raw.get("description") or raw.get("content") or "—",
-        })
+def _response(titles=("Rettungswege bei Paralleleinsätzen", "Wechselbereitschaft der Hebammen")):
     return {
-        "title": outline_dict.get("title") or "Report",
-        "summary": outline_dict.get("summary") or "—",
-        "sections": sections,
+        "title": "Geburtshilfe im Landkreis",
+        "summary": "Bündelung unter knappen Personalressourcen",
+        "sections": [{"title": title, "description": "Quellen und simulierte Stimmen abgleichen."} for title in titles],
     }
 
 
-def _default_response_sections(
-    description: str = "Pflichtabschnitt",
-) -> list[dict[str, str]]:
-    return [
-        {"title": title, "description": f"{description}: {title}"}
-        for title, _ in DEFAULT_REPORT_SECTIONS
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Test 1: happy-path — LLM liefert title + summary + sections mit description
-# ---------------------------------------------------------------------------
-
-def test_plan_outline_happy_path_returns_outline_with_description():
-    """plan_outline() muss ReportOutline mit description >= 1 Zeichen liefern."""
+def test_free_scenario_titles_survive_planning_and_contract_roundtrip():
     agent = _make_agent()
-    agent.llm.chat_json.return_value = {
-        "title": "Simulation Analysis Report",
-        "summary": "Overview of simulation results",
-        "sections": _default_response_sections("Describes"),
-    }
-
-    outline = agent.plan_outline()
-
-    # Direkter Test: to_dict() muss 'description' emittieren
-    outline_dict = outline.to_dict()
-    for raw_section in outline_dict["sections"]:
-        assert "description" in raw_section, (
-            f"to_dict() emittiert kein 'description'-Feld: {raw_section}"
-        )
-        assert raw_section["description"], (
-            f"'description' ist leer in {raw_section.get('title')!r}"
-        )
-
-    # Contract-Validation via Pydantic
-    validated = ReportOutlineModel.model_validate(_to_contract_dict(outline_dict))
-    assert validated.title == "Simulation Analysis Report"
-    assert len(validated.sections) == len(DEFAULT_REPORT_SECTIONS)
-    for section in validated.sections:
-        assert len(section.description) >= 1, (
-            f"Section '{section.title}' hat leere description: {section.description!r}"
-        )
-    assert validated.sections[0].description == "Describes: Executive Summary"
+    agent.llm.chat_json.return_value = _response()
+    outline = plan_outline(agent)
+    validated = ReportOutlineModel.model_validate({
+        "title": outline.title,
+        "summary": outline.summary,
+        "sections": [{"title": s.title, "description": s.description} for s in outline.sections],
+    })
+    assert [s.title for s in validated.sections] == [s["title"] for s in _response()["sections"]]
+    assert events_for(agent).fallback_outline_used is False
+    messages = agent.llm.chat_json.call_args.kwargs["messages"]
+    assert agent.simulation_requirement in messages[1]["content"]
+    assert "Nur zwei von sieben Hebammen" in messages[1]["content"]
+    assert "Persona-Tabelle" not in messages[1]["content"]
 
 
-# ---------------------------------------------------------------------------
-# Test 2: edge-case — leeres description aus LLM -> Default-Fill "—"
-# ---------------------------------------------------------------------------
-
-def test_plan_outline_empty_description_gets_default():
-    """Leeres description im LLM-Response wird mit '—' aufgefuellt."""
+@pytest.mark.parametrize("error", [RuntimeError("Provider nicht erreichbar"), ValueError("Invalid JSON format from LLM")])
+def test_planning_failure_preserves_cause_without_success_event(error):
     agent = _make_agent()
-    agent.llm.chat_json.return_value = {
-        "title": "Szenario-Analyse",
-        "summary": "Kurze Zusammenfassung",
-        "sections": [
-            {
-                "title": title,
-                "description": "" if idx % 3 == 0 else "   " if idx % 3 == 1 else None,
-            }
-            for idx, (title, _) in enumerate(DEFAULT_REPORT_SECTIONS)
-        ],
-    }
-
-    outline = agent.plan_outline()
-    outline_dict = outline.to_dict()
-
-    # to_dict() muss description-Feld emittieren
-    for raw_section in outline_dict["sections"]:
-        assert "description" in raw_section
-        assert raw_section["description"], (
-            f"Empty-description-Section '{raw_section.get('title')}' hat kein Default"
-        )
-
-    # Muss Pydantic-Validation bestehen (description min_length=1)
-    validated = ReportOutlineModel.model_validate(_to_contract_dict(outline_dict))
-    for section in validated.sections:
-        assert len(section.description) >= 1, (
-            f"Section '{section.title}' hat leere description nach Default-Fill: "
-            f"{section.description!r}"
-        )
+    agent.llm.chat_json.side_effect = error
+    progress = MagicMock()
+    with pytest.raises(type(error), match=str(error)) as caught:
+        plan_outline(agent, progress_callback=progress)
+    assert caught.value is error
+    assert events_for(agent).fallback_outline_used is False
+    assert not any(call.args[1] == 100 for call in progress.call_args_list)
 
 
-# ---------------------------------------------------------------------------
-# Test 3: fallback-Pfad — LLM raised -> valides Outline mit description >= 1
-# ---------------------------------------------------------------------------
-
-def test_plan_outline_fallback_on_llm_exception():
-    """Wenn LLM-Aufruf raised, liefert plan_outline() Default-Outline mit validen descriptions."""
+@pytest.mark.parametrize("titles", [(), ("Hebammen", "  HEBAMMEN "), ("  ",)])
+def test_invalid_model_outline_is_rejected_without_replacement(titles):
     agent = _make_agent()
-    agent.llm.chat_json.side_effect = RuntimeError("Ollama nicht erreichbar")
-
-    outline = agent.plan_outline()
-    outline_dict = outline.to_dict()
-
-    # to_dict() muss description-Feld emittieren
-    for raw_section in outline_dict["sections"]:
-        assert "description" in raw_section
-        assert raw_section["description"], (
-            f"Fallback-Section '{raw_section.get('title')}' hat kein description"
-        )
-
-    for section in outline.sections:
-        assert len(section.description) >= 1, (
-            f"Fallback-Section '{section.title}' hat leere description: "
-            f"{section.description!r}"
-        )
+    agent.llm.chat_json.return_value = _response(titles)
+    with pytest.raises(ValidationError, match="sections|title|doppelt|eindeutig"):
+        plan_outline(agent)
+    assert events_for(agent).fallback_outline_used is False
 
 
-# ---------------------------------------------------------------------------
-# Test 3b: M11.8a-Followup — leeres LLM-Outline triggert Fallback
-# ---------------------------------------------------------------------------
-
-def test_plan_outline_empty_sections_triggers_fallback():
-    """M11.8a-Followup auf Gemini-MEDIUM (PR #335).
-
-    Section-Cap (Min 2 / Max 5) wurde in M11.8a entfernt. Ein leeres
-    sections-Array vom LLM darf dadurch NICHT als valide Outline
-    durchgehen. plan_outline() muss in den Default-Fallback wechseln,
-    statt eine kaputte Zero-Section-Outline zurückzugeben.
-    """
+def test_budget_abort_preserves_identity_and_termination_reason():
     agent = _make_agent()
-    agent.llm.chat_json.return_value = {
-        "title": "Empty",
-        "summary": "Empty",
-        "sections": [],
-    }
-
-    outline = agent.plan_outline()
-
-    assert len(outline.sections) >= 2, (
-        "Empty-Sections-Response muss Fallback-Outline triggern, nicht "
-        "leer durchgehen (M11.8a-Followup)."
-    )
+    error = BudgetExceededError("calls", 10, 10)
+    agent.llm.chat_json.side_effect = error
+    with pytest.raises(BudgetExceededError, match="10 >= 10") as caught:
+        plan_outline(agent)
+    assert caught.value is error
+    assert caught.value.termination_reason == "budget_calls"
+    agent.llm.chat_json.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# Test 4: Rauch-Test — to_dict() emittiert 'description' fuer jede Section
-# ---------------------------------------------------------------------------
-
-def test_plan_outline_to_dict_emits_description_field():
-    """
-    Rauchtest: plan_outline() baut Sections mit description-Feld.
-    Stellt sicher, dass to_dict() das Feld emittiert — so dass _map_outline_for_contract
-    in der API-Schicht es korrekt weiterreichen kann.
-    """
+def test_explicit_required_sections_preserve_order():
     agent = _make_agent()
-    agent.llm.chat_json.return_value = {
-        "title": "Test Report",
-        "summary": "Test summary text",
-        "sections": _default_response_sections("Detail"),
-    }
+    required = [("Rettungswege", "Kapazität"), ("Hebammen", "Wechsel")]
+    agent.llm.chat_json.return_value = _response(tuple(title for title, _ in required))
+    outline = plan_outline(agent, required_sections=required)
+    assert [s.title for s in outline.sections] == [title for title, _ in required]
 
-    outline = agent.plan_outline()
-    outline_dict = outline.to_dict()
 
-    for raw_section in outline_dict["sections"]:
-        assert "description" in raw_section, (
-            f"to_dict() emittiert kein 'description'-Feld fuer Section "
-            f"'{raw_section.get('title')}': {raw_section}"
-        )
-        assert raw_section["description"], (
-            f"'description' ist leer in Section '{raw_section.get('title')}'"
-        )
+@pytest.mark.parametrize("titles", [("Hebammen", "Rettungswege"), ("Rettungswege",), ("Rettungswege", "Personal")])
+def test_explicit_required_sections_reject_changed_order_or_titles(titles):
+    agent = _make_agent()
+    agent.llm.chat_json.return_value = _response(titles)
+    with pytest.raises(ValueError, match="required_sections"):
+        plan_outline(agent, required_sections=[("Rettungswege", "Kapazität"), ("Hebammen", "Wechsel")])

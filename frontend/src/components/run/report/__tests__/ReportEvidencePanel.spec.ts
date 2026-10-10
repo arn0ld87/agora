@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { ApiError } from '@/api/envelope'
 import ReportEvidencePanel from '../evidence/ReportEvidencePanel.vue'
 import { claimsMap } from '@/composables/run/report/__tests__/claimFixtures'
+import { listEnvelope, reportData } from '@/composables/run/report/__tests__/reportFixtures'
 import { mountWithReport, okApi } from './helpers'
 
 const density = {
@@ -111,6 +112,34 @@ describe('ReportEvidencePanel', () => {
     expect(omitted.text()).toContain('Feld fehlt')
     expect(omitted.text()).toContain('keine Datenlücke')
     expect(wrapper.get('[data-testid="report-stance-unsaved"]').text()).toBe('Für diese Fassung nicht gespeichert.')
+  })
+
+  it('UAT-010: unvollständige Fassung ohne Artefakte: Kennzahlen stehen als nicht gespeichert, kein Fehler', async () => {
+    const incomplete = reportData({
+      status: 'incomplete',
+      missing_sections: ['Persona-Mindestanzahl nicht erreicht: 18/20 Personas vorhanden.'],
+    })
+    const api = okApi({
+      listReports: vi.fn().mockResolvedValue(listEnvelope([incomplete])),
+      getReport: vi.fn().mockResolvedValue({ success: true, data: incomplete }),
+      getReportEvidence: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'unknown_error', status: 404, message: 'No evidence map available for report: report_1' })),
+    })
+    const artifactsApi = {
+      getDensity: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'unknown_error', status: 404, message: 'No evidence density available for report: report_1' })),
+      getStance: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'unknown_error', status: 404, message: 'No stance analysis available for report: report_1' })),
+    }
+    const { wrapper } = await mountWithReport(ReportEvidencePanel, { artifactsApi }, { api })
+    expect(wrapper.get('[data-testid="report-density-unsaved"]').text()).toBe('Für diese Fassung nicht gespeichert.')
+    expect(wrapper.get('[data-testid="report-stance-unsaved"]').text()).toBe('Für diese Fassung nicht gespeichert.')
+    expect(wrapper.find('[data-testid="report-density-failed"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="report-stance-failed"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('No evidence density available')
   })
 
   it('Kennzahlen mit Daten: Belegdichte und Positionierungsquote', async () => {

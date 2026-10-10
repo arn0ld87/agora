@@ -30,6 +30,26 @@ describe('GraphOriginMark', () => {
     expect(mountMark('manual', '2026-10-07').text()).not.toContain('Geändert am')
   })
 
+  it('unterscheidet die drei Herkünfte an Testkennung und Text; kein Datum ohne Änderungsstempel', () => {
+    const edited = mountMark('edited')
+    expect(edited.find(`[data-testid="${GraphEditTestId.markEdited}"]`).exists()).toBe(true)
+    expect(edited.find(`[data-testid="${GraphEditTestId.markManual}"]`).exists()).toBe(false)
+    expect(edited.find(`[data-testid="${GraphEditTestId.markExtracted}"]`).exists()).toBe(false)
+    expect(edited.text()).not.toContain('Geändert am')
+    const manual = mountMark('manual')
+    expect(manual.find(`[data-testid="${GraphEditTestId.markEdited}"]`).exists()).toBe(false)
+    expect(manual.text()).not.toContain('bearbeitet')
+  })
+
+  it('trägt die Bedeutung im Text; das Symbol ist auch bei extrahiert für Hilfstechnik verborgen', () => {
+    for (const origin of ['manual', 'edited', null] as const) {
+      const wrapper = mountMark(origin)
+      const symbol = wrapper.get('[aria-hidden="true"]')
+      expect(symbol.text()).toBe('✎')
+      expect(wrapper.text().replace('✎', '').trim().length).toBeGreaterThan(0)
+    }
+  })
+
   it('zeigt ohne Merkmal extrahiert statt nichts', () => {
     const wrapper = mountMark(null)
     expect(wrapper.get(`[data-testid="${GraphEditTestId.markExtracted}"]`).text()).toContain('extrahiert')
