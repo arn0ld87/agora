@@ -283,7 +283,7 @@ def test_generate_report_propagates_budget_exceeded_from_red_team(tmp_path):
     outline = ReportOutline(
         title="Test Report",
         summary="Test summary",
-        sections=[ReportSection(title="Section 1", content="", description="")],
+        sections=[ReportSection(title="Section 1", content="", description="Szenariobezogene Analyse")],
     )
 
     report_folder = str(tmp_path / report_id)
@@ -294,7 +294,6 @@ def test_generate_report_propagates_budget_exceeded_from_red_team(tmp_path):
         patch("app.services.report_agent.workflow.generate_section_metadata", return_value={}),
         patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
         patch("app.services.report_agent.workflow.plan_outline_impl", return_value=outline),
-        patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
         patch("app.services.report_agent.workflow._load_persona_count", return_value=100),
         patch("app.services.report_agent.workflow.MIN_PERSONA_TABLE_ROWS", 0),
         patch(

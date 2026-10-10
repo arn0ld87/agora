@@ -954,6 +954,7 @@
     },
     "ReportOutlineModel": {
       "additionalProperties": false,
+      "description": "Freie modellgeplante Gliederung; fachliche Abdeckung prueft der Workflow.",
       "properties": {
         "sections": {
           "items": {
@@ -970,7 +971,7 @@
           "type": "string"
         },
         "title": {
-          "minLength": 3,
+          "minLength": 1,
           "title": "Title",
           "type": "string"
         }
@@ -991,6 +992,11 @@
           "minLength": 1,
           "title": "Description",
           "type": "string"
+        },
+        "section_kind": {
+          "$ref": "#/$defs/ReportSectionKind",
+          "default": "generic",
+          "description": "Stabile semantische Rolle des Abschnitts. Consumer (DTO-Auswahl, Zitat-Validierung) lesen sie statt den Titel zu matchen; der Titel bleibt frei formulierbar. Unbekannte oder fehlende Angaben fallen auf 'generic' zurueck."
         },
         "title": {
           "minLength": 3,
@@ -1110,6 +1116,25 @@
       ],
       "title": "ReportSectionHypothesisModel",
       "type": "object"
+    },
+    "ReportSectionKind": {
+      "description": "Stabile semantische Rolle eines Report-Abschnitts (#1832).\n\nDer Abschnittstitel ist frei formuliert; nachgelagerte Consumer\n(DTO-Auswahl, Zitat-Validierung) lesen ausschliesslich diesen Wert und\nmatchen nie den Titel. ``generic`` ist der sichere Default fuer alles,\nwas keine der spezifischen Rollen erfuellt, und fuer Bestandsdaten.",
+      "enum": [
+        "stakeholder_voices",
+        "segment_table",
+        "persona_table",
+        "multiplier_analysis",
+        "friction_points",
+        "trust_signals",
+        "change_recommendations",
+        "project_impact",
+        "positioning",
+        "content_ideas",
+        "data_gaps",
+        "generic"
+      ],
+      "title": "ReportSectionKind",
+      "type": "string"
     },
     "ReportSectionModel": {
       "additionalProperties": false,

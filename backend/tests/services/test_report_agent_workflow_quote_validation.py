@@ -75,6 +75,7 @@ def _make_outline_with_section(section_title: str = "Persona-Reaktionen") -> obj
     """Minimaler Outline-Stub mit einer Section."""
     section = MagicMock()
     section.title = section_title
+    section.description = "Quellen und simulierte Stimmen prüfen"
     section.content = ""
     section.metadata = {}
 
@@ -126,7 +127,6 @@ class TestWorkflowValidQuotes:
             patch("app.services.report_agent.workflow.generate_section_react") as mock_gsr,
             patch("app.services.report_agent.workflow.generate_section_metadata") as mock_meta,
             patch("app.services.report_agent.workflow.migrate_v1_to_v2") as mock_migrate,
-            patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
         ):
             mock_plan.return_value = outline
             mock_gsr.return_value = valid_text
@@ -179,7 +179,6 @@ class TestWorkflowInvalidQuotesRepairRetry:
             patch("app.services.report_agent.workflow.generate_section_react") as mock_gsr,
             patch("app.services.report_agent.workflow.generate_section_metadata") as mock_meta,
             patch("app.services.report_agent.workflow.migrate_v1_to_v2") as mock_migrate,
-            patch("app.services.report_agent.workflow.validate_required_sections", return_value=[]),
         ):
             mock_plan.return_value = outline
             # Beide generate_section_react-Aufrufe liefern ungültigen Text

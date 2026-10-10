@@ -166,17 +166,11 @@ class TestPlanOutlineStrictSchema:
         assert outline.title == "DACH Marktanalyse"
         assert len(outline.sections) == len(DEFAULT_REPORT_SECTIONS)
 
-    def test_plan_outline_fallback_on_llm_error_still_stable(self):
-        """Fallback-Outline ist stabil wenn chat_json raised."""
+    def test_plan_outline_provider_error_is_not_replaced(self):
         agent = _make_agent()
         agent.llm.chat_json.side_effect = RuntimeError("Provider nicht erreichbar")
-
-        outline = agent.plan_outline()
-
-        # Fallback-Outline muss mindestens 2 Sections haben
-        assert len(outline.sections) >= 2
-        for section in outline.sections:
-            assert section.description, f"Fallback-Section '{section.title}' hat kein description"
+        with pytest.raises(RuntimeError, match="Provider nicht erreichbar"):
+            agent.plan_outline()
 
 
 # ---------------------------------------------------------------------------

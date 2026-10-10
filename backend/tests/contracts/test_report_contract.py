@@ -265,22 +265,12 @@ def test_claim_id_pattern():
 # ---- ReportContractModel: Schema-Version-Drift unmöglich ----
 
 
-def test_outline_rejects_missing_required_sections() -> None:
-    """Sub-Slice P1.1: ReportOutlineModel listet fehlende Default-Sections explizit."""
-    from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
-
-    first_default_title = DEFAULT_REPORT_SECTIONS[0][0]
-    with pytest.raises(ValidationError) as exc_info:
-        ReportOutlineModel(
-            title="Test-Outline",
-            summary="Nur ein Abschnitt, sonst nichts.",
-            sections=[
-                ReportOutlineSectionModel(title=first_default_title, description="Stub"),
-            ],
-        )
-    msg = str(exc_info.value)
-    for title, _ in DEFAULT_REPORT_SECTIONS[1:]:
-        assert title in msg, f"Erwartet '{title}' in ValidationError-Message"
+def test_outline_accepts_scenario_specific_title() -> None:
+    outline = ReportOutlineModel(
+        title="Geburtshilfe", summary="Personal und Versorgung",
+        sections=[ReportOutlineSectionModel(title="Hebammenwechsel", description="Zwei von sieben")],
+    )
+    assert [s.title for s in outline.sections] == ["Hebammenwechsel"]
 
 
 def test_validate_required_sections_case_insensitive() -> None:
