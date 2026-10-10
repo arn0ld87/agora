@@ -37,8 +37,8 @@ Die Testzähler in diesem Markerblock werden **nur durch `scripts/sync-status.sh
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 5976 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 206 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 10962 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 331 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 **Wichtig:** Die beiden Zahlen oben sind der letzte generierte Counter-Snapshot und nicht als exakter 08.09.-Head-Count zu lesen. Für einen dedizierten Refresh: `bash scripts/sync-status.sh --no-cache` und den generierten Block committen.
