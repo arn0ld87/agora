@@ -47,6 +47,8 @@ Zusätzliche aktuelle Nachweise:
 
 - **10.10.2026, UAT-003:** GraphML-Downloads in GraphCanvas und GraphReader übernehmen den bereits entpackten API-Blob direkt. Die Regression prüft mit echtem Axios-Interceptor XML-Inhalt und Downloadnamen für Einzelknoten, eine Beziehung und 12 Entitäten/15 Beziehungen; Fehlerantworten erzeugen keinen Download. Rücknahme des Fixes reproduziert Nullbyte-Dateien, Wiederanwendung erhält die XML-Bytes. Der erneute Live-UAT bleibt ausstehend.
 
+- **10.10.2026, UAT-005:** Beim Wiedereintritt auf `/v4/env-setup/<project_id>` blieben persistierte Personas unsichtbar, solange der Config-Realtime-Endpunkt keine Simulationskonfiguration lieferte: `probeAlreadyPrepared` lud Profile nur hinter dem Config-Gate, Card 02 renderte wegen `phase === 0` nicht. Der Profile-Load ist jetzt vom Config-Gate entkoppelt (`useSimulationPrepare.ts`) — persistierte Personas erscheinen als Personakarten (Phase 1, ohne falsches „im Lauf"-Signal via `isPreparing`-Gate am card-desc), bei leerem Stand bleibt es beim Generierungsformular. Regressionstest in `useSimulationPrepare.spec.ts` (19 Tests grün); erneuter Live-UAT steht aus.
+
 - **08.10.2026, #1670:** Ausnahmeschema und Checker erfassen Dependency-, Code- und Container-Quellen mit Evidence, Owner, Frist und dokumentierter Maintainerfreigabe. Der Supabase-CVE-Job leitet das vollständige Image-Inventar aus Compose ab und prüft HIGH/CRITICAL ohne Ignore-Unterdrückung gegen den Register-Gate. 48 gezielte Checker-/Workflow-Tests sind lokal grün; ein echter Stichtag-Scan mit Run-URL bleibt als Release-Nachweis erforderlich.
 
 - PR #1461 dokumentiert einen vollständigen Backend-Lauf mit **6177 passed, 8 skipped, 1 xfailed** nach der Budget-Reservierungs-Härtung.

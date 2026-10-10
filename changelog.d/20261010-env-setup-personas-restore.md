@@ -1,0 +1,3 @@
+# UAT-005 — Vorbereitungsseite stellt persistierte Personas wieder dar
+
+Beim Wiedereintritt auf `/v4/env-setup/<project_id>` blieben persistierte Personas unsichtbar, wenn der Config-Realtime-Endpunkt keine Simulationskonfiguration liefert: der Restore-Pfad lud Profile nur hinter dem Config-Gate (`probeAlreadyPrepared`), Card 02 (Personakarten) blieb wegen `phase === 0` weg und nur das Generierungsformular war sichtbar. Der Profile-Load ist jetzt vom Config-Gate entkoppelt — Personas werden bei vorhandenem Stand als Card 02 gerendert (Phase 1, ohne falsches „im Lauf"-Signal, `isPreparing` bleibt false), bei leerem Stand bleibt es beim Generierungsformular. Kein Vertrags- oder API-Change.
