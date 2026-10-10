@@ -64,11 +64,11 @@ beforeEach(() => {
 })
 
 describe('UserMenu', () => {
-  it('routes the legacy profile item through the operator access section', async () => {
+  it('routet den Legacy-Profil-Eintrag auf den eigenen Profilabschnitt (UAT-008)', async () => {
     const wrapper = mount(UserMenu)
     const profile = wrapper.findAll('[role="menuitem"]').find((item) => item.text() === 'topbar.userMenu.profile')
     await profile?.trigger('click')
-    expect(router.push).toHaveBeenCalledWith({ name: 'SettingsWindow', params: { section: 'access' } })
+    expect(router.push).toHaveBeenCalledWith({ name: 'SettingsWindow', params: { section: 'profile' } })
   })
   it('offers profile access with a session', async () => {
     Object.assign(auth, { jwtEnabled: true, session: { access_token: 'x' }, user: { email: 'user@example.test' } })

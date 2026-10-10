@@ -50,10 +50,11 @@
             {{ t('topbar.userMenu.providerKeys') }}
           </DropdownMenuItem>
         </template>
-        <!-- Allgemeine Betreiber-Einstellungen bleiben im Legacy-Modus;
-             angemeldete Konten erhalten den eigenen Profilabschnitt. -->
+        <!-- Im Legacy-Modus zeigt „Profil" ebenfalls auf den eigenen
+             Profilabschnitt; Betreiber-Einstellungen bleiben über
+             „Einstellungen" erreichbar. -->
         <template v-else>
-          <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'access' } }) }">
+          <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsWindow', params: { section: 'profile' } }) }">
             {{ t('topbar.userMenu.profile') }}
           </DropdownMenuItem>
           <DropdownMenuItem @select="() => { close(); goTo({ name: 'SettingsGeneral' }) }">
