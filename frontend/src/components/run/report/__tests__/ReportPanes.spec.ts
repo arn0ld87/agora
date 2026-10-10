@@ -133,6 +133,33 @@ describe('ReportReadingPane', () => {
     ctx.generation.stop()
   })
 
+  it('UAT-010: nach dem Start ist der Bericht noch nicht angelegt (404): Fortschritt statt Fehlerblock', async () => {
+    const api = okApi({
+      listReports: vi.fn().mockResolvedValue(listEnvelope([])),
+      getReport: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'not_found', status: 404, message: 'Report does not exist: report_new' })),
+    })
+    const { wrapper, ctx, routed, generationApi } = await mountWithReport(
+      ReportReadingPane,
+      { activeSection: null },
+      { api, reportId: 'new' },
+    )
+    generationApi.generateReport.mockResolvedValue({ success: true, data: { report_id: 'report_new' } })
+    generationApi.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'processing', report_id: 'report_new', run_id: 'run_9' },
+    })
+    await wrapper.get('[data-testid="report-start-button"]').trigger('click')
+    await flushPromises()
+    routed.value = 'report_new'
+    await flushPromises()
+    expect(wrapper.find('[data-testid="report-load-failed"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="report-progress"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Report does not exist')
+    ctx.generation.stop()
+  })
+
   it('fehlgeschlagener Bericht: Grund sichtbar', async () => {
     const failed = reportData({ status: 'failed', error: 'Budget erschöpft', completed_at: null })
     const api = okApi({

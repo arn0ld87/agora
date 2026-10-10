@@ -162,6 +162,77 @@ describe('useRunReport', () => {
     expect(b.ctx.evidence.value).toEqual({ status: 'unsaved' })
   })
 
+  describe('UAT-010: Bericht-404 während der Erzeugung', () => {
+    const notFound = (id: string) => new ApiError({ code: 'not_found', status: 404, message: `Report does not exist: ${id}` })
+    const processing = {
+      success: true,
+      data: { status: 'processing', report_id: 'report_new', run_id: 'run_9' },
+    }
+
+    it('404 direkt nach dem Start ist kein Fehler', async () => {
+      const api = okApi({
+        listReports: vi.fn().mockResolvedValue(listEnvelope([])),
+        getReport: vi.fn().mockRejectedValue(notFound('report_new')),
+      })
+      const { ctx, routed, generationApi } = setup({
+        api,
+        reportId: 'new',
+        onStarted: (id) => {
+          routed.value = id
+        },
+      })
+      generationApi.generateReport.mockResolvedValue({ success: true, data: { report_id: 'report_new' } })
+      generationApi.getReportStatus.mockResolvedValue(processing)
+      await ctx.reload()
+      await ctx.generation.start()
+      await flushPromises()
+      expect(ctx.selectedReportId.value).toBe('report_new')
+      expect(api.getReport).toHaveBeenCalledWith('report_new')
+      expect(ctx.report.value).toEqual({ status: 'idle' })
+      expect(ctx.evidence.value.status).toBe('idle')
+      expect(ctx.generation.status.phase.value).toBe(1)
+      ctx.generation.stop()
+    })
+
+    it('Reload während der Anlage, die Run-Registry kennt den Job', async () => {
+      const api = okApi({
+        listReports: vi.fn().mockResolvedValue(listEnvelope([])),
+        getReport: vi.fn().mockRejectedValue(notFound('report_new')),
+      })
+      const { ctx, generationApi } = setup({ api, reportId: 'report_new' })
+      generationApi.getReportStatus.mockResolvedValue(processing)
+      await ctx.reload()
+      expect(ctx.report.value).toEqual({ status: 'idle' })
+      expect(ctx.generation.status.phase.value).toBe(1)
+      expect(generationApi.getReportStatus).toHaveBeenCalledWith({ simulationId: 'sim_1', reportId: 'report_new' })
+      ctx.generation.stop()
+    })
+
+    it.each([
+      ['Quittung ohne Job', { success: true, data: { status: 'generating', report_id: 'report_x', message_key: 'report.awaiting_task' } }],
+      ['gescheiterter Job', { success: true, data: { status: 'failed', report_id: 'report_x', run_id: 'run_1', error: 'Budget' } }],
+      ['Job einer anderen Kennung', { success: true, data: { status: 'processing', report_id: 'report_other', run_id: 'run_2' } }],
+    ])('eine Berichts-ID ohne laufenden Job bleibt notFound: %s', async (_label, status) => {
+      const api = okApi({ getReport: vi.fn().mockRejectedValue(notFound('report_x')) })
+      const { ctx, generationApi } = setup({ api, reportId: 'report_x' })
+      generationApi.getReportStatus.mockResolvedValue(status)
+      await ctx.reload()
+      expect(ctx.report.value).toMatchObject({ status: 'failed', kind: 'notFound' })
+      expect(ctx.generation.status.phase.value).toBe(0)
+      ctx.generation.stop()
+    })
+
+    it('eine Berichts-ID bleibt notFound, wenn die Statusabfrage selbst scheitert', async () => {
+      const api = okApi({ getReport: vi.fn().mockRejectedValue(notFound('report_x')) })
+      const { ctx, generationApi } = setup({ api, reportId: 'report_x' })
+      generationApi.getReportStatus.mockRejectedValue(new Error('offline'))
+      await ctx.reload()
+      expect(ctx.report.value).toMatchObject({ status: 'failed', kind: 'notFound' })
+      expect(ctx.generation.status.phase.value).toBe(0)
+      ctx.generation.stop()
+    })
+  })
+
   it('Fassungswechsel über die Adresse lädt nur Bericht und Belege der neuen Fassung', async () => {
     const api = okApi()
     const { ctx, routed } = setup({ api, reportId: 'report_1' })

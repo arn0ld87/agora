@@ -22,6 +22,8 @@
  *   ReportState    idle | loading | ok { report } | failed { kind, reason }
  *   EvidenceState  idle | loading | ok { map } | omitted { omission } | unsaved | failed { kind, reason }
  * `idle` heißt: es gibt nichts zu laden (kein Bericht gewählt, Bericht läuft noch).
+ * Der Zustand gilt auch, solange eine bekannte laufende Erzeugung ihren Berichtsdatensatz
+ * noch nicht angelegt hat (404 vor dem ersten Speichern, UAT-010).
  * `unsaved` ist die Antwort 404 des Evidence-Endpunkts für eine Fassung, die selbst
  * geladen wurde: für sie ist keine Evidence-Map gespeichert (unvollständige Fassung
  * ohne erzeugten Abschnitt, Altbericht). Das ist weder ein Ladefehler noch
@@ -47,6 +49,7 @@ import { ApiError } from '@/api/envelope'
 import {
   getReport as defaultGetReport,
   getReportEvidence as defaultGetReportEvidence,
+  getReportStatus as defaultGetReportStatus,
   listReports as defaultListReports,
   type EvidenceEnvelope,
 } from '@/api/report'
@@ -136,7 +139,9 @@ export interface RunReportContext {
 export const RUN_REPORT_KEY: InjectionKey<RunReportContext> = Symbol('run-report')
 
 const RUNNING_STATUSES = new Set(['pending', 'planning', 'generating'])
-const TERMINAL_WITH_EVIDENCE = new Set(['completed', 'incomplete'])
+/** Zustände, in denen die Run-Registry einen Berichts-Job vor seinem Ende führt. */
+const ACTIVE_RUN_STATUSES = new Set(['pending', 'processing'])
+const TERMINAL_WITH_EVIDENCE =new Set(['completed', 'incomplete'])
 
 function describe(err: unknown): string {
   if (err instanceof Error && err.message) return err.message
@@ -347,6 +352,33 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
     }
   }
 
+  const getStatus = options.generationApi?.getReportStatus ?? defaultGetReportStatus
+
+  /**
+   * Kennt die Run-Registry einen laufenden Berichts-Job zu dieser Kennung? `run_id` kommt nur
+   * aus dem Registry-Zweig des Backends (`report_status.py::_status_from_run_registry`); die
+   * Quittung für unbekannte Kennungen (`_acknowledge_polling`) trägt keines und beweist keinen Job.
+   */
+  async function generationRegisteredFor(id: string): Promise<boolean> {
+    try {
+      const res = (await getStatus({ simulationId: options.simulationId(), reportId: id })) as {
+        success?: boolean
+        data?: { report_id?: unknown; run_id?: unknown; status?: unknown }
+      } | null
+      const data = res?.success ? res.data : null
+      return (
+        !!data &&
+        data.report_id === id &&
+        typeof data.run_id === 'string' &&
+        data.run_id !== '' &&
+        typeof data.status === 'string' &&
+        ACTIVE_RUN_STATUSES.has(data.status)
+      )
+    } catch {
+      return false
+    }
+  }
+
   /** Bericht und Belege der gewählten Fassung; startet bzw. beendet die Erzeugungsabfrage. */
   async function reloadSelected(): Promise<void> {
     const mine = ++seq
@@ -367,6 +399,21 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
     evidence.value = { status: 'loading' }
     const loaded = await loadReport(id)
     if (mine !== seq) return
+    if (loaded.status === 'failed' && loaded.kind === 'notFound') {
+      // Der Datensatz entsteht erst im Worker: bis dahin ist 404 bei laufender Erzeugung erwartbar.
+      const known = generationFor === id || (await generationRegisteredFor(id))
+      if (mine !== seq) return
+      if (known) {
+        report.value = { status: 'idle' }
+        evidence.value = { status: 'idle' }
+        if (generationFor !== id) {
+          generation.stop()
+          generationFor = id
+          await generation.bootstrap()
+        }
+        return
+      }
+    }
     report.value = loaded
     if (loaded.status === 'ok' && TERMINAL_WITH_EVIDENCE.has(loaded.report.status)) {
       const ev = await loadEvidence(id)
