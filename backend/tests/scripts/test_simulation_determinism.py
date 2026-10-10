@@ -260,7 +260,8 @@ def test_parallel_runner_selection_fills_the_target_with_existing_agents() -> No
 
 
 def test_single_platform_runner_selection_fills_the_target_with_existing_agents() -> None:
-    platform_runner = pytest.importorskip("sim_runtime.platform_runner")
+    from sim_runtime import platform_runner
+
     runner = platform_runner.SinglePlatformRunner.__new__(platform_runner.SinglePlatformRunner)
     runner.config = {"time_config": dict(_LEGACY_TIME_CONFIG), "agent_configs": _legacy_agent_configs()}
     runner.random_seed = 0
