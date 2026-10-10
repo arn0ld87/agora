@@ -84,7 +84,7 @@ vi.mock('../../composables/useSystemLog', () => ({
 }))
 
 import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
-import { getAvailableModels, prepareSimulation } from '../../api/simulation'
+import { getAvailableModels, prepareSimulation, getPrepareStatus } from '../../api/simulation'
 
 const i18n = createI18n({
   legacy: false,
@@ -547,6 +547,151 @@ describe('Step2EnvSetup — EnvSetupModelPanel ohne v3-Profil-Legacy-Picker (Iss
     expect(prepareSimulation).toHaveBeenCalled()
     const payload = (prepareSimulation as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('llm_profile_id')
+
+    wrapper.unmount()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// UAT-004 — widerspruchsfreie Persona-Statuskarte + ehrlicher Button-Zustand.
+// Der Primär-Button zeigt "Verarbeitet…" nur, solange ein Prepare läuft; der
+// Badge behält Zahlen neben dem Statuswort und nennt die Mindestanzahl aus
+// dem Backend-Vertrag (persona_target.floor), nicht einen Client-Ableitung.
+// ---------------------------------------------------------------------------
+
+// Badge und Button REAL mounten — die pruefen Ton-Klasse und Label-Text.
+const globalConfigUat004 = {
+  plugins: [i18nHints],
+  stubs: {
+    Btn: { template: '<button><slot /></button>' },
+    Kicker: { template: '<span><slot /></span>' },
+    Field: { template: '<div><slot /></div>' },
+    Select: { template: '<select><slot /></select>' },
+    AiModelPicker: passiveAiModelPickerStub,
+  },
+}
+
+function nProfiles(n: number): Array<Record<string, unknown>> {
+  return Array.from({ length: n }, (_, i) => ({ username: `persona-${i}` }))
+}
+
+describe('Step2EnvSetup — UAT-004 widerspruchsfreie Statusanzeige', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    _capturedPollingTasks.length = 0
+    _profilesResponse = { success: true, data: { profiles: [] } }
+    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { ollama: [], presets: [], current_default: '' },
+    })
+  })
+
+  async function mountAndPrepare(opts: {
+    personaTarget?: Record<string, unknown>
+    profiles: Array<Record<string, unknown>>
+  }): Promise<ReturnType<typeof mount>> {
+    _profilesResponse = { success: true, data: { profiles: opts.profiles } }
+    ;(prepareSimulation as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        task_id: 'uat004',
+        ...(opts.personaTarget !== undefined ? { persona_target: opts.personaTarget } : {}),
+      },
+    })
+    ;(getPrepareStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', progress: 100, message: '' },
+    })
+
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-uat004', projectData: undefined, graphData: undefined, systemLogs: [] },
+      global: globalConfigUat004,
+    })
+    await flushPromises()
+
+    await (wrapper.vm as unknown as { triggerPrepare: () => Promise<void> }).triggerPrepare()
+    await flushPromises()
+
+    // Erfassten prepare-status-Polling-Task manuell ticken (Index 0, Muster
+    // aus dem refreshQuality-Tick-Test) — _loadPreparedData setzt phase=3
+    // und isPreparing=false.
+    const prepareStatusTask = _capturedPollingTasks[0]
+    expect(typeof prepareStatusTask).toBe('function')
+    await prepareStatusTask()
+    await flushPromises()
+    await nextTick()
+
+    return wrapper
+  }
+
+  /**
+   * Der Primär-Button der Umgebung-Stufe: erster .actions-Block im DOM
+   * (Card 0, Step2EnvSetup) — SimulationStartConfig (Card 2) rendert einen
+   * eigenen, späteren .actions-Block mit "Simulation starten".
+   */
+  function primaryActionsButton(wrapper: ReturnType<typeof mount>): ReturnType<ReturnType<typeof mount>['find']> {
+    const buttons = wrapper.findAll('.actions')[0].findAll('button')
+    return buttons[buttons.length - 1]
+  }
+
+  it('nach abgeschlossenem Prepare: Button nicht mehr "Verarbeitet…", Karte zeigt Ziel, Floor und Status widerspruchsfrei', async () => {
+    const wrapper = await mountAndPrepare({
+      personaTarget: { entity_count: 18, persona_target_count: 18, floor_applied: true, floor: 18 },
+      profiles: nProfiles(18),
+    })
+
+    // Idle-Button: kein Processing-Blokwort, "Neu generieren".
+    const btn = primaryActionsButton(wrapper)
+    expect(btn.text()).not.toContain('Verarbeitet')
+    expect(btn.text()).toContain('Neu generieren')
+
+    // Badge: Zahlen sichtbar neben Statuswort + green bei 18/18 mit Floor 18.
+    const badge = wrapper.find('[data-testid="personas-status-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('18 / 18')
+    expect(badge.text()).toContain('Abgeschlossen')
+    expect(badge.classes()).toContain('v4-badge--green')
+
+    // Mindestanzahl aus dem Backend-Vertrag (Report-Gate-Zahl), nicht Client-Ableitung.
+    const floorHint = wrapper.find('[data-testid="personas-floor-hint"]')
+    expect(floorHint.exists()).toBe(true)
+    expect(floorHint.text()).toContain('mindestens 18')
+
+    wrapper.unmount()
+  })
+
+  it('Prepare endet unter dem Ziel: Badge warnt ("Unvollständig", orange) statt "Abgeschlossen"', async () => {
+    const wrapper = await mountAndPrepare({
+      personaTarget: { entity_count: 18, persona_target_count: 20, floor_applied: true, floor: 20 },
+      profiles: nProfiles(18),
+    })
+
+    const badge = wrapper.find('[data-testid="personas-status-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.classes()).toContain('v4-badge--orange')
+    expect(badge.text()).toContain('18 / 20')
+    expect(badge.text()).toContain('Unvollständig')
+    expect(badge.text()).not.toContain('Abgeschlossen')
+
+    // Button steht im Idle auf "Neu generieren".
+    const btn = primaryActionsButton(wrapper)
+    expect(btn.text()).toContain('Neu generieren')
+    expect(btn.text()).not.toContain('Verarbeitet')
+
+    wrapper.unmount()
+  })
+
+  it('Edge: ohne persona_target (Alter-Backend-Fallback) bleibt personaFloor null — kein Floor-Hint, Badge zeigt Zahlen mit "?"-Nenner', async () => {
+    const wrapper = await mountAndPrepare({
+      profiles: nProfiles(3),
+    })
+
+    expect(wrapper.find('[data-testid="personas-floor-hint"]').exists()).toBe(false)
+
+    const badge = wrapper.find('[data-testid="personas-status-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('3 / ?')
 
     wrapper.unmount()
   })
