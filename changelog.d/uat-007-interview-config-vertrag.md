@@ -1,0 +1,3 @@
+### Fixed
+
+- **Interview-Seite zeigte Pseudo-Vertragsfehler trotz validem Backend (UAT-007, 10.10.2026).** Auf `/simulations/<sim>/interviews` erschien „Konfiguration: Antwort entspricht nicht dem Vertrag", obwohl Auswahl und Interview funktionieren: Das Frontend-Schema verlangte `contested_question` als reinen String, seit #1778 persistiert das Backend die Streitfrage aber gemäß Contract als Objekt (`statement`/`origin`/`absence_reason`). Der Zod-Spiegel `ContestedQuestionSchema` validiert das Feld jetzt unverändert 1:1 zum Contract; als dokumentierte Legacy-Form bleibt auch der reine String zugelassen — ein dritter Typ bleibt ein Vertragsverstoß mit zielgerichteter Meldung, ohne dass rohe Zod-Details ins UI rutschen.

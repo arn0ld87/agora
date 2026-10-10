@@ -23,6 +23,7 @@
 import { computed, ref, toValue, watch, type ComputedRef, type Ref } from 'vue'
 import { z } from 'zod'
 import { getSimulationConfig, getSimulationProfiles } from '@/api/simulation'
+import { ContestedQuestionSchema } from '@/contracts/contestedQuestionContract'
 
 const ProfileSchema = z
   .object({
@@ -46,11 +47,20 @@ const AgentConfigSchema = z
   })
   .passthrough()
 
+// Streitfrage: kanonisch seit #1778 ein ContestedQuestion-Contract-Objekt
+// (`backend/app/contracts/contested_question_contract.py`); der reine string
+// ist die dokumentierte Legacy-/Bestandstform. Beide Formen werden strikt
+// validiert, kein dritter Typ wird akzeptiert.
+const ContestedQuestionPersistedSchema = z.union([
+  z.string(),
+  ContestedQuestionSchema,
+])
+
 const ConfigEnvelopeSchema = z.object({
   success: z.literal(true),
   data: z
     .object({
-      contested_question: z.string().nullable().optional(),
+      contested_question: ContestedQuestionPersistedSchema.nullable().optional(),
       agent_configs: z.array(z.unknown()).optional(),
     })
     .passthrough(),
@@ -155,7 +165,13 @@ export function useRunPersonas(simulationId: Ref<string> | string): UseRunPerson
         agentConfigs.value = []
         question.value = null
       } else {
-        question.value = env.data.data.contested_question ?? null
+        const persisted = env.data.data.contested_question
+        question.value =
+          persisted == null
+            ? null
+            : typeof persisted === 'string'
+              ? persisted
+              : (persisted.statement ?? null)
         agentConfigs.value = (env.data.data.agent_configs ?? []).flatMap((entry) => {
           const c = AgentConfigSchema.safeParse(entry)
           return c.success ? [c.data] : []

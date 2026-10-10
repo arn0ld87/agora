@@ -119,4 +119,67 @@ describe('useRunPersonas', () => {
     expect(personas.error.value).toContain('1 Einträge')
     expect(personas.personaById('1')).toBeNull()
   })
+
+  // UAT-007: Streitfrage als ContestedQuestion-Contract-Objekt (kanonisch seit #1778)
+  // darf auf der Interview-Seite keinen Pseudo-Vertragsfehler produzieren.
+  it('parst contested_question als Contract-Objekt (Statement, origin=user) ohne Fehler', async () => {
+    api.profiles.mockResolvedValue(profiles)
+    api.config.mockResolvedValue({
+      success: true,
+      data: {
+        contested_question: {
+          statement: 'Soll die Pflicht kommen?',
+          origin: 'user',
+        },
+        agent_configs: [
+          { agent_id: 0, stance: 'supportive', activity_level: 0.7 },
+          { agent_id: 1, stance: 'opposing' },
+          { agent_id: 2, stance: 'neutral' },
+        ],
+      },
+    })
+    const personas = setup()
+    await flush()
+    expect(personas.error.value).toBeNull()
+    expect(personas.contestedQuestion.value).toBe('Soll die Pflicht kommen?')
+    expect(personas.personaById('0')).toMatchObject({
+      name: 'Anna Beck',
+      stance: 'supportive',
+      contestedQuestion: 'Soll die Pflicht kommen?',
+    })
+  })
+
+  it('parst contested_question als Contract-Objekt mit origin=none als null', async () => {
+    api.profiles.mockResolvedValue(profiles)
+    api.config.mockResolvedValue({
+      success: true,
+      data: {
+        contested_question: {
+          statement: null,
+          origin: 'none',
+          absence_reason: 'Keine strittige Frage',
+        },
+        agent_configs: [],
+      },
+    })
+    const personas = setup()
+    await flush()
+    expect(personas.error.value).toBeNull()
+    expect(personas.contestedQuestion.value).toBeNull()
+  })
+
+  it('lehnt einen dritten contested_question-Typ als Vertragsverstoß ab', async () => {
+    api.profiles.mockResolvedValue(profiles)
+    api.config.mockResolvedValue({
+      success: true,
+      data: {
+        contested_question: { origin: 'user', other: 1 },
+        agent_configs: [],
+      },
+    })
+    const personas = setup()
+    await flush()
+    expect(personas.error.value).toContain('Konfiguration')
+    expect(personas.contestedQuestion.value).toBeNull()
+  })
 })
