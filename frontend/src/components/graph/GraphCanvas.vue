@@ -195,10 +195,8 @@ async function downloadGraphml() {
   const gid = props.graphData?.graph_id
   if (!gid) return
   try {
-    const res = await exportGraphMl(gid)
-    const blob = res?.data instanceof Blob
-      ? res.data
-      : new Blob([res?.data ?? ''], { type: 'application/xml' })
+    // The API interceptor already unwraps the Blob; reading .data again loses its bytes.
+    const blob = await exportGraphMl(gid)
     _triggerBlobDownload(blob, `agora-graph-${gid}.graphml`)
   } catch (e) {
     console.error('GraphML export failed', e)
