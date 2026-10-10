@@ -154,3 +154,114 @@ class TestQuotaHoldsForFinalPopulation:
         result = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=1.0)
 
         assert result == personas
+
+
+class TestSyntheticSkepticProfiles:
+    """#1779: Die Skeptiker der Quotenregel bekommen nachgelagert ein Profil.
+
+    Die Konfiguration entsteht nach der Persona-Phase. Im Lauf
+    ``sim_c8c6b30aa652`` blieben die Agenten 50 bis 53 deshalb ohne Profil,
+    existierten in OASIS nicht und schrieben nie.
+    """
+
+    @staticmethod
+    def _config_with_skeptics(entity_count: int = 10) -> dict:
+        from dataclasses import asdict
+
+        personas = [_make_agent(i) for i in range(entity_count)]
+        agents = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
+        return {
+            "simulation_requirement": "Soll der Kreißsaal geschlossen werden?",
+            "contested_question": {
+                "statement": "Der Kreistag beschließt, den Kreißsaal zu schließen.",
+                "origin": "user",
+                "absence_reason": None,
+            },
+            "agent_configs": [asdict(a) for a in agents],
+        }
+
+    @staticmethod
+    def _entity_profiles(entity_count: int = 10) -> list:
+        from app.services.oasis_profile_models import OasisAgentProfile
+
+        return [
+            OasisAgentProfile(
+                user_id=i, user_name=f"user_{i}", name=f"Agent {i}", bio="Bio", persona="Persona"
+            )
+            for i in range(entity_count)
+        ]
+
+    def test_synthetic_skeptics_get_profiles(self) -> None:
+        from app.services.prepare_skeptic_profiles import build_skeptic_profiles
+
+        config = self._config_with_skeptics()
+        existing = self._entity_profiles()
+
+        created = build_skeptic_profiles(config, existing, language="de")
+
+        profiles = [*existing, *created]
+        assert len(profiles) == len(config["agent_configs"])
+        synthetic = [
+            c for c in config["agent_configs"] if c["entity_uuid"].startswith("synthetic-skeptic-")
+        ]
+        assert synthetic, "Die Quotenregel muss Skeptiker ergänzt haben"
+        by_user_id = {p.user_id: p for p in created}
+        for agent_config in synthetic:
+            profile = by_user_id[agent_config["agent_id"]]
+            assert profile.source_entity_uuid == agent_config["entity_uuid"]
+            assert profile.name == agent_config["entity_name"]
+            # Haltung (ablehnend) und Streitfrage stehen im Profiltext.
+            assert "ablehnend" in profile.persona
+            assert "Kreißsaal" in profile.persona
+            assert profile.generation_source == "rule_based"
+
+    def test_profiles_satisfy_the_persona_contract_without_invented_demography(self) -> None:
+        from app.contracts.persona_contract import PersonaModel
+        from app.services.prepare_skeptic_profiles import build_skeptic_profiles
+
+        created = build_skeptic_profiles(
+            self._config_with_skeptics(), self._entity_profiles(), language="de"
+        )
+
+        assert created
+        for profile in created:
+            payload = {
+                k: v
+                for k, v in profile.to_reddit_format().items()
+                if k not in ("created_at", "age", "gender", "mbti")
+            }
+            payload["user_name"] = payload.pop("username")
+            model = PersonaModel.model_validate(payload)
+            assert model.persona_kind == "collective"
+            assert profile.age is None and profile.gender is None and profile.mbti is None
+            assert profile.profession is None
+
+    def test_existing_profile_is_not_duplicated(self) -> None:
+        from app.services.prepare_skeptic_profiles import build_skeptic_profiles
+
+        config = self._config_with_skeptics()
+        existing = self._entity_profiles()
+        first = build_skeptic_profiles(config, existing, language="de")
+
+        assert build_skeptic_profiles(config, [*existing, *first], language="de") == []
+
+    def test_english_language_is_respected(self) -> None:
+        from app.services.prepare_skeptic_profiles import build_skeptic_profiles
+
+        created = build_skeptic_profiles(
+            self._config_with_skeptics(), self._entity_profiles(), language="en"
+        )
+
+        assert created
+        assert all("oppose" in p.persona for p in created)
+
+    def test_without_contested_question_the_simulation_requirement_is_referenced(self) -> None:
+        from app.services.prepare_skeptic_profiles import build_skeptic_profiles
+
+        config = self._config_with_skeptics()
+        config["contested_question"] = {"statement": None, "origin": "none", "absence_reason": None}
+
+        created = build_skeptic_profiles(config, self._entity_profiles(), language="de")
+
+        assert created
+        assert all("Soll der Kreißsaal geschlossen werden?" in p.persona for p in created)

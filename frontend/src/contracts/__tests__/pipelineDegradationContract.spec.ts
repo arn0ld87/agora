@@ -69,6 +69,7 @@ describe('PipelineDegradationSchema', () => {
       'stance_position_unrepresented',
       'initial_post_stance_conflict',
       'entity_selection_actors_omitted',
+      'agent_config_rule_fallback',
     ])
   })
 

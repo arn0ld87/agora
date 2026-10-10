@@ -11,8 +11,10 @@ from contextvars import copy_context
 from typing import Any, Dict, List, Optional
 
 
+from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from ..contracts.simulation_activity_contract import ActorClass
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 from .entity_reader import EntityNode
 from .simulation_activity_policy import (
     enforce_active_hours_floor,
@@ -102,6 +104,41 @@ def _topic_types_of(self) -> frozenset:
     """Topic-Typen des Laufs; leer, wenn der Generator keine gesetzt hat."""
     value = getattr(self, '_contested_topic_types', None)
     return value if isinstance(value, frozenset) else frozenset()
+
+
+def _degradations_of(self) -> Optional[DegradationCollector]:
+    """Sammler des Laufs; ``None``, wenn der Generator keinen gesetzt hat (#1779)."""
+    value = getattr(self, '_degradations', None)
+    return value if isinstance(value, DegradationCollector) else None
+
+
+_LLM_SOURCE = 'llm'
+_RULE_FALLBACK_SOURCE = 'rule_fallback'
+_SYNTHETIC_SKEPTIC_SOURCE = 'synthetic_skeptic'
+# Betrag des Vorzeichens, das die Regel einer aus dem Graph belegten Haltung gibt.
+_RULE_BIAS_MAGNITUDE = 0.5
+
+
+def _report_rule_fallback(self, config: AgentActivityConfig) -> None:
+    """Macht einen Agenten aus den Regel-Defaults sichtbar (#1779).
+
+    Log und, wenn der Lauf einen Sammler hat, eine Degradation. Der Eintrag
+    selbst trägt ``config_source="rule_fallback"``.
+    """
+    detail = (
+        f'Agent {config.entity_name} (agent_id {config.agent_id}, Typ {config.entity_type}) '
+        f'ohne Modellkonfiguration: Regel-Defaults mit Haltung {config.stance}; '
+        'es wird keine Position erfunden.'
+    )
+    logger.warning('Agentenkonfiguration per Regel-Fallback: %s', detail)
+    collector = _degradations_of(self)
+    if collector is not None:
+        collector.record(
+            DegradationKind.AGENT_CONFIG_RULE_FALLBACK,
+            DegradationSeverity.WARNING,
+            detail,
+            context={'agent_id': config.agent_id, 'stance': config.stance},
+        )
 
 
 def _resolve_agent_stance(entity: EntityNode, cfg: Dict[str, Any], topic_types: frozenset) -> str:
@@ -196,8 +233,9 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
     for i, entity in enumerate(entities):
         agent_id = start_idx + i
         cfg = llm_configs.get(agent_id, {})
-        if not cfg:
-            cfg = self._generate_agent_config_by_rule(entity)
+        from_rule = not cfg
+        if from_rule:
+            cfg = self._generate_agent_config_by_rule(entity, contested_statement)
         # Issue #1713 Slice S4: dieselbe Untergrenze fuer LLM-Output (cfg aus
         # llm_configs) und Regel-Fallback (cfg aus _generate_agent_config_by_rule)
         # — beide landen hier im selben cfg-Dict, bevor AgentActivityConfig
@@ -206,11 +244,13 @@ def _generate_agent_configs_batch(self, context: str, entities: List[EntityNode]
         active_hours = enforce_active_hours_floor(
             self._coerce_int_list(cfg.get('active_hours'), list(range(9, 23)))
         )
-        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0), actor_class=_resolve_actor_class(agent_id, entity, cfg).value)
+        config = AgentActivityConfig(agent_id=agent_id, entity_uuid=entity.uuid, entity_name=entity.name, entity_type=entity.get_entity_type() or 'Unknown', activity_level=activity_level, posts_per_hour=cfg.get('posts_per_hour', 0.5), comments_per_hour=cfg.get('comments_per_hour', 1.0), active_hours=active_hours, response_delay_min=cfg.get('response_delay_min', 5), response_delay_max=cfg.get('response_delay_max', 60), sentiment_bias=cfg.get('sentiment_bias', 0.0), stance=_resolve_agent_stance(entity, cfg, topic_types), influence_weight=cfg.get('influence_weight', 1.0), actor_class=_resolve_actor_class(agent_id, entity, cfg).value, config_source=_RULE_FALLBACK_SOURCE if from_rule else _LLM_SOURCE)
         # Die Vorzeichenregel steht nur im Prompt mit Streitfrage; ohne
         # Streitfrage bleibt der Lauf wie zuvor (Review PR #1780).
         if contested_statement:
             config.sentiment_bias = _align_sentiment_sign(config.stance, config.sentiment_bias)
+        if from_rule:
+            _report_rule_fallback(self, config)
         configs.append(config)
     return configs
 
@@ -286,14 +326,42 @@ def _ensure_skeptic_quota(personas: List[AgentActivityConfig], min_ratio: float=
     result = list(personas)
     base_agent_id = max((p.agent_id for p in personas), default=-1) + 1
     for i in range(to_add):
-        synthetic = AgentActivityConfig(agent_id=base_agent_id + i, entity_uuid=f'synthetic-skeptic-{base_agent_id + i}', entity_name=f'Skeptiker {base_agent_id + i}', entity_type='Person', activity_level=enforce_activity_level_floor(0.7), posts_per_hour=0.5, comments_per_hour=1.2, active_hours=enforce_active_hours_floor(range(18, 23)), response_delay_min=5, response_delay_max=30, sentiment_bias=-0.5, stance='opposing', influence_weight=1.0)
+        synthetic = AgentActivityConfig(agent_id=base_agent_id + i, entity_uuid=f'synthetic-skeptic-{base_agent_id + i}', entity_name=f'Skeptiker {base_agent_id + i}', entity_type='Person', activity_level=enforce_activity_level_floor(0.7), posts_per_hour=0.5, comments_per_hour=1.2, active_hours=enforce_active_hours_floor(range(18, 23)), response_delay_min=5, response_delay_max=30, sentiment_bias=-0.5, stance='opposing', influence_weight=1.0, config_source=_SYNTHETIC_SKEPTIC_SOURCE)
         result.append(synthetic)
         logger.info('_ensure_skeptic_quota: synthetischen Skeptiker hinzugefügt (agent_id=%d, gesamt-skeptisch=%d/%d)', synthetic.agent_id, skeptic_count + i + 1, total + i + 1)
     return result
 
 
-def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
-    """Generate single agent configuration based on DACH timing rules."""
+def _rule_bias_for(stance: str) -> float:
+    """Vorzeichen der Regel zu einer belegten Haltung; ohne Haltung neutral (0.0)."""
+    if stance == 'opposing':
+        return -_RULE_BIAS_MAGNITUDE
+    if stance == 'supportive':
+        return _RULE_BIAS_MAGNITUDE
+    return 0.0
+
+
+def _generate_agent_config_by_rule(self, entity: EntityNode, contested_statement: Optional[str]=None) -> Dict[str, Any]:
+    """Regel-Defaults für einen Agenten, dessen Modellkonfiguration fehlt (#1779).
+
+    Die Regel erfindet keine Haltung. Reihenfolge: (1) die aus dem Graph
+    belegte Haltung (``resolve_stance``, Kante auf einen Topic-Knoten); (2) sonst
+    ``neutral`` — ``observer`` gilt nur für Medien, nie für betroffene Typen. Mit
+    Streitfrage trägt eine belegte Haltung ein dazu passendes Vorzeichen von
+    ``sentiment_bias`` (``_align_sentiment_sign``); ohne Streitfrage bleibt es
+    bei 0.0 wie zuvor. Der Aufrufer macht den Rückfall sichtbar
+    (``config_source="rule_fallback"``, Degradation), er ist nie ein stiller Default.
+    """
+    cfg = _rule_defaults_for_type(entity)
+    stance = resolve_stance(entity, cfg['stance'], _topic_types_of(self))
+    cfg['stance'] = stance
+    if contested_statement:
+        cfg['sentiment_bias'] = _align_sentiment_sign(stance, _rule_bias_for(stance))
+    return cfg
+
+
+def _rule_defaults_for_type(entity: EntityNode) -> Dict[str, Any]:
+    """Zeit- und Gewichtsregeln nach Entitätstyp (DACH); Haltung ``neutral``, Medien ``observer``."""
     entity_type = (entity.get_entity_type() or 'Unknown').lower()
     if entity_type in ['university', 'governmentagency', 'ngo']:
         return {'activity_level': 0.2, 'posts_per_hour': 0.1, 'comments_per_hour': 0.05, 'active_hours': list(range(9, 18)), 'response_delay_min': 60, 'response_delay_max': 240, 'sentiment_bias': 0.0, 'stance': 'neutral', 'influence_weight': 3.0}

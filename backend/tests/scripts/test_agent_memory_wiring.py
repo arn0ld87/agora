@@ -111,6 +111,85 @@ async def test_round_loop_prunes_after_every_step(
     assert all(callable(c["log"]) for c in prune_calls)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("profile_file", "runner_name"),
+    [
+        ("twitter_profiles.csv", "run_twitter_simulation"),
+        ("reddit_profiles.json", "run_reddit_simulation"),
+    ],
+)
+async def test_both_parallel_loops_install_stance_anchor(
+    monkeypatch: Any, tmp_path: Path, profile_file: str, runner_name: str
+) -> None:
+    """#1779: Haltungsanker je Aktivierung, genau einmal je Graph, mit der (ausgerichteten)
+    Konfiguration der Schleife, nach dem Kommentardeckel und vor der ersten Runde."""
+    (tmp_path / profile_file).write_text("{}" if profile_file.endswith("json") else "", encoding="utf-8")
+    events: List[str] = []
+    _patch(monkeypatch, events, [])
+    anchor_calls: List[Dict[str, Any]] = []
+
+    def fake_anchor(agent_graph: Any, agent_configs: Any, contested_statement: Any, *, log: Any = None) -> int:
+        events.append("install_stance_anchor")
+        anchor_calls.append(
+            {"graph": agent_graph, "configs": agent_configs, "statement": contested_statement, "log": log}
+        )
+        return 1
+
+    monkeypatch.setattr(rps, "install_stance_anchor", fake_anchor)
+    config = _config()
+    config["agent_configs"] = [{"agent_id": 0, "stance": "opposing", "sentiment_bias": -0.5}]
+    config["contested_question"] = {"statement": "Der Kreistag schließt den Kreißsaal."}
+
+    result = await getattr(rps, runner_name)(config, str(tmp_path))
+
+    assert events == ["install_comment_cap", "install_stance_anchor", "step", "prune", "step", "prune"]
+    assert len(anchor_calls) == 1
+    (call,) = anchor_calls
+    assert call["graph"] is result.agent_graph
+    assert call["configs"] is config["agent_configs"]
+    assert call["statement"] == "Der Kreistag schließt den Kreißsaal."
+    assert callable(call["log"])
+
+
+def test_single_platform_runner_installs_the_anchor_only_without_react_loop(
+    monkeypatch: Any,
+) -> None:
+    """#1779: Der Single-Platform-Runner verankert die Haltung im Feed, solange kein ReAct-Loop
+    läuft; mit ``tool_loop`` injiziert dieser sie je Runde selbst (kein doppelter Anker)."""
+    from sim_runtime import platform_runner
+
+    calls: List[Dict[str, Any]] = []
+
+    def fake_anchor(agent_graph: Any, agent_configs: Any, contested_statement: Any, *, log: Any = None) -> int:
+        calls.append({"graph": agent_graph, "configs": agent_configs, "statement": contested_statement})
+        return 3
+
+    monkeypatch.setattr(platform_runner, "install_stance_anchor", fake_anchor)
+    runner = platform_runner.SinglePlatformRunner.__new__(platform_runner.SinglePlatformRunner)
+    runner.agent_graph = object()
+    runner.config = {
+        "agent_configs": [{"agent_id": 0, "stance": "supportive"}],
+        "contested_question": {"statement": "S"},
+    }
+
+    runner.tool_loop = object()
+    assert runner._install_stance_anchor() == 0
+    assert calls == []
+
+    runner.tool_loop = None
+    assert runner._install_stance_anchor() == 3
+    assert calls == [{"graph": runner.agent_graph, "configs": runner.config["agent_configs"], "statement": "S"}]
+
+
+def test_single_platform_runner_wires_the_anchor_after_the_tool_loop_decision() -> None:
+    source = (_SCRIPTS_DIR / "sim_runtime" / "platform_runner.py").read_text(encoding="utf-8")
+    loop_created = source.index("self.tool_loop = create_tool_aware_loop(")
+    anchor = source.index("self._install_stance_anchor()")
+    assert anchor > loop_created
+    assert anchor < source.index("await self.env.step(actions)")
+
+
 def test_single_platform_runner_prunes_after_env_step() -> None:
     source = (_SCRIPTS_DIR / "sim_runtime" / "platform_runner.py").read_text(encoding="utf-8")
     step = source.index("await self.env.step(actions)")

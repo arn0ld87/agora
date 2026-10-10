@@ -98,6 +98,7 @@ from app.services.simulation_activity_policy import (
 )
 from app.services.simulation_activity_model import (
     RUNTIME_PLATFORMS_KEY,
+    agent_ids_in_graph,
     for_platform,
     select_round_agent_ids_from_config,
 )
@@ -128,7 +129,7 @@ from activation_limit import (
     install_activation_limits_from_config,
     round_activation_limits,
 )
-from agent_feed import install_feed_comment_cap
+from agent_feed import install_feed_comment_cap, install_stance_anchor
 from agent_memory import describe_memory_policy, prune_graph_memories
 from oasis_action_ingest import (
     fetch_new_actions_from_db,
@@ -247,6 +248,23 @@ class SinglePlatformRunner:
         profiles = load_simulation_profiles(os.path.dirname(self.config_path) or ".")
         aligned, _agents_without_profile = align_config_to_profiles(config, profiles)
         return aligned
+
+    def _install_stance_anchor(self) -> int:
+        """Haltungsanker je Aktivierung in den Feed-Text (#1779).
+
+        Der ReAct-Pfad (``self.tool_loop``) baut die Haltung je Runde in seinen
+        Prompt; dann wäre ein Anker im Feed (``agent_observation``) doppelt. Ohne
+        Loop (Standard-``LLMAction``) fehlt die Haltung in diesem Runner sonst ganz,
+        weil hier kein ``augment_profile_with_stance`` läuft.
+        """
+        if self.tool_loop:
+            return 0
+        return install_stance_anchor(
+            self.agent_graph,
+            self.config.get("agent_configs", []),
+            (self.config.get("contested_question") or {}).get("statement"),
+            log=logger.info,
+        )
 
     def _get_profile_path(self) -> str:
         """Get Profile file path (platform-spezifischer Dateiname)"""
@@ -392,6 +410,9 @@ class SinglePlatformRunner:
             current_hour,
             round_num,
             fallback_seed=self.random_seed,
+            # Konfigurationen ohne OASIS-Agent (kein Profil) kommen im Altpfad
+            # vor der Ziehung aus dem Kandidatenpool (#1779).
+            existing_agent_ids=agent_ids_in_graph(env.agent_graph),
         )
 
         # Convert to Agent objects
@@ -400,8 +421,13 @@ class SinglePlatformRunner:
             try:
                 agent = env.agent_graph.get_agent(agent_id)
                 active_agents.append((agent_id, agent))
-            except Exception:
-                pass
+            except Exception as exc:
+                # Nach der Vorfilterung ist ein fehlender Agent unerwartet;
+                # nicht still verwerfen (#1779).
+                logger.warning(
+                    "Runde %s: Agent %s nicht aktivierbar (%s: %s)",
+                    round_num, agent_id, type(exc).__name__, exc,
+                )
 
         return active_agents
 
@@ -709,6 +735,9 @@ class SinglePlatformRunner:
                 print("[ToolUse] Tool registry initialization failed (check Neo4j credentials)")
         elif enable_tools and not AGENT_TOOLS_AVAILABLE:
             print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
+        # #1779: Haltungsanker im Feed-Text, sofern der ReAct-Loop die Haltung nicht je Runde selbst liefert.
+        self._install_stance_anchor()
 
         # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
         # damit sie im Tool-Loop in den Prompt gelangen statt nur in der

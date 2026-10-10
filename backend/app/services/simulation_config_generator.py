@@ -282,6 +282,8 @@ class SimulationConfigGenerator:
             else _stance_graph.resolve_contested_topic_types(project_id)
         )
         self._contested_topic_types = topic_types
+        # Sammler für sichtbare Rückfälle der Agentenkonfiguration (#1779).
+        self._degradations = degradations
 
         # Calculate total steps
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
@@ -366,6 +368,14 @@ class SimulationConfigGenerator:
             )
 
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
+        rule_fallback_names = [
+            a.entity_name for a in all_agent_configs if a.config_source == "rule_fallback"
+        ]
+        if rule_fallback_names:
+            reasoning_parts.append(
+                f"Regel-Fallback: {len(rule_fallback_names)} Agenten ohne Modellkonfiguration "
+                f"({', '.join(rule_fallback_names)}) laufen mit Regel-Defaults ohne erfundene Haltung."
+            )
 
         # ========== Skeptiker-Quote ≥20 % (Slice 5, Issue #497) ==========
         all_agent_configs = self._ensure_skeptic_quota(all_agent_configs)
@@ -501,5 +511,5 @@ class SimulationConfigGenerator:
     def _ensure_skeptic_quota(personas: List[AgentActivityConfig], min_ratio: float=0.2) -> List[AgentActivityConfig]:
         return _simulation_config_agents._ensure_skeptic_quota(personas, min_ratio)
 
-    def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
-        return _simulation_config_agents._generate_agent_config_by_rule(self, entity)
+    def _generate_agent_config_by_rule(self, entity: EntityNode, contested_statement: Optional[str] = None) -> Dict[str, Any]:
+        return _simulation_config_agents._generate_agent_config_by_rule(self, entity, contested_statement)

@@ -235,6 +235,36 @@ def _clone(memory: ChatHistoryMemory) -> ChatHistoryMemory:
     return twin
 
 
+def test_system_message_with_stance_survives_pruning_and_token_cap() -> None:
+    """Q1 aus #1779: Die Haltung steht in der System-Nachricht und geht weder durch das
+    Feed-Pruning noch durch das Kürzen des Kontexts (kleines Token-Limit) verloren; die
+    eigenen Aktionen bleiben in Reihenfolge. Verblassen ist Verwässerung, kein Verlust."""
+    stance_section = agent_tools.build_stance_section("opposing", -0.7, "Betriebsrätin")
+    assert stance_section.startswith("## Deine Haltung")
+    memory = _new_memory(token_limit=1_200)
+    memory.clear()
+    system = BaseMessage.make_assistant_message(role_name="system", content=f"Persona X.\n{stance_section}")
+    memory.write_records([MemoryRecord(message=system, role_at_backend=OpenAIBackendRole.SYSTEM)])
+    own_uuids: List[str] = []
+    for n in range(1, 9):
+        own_uuids += _write_activation(memory, n)
+
+    result = agent_memory.prune_memory_feeds(memory, keep_feeds=1, token_cap=1_200)
+
+    assert result.replaced >= 1
+    records = _records(memory)
+    assert _role(records[0]) == "system" and "## Deine Haltung" in records[0].message.content
+    own_after = [str(r.uuid) for r in records if _role(r) not in ("user", "system")]
+    assert own_after == own_uuids
+    messages, _tokens = memory.get_context()
+    assert messages[0]["role"] == "system"
+    assert "## Deine Haltung" in messages[0]["content"]
+    # Auch nach dem Kürzen bleiben die eigenen Antworten in der Reihenfolge der Aktivierungen.
+    answers = [m["content"] for m in messages if str(m.get("content", "")).startswith("done ")]
+    assert answers == sorted(answers, key=lambda text: int(text.split()[1]))
+    assert answers, "mindestens die jüngsten eigenen Antworten bleiben im Kontext"
+
+
 # --- Rundenhook: Schalter, Fehlertoleranz, Sichtbarkeit -----------------------------------
 
 

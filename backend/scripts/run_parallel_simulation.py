@@ -219,6 +219,7 @@ from app.services.simulation_activity_model import (
     activity_limits_sentence,
     activity_platforms,
     activity_runtime_context,
+    agent_ids_in_graph,
     for_platform,
     select_round_agent_ids_from_config,
 )
@@ -332,9 +333,9 @@ except ImportError as _e:
 
 # Kommentardeckel im Agenten-Feed (#1772). Braucht oasis, steht deshalb hinter dem Import-Guard oben.
 try:
-    from .agent_feed import install_feed_comment_cap
+    from .agent_feed import install_feed_comment_cap, install_stance_anchor
 except ImportError:  # direct script execution
-    from agent_feed import install_feed_comment_cap
+    from agent_feed import install_feed_comment_cap, install_stance_anchor
 
 # Obergrenze je Aktivierung (#1779): umhuellt die Aktions-Tools der Agenten.
 try:
@@ -1498,11 +1499,14 @@ def get_active_agents_for_round(
     # Geteilte Auswahl-Logik mit platform_runner.py (#1713 Slice S4). Mit
     # ``time_config.activity_model`` waehlt sie nach Rate, eine Ziehung je Runde
     # fuer beide Plattformen (#1779); ohne das Feld gilt der bisherige Pfad.
+    # Konfigurationen ohne OASIS-Agent (kein Profil) kommen im Altpfad vor der
+    # Ziehung aus dem Kandidatenpool (#1779).
     selected_ids = select_round_agent_ids_from_config(
         config,
         current_hour,
         round_num,
         fallback_seed=derive_simulation_seed(config),
+        existing_agent_ids=agent_ids_in_graph(env.agent_graph),
     )
 
     active_agents = []
@@ -1510,9 +1514,14 @@ def get_active_agents_for_round(
         try:
             agent = env.agent_graph.get_agent(agent_id)
             active_agents.append((agent_id, agent))
-        except Exception:
-            pass
-    
+        except Exception as exc:
+            # Nach der Vorfilterung ist ein fehlender Agent unerwartet; nicht
+            # still verwerfen, sondern sichtbar machen (#1779).
+            logging.getLogger("agora.run_parallel_simulation").warning(
+                "Runde %s: Agent %s nicht aktivierbar (%s: %s)",
+                round_num, agent_id, type(exc).__name__, exc,
+            )
+
     return active_agents
 
 
@@ -1620,6 +1629,13 @@ async def run_twitter_simulation(
             log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
     log_info(describe_memory_policy())
     install_feed_comment_cap(result.agent_graph, log=log_info)
+    # #1779: Haltung + Streitfrage je Aktivierung im Feed-Text (ausgerichtete Konfiguration).
+    install_stance_anchor(
+        result.agent_graph,
+        config.get("agent_configs", []),
+        (config.get("contested_question") or {}).get("statement"),
+        log=log_info,
+    )
 
     # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
     # to every SocialAgent. OASIS triggers these through its normal LLMAction()
@@ -2005,6 +2021,13 @@ async def run_reddit_simulation(
             log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
     log_info(describe_memory_policy())
     install_feed_comment_cap(result.agent_graph, log=log_info)
+    # #1779: Haltungsanker je Aktivierung, siehe Twitter-Zweig.
+    install_stance_anchor(
+        result.agent_graph,
+        config.get("agent_configs", []),
+        (config.get("contested_question") or {}).get("statement"),
+        log=log_info,
+    )
 
     # Native CAMEL function-calling for Reddit agents (see Twitter branch).
     if enable_tools and AGENT_TOOLS_AVAILABLE:

@@ -478,10 +478,12 @@ class TestStanceSectionRefersToContestedQuestion:
             "observer", 0.0, "Redaktion", contested_statement="X wird geschlossen."
         )
         assert "Zur Streitfrage „X wird geschlossen.\" bist du noch unentschieden." in neutral
+        # #1779: kein Verbot, sich zu positionieren; ohne Vorzeichen des Bias keine Neigung.
         assert (
-            "Die Streitfrage „X wird geschlossen.\" beobachtest du, ohne selbst Partei zu sein."
-            in observer
+            "Die Streitfrage „X wird geschlossen.\" verfolgst du aufmerksam; "
+            "du hast dich noch nicht festgelegt." in observer
         )
+        assert "ohne selbst Partei" not in observer
 
     def test_without_contested_question_the_old_text_is_unchanged(self):
         section = self._agent_tools().build_stance_section(

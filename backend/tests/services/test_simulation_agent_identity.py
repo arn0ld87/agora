@@ -207,3 +207,122 @@ def test_twitter_csv_written_by_prepare_carries_the_config_agent_id(tmp_path) ->
         rows = list(csv.DictReader(handle))
     assert [row["user_id"] for row in rows] == ["0", "1", "2"]
     assert position_by_config_agent_id(load_simulation_profiles(str(tmp_path))) == {0: 0, 2: 1, 3: 2}
+
+
+def test_no_agents_without_profile_after_prepare(tmp_path) -> None:
+    """#1779: Nach der Skeptiker-Phase gibt es keinen Konfigurations-Agenten ohne Profil.
+
+    Die Phase läuft nach der Konfigurationsgenerierung, liest die persistierte
+    Konfiguration, ergänzt die Profile der synthetischen Skeptiker und schreibt
+    beide Profildateien neu. ``align_config_to_profiles`` meldet danach keinen
+    Agenten ohne Profil mehr, und die Skeptiker haben eine OASIS-Position.
+    """
+    from dataclasses import asdict
+    from types import SimpleNamespace
+
+    from app.services import prepare_service
+    from app.services.degradation_collector import DegradationCollector
+    from app.services.oasis_profile_models import OasisAgentProfile
+    from app.services.simulation_config_generator import (
+        AgentActivityConfig,
+        SimulationConfigGenerator,
+    )
+
+    personas = [
+        AgentActivityConfig(
+            agent_id=i, entity_uuid=f"uuid-{i}", entity_name=f"Agent {i}", entity_type="Person"
+        )
+        for i in range(10)
+    ]
+    agents = SimulationConfigGenerator._ensure_skeptic_quota(personas, min_ratio=0.20)
+    assert len(agents) > len(personas)
+    config = {
+        "simulation_requirement": "Frage",
+        "agent_configs": [asdict(a) for a in agents],
+        "event_config": {"initial_posts": []},
+    }
+    state = SimpleNamespace(enable_reddit=True, enable_twitter=True, profiles_count=10)
+    profiles = [
+        OasisAgentProfile(
+            user_id=i, user_name=f"user_{i}", name=f"Agent {i}", bio="Bio", persona="Persona"
+        )
+        for i in range(10)
+    ]
+    collector = DegradationCollector()
+
+    result = prepare_service._phase_profile_synthetic_skeptics(
+        state, str(tmp_path), profiles, config, language="de", degradations=collector
+    )
+
+    assert len(result) == len(agents)
+    assert state.profiles_count == len(agents)
+    loaded = load_simulation_profiles(str(tmp_path))
+    assert len(loaded) == len(agents)
+    aligned, without_profile = align_config_to_profiles(config, loaded)
+    assert without_profile == []
+    assert aligned["agent_configs"] == config["agent_configs"]
+    # Reddit-JSON und Twitter-CSV tragen dieselben Agenten.
+    with open(tmp_path / "twitter_profiles.csv", "r", encoding="utf-8", newline="") as handle:
+        twitter_rows = list(csv.DictReader(handle))
+    assert [int(row["source_user_id"]) for row in twitter_rows] == [p["user_id"] for p in loaded]
+    # Die regelbasierten Platzhalter sind als Degradation sichtbar.
+    events = collector.report().events
+    assert [event.kind.value for event in events] == ["persona_rule_based_fallback"]
+    assert events[0].severity.value == "warning"
+
+
+def test_skeptic_phase_is_a_noop_without_skeptics(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from app.services import prepare_service
+
+    state = SimpleNamespace(enable_reddit=True, enable_twitter=True, profiles_count=3)
+    profiles: list = [SimpleNamespace(user_id=i) for i in range(3)]
+
+    for config in ({}, {"agent_configs": [{"agent_id": 0, "entity_uuid": "uuid-0"}]}):
+        result = prepare_service._phase_profile_synthetic_skeptics(
+            state, str(tmp_path), profiles, config, language=None
+        )
+        assert result is profiles
+    assert state.profiles_count == 3
+    assert not list(tmp_path.iterdir())
+
+
+def test_generate_config_phase_hands_profiles_to_the_skeptic_phase(monkeypatch, tmp_path) -> None:
+    """``_phase_generate_config`` ruft die Skeptiker-Phase mit der geschriebenen Konfiguration."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from app.services import prepare_service
+    from app.services.llm_runtime import RuntimeLlmConfig
+
+    payload = {"time_config": {}, "agent_configs": []}
+    fake_params = MagicMock(to_json=lambda: json.dumps(payload), generation_reasoning="ok")
+    generator = MagicMock(generate_config=MagicMock(return_value=fake_params))
+    monkeypatch.setattr(prepare_service, "SimulationConfigGenerator", lambda **kw: generator)
+    seen: dict = {}
+
+    def _spy(state, sim_dir, profiles, config, **kwargs):
+        seen.update(sim_dir=sim_dir, profiles=profiles, config=config, **kwargs)
+        return profiles
+
+    monkeypatch.setattr(prepare_service, "_phase_profile_synthetic_skeptics", _spy)
+    state = SimpleNamespace(
+        project_id="p", graph_id="g", enable_twitter=True, enable_reddit=True,
+        config_generated=False, config_reasoning="",
+    )
+    runtime = RuntimeLlmConfig(
+        provider="custom_openai", api_key="runtime-override-placeholder", base_url="http://llm.invalid/v1"
+    )
+    profiles = [SimpleNamespace(user_id=0)]
+
+    prepare_service._phase_generate_config(
+        MagicMock(name="SimulationManager"), state, "sim_x", "req", "doc",
+        expanded_entities=[], llm_model=None, llm_runtime=runtime, language="en",
+        profiles=profiles, sim_dir=str(tmp_path),
+    )
+
+    assert seen["profiles"] is profiles
+    assert seen["sim_dir"] == str(tmp_path)
+    assert seen["config"] == payload
+    assert seen["language"] == "en"

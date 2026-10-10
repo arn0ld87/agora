@@ -227,6 +227,100 @@ def test_install_swaps_plain_social_environments_only(monkeypatch: pytest.Monkey
     assert logged == ["Feed comment cap: newest 5 comments per post in 1 agent feed(s)"]
 
 
+# --- Haltungsanker je Aktivierung (#1779) -----------------------------------------------------
+
+_STATEMENT = "Der Kreistag beschließt die Schließung."
+
+
+def _anchor_configs() -> List[Dict[str, Any]]:
+    return [
+        {"agent_id": 0, "stance": "opposing", "sentiment_bias": -0.6, "entity_type": "Hospital"},
+        {"agent_id": 1, "stance": None},  # Altkonfig: kein Anker
+        {"agent_id": 2, "stance": "supportive", "sentiment_bias": 0.4},
+        # agent_id 3 fehlt in der Konfiguration: kein Anker
+    ]
+
+
+def _anchor_graph(action: Any) -> tuple[_Graph, List[_Agent]]:
+    agents = [_Agent(SocialEnvironment(action)) for _ in range(4)]
+    return _Graph(agents), agents
+
+
+def test_stance_anchor_is_appended_to_feed_and_comment_cap_still_applies() -> None:
+    posts = [_post(1, 12)]
+    action = _Action({"success": True, "posts": posts})
+    graph, agents = _anchor_graph(action)
+    logged: List[str] = []
+
+    assert agent_feed.install_feed_comment_cap(graph, max_comments=5, log=logged.append) == 4
+    assert agent_feed.install_stance_anchor(graph, _anchor_configs(), _STATEMENT, log=logged.append) == 2
+
+    anchored = _run(agents[0].env.get_posts_env())
+    plain = _run(agents[1].env.get_posts_env())
+    # Der Anker steht am Ende des Feed-Textes, mit Streitfrage und eigener Seite.
+    assert anchored.startswith(plain)
+    tail = anchored[len(plain):]
+    assert tail.startswith("\n\n") and _STATEMENT in tail and "dagegen" in tail
+    other_side = _run(agents[2].env.get_posts_env())[len(plain):]
+    assert _STATEMENT in other_side and "dafür" in other_side
+    # Der Kommentardeckel wirkt weiter: der Feed vor dem Anker ist unverändert gedeckelt.
+    prefix = SocialEnvironment.posts_env_template.template.split("$posts")[0]
+    feed = json.loads(plain[len(prefix):])
+    assert len(feed[0]["comments"]) == 5 and feed[0]["omitted_comments"] == 7
+    # Agent ohne stance und Agent ohne Konfiguration bekommen keinen Anker.
+    assert _run(agents[3].env.get_posts_env()) == plain
+    assert logged[-1] == "Stance anchor: appended to 2 agent feed(s)"
+
+
+def test_stance_anchor_also_works_when_installed_before_the_comment_cap() -> None:
+    action = _Action({"success": True, "posts": [_post(1, 12)]})
+    graph, agents = _anchor_graph(action)
+
+    assert agent_feed.install_stance_anchor(graph, _anchor_configs(), _STATEMENT, log=lambda _l: None) == 2
+    # Der Deckel ersetzt auch eine bereits vom Anker getauschte Umgebung, behält aber den Anker.
+    agent_feed.install_feed_comment_cap(graph, max_comments=5, log=lambda _l: None)
+
+    text = _run(agents[0].env.get_posts_env())
+    prefix = SocialEnvironment.posts_env_template.template.split("$posts")[0]
+    assert _STATEMENT in text
+    feed_json, _anchor = text[len(prefix):].split("\n\n", 1)
+    assert len(json.loads(feed_json)[0]["comments"]) == 5
+
+
+def test_stance_anchor_with_cap_off_keeps_the_oasis_feed_format() -> None:
+    result = {"success": True, "posts": [_post(1, 3)]}
+    action = _Action(result)
+    graph, agents = _anchor_graph(action)
+
+    agent_feed.install_stance_anchor(graph, _anchor_configs(), _STATEMENT, log=lambda _l: None)
+
+    reference = _run(SocialEnvironment(action).get_posts_env())
+    assert _run(agents[0].env.get_posts_env()).startswith(reference)
+
+
+def test_stance_anchor_is_added_to_an_empty_feed_too() -> None:
+    action = _Action({"success": False})
+    graph, agents = _anchor_graph(action)
+    agent_feed.install_stance_anchor(graph, _anchor_configs(), _STATEMENT, log=lambda _l: None)
+
+    text = _run(agents[0].env.get_posts_env())
+    assert text.startswith("After refreshing, there are no existing posts.") and _STATEMENT in text
+
+
+def test_stance_anchor_leaves_foreign_environments_and_missing_configs_alone() -> None:
+    action = _Action({"success": True, "posts": []})
+
+    class _Foreign(SocialEnvironment):
+        pass
+
+    foreign = _Agent(_Foreign(action))
+    original = foreign.env
+    assert agent_feed.install_stance_anchor(_Graph([foreign]), _anchor_configs(), _STATEMENT, log=lambda _l: None) == 0
+    assert foreign.env is original
+    assert agent_feed.install_stance_anchor(None, _anchor_configs(), _STATEMENT, log=lambda _l: None) == 0
+    assert agent_feed.install_stance_anchor(_Graph([_Agent(SocialEnvironment(action))]), [], _STATEMENT) == 0
+
+
 def test_install_is_a_no_op_when_switched_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(agent_feed.ENV_FEED_MAX_COMMENTS, "0")
     agent = _Agent(SocialEnvironment(_Action({"success": True, "posts": []})))

@@ -1470,7 +1470,8 @@
       "ontology_topic_type_missing": "No contested-topic type in the ontology",
       "stance_position_unrepresented": "Documented position not represented by any agent",
       "initial_post_stance_conflict": "Initial post contradicts its sender's stance",
-      "entity_selection_actors_omitted": "Documented actors without a persona slot"
+      "entity_selection_actors_omitted": "Documented actors without a persona slot",
+      "agent_config_rule_fallback": "Agents with rule defaults instead of a model configuration"
     },
     "action": {
       "embedding_unavailable": "Start the embedding service and rebuild the graph, otherwise vector search stays ineffective.",
@@ -1482,7 +1483,8 @@
       "ontology_topic_type_missing": "Positions stay attached to the actors; regenerate the ontology if the graph needs position edges.",
       "stance_position_unrepresented": "The simulation continues but does not reflect this position; add a matching actor to the persona set.",
       "initial_post_stance_conflict": "Check the initial post and its sender in the persona set before the run starts.",
-      "entity_selection_actors_omitted": "Raise the agent limit or add the missing actors manually, otherwise they are absent from the run."
+      "entity_selection_actors_omitted": "Raise the agent limit or add the missing actors manually, otherwise they are absent from the run.",
+      "agent_config_rule_fallback": "These agents take no position (neutral, media observing); regenerate the configuration with a stronger model if they should take a stand."
     },
     "occurrences": "occurred {count}×"
   },
