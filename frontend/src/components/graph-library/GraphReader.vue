@@ -424,6 +424,10 @@ const viewOptions = ['net', 'table'] as const
   .gr__grid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .gr__mid {
+    order: -1;
+  }
 }
 
 .gr__left,
