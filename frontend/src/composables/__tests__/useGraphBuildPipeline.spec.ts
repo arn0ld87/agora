@@ -596,6 +596,74 @@ describe('useGraphBuildPipeline', () => {
     })
   })
 
+  // UAT-011 — autoritative Abschlusszähler aus dem Task-Ergebnis
+  describe('Zähler aus dem abgeschlossenen Build', () => {
+    function completedTaskWith(result: Record<string, unknown>) {
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: {
+          project_id: 'project_99',
+          status: 'graph_building',
+          graph_build_task_id: 'task_99',
+          graph_id: 'graph_99',
+        },
+      })
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: { status: 'completed', result },
+      })
+      graphApi.getGraphData.mockResolvedValue({
+        success: true,
+        data: { graph_id: 'graph_99', nodes: [], edges: [] },
+      })
+    }
+
+    it('übernimmt node_count/edge_count aus dem Task-Ergebnis', async () => {
+      // Der Worker liest diese Counts aus Neo4j, bevor er den Task als
+      // abgeschlossen meldet — sie sind früher verfügbar als jeder erneute
+      // /data-Call des Frontends.
+      completedTaskWith({
+        graph_id: 'graph_99',
+        node_count: 12,
+        edge_count: 15,
+        degradations: { schema_version: 1, events: [] },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.buildCounts.value).toEqual({ node_count: 12, edge_count: 15 })
+    })
+
+    it('bleibt null, wenn das Task-Ergebnis keine Zähler trägt', async () => {
+      completedTaskWith({ graph_id: 'graph_99' })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+
+      await pipeline.initialize()
+      await polling.taskTick?.()
+
+      expect(pipeline.buildCounts.value).toBeNull()
+      expect(pipeline.currentPhase.value).toBe(2)
+    })
+
+    it('verwirft die Zähler beim Wechsel auf ein anderes Projekt', async () => {
+      completedTaskWith({ graph_id: 'graph_99', node_count: 12, edge_count: 15 })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_99', router: createRouter(), t })
+      await pipeline.initialize()
+      await polling.taskTick?.()
+      expect(pipeline.buildCounts.value).toEqual({ node_count: 12, edge_count: 15 })
+
+      graphApi.getProject.mockResolvedValue({
+        success: true,
+        data: { project_id: 'project_100', status: 'created' },
+      })
+      await pipeline.initialize('project_100')
+
+      expect(pipeline.buildCounts.value).toBeNull()
+    })
+  })
+
   // Issue #1029 — ein Reload darf einen blockierenden Befund nicht verlieren
   describe('Degradierungen nach einem Reload', () => {
     const BLOCKING_RESULT = {
@@ -661,6 +729,24 @@ describe('useGraphBuildPipeline', () => {
       expect(pipeline.currentPhase.value).toBe(2)
       expect(pipeline.error.value).toBe('')
       expect(graphApi.getTaskStatus).not.toHaveBeenCalled()
+    })
+
+    it('holt die Zähler beim Wiedereinstieg aus dem Task-Ergebnis nach', async () => {
+      // UAT-011: Auch der Reload-Pfad soll die autoritativen Counts zeigen,
+      // bevor/statt eines erneuten /data-Calls.
+      completedProject()
+      graphApi.getTaskStatus.mockResolvedValue({
+        success: true,
+        data: {
+          status: 'completed',
+          result: { graph_id: 'graph_77', node_count: 12, edge_count: 15 },
+        },
+      })
+      const pipeline = useGraphBuildPipeline({ projectId: 'project_77', router: createRouter(), t })
+
+      await pipeline.initialize()
+
+      expect(pipeline.buildCounts.value).toEqual({ node_count: 12, edge_count: 15 })
     })
 
     it('verwirft die Befunde beim Wechsel auf ein anderes Projekt', async () => {

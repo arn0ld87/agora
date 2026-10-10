@@ -247,6 +247,7 @@
       "title": "Explore graph",
       "nodes": "Entities",
       "edges": "Relationships",
+      "countsPending": "Counting in progress — entity and relationship totals follow with the graph data load.",
       "search": "Search the graph…",
       "noResults": "No matches.",
       "openInBrowser": "Open in Neo4j Browser"

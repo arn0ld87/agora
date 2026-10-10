@@ -18,6 +18,10 @@ const props = defineProps({
   ontologyProgress: Object,
   buildProgress: Object,
   graphData: Object,
+  // UAT-011: autoritative Zähler aus dem Task-Ergebnis des Builds. Sie
+  // stehen ab Completion bereit — früher als der GET /api/graph/data-Call,
+  // aus dem graphData erst danach befüllt wird.
+  buildCounts: { type: Object, default: null },
   systemLogs: { type: Array, default: () => [] },
   // Issue #1029: Der Build ist durchgelaufen, das Ergebnis trägt aber
   // einen blockierenden Befund — etwa ein Graph ohne eine einzige
@@ -34,10 +38,16 @@ const logContent = ref(null)
 const creatingSimulation = ref(false)
 
 const graphStats = computed(() => {
-  const nodes = props.graphData?.node_count || props.graphData?.nodes?.length || 0
-  const edges = props.graphData?.edge_count || props.graphData?.edges?.length || 0
+  // UAT-011: geladene Graphdaten sind die Live-Quelle; liegen sie noch
+  // nicht vor, gelten die Counts aus dem Task-Ergebnis. Erst wenn BEIDE
+  // fehlen, ist die Zählung ausdrücklich ausstehend — nie eine schlichte
+  // 0 unter einem „Fertig"-Badge.
+  const live = props.graphData
+  const fromBuild = props.buildCounts
+  const nodes = live?.node_count ?? fromBuild?.node_count ?? null
+  const edges = live?.edge_count ?? fromBuild?.edge_count ?? null
   const types = props.projectData?.ontology?.entity_types?.length || 0
-  return { nodes, edges, types }
+  return { nodes, edges, types, pending: nodes === null || edges === null }
 })
 
 // Issue #1029: drei Zustände statt zwei — läuft noch, fertig, oder fertig
@@ -204,11 +214,11 @@ function phaseVariant(phase) {
         <p class="card-desc">{{ t('step1.build.desc') }}</p>
         <div class="stats-grid">
           <div class="stat">
-            <span class="stat-value">{{ graphStats.nodes }}</span>
+            <span class="stat-value">{{ graphStats.pending ? '–' : graphStats.nodes }}</span>
             <span class="stat-label">{{ t('step1.graph.nodes') }}</span>
           </div>
           <div class="stat">
-            <span class="stat-value">{{ graphStats.edges }}</span>
+            <span class="stat-value">{{ graphStats.pending ? '–' : graphStats.edges }}</span>
             <span class="stat-label">{{ t('step1.graph.edges') }}</span>
           </div>
           <div class="stat">
@@ -216,6 +226,9 @@ function phaseVariant(phase) {
             <span class="stat-label">ENTITÄTSTYPEN</span>
           </div>
         </div>
+        <p v-if="graphStats.pending" class="stats-pending" role="status">
+          {{ t('step1.graph.countsPending') }}
+        </p>
         <div v-if="currentPhase === 1 && buildProgress?.message" class="progress-row">
           <span class="spinner-sm" />
           <span>{{ buildProgress.message }}</span>
@@ -352,6 +365,12 @@ function phaseVariant(phase) {
   font-size: 11px;
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.stats-pending {
+  margin: 0;
+  font-family: var(--ff-mono);
+  font-size: var(--fs-12);
   color: var(--fg-muted);
 }
 

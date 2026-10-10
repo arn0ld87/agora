@@ -40,6 +40,7 @@
         :ontologyProgress="ontologyProgress"
         :buildProgress="buildProgress"
         :graphData="graphData"
+        :buildCounts="buildCounts"
         :systemLogs="systemLogs"
         :qualityBlocked="qualityBlocked"
         @next-step="handleNextStep"
@@ -93,6 +94,7 @@ const {
   error,
   currentRunId,
   degradations,
+  buildCounts,
   graphIncomplete,
   initialize,
   refreshGraph,
