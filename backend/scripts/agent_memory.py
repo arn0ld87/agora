@@ -22,6 +22,12 @@ Zwei Maßnahmen, beide ohne Eingriff in OASIS/CAMEL:
    schützt vor ungebremstem Wachstum, auch wenn CAMEL für ein Modell auf
    ``999_999_999`` zurückfällt (``ModelType.token_limit``).
 
+Haltung und Pruning (#1779): Die Haltung des Agenten steht in der System-Nachricht;
+CAMELs ``ScoreBasedContextCreator`` gibt sie stets zuerst aus und kürzt sie nie, das
+Pruning fasst sie nicht an. Verblassen ist Verwässerung gegen den Feed, kein Verlust.
+Der Haltungsanker (``agent_feed.install_stance_anchor``) steht im Feed-Text jeder
+Aktivierung; ältere Anker verschwinden mit ihrem Feed, nur der aktuelle bleibt.
+
 Bewusst NICHT verwendet: ``ChatHistoryMemory(window_size=K)``. Das Fenster
 schneidet die letzten K Datensätze roh aus dem Speicher
 (``ChatHistoryBlock.retrieve``) und kann einen Tool-Call von seinem

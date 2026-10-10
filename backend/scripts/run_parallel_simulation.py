@@ -332,9 +332,9 @@ except ImportError as _e:
 
 # Kommentardeckel im Agenten-Feed (#1772). Braucht oasis, steht deshalb hinter dem Import-Guard oben.
 try:
-    from .agent_feed import install_feed_comment_cap
+    from .agent_feed import install_feed_comment_cap, install_stance_anchor
 except ImportError:  # direct script execution
-    from agent_feed import install_feed_comment_cap
+    from agent_feed import install_feed_comment_cap, install_stance_anchor
 
 # Obergrenze je Aktivierung (#1779): umhuellt die Aktions-Tools der Agenten.
 try:
@@ -1620,6 +1620,13 @@ async def run_twitter_simulation(
             log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
     log_info(describe_memory_policy())
     install_feed_comment_cap(result.agent_graph, log=log_info)
+    # #1779: Haltung + Streitfrage je Aktivierung im Feed-Text (ausgerichtete Konfiguration).
+    install_stance_anchor(
+        result.agent_graph,
+        config.get("agent_configs", []),
+        (config.get("contested_question") or {}).get("statement"),
+        log=log_info,
+    )
 
     # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
     # to every SocialAgent. OASIS triggers these through its normal LLMAction()
@@ -2005,6 +2012,13 @@ async def run_reddit_simulation(
             log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
     log_info(describe_memory_policy())
     install_feed_comment_cap(result.agent_graph, log=log_info)
+    # #1779: Haltungsanker je Aktivierung, siehe Twitter-Zweig.
+    install_stance_anchor(
+        result.agent_graph,
+        config.get("agent_configs", []),
+        (config.get("contested_question") or {}).get("statement"),
+        log=log_info,
+    )
 
     # Native CAMEL function-calling for Reddit agents (see Twitter branch).
     if enable_tools and AGENT_TOOLS_AVAILABLE:

@@ -779,6 +779,28 @@ def build_stance_section(
     )
 
 
+def build_stance_anchor(
+    stance: Optional[str],
+    sentiment_bias: Optional[float],
+    agent_role: str,
+    contested_statement: Optional[str] = None,
+) -> str:
+    """Kurze Erinnerung an die eigene Haltung für den Feed-Text jeder Aktivierung (#1779).
+
+    Der Abschnitt "Deine Haltung" steht genau einmal in der System-Nachricht und
+    wird im Parallelpfad nie erneuert; über viele Runden verblasst er gegen den
+    wachsenden Feed. Dieser Anker wiederholt Streitfrage und eigene Seite in
+    einem Absatz am Ende des Feeds (``agent_feed.install_stance_anchor``). Er
+    nutzt denselben Haltungssatz wie ``build_stance_section``
+    (``_describe_stance``), keine zweite Formulierung. Leerstring ohne ``stance``
+    (Altkonfig): dann bleibt der Feed unverändert.
+    """
+    if not stance:
+        return ""
+    sentence = _describe_stance(stance, sentiment_bias, agent_role, contested_statement)
+    return f"Erinnerung an deine Haltung: {sentence} Lass sie in deinem Beitrag erkennen."
+
+
 def _profile_prompt_sections(
     platform: str,
     stance_section: str,

@@ -484,3 +484,26 @@ def test_augment_profile_with_stance_returns_original_path_without_agent_configs
 
     out_path = agent_tools.augment_profile_with_stance(str(profile_path), [], platform="reddit")
     assert out_path == str(profile_path)
+
+
+# ── Issue #1779: Haltungsanker je Aktivierung ──
+
+
+def test_build_stance_anchor_is_one_short_paragraph_with_question_and_side() -> None:
+    statement = "Der Kreistag beschließt die Schließung."
+    anchor = agent_tools.build_stance_anchor(
+        stance="opposing",
+        sentiment_bias=-0.7,
+        agent_role="Betriebsrätin",
+        contested_statement=statement,
+    )
+    assert statement in anchor
+    assert "sehr dagegen" in anchor
+    assert "\n" not in anchor.strip()
+    # Eine Formulierung: der Anker trägt denselben Haltungssatz wie der Systemabschnitt.
+    assert agent_tools._describe_stance("opposing", -0.7, "Betriebsrätin", statement) in anchor
+
+
+def test_build_stance_anchor_is_empty_without_stance() -> None:
+    assert agent_tools.build_stance_anchor(None, None, "Analyst") == ""
+    assert agent_tools.build_stance_anchor("", 0.3, "Analyst", "X") == ""
