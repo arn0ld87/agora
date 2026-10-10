@@ -1250,6 +1250,9 @@ class ReportManager:
                     title=s['title'],
                     content=s.get('content', ''),
                     description=stored_desc if stored_desc.strip() else "—",
+                    # #1832: ohne den gespeicherten Kind fiele ein Resume auf
+                    # die Titel-Heuristik zurueck; Altbestand ohne Feld bleibt generic.
+                    kind=str(s.get('kind') or 'generic'),
                 ))
             outline = ReportOutline(
                 title=outline_data['title'],
