@@ -20,8 +20,8 @@
 | Bekannte verwandte Issues sind offen | gh issue list: #1766, #1779, #1778, #1304, #1240, #1662 | GitHub-Liste |
 | Zufällige Demografie verdrängt Quellenrolle | backend/app/services/oasis_profile_demographics.py:137–142: `age: exakt`, `Diese drei Felder sind vorgegeben`; core.py:231–243 übernimmt display_name | Explorer mit wörtlichem Beleg |
 | Domainprüfung prüft keine gleiche-Domäne-Rollenwechsel | backend/app/services/persona_domain_coherence.py:235–240 akzeptiert gleiche Hauptdomäne | Explorer; gezielte Codeprüfung vor Fix |
-| Ein Reply-Pfad lässt parent_comment_id weg | backend/scripts/agent_tools.py:1338–1344 übernimmt nur post_id/content; CREATE_POST ist in run_parallel_simulation.py:550–575 erlaubt | Explorer; konkreter Laufpfad noch offen |
-| Kontext im Tool-loop stark gekürzt | backend/scripts/agent_tools.py:1032–1038: Bio 300, Timeline 1500 Zeichen | Explorer |
+| Ein Reply-Pfad lässt parent_comment_id weg | backend/scripts/agent_tools.py:1428–1434 (`_create_manual_action`) übernimmt nur post_id/content; betrifft nur den ReAct-Loop des Einzel-Runners mit aktivierten Agent-Tools, nicht den Referenzlauf (nativer Pfad reicht Antworten durch) | belegt (#1835): `04-ANTWORTZIELE.md`, `backend/tests/scripts/test_reply_targets_and_visible_context.py`; bewusst nicht gepatcht (Gate G1 nein) |
+| Kontext im Tool-loop stark gekürzt | backend/scripts/agent_tools.py:1124/1128: Bio 300, Timeline 1500 Zeichen; gilt nur im ReAct-Loop, der nativ-Pfad sieht den Feed mit Deckel 5 je Post | belegt (#1835): `04-ANTWORTZIELE.md`, gemessen, Grenzen unverändert |
 | Planprüfung bestanden | unabhängiger gsd-plan-checker: `PASS` nach Konkretisierung beider Titelprüfungen und Regressionen | Review, kein Implementierungsnachweis |
 | Mountursache betrieblich korrigiert | gns3 .env, ausschließlich AGORA_CODEX_HOME von /home/schneider/... nach /home/alex/...; Container ohne aktive Jobs neu erstellt; Mount verifiziert, codex_cli_readiness: binary_present=True credentials=ok ready=True | Betriebskorrektur; echter Modellcall separat |
 
@@ -56,7 +56,7 @@ Ausführbare Gates aus `backend/`: `uv run pytest tests/contracts/test_report_co
 - Status/Fehler müssen ursprüngliche Transportursache erhalten; planning_complete erst nach erfolgreicher validierter Planung.
 - Keine neue Datenbank, kein neuer Produktbereich, keine Env-Default- oder Auth-Änderung. Upgrade-Runbook bei CLI-Mount-/Persistenzänderung nachziehen.
 - Befürchtete Rollenwechsel innerhalb einer Domäne und falsche Graph-Typen getrennt prüfen; Kollektivguard existiert bereits.
-- Noch offen: exakter OS-Pfad beim CLI-Fehler; aktiver Tool-loop/native Pfad; tatsächliche historische Persona-Route/Promptversion; faire verfügbare stärkere Vergleichsroute. Nicht belegte Punkte bleiben so markiert.
+- Noch offen: exakter OS-Pfad beim CLI-Fehler; aktiver Tool-loop/native Pfad (geklärt, #1835: Referenzlauf nativ, siehe `04-ANTWORTZIELE.md`); tatsächliche historische Persona-Route/Promptversion; faire verfügbare stärkere Vergleichsroute. Nicht belegte Punkte bleiben so markiert.
 - Related #1766/#1779/#1778/#1304/#1240/#1662 nutzen, keine parallele Doppelimplementierung. Größerer Frontend-Umbau #1790 bleibt außerhalb dieses Epics.
 
 ## Assumptions & Checkpoint Decisions
