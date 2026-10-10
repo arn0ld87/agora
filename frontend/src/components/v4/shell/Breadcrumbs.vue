@@ -109,6 +109,8 @@ async function copyIdent(ident: string): Promise<void> {
 .breadcrumbs {
   display: flex;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
   font-size: 14px;
   color: var(--text-secondary);
 }
@@ -116,6 +118,7 @@ async function copyIdent(ident: string): Promise<void> {
 .breadcrumbs__list {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 6px;
   list-style: none;
   margin: 0;
@@ -128,6 +131,8 @@ async function copyIdent(ident: string): Promise<void> {
 }
 
 .breadcrumbs__item {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -138,6 +143,12 @@ async function copyIdent(ident: string): Promise<void> {
 }
 
 .breadcrumbs__link {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
   color: inherit;
   text-decoration: none;
 }
@@ -147,6 +158,10 @@ async function copyIdent(ident: string): Promise<void> {
 }
 
 .breadcrumbs__ident {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   margin-left: 8px;
   padding: 1px 6px;
   border: 0;
