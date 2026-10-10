@@ -50,6 +50,8 @@ from . import prepare_llm as _prepare_llm
 from . import prepare_entities as _prepare_entities
 from . import prepare_quota as _prepare_quota
 from . import prepare_checkpoint as _prepare_checkpoint
+from . import prepare_skeptic_profiles as _prepare_skeptic_profiles
+from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from .prepare_requirement_selection import requirement_hash as _requirement_hash
 
 logger = get_logger("agora.prepare")
@@ -560,8 +562,15 @@ def _phase_generate_config(
     degradations: Optional[DegradationCollector] = None,
     contested_question_override: Optional[str] = None,
     activity_mode: Optional[str] = None,
+    profiles: Optional[List[Any]] = None,
+    sim_dir: Optional[str] = None,
 ) -> None:
     """Phase 3: Simulation-Config per LLM erzeugen + atomar persistieren.
+
+    ``profiles`` und ``sim_dir`` (#1779): Profile der Persona-Phase. Sind beide
+    gesetzt, erhalten die synthetischen Skeptiker der Quotenregel direkt nach dem
+    Schreiben der Konfiguration ein Profil
+    (:func:`_phase_profile_synthetic_skeptics`).
 
     ``activity_mode`` (#1779): ``realistic`` oder ``active``; ``None`` liest
     ``AGORA_SIM_ACTIVITY_MODE``.
@@ -646,6 +655,16 @@ def _phase_generate_config(
     state.config_generated = True
     state.config_reasoning = sim_params.generation_reasoning
 
+    if profiles is not None and sim_dir:
+        _phase_profile_synthetic_skeptics(
+            state,
+            sim_dir,
+            profiles,
+            config_payload,
+            language=language,
+            degradations=degradations,
+        )
+
     if progress_callback:
         progress_callback(
             "generating_config", 100,
@@ -653,6 +672,72 @@ def _phase_generate_config(
             current=3,
             total=3,
         )
+
+
+def _phase_profile_synthetic_skeptics(
+    state: SimulationState,
+    sim_dir: str,
+    profiles: List[Any],
+    config: Dict[str, Any],
+    *,
+    language: Optional[str],
+    degradations: Optional[DegradationCollector] = None,
+) -> List[Any]:
+    """Phase 3b (#1779): Profile für die synthetischen Skeptiker der Quotenregel.
+
+    ``_ensure_skeptic_quota`` ergänzt die Konfiguration erst NACH der
+    Persona-Phase um Agenten wie ``synthetic-skeptic-50``. Ohne Profil
+    existierten sie in OASIS nicht und schrieben nie. Dieser Schritt baut aus
+    der gerade persistierten Konfiguration die fehlenden Profile
+    (``user_id`` = ``agent_id`` der Konfiguration, damit
+    ``simulation_agent_identity`` sie auflöst) und schreibt beide Profildateien
+    neu. Er läuft innerhalb der Konfigurationsphase und damit hinter dem
+    Persona-Checkpoint (#1472c), der am Ende von Phase 2 gelöscht wird: ein
+    Resume erzeugt die Persona-Profile über den regulären Pfad, die
+    Skeptiker-Profile danach erneut.
+
+    Idempotent (ein Agent mit vorhandenem Profil bekommt kein zweites).
+    Rückgabe: die um die Skeptiker erweiterte Profilliste.
+    """
+    skeptics = _prepare_skeptic_profiles.build_skeptic_profiles(
+        config, profiles, language=language
+    )
+    if not skeptics:
+        return profiles
+
+    all_profiles = [*profiles, *skeptics]
+    # Nur die Persistenzmethoden des Generators werden genutzt; der Platzhalter-
+    # Schlüssel löst keinen Aufruf aus.
+    writer = OasisProfileGenerator(api_key="persistence-only")
+    if state.enable_reddit:
+        writer.save_profiles(
+            profiles=all_profiles,
+            file_path=os.path.join(sim_dir, "reddit_profiles.json"),
+            platform="reddit",
+        )
+    if state.enable_twitter:
+        writer.save_profiles(
+            profiles=all_profiles,
+            file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
+            platform="twitter",
+        )
+    state.profiles_count = len(all_profiles)
+
+    if degradations is not None:
+        degradations.record(
+            kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
+            severity=DegradationSeverity.WARNING,
+            detail=(
+                f"{len(skeptics)} synthetische Skeptiker-Personas (Quotenregel) sind "
+                "regelbasierte Platzhalter ohne Modellbeteiligung. Ihre Beiträge sind "
+                "synthetische Gegenstimmen, keine aus dem Graph belegten Positionen."
+            ),
+            context={
+                "fallback_personas": len(skeptics),
+                "total_personas": len(all_profiles),
+            },
+        )
+    return all_profiles
 
 
 def _expand_entities_for_quota(entities: List[Any], plan: Optional[PersonaQuotaPlan]) -> List[Any]:
@@ -979,6 +1064,8 @@ def prepare_simulation(
             degradations=degradations,
             contested_question_override=contested_question_override,
             activity_mode=activity_mode,
+            profiles=profiles,
+            sim_dir=sim_dir,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to
