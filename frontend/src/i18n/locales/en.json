@@ -2786,6 +2786,7 @@
           "questionsPlaceholder": "Questions to the report agent appear here.",
           "evidenceLoading": "Loading the evidence …",
           "evidenceFailed": "The evidence could not be loaded: {reason}",
+          "evidenceUnsaved": "No evidence is stored for this version.",
           "omitted": {
             "title": "Evidence omitted (evidence_omitted)",
             "body": "The report has evidence, but it could not be delivered in a contract-conforming way. This is not a data gap; the evidence cannot be checked in this view."

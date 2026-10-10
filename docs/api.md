@@ -220,7 +220,7 @@ Ist die Persona-Zahl nicht lesbar (Store-Aussetzer), unterbleibt die Prüfung: e
 1. erfolgreiche, validierte Evidence-Map,
 2. `evidence_omitted` mit `reason=contract_violation`.
 
-Bei einem **persistierten Altartefakt**, das die heutige Evidence-Semantik nicht mehr erfüllt, kann der direkte Evidence-Endpunkt deshalb HTTP 200 mit `evidence_omitted` liefern. Das hält den Bericht lesbar, ohne ungültige Evidence als geprüft auszugeben (#1477).
+Bei einem **persistierten Altartefakt**, das die heutige Evidence-Semantik nicht mehr erfüllt, kann der direkte Evidence-Endpunkt deshalb HTTP 200 mit `evidence_omitted` liefern. Das hält den Bericht lesbar, ohne ungültige Evidence als geprüft auszugeben (#1477). Ohne gespeicherte `evidence_map.json` antwortet der Endpunkt mit HTTP 404 (Altbericht oder `INCOMPLETE` vor dem ersten Abschnitt); der Bericht-Reiter zeigt das als „nicht gespeichert“, nicht als Ladefehler. `evidence_omitted` ist davon unberührt.
 
 Belege aus Interview und Simulationsaktion tragen seit #1778 das optionale Feld `voice_key` (`agent:<agent_id>`), die Stimme, von der der Beleg stammt. `run_degradations` kennt seit #1778 die Komponente `simulation_positioning` (`warning`): zu wenige Stimmen beziehen in der Simulation Stellung zur Streitfrage.
 
@@ -240,7 +240,7 @@ Belege aus Interview und Simulationsaktion tragen seit #1778 das optionale Feld 
 `GET /api/report/<id>/evidence-density` liefert die je Bericht gespeicherte `evidence_density.json` (#1779), `GET /api/report/<id>/stance-analysis` die `stance_analysis.json` mit Positionierungsquote und Lagerverteilung (#1778). Beide sind rein lesend, ohne eigene Scope-Regel (wie `/evidence`), und antworten mit genau einer von drei Formen:
 
 1. `{"success": true, "data": {…}}` — die Datei liegt vor und erfüllt den Vertrag (`EvidenceDensity` bzw. `StanceAnalysis`). `data.applicable=false` bei der Haltungsanalyse ist ein Lauf ohne Streitfrage, kein Fehler.
-2. HTTP 404 (`{"success": false, "error": …}`) — der Bericht hat die Datei nicht (Altbericht aus der Zeit vor #1778/#1779).
+2. HTTP 404 (`{"success": false, "error": …}`) — der Bericht hat die Datei nicht (Altbericht aus der Zeit vor #1778/#1779 oder eine Fassung, die als `INCOMPLETE` endete, bevor ein Abschnitt erzeugt wurde).
 3. HTTP 200 `{"success": true, "artifact_omitted": {"artifact", "reason": "contract_violation", "detail", "validation_errors"}}` — die Datei liegt vor, ist aber beschädigt oder vertragswidrig. Das ist sichtbar und nicht dasselbe wie „keine Daten“ (Muster von `evidence_omitted`). Die Datei wird nie verändert.
 
 Verträge: `EvidenceDensityResponseModel` / `StanceAnalysisResponseModel` (`backend/app/contracts/report_artifact_contract.py`), Schemas `schemas/evidence-density-response.schema.json` und `schemas/stance-analysis-response.schema.json`, Zod-Spiegel `frontend/src/contracts/reportArtifactContract.ts`.

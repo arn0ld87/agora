@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { ApiError } from '@/api/envelope'
 import ReportSidePane from '../ReportSidePane.vue'
 import ReportOutlinePane from '../ReportOutlinePane.vue'
 import ReportReadingPane from '../ReportReadingPane.vue'
@@ -50,6 +51,21 @@ describe('ReportSidePane', () => {
     const api = okApi({ getReportEvidence: vi.fn().mockRejectedValue(new Error('offline')) })
     const { wrapper } = await mountWithReport(ReportSidePane, { panel: 'evidence' }, { api })
     expect(wrapper.get('[data-testid="report-evidence-failed"]').text()).toContain('offline')
+  })
+
+  it('UAT-010: Belege nicht gespeichert (404) sind ein sichtbarer Hinweis, kein Ladefehler', async () => {
+    const api = okApi({
+      getReportEvidence: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'unknown_error', status: 404, message: 'No evidence map available for report: report_1' })),
+    })
+    const { wrapper } = await mountWithReport(ReportSidePane, { panel: 'evidence' }, { api })
+    const note = wrapper.get('[data-testid="report-evidence-unsaved"]')
+    expect(note.text()).toBe('Für diese Fassung sind keine Belege gespeichert.')
+    expect(note.attributes('role')).toBeUndefined()
+    expect(wrapper.find('[data-testid="report-evidence-failed"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('No evidence map available')
+    expect(wrapper.get('[data-testid="report-side-evidence"]').element.contains(note.element)).toBe(true)
   })
 })
 
@@ -114,6 +130,33 @@ describe('ReportReadingPane', () => {
     expect(wrapper.findAll('[data-testid="report-section"]')[1]!.attributes('data-state')).toBe('pending')
     const log = wrapper.get('details[data-testid="report-log"]')
     expect(log.get('summary').text()).toBe('Protokoll der Erzeugung')
+    ctx.generation.stop()
+  })
+
+  it('UAT-010: nach dem Start ist der Bericht noch nicht angelegt (404): Fortschritt statt Fehlerblock', async () => {
+    const api = okApi({
+      listReports: vi.fn().mockResolvedValue(listEnvelope([])),
+      getReport: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'not_found', status: 404, message: 'Report does not exist: report_new' })),
+    })
+    const { wrapper, ctx, routed, generationApi } = await mountWithReport(
+      ReportReadingPane,
+      { activeSection: null },
+      { api, reportId: 'new' },
+    )
+    generationApi.generateReport.mockResolvedValue({ success: true, data: { report_id: 'report_new' } })
+    generationApi.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'processing', report_id: 'report_new', run_id: 'run_9' },
+    })
+    await wrapper.get('[data-testid="report-start-button"]').trigger('click')
+    await flushPromises()
+    routed.value = 'report_new'
+    await flushPromises()
+    expect(wrapper.find('[data-testid="report-load-failed"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="report-progress"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Report does not exist')
     ctx.generation.stop()
   })
 

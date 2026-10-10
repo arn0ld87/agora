@@ -8,7 +8,7 @@
  *   Emit   `update:panel(value)`               Umschalter betätigt
  *   Slots  `evidence`   Inhalt „Belege“ (Platzhalter bis zum Ticket „Belegspalte“)
  *          `questions`  Inhalt „Nachfragen“ (Platzhalter bis zum Ticket „Nachfragen“)
- *   Daten  `useRunReportContext()`  `evidence` (ok | omitted | failed | loading),
+ *   Daten  `useRunReportContext()`  `evidence` (ok | omitted | unsaved | failed | loading),
  *          `selectedClaimId`
  *
  * Bei `evidence_omitted` steht im Bereich „Belege“ ein eigener, deutlich
@@ -93,6 +93,9 @@ function onKey(event: KeyboardEvent): void {
           <li v-for="err in ctx.evidence.value.omission.validation_errors" :key="err">{{ err }}</li>
         </ul>
       </section>
+      <p v-else-if="ctx.evidence.value.status === 'unsaved'" class="rr-side__text" data-testid="report-evidence-unsaved">
+        {{ t('views.run.report.side.evidenceUnsaved') }}
+      </p>
       <p
         v-else-if="ctx.evidence.value.status === 'failed'"
         class="rr-side__problem"

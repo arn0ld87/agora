@@ -2786,6 +2786,7 @@
           "questionsPlaceholder": "Nachfragen an den Berichtsagenten erscheinen hier.",
           "evidenceLoading": "Die Belege werden geladen …",
           "evidenceFailed": "Die Belege ließen sich nicht laden: {reason}",
+          "evidenceUnsaved": "Für diese Fassung sind keine Belege gespeichert.",
           "omitted": {
             "title": "Belege ausgelassen (evidence_omitted)",
             "body": "Der Bericht hat Belege, aber sie ließen sich nicht vertragskonform ausliefern. Das ist keine Datenlücke; die Belege sind in dieser Ansicht nicht prüfbar."

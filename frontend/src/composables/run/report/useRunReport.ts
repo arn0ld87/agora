@@ -20,8 +20,14 @@
  * Alle Zustände sind nach `status` diskriminiert:
  *   VersionsState  loading | ok { items, invalid } | failed { reason }
  *   ReportState    idle | loading | ok { report } | failed { kind, reason }
- *   EvidenceState  idle | loading | ok { map } | omitted { omission } | failed { kind, reason }
+ *   EvidenceState  idle | loading | ok { map } | omitted { omission } | unsaved | failed { kind, reason }
  * `idle` heißt: es gibt nichts zu laden (kein Bericht gewählt, Bericht läuft noch).
+ * Der Zustand gilt auch, solange eine bekannte laufende Erzeugung ihren Berichtsdatensatz
+ * noch nicht angelegt hat (404 vor dem ersten Speichern, UAT-010).
+ * `unsaved` ist die Antwort 404 des Evidence-Endpunkts für eine Fassung, die selbst
+ * geladen wurde: für sie ist keine Evidence-Map gespeichert (unvollständige Fassung
+ * ohne erzeugten Abschnitt, Altbericht). Das ist weder ein Ladefehler noch
+ * `evidence_omitted`.
  * `omitted` ist die Variante `evidence_omitted` des Evidence-Endpunkts: die Belege
  * existieren, ließen sich aber nicht vertragskonform ausliefern. Sie ist nie eine
  * Datenlücke. Jede Antwort läuft durch ein Zod-Schema (`safeParse`); eine
@@ -43,6 +49,7 @@ import { ApiError } from '@/api/envelope'
 import {
   getReport as defaultGetReport,
   getReportEvidence as defaultGetReportEvidence,
+  getReportStatus as defaultGetReportStatus,
   listReports as defaultListReports,
   type EvidenceEnvelope,
 } from '@/api/report'
@@ -92,6 +99,7 @@ export type EvidenceState =
   | { status: 'loading' }
   | { status: 'ok'; map: EvidenceMap }
   | { status: 'omitted'; omission: EvidenceOmission }
+  | { status: 'unsaved' }
   | ({ status: 'failed' } & LoadFailure)
 
 export interface RunReportApi {
@@ -131,6 +139,8 @@ export interface RunReportContext {
 export const RUN_REPORT_KEY: InjectionKey<RunReportContext> = Symbol('run-report')
 
 const RUNNING_STATUSES = new Set(['pending', 'planning', 'generating'])
+/** Zustände, in denen die Run-Registry einen Berichts-Job vor seinem Ende führt. */
+const ACTIVE_RUN_STATUSES = new Set(['pending', 'processing'])
 const TERMINAL_WITH_EVIDENCE = new Set(['completed', 'incomplete'])
 
 function describe(err: unknown): string {
@@ -327,13 +337,45 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
     try {
       const res = await api.getReportEvidence(id)
       if (res.success !== true) {
-        const err = res as { error?: string }
+        const err = res as { error?: string; code?: string }
+        // Der Bericht-404 ist hier eindeutig "nicht gespeichert": die Fassung selbst wurde geladen.
+        // Das gilt auch für `completed`; dort ist es nur vertretbar, weil der Hinweis sichtbar bleibt.
+        if (err.code === 'not_found') return { status: 'unsaved' }
         return { status: 'failed', kind: 'transport', reason: err.error || 'getReportEvidence' }
       }
       if ('evidence_omitted' in res) return { status: 'omitted', omission: res.evidence_omitted }
       return { status: 'ok', map: res.data }
     } catch (err) {
+      // Siehe oben: 404 → `unsaved` gilt auch für `completed`, der Hinweis bleibt sichtbar.
+      if (err instanceof ApiError && err.status === 404) return { status: 'unsaved' }
       return { status: 'failed', ...failure(err) }
+    }
+  }
+
+  const getStatus = options.generationApi?.getReportStatus ?? defaultGetReportStatus
+
+  /**
+   * Kennt die Run-Registry einen laufenden Berichts-Job zu dieser Kennung? `run_id` kommt nur
+   * aus dem Registry-Zweig des Backends (`report_status.py::_status_from_run_registry`); die
+   * Quittung für unbekannte Kennungen (`_acknowledge_polling`) trägt keines und beweist keinen Job.
+   */
+  async function generationRegisteredFor(id: string): Promise<boolean> {
+    try {
+      const res = (await getStatus({ simulationId: options.simulationId(), reportId: id })) as {
+        success?: boolean
+        data?: { report_id?: unknown; run_id?: unknown; status?: unknown }
+      } | null
+      const data = res?.success ? res.data : null
+      return (
+        !!data &&
+        data.report_id === id &&
+        typeof data.run_id === 'string' &&
+        data.run_id !== '' &&
+        typeof data.status === 'string' &&
+        ACTIVE_RUN_STATUSES.has(data.status)
+      )
+    } catch {
+      return false
     }
   }
 
@@ -357,6 +399,21 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
     evidence.value = { status: 'loading' }
     const loaded = await loadReport(id)
     if (mine !== seq) return
+    if (loaded.status === 'failed' && loaded.kind === 'notFound') {
+      // Der Datensatz entsteht erst im Worker: bis dahin ist 404 bei laufender Erzeugung erwartbar.
+      const known = generationFor === id || (await generationRegisteredFor(id))
+      if (mine !== seq) return
+      if (known) {
+        report.value = { status: 'idle' }
+        evidence.value = { status: 'idle' }
+        if (generationFor !== id) {
+          generation.stop()
+          generationFor = id
+          await generation.bootstrap()
+        }
+        return
+      }
+    }
     report.value = loaded
     if (loaded.status === 'ok' && TERMINAL_WITH_EVIDENCE.has(loaded.report.status)) {
       const ev = await loadEvidence(id)
