@@ -178,9 +178,8 @@ async function exportGraphml(): Promise<void> {
   exporting.value = true
   exportError.value = ''
   try {
-    const res = (await exportGraphMl(props.graphData.graph_id)) as unknown as { data?: unknown }
-    const blob =
-      res?.data instanceof Blob ? res.data : new Blob([String(res?.data ?? '')], { type: 'application/xml' })
+    // The API interceptor already unwraps the Blob; reading .data again loses its bytes.
+    const blob = await exportGraphMl(props.graphData.graph_id)
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
