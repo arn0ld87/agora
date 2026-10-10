@@ -973,10 +973,45 @@ class ReportSectionModel(BaseModel):
     )
 
 
+class ReportSectionKind(str, Enum):
+    """Stabile semantische Rolle eines Report-Abschnitts (#1832).
+
+    Der Abschnittstitel ist frei formuliert; nachgelagerte Consumer
+    (DTO-Auswahl, Zitat-Validierung) lesen ausschliesslich diesen Wert und
+    matchen nie den Titel. ``generic`` ist der sichere Default fuer alles,
+    was keine der spezifischen Rollen erfuellt, und fuer Bestandsdaten.
+    """
+
+    stakeholder_voices = "stakeholder_voices"
+    segment_table = "segment_table"
+    persona_table = "persona_table"
+    multiplier_analysis = "multiplier_analysis"
+    friction_points = "friction_points"
+    trust_signals = "trust_signals"
+    change_recommendations = "change_recommendations"
+    project_impact = "project_impact"
+    positioning = "positioning"
+    content_ideas = "content_ideas"
+    data_gaps = "data_gaps"
+    generic = "generic"
+
+
 class ReportOutlineSectionModel(BaseModel):
     model_config = ConfigDict(**_STRICT, str_strip_whitespace=True)
-    title: str = Field(min_length=1)
+    # #1832/Review: min_length=3 spiegelt ReportSectionModel.section_title —
+    # ein kuerzerer Titel wuerde in der Evidenz-Persistenz failen, obwohl die
+    # Planung ihn akzeptiert haette (Contract-Drift).
+    title: str = Field(min_length=3)
     description: str = Field(min_length=1, max_length=2000)
+    section_kind: ReportSectionKind = Field(
+        default=ReportSectionKind.generic,
+        description=(
+            "Stabile semantische Rolle des Abschnitts. Consumer (DTO-Auswahl, "
+            "Zitat-Validierung) lesen sie statt den Titel zu matchen; der "
+            "Titel bleibt frei formulierbar. Unbekannte oder fehlende Angaben "
+            "fallen auf 'generic' zurueck."
+        ),
+    )
 
 
 class ReportOutlineModel(BaseModel):

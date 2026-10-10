@@ -1,4 +1,5 @@
 ### Behoben
 
 - Berichts-Gliederungen werden aus Fragestellung und verfügbaren Daten vom Modell geplant; feste Standard-/Intent-Titel werden nicht mehr erzwungen. Explizite Titelvorgaben bleiben verbindlich. Leere und doppelte Abschnittstitel werden abgewiesen.
+- Freie Abschnittstitel tragen jetzt eine stabile Semantik: Jeder Abschnitt wählt im Plan ein `section_kind` (Vertrag `ReportSectionKind`); DTO-Auswahl und Zitat-Validierung lesen diesen Kind statt den Titel zu matchen — freie Titel wie „Stimmen aus dem Kreißsaal" behalten damit die strukturierten ReportV3-Felder und die Persona-Zitatprüfung. Bestandsdaten ohne Kind fallen auf die historische Titel-Heuristik zurück. Abschnittstitel unter drei Zeichen werden abgewiesen (deckungsgleich mit der Evidenz-Persistenz; kein Contract-Drift).
 - Planungs-/Providerfehler erzeugen keinen englischen Ersatzbericht mehr, sondern erhalten den ursprünglichen Fehler als fehlgeschlagenen Bericht. Resume plant historische Ersatzgliederungen neu; Inhalts- und Evidence-Prüfungen bleiben aktiv.

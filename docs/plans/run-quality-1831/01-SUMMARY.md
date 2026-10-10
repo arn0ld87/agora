@@ -13,3 +13,11 @@ Auf gns3 wurde ausschließlich der nicht geheime Mountpfad AGORA_CODEX_HOME von 
 ## Offene Abnahme des Epics
 
 Persona-Identitätsfehler (#1833), weitere Betriebs-/neuer Reportnachweis (#1834), Dialog-/Kontextpfad (#1835) und kontrollierte Stage-Evaluation (#1836) bleiben offen. Der Berichtfehler dieses Runs ist kein Nachweis gegen gpt-6-luna.
+
+## Nachbesserung nach dem Review (2026-10-10)
+
+Das Review zu PR #1838 (Codex) fand zwei Lücken im ersten Schnitt. Beide sind im selben PR nachgebessert:
+
+- **Stabile Abschnitts-Semantik statt Titel-Matching.** Freie Titel brachen die Semantik-Erkennung nachgelagerter Consumer (`_section_schema_for`, `_section_expects_quotes`): strukturierte ReportV3-Felder wären leer geblieben, die Persona-Zitatprüfung wäre übersprungen worden. Der Outline-Vertrag trägt jetzt `ReportSectionKind` (`section_kind` am Abschnitt); DTO-Auswahl und Zitat-Validierung lesen den Kind, der Titel bleibt frei. Der Plan-Prompt wählt den Kind aus einer festen Liste (Test hält Prompt und Enum synchron). Bestandsdaten ohne Kind fallen in `section_kinds.py` auf die historische Preset-/Keyword-Heuristik zurück — exakt das Verhalten vor #1832. Regressionstests: `backend/tests/services/report_agent/test_section_kinds.py`.
+- **Titel-Untergrenze vereinheitlicht.** Der erste Schnitt erlaubte Outline-Titel ab einem Zeichen, während `ReportSectionModel.section_title` weiter mindestens drei verlangt — ein Modelloutput wie „KI" wäre gültig geplant und später in der Evidenz-Persistenz FAILED geworden. Der Outline-Vertrag fordert jetzt ebenfalls mindestens drei Zeichen (Backend, Zod-Spiegel, generierte Schemas).
+- **Alt-Test aktualisiert.** `test_plan_outline_falls_back_after_two_failures` erwartete noch die entfernte Ersatzgliederung; er asserted jetzt die Fehlerpropagation inklusive Retry-Zählung.

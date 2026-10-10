@@ -103,7 +103,9 @@ def test_all_prompt_names_in_dunder_all():
         "DEFAULT_REPORT_SECTIONS",
         "RECOMMENDATION_SECTION_DESCRIPTION",
         "RECOMMENDATION_SECTION_TITLE",
+        "SECTION_KIND_PROMPT_LINES",
         "format_required_sections",
+        "format_section_kinds",
     }
     assert set(report_prompts.__all__) == expected
 

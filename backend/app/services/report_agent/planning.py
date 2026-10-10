@@ -7,9 +7,10 @@ from ...config import Config
 from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...models.report import ReportOutline, ReportSection
 from ...utils.logger import get_logger
-from ..report_prompts import format_required_sections
+from ..report_prompts import format_required_sections, format_section_kinds
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
 from .schemas import PlanResponse
+from .section_kinds import coerce_section_kind
 
 logger = get_logger('agora.report_agent')
 
@@ -38,7 +39,11 @@ def plan_outline(
         if required_sections is not None
         else "No explicit required_sections. Choose the sections from the question and available data."
     )
-    system_prompt = PLAN_SYSTEM_PROMPT_TEMPLATE.replace("{language}", Config.REPORT_LANGUAGE)
+    system_prompt = (
+        PLAN_SYSTEM_PROMPT_TEMPLATE
+        .replace("{language}", Config.REPORT_LANGUAGE)
+        .replace("{section_kinds}", format_section_kinds())
+    )
     user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
         simulation_requirement=agent.simulation_requirement,
         total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
@@ -100,6 +105,8 @@ def plan_outline(
             pydantic_sections.append(ReportOutlineSectionModel(
                 title=section_data.get("title") or "",
                 description=raw_desc if raw_desc else "—",
+                # #1832: stabile semantische Rolle; Unbekanntes/Fehlendes -> generic.
+                section_kind=coerce_section_kind(section_data.get("section_kind")),
             ))
 
         pydantic_outline = ReportOutlineModel(
@@ -112,6 +119,9 @@ def plan_outline(
             ReportSection(
                 title=s.title,
                 description=s.description,
+                # #1832: Kind wandert in die Domain-Section — Consumer lesen ihn
+                # statt den (nun freien) Titel zu matchen.
+                kind=s.section_kind.value,
             )
             for s in pydantic_outline.sections
         ]

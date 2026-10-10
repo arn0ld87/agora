@@ -489,18 +489,37 @@ describe('ReportOutlineSchema (Drift-Guard max-sections)', () => {
     description: `Beschreibung für ${title}.`,
   });
 
-  it('akzeptiert freie kurze Titel und entfernt aeussere Leerzeichen (#1832)', () => {
+  it('trimmt freie Titel und erzwingt die Drei-Zeichen-Untergrenze der Abschnitte (#1832)', () => {
     const parsed = ReportOutlineSchema.parse({
       title: ' A ',
       summary: ' Zusammenfassung. ',
-      sections: [{ title: ' X ', description: ' Beschreibung. ' }],
+      sections: [{ title: ' XYZ ', description: ' Beschreibung. ' }],
     });
     expect(parsed).toEqual({
       title: 'A',
       summary: 'Zusammenfassung.',
-      sections: [{ title: 'X', description: 'Beschreibung.' }],
+      sections: [{ title: 'XYZ', description: 'Beschreibung.', section_kind: 'generic' }],
     });
     expect(Object.keys(ReportOutlineSchema.shape)).toEqual(['title', 'summary', 'sections']);
+  });
+
+  it('lehnt zu kurze Abschnittstitel ab (kein Drift zur Evidenz-Persistenz, #1832)', () => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [{ title: 'KI', description: 'Kurz.' }],
+    }).success).toBe(false);
+  });
+
+  it('nimmt section_kind an und defaultet fehlende Angaben auf generic (#1832)', () => {
+    const parsed = ReportOutlineSchema.parse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [
+        { title: 'Stimmen aus dem Kreißsaal', description: 'Persona-Stimmen.', section_kind: 'stakeholder_voices' },
+        { title: 'Ohne Angabe', description: 'Bestandsdaten.' },
+      ],
+    });
+    expect(parsed.sections[0].section_kind).toBe('stakeholder_voices');
+    expect(parsed.sections[1].section_kind).toBe('generic');
   });
 
   it.each(['title', 'summary'] as const)('lehnt leeres Outline-Feld %s nach Trimmen ab', (field) => {

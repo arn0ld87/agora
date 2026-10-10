@@ -495,8 +495,8 @@ describe('buildShelfObjects', () => {
         title: 'Titel',
         summary: 'Zusammenfassung',
         sections: [
-          { title: 'Abschnitt 1', description: 'Beschreibung 1' },
-          { title: 'Abschnitt 2', description: 'Beschreibung 2' },
+          { title: 'Abschnitt 1', description: 'Beschreibung 1', section_kind: 'generic' },
+          { title: 'Abschnitt 2', description: 'Beschreibung 2', section_kind: 'generic' },
         ],
       },
     })

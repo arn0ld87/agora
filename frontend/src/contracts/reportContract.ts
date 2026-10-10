@@ -332,10 +332,33 @@ export const ReportSectionSchema = z.object({
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
+// #1832: stabile semantische Rolle eines Abschnitts — spiegelt
+// backend/app/contracts/report_contract.py::ReportSectionKind.
+export const ReportSectionKindSchema = z.enum([
+  'stakeholder_voices',
+  'segment_table',
+  'persona_table',
+  'multiplier_analysis',
+  'friction_points',
+  'trust_signals',
+  'change_recommendations',
+  'project_impact',
+  'positioning',
+  'content_ideas',
+  'data_gaps',
+  'generic',
+]);
+export type ReportSectionKind = z.infer<typeof ReportSectionKindSchema>;
+
 export const ReportOutlineSectionSchema = z.object({
-  title: z.string().trim().min(1),
+  // #1832/Review: min(3) spiegelt ReportSectionModel.section_title — ein
+  // kuerzerer Titel wuerde in der Evidenz-Persistenz failen (Contract-Drift).
+  title: z.string().trim().min(3),
   // max(2000) — spiegelt backend/app/contracts/report_contract.py.
   description: z.string().trim().min(1).max(2000),
+  // #1832: Consumer (DTO-Auswahl, Zitat-Validierung) lesen den Kind statt den
+  // Titel zu matchen; der Titel bleibt frei formulierbar.
+  section_kind: ReportSectionKindSchema.default('generic'),
 }).strict();
 
 export const ReportOutlineSchema = z.object({

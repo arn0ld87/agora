@@ -16,9 +16,9 @@ const outline: ReportOutline = {
   title: 'Nexora Triage Assist',
   summary: 'Sechs Stakeholdergruppen erwarten Entlastung.',
   sections: [
-    { title: 'Ausgangslage', description: 'x' },
-    { title: 'Stakeholder', description: 'y' },
-    { title: 'Empfehlung', description: 'z' },
+    { title: 'Ausgangslage', description: 'x', section_kind: 'generic' },
+    { title: 'Stakeholder', description: 'y', section_kind: 'generic' },
+    { title: 'Empfehlung', description: 'z', section_kind: 'generic' },
   ],
 }
 

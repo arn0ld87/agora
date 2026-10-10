@@ -46,6 +46,30 @@ def format_required_sections(sections: list[tuple[str, str]]) -> str:
     )
 
 
+#: #1832: Fixe Semantik-Liste fuer ``section_kind`` im Outline-Vertrag. Jeder
+#: ReportSectionKind-Wert MUSS hier auftauchen; ein Test haelt Prompt und Enum
+#: synchron, damit die freie Titelwahl nie die Semantik verliert.
+SECTION_KIND_PROMPT_LINES: tuple[tuple[str, str], ...] = (
+    ("stakeholder_voices", "persona voices, reactions, interviews or audience feedback — quotes in this section are validated"),
+    ("segment_table", "persona segments with size, goal and trust aggregates"),
+    ("persona_table", "full persona list with reactions, drop-off and decisions"),
+    ("multiplier_analysis", "multiplier profiles with reach and impact"),
+    ("friction_points", "strongest negative triggers with persona refs"),
+    ("trust_signals", "strongest positive triggers with persona refs"),
+    ("change_recommendations", "concrete prioritized recommendations"),
+    ("project_impact", "per-project impact, credibility and risks"),
+    ("positioning", "positioning variants with trade-offs"),
+    ("content_ideas", "concrete topic and format ideas"),
+    ("data_gaps", "what the simulation cannot answer"),
+    ("generic", "anything else — generic metadata only, no quote validation"),
+)
+
+
+def format_section_kinds() -> str:
+    """Rendert die section_kind-Liste fuer PLAN_SYSTEM_PROMPT_TEMPLATE."""
+    return "\n".join(f"- {name} — {desc}" for name, desc in SECTION_KIND_PROMPT_LINES)
+
+
 PLAN_SYSTEM_PROMPT_TEMPLATE = """\
 You are an expert in writing "scenario evaluation reports" from an analytical observer perspective on the simulated environment - you can review the behavior, statements, and interactions of every agent in the simulation.
 
@@ -68,6 +92,10 @@ Write a "scenario evaluation report" that answers:
 [Section Requirements]
 - Plan 1 to 15 distinct sections from the actual question and available observations.
 - Choose specific titles and descriptions that answer this scenario's analytical needs.
+- For EVERY section assign a `section_kind` from this fixed list — it carries the
+  stable semantics the report pipeline relies on (structured DTO selection, quote
+  validation); the title itself stays free-form:
+{section_kinds}
 - Do not use a fixed template or invent data to fill generic report sections.
 - Distinguish source facts, simulated reactions, analytical conclusions and data gaps.
 - Include limitations relevant to the available evidence.
@@ -83,6 +111,7 @@ Please output the report outline in JSON format as follows:
     "sections": [
         {
             "title": "Section Title",
+            "section_kind": "stakeholder_voices",
             "description": "Section Content Description"
         }
     ]

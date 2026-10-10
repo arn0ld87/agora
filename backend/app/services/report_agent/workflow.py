@@ -9,7 +9,11 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from pydantic import ValidationError
 
 from ...config import Config
-from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
+from ...contracts.report_contract import (
+    ReportOutlineModel,
+    ReportOutlineSectionModel,
+    ReportSectionKind,
+)
 from ...llm.tokens import PROMPT_HEADROOM_TOKENS
 from ...contracts.report_v3 import (
     DEFAULT_REPORT_MODE,
@@ -1697,6 +1701,7 @@ def generate_section_metadata(
     section_title: str,
     section_content: str,
     section_index: int,
+    section_kind: str | None = None,
 ) -> Dict[str, Any]:
     """Extrahiert strukturierte Metadaten aus einem fertig generierten Abschnitt.
 
@@ -1715,7 +1720,7 @@ def generate_section_metadata(
         Validiertes dict aus dem gewählten DTO (via model_dump).
         Bei Fehler leeres dict — die Hauptgenerierung ist nicht blockiert.
     """
-    schema_cls = _section_schema_for(section_title)
+    schema_cls = _section_schema_for(section_title, section_kind)
     schema_name = f"section_metadata_{schema_cls.__name__.lower()}"
 
     schema_json = json.dumps(
@@ -1875,7 +1880,13 @@ def _validate_outline_structure(outline: Any) -> None:
         title=outline.title,
         summary=outline.summary,
         sections=[
-            ReportOutlineSectionModel(title=section.title, description=section.description)
+            ReportOutlineSectionModel(
+                title=section.title,
+                description=section.description,
+                # #1832: Kind aus der persistierten Section uebernehmen; alte
+                # Bestandsdaten ohne Kind fallen auf generic zurueck.
+                section_kind=getattr(section, "kind", None) or ReportSectionKind.generic,
+            )
             for section in outline.sections
         ],
     )
