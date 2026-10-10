@@ -415,7 +415,9 @@ onMounted(async () => {
             <template v-if="phase > 1"> {{ completedBadgeLabel }}</template>
           </Badge>
         </header>
-        <p class="card-desc" v-if="phase === 1">
+        <!-- UAT-005: "running"-Text nur, wenn tatsächlich etwas läuft –
+             im Restore-Fall (phase 1 ohne prepare) ist isPreparing false. -->
+        <p class="card-desc" v-if="phase === 1 && isPreparing">
           {{ t('step2.personas.running', { done: profiles.length, total: expectedTotal || '?' }) }}
         </p>
         <!-- Issue #1034: Ohne diesen Hinweis wirkt der Nenner willkürlich —

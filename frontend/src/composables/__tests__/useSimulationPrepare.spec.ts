@@ -327,6 +327,39 @@ describe('useSimulationPrepare', () => {
       expect(composable.phase.value).toBe(0)
       expect(composable.simulationConfig.value).toBeNull()
     })
+
+    it('lädt persistierte Personas auch dann nach, wenn kein Config geliefert wird (UAT-005)', async () => {
+      mockGetConfig.mockResolvedValue(makeConfigEnvelope(null))
+      const fakeProfiles = [
+        { username: 'uat-1' },
+        { username: 'uat-2' },
+      ] as unknown as ProfileRecord[]
+      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope(fakeProfiles))
+
+      const composable = useSimulationPrepare()
+      const onStatusChange = vi.fn()
+      await composable.probeAlreadyPrepared('sim-005-uat', { onLog: vi.fn(), onStatusChange })
+
+      expect(composable.profiles.value.length).toBe(fakeProfiles.length)
+      expect(mockGetProfiles).toHaveBeenCalledWith('sim-005-uat', 'reddit')
+      expect(composable.phase.value).toBe(1)
+      expect(composable.simulationConfig.value).toBeNull()
+      expect(onStatusChange).not.toHaveBeenCalledWith('completed')
+    })
+
+    it('UAT-005 Leerlauf-Schutz: ohne Config und ohne Personas bleibt phase 0 (Generierungsformular)', async () => {
+      mockGetConfig.mockResolvedValue(makeConfigEnvelope(null))
+      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope())
+
+      const composable = useSimulationPrepare()
+      const onStatusChange = vi.fn()
+      await composable.probeAlreadyPrepared('sim-005-empty', { onLog: vi.fn(), onStatusChange })
+
+      expect(composable.profiles.value.length).toBe(0)
+      expect(composable.phase.value).toBe(0)
+      expect(composable.simulationConfig.value).toBeNull()
+      expect(onStatusChange).not.toHaveBeenCalledWith('completed')
+    })
   })
 
   describe('Case 6 — fehlende simulationId: startPrepare bricht früh ab', () => {

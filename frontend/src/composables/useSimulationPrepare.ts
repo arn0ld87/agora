@@ -359,9 +359,25 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     _onStatusChange = opts.onStatusChange
 
     await _fetchConfigRealtime()
+    // UAT-005: Personen laden unabhängig vom Config-Gate — ein Lauf mit
+    // persistierten Personas (Altbestand ohne Config) darf beim Wiedereintritt
+    // nicht wie ein frischer Lauf aussehen. Reihenfolge wie im Lese-Pfad:
+    // Config zuerst, dann Profiles.
+    await fetchProfilesRealtime()
     if (simulationConfig.value) {
-      await _loadPreparedData()
+      // Persistierter Zustand inkl. Config: Lauf ist komplett vorbereitet.
+      // (Explizit statt _loadPreparedData(), damit der Config-Endpunkt im
+      // Restore-Pfad nicht doppelt gefetcht wird.)
+      phase.value = 3
+      _onStatusChange?.('completed')
+      isPreparing.value = false
+    } else if (profiles.value.length > 0) {
+      // Personas persistiert, aber keine Config: Card 02 rendert die
+      // Personakarten, ohne ein "im Lauf"-Signal zu faken (isPreparing
+      // bleibt false; Status 'completed' wird nicht gemeldet).
+      phase.value = 1
     }
+    // Kein Config, keine Personas: frischer Lauf — phase bleibt 0.
   }
 
   return {
