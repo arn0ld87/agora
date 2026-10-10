@@ -23,6 +23,17 @@ export const NOT_FINISHED_STATES: ReadonlySet<StageStateKind> = new Set<StageSta
   'paused',
 ])
 
+/**
+ * Stufen, für deren Live-Nachladen der Arbeitsbereich periodisch pollt
+ * (UAT-006). Bewusst ohne `notStarted` — frische Läufe müssten sonst endlos
+ * pollen, obwohl noch nichts bewegt wurde.
+ */
+export const POLLING_STAGE_STATES: ReadonlySet<StageStateKind> = new Set<StageStateKind>([
+  'queued',
+  'running',
+  'paused',
+])
+
 export type StageStateKind =
   | 'notStarted'
   | 'queued'

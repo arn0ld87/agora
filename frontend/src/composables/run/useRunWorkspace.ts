@@ -5,7 +5,16 @@
  * Pflichtteil fehl, steht ein sichtbarer Fehler da, nichts wird still
  * ausgelassen. Optionale Teile (Verbrauch, Evidence-Prüfung) benennen ihren
  * Ausfall in den Daten.
+ *
+ * `reload(true)` ist ein Still-Refresh (UAT-006): solange der Stand bereits
+ * sichtbar ist, flackert die Ansicht beim Nachladen nicht; schlägt ein
+ * Still-Refresh fehl, bleibt der letzte Stand stehen (strukturierte Warnung).
+ * Der `notFound`-Pfad bleibt auch bei `quiet` wirksam — ein gelöschter Lauf
+ * wird ehrlich gezeigt.
  */
+
+/** Poll-Intervall der Übersicht; bewusst langsamer als der 2500-ms-Feed. */
+export const RUN_WORKSPACE_POLL_INTERVAL_MS = 5000
 import { computed, inject, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue'
 import { z } from 'zod'
 import { getSimulation } from '@/api/simulation'
@@ -61,7 +70,8 @@ export interface RunWorkspace {
   tabs: ComputedRef<RunTab[]>
   /** Job, dessen Budget die Übersicht zeigt (Simulation, sonst der jüngste). */
   budgetJob: ComputedRef<JobInfo | null>
-  reload: () => Promise<void>
+  /** `quiet: true` lädt still nach, ohne einen sichtbaren Stand zurückzusetzen. */
+  reload: (quiet?: boolean) => Promise<void>
 }
 
 export const RUN_WORKSPACE_KEY: InjectionKey<RunWorkspace> = Symbol('run-workspace')
@@ -220,11 +230,15 @@ export function useRunWorkspace(simulationId: () => string): RunWorkspace {
   const graphName = ref<string | null>(null)
   let token = 0
 
-  async function reload(): Promise<void> {
+  async function reload(quiet = false): Promise<void> {
     const id = simulationId()
     const mine = ++token
-    state.value = 'loading'
-    error.value = null
+    // Still-Refresh: ein sichtbarer Stand bleibt stehen, nichts flackert.
+    const quietKeep = quiet && state.value === 'ready'
+    if (!quietKeep) {
+      state.value = 'loading'
+      error.value = null
+    }
     try {
       const simRes = await getSimulation(id)
       if (mine !== token) return
@@ -268,6 +282,14 @@ export function useRunWorkspace(simulationId: () => string): RunWorkspace {
       state.value = 'ready'
     } catch (err) {
       if (mine !== token) return
+      // Still-Refresh hält den letzten Stand: kein `data = null`, kein Fehlerrahmen.
+      if (quietKeep && !isNotFound(err)) {
+        console.warn('[run-workspace] Still-Refresh fehlgeschlagen, letzter Stand bleibt', {
+          simulationId: id,
+          error: describe(err),
+        })
+        return
+      }
       data.value = null
       if (isNotFound(err)) {
         state.value = 'notFound'

@@ -2,16 +2,20 @@
 /**
  * Lauf-Arbeitsbereich (Etappe 2, #1797, Bauplan 4.2/6.2): Lauf-Kopf mit der
  * Frage als Titel und der Zustandsmarke, sechs Reiter, darunter die
- * Kind-Ansicht. Lädt die Daten des Laufs einmal und reicht sie per
- * `provide` an die Übersicht weiter.
+ * Kind-Ansicht. Lädt die Daten des Laufs einmal initial und reicht sie per
+ * `provide` an die Übersicht weiter; solange eine Stufe`queued`/`running`/
+ * `paused` ist, lädt der Arbeitsbereich stillos per `usePolling` nach
+ * (UAT-006) und stoppt bei Terminalzustand.
  */
 import { computed, onMounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import RunTabs from '@/components/run/RunTabs.vue'
 import RunStateMark from '@/components/run/RunStateMark.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
+import { usePolling } from '@/composables/usePolling'
 import { crumbForId, useShellBreadcrumbs } from '@/composables/useShellBreadcrumbs'
-import { RUN_WORKSPACE_KEY, useRunWorkspace } from '@/composables/run/useRunWorkspace'
+import { POLLING_STAGE_STATES } from '@/composables/run/runStageState'
+import { RUN_WORKSPACE_KEY, RUN_WORKSPACE_POLL_INTERVAL_MS, useRunWorkspace } from '@/composables/run/useRunWorkspace'
 
 const props = defineProps<{ simulationId: string }>()
 const { t } = useI18n()
@@ -24,6 +28,15 @@ watch(
   () => props.simulationId,
   () => void ws.reload(),
 )
+
+// Still-Refresh der Übersicht (UAT-006): läuft eine Stufe, holt der
+// Arbeitsbereich periodisch nach; terminal Stufen beenden das Polling.
+const polling = usePolling(() => ws.reload(true), RUN_WORKSPACE_POLL_INTERVAL_MS)
+const isPollingStage = computed(() => ws.stages.value.some((r) => POLLING_STAGE_STATES.has(r.state)))
+watch(isPollingStage, (active) => {
+  if (active) void polling.start()
+  else polling.stop()
+})
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
   { label: t('views.library.title'), path: '/library/runs' },

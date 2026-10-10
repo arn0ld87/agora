@@ -3,7 +3,7 @@
  * Deaktivierung mit Grund, Zustände je Stufe, genau ein nächster Schritt,
  * Lade-/Fehler-/Nicht-gefunden-Zustand.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -41,6 +41,7 @@ vi.mock('@/api/llmRoutingDefaults', async (orig) => ({
 }))
 
 import { PENDING_RUN_PARAMS_PREFIX, writePendingRunParams } from '@/composables/new-run/pendingRunParams'
+import { RUN_WORKSPACE_POLL_INTERVAL_MS } from '@/composables/run/useRunWorkspace'
 import RunWorkspaceView from '../RunWorkspaceView.vue'
 import RunOverviewView from '../RunOverviewView.vue'
 
@@ -329,6 +330,33 @@ describe('RunWorkspaceView: Laden und Fehler', () => {
     api.listReports.mockResolvedValue({ success: true, data: [{ report_id: 'x' }] })
     const { wrapper } = await mountAt()
     expect(wrapper.get('[data-testid="run-error"]').text()).toContain('Vertragsbruch')
+  })
+})
+
+describe('RunWorkspaceView: Still-Refresh während aktiver Stufe (UAT-006)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('pollt auf aktiver Stufe, zeigt den Endzustand ohne Reload und stoppt danach', async () => {
+    vi.useFakeTimers()
+    arrange({ jobs: [runDetail('simulation_run', { status: 'processing', completed_at: null })], reports: [] })
+    const { wrapper } = await mountAt()
+    expect(wrapper.get('[data-testid="run-headline"]').text()).toContain('Läuft')
+    const afterMount = api.listRuns.mock.calls.length
+
+    // Der Runner endet backend-seitig; der nächste Poll-Tick holt den Endzustand.
+    arrange({ jobs: [runDetail('simulation_run')], reports: [] })
+    await vi.advanceTimersByTimeAsync(RUN_WORKSPACE_POLL_INTERVAL_MS)
+    await flushPromises()
+    expect(api.listRuns.mock.calls.length).toBeGreaterThan(afterMount)
+    expect(wrapper.get('[data-testid="run-headline"]').text()).toContain('Fertig')
+
+    // Terminalzustand: kein Poll-Tick mehr.
+    const afterStop = api.listRuns.mock.calls.length
+    await vi.advanceTimersByTimeAsync(RUN_WORKSPACE_POLL_INTERVAL_MS * 2)
+    await flushPromises()
+    expect(api.listRuns.mock.calls.length).toBe(afterStop)
   })
 })
 
