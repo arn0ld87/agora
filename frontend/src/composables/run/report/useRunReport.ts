@@ -141,7 +141,7 @@ export const RUN_REPORT_KEY: InjectionKey<RunReportContext> = Symbol('run-report
 const RUNNING_STATUSES = new Set(['pending', 'planning', 'generating'])
 /** Zustände, in denen die Run-Registry einen Berichts-Job vor seinem Ende führt. */
 const ACTIVE_RUN_STATUSES = new Set(['pending', 'processing'])
-const TERMINAL_WITH_EVIDENCE =new Set(['completed', 'incomplete'])
+const TERMINAL_WITH_EVIDENCE = new Set(['completed', 'incomplete'])
 
 function describe(err: unknown): string {
   if (err instanceof Error && err.message) return err.message
