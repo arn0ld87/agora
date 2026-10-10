@@ -44,8 +44,9 @@ die applied_penalties auswerten wollen.
 #1778 Medium-Regel: Unabhängigkeit hängt an der Stimme (``voice_key``). Zwei
 Aktionsbelege (``agent_action``) verschiedener Stimmen heben den
 Ein-Quellen-Deckel 0.59; reine Aktionsbelege bleiben bei höchstens 0.84, also
-nie ``high``/``verified``. Das Label ``medium`` in der Berichtspipeline ist
-ADR-0002-seitig geregelt (siehe ``docs/decisions/0002-supersedes.md``).
+nie ``high``/``verified``. Das Label ``medium`` ist über ``has_two_action_voices``
+an dieselbe Zwei-Stimmen-Regel gebunden wie der Vertrag (ADR-0002-Nachtrag
+2026-10-10, ``docs/decisions/0002-supersedes.md``).
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ from __future__ import annotations
 import statistics
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.contracts.report_contract import counts_for_confidence
+from app.contracts.report_contract import counts_for_confidence, has_two_action_voices
 
 
 def _drop_hand_made(evidence: List[Dict]) -> List[Dict]:
@@ -241,8 +242,7 @@ def _apply_action_voices_ceiling(score: float, evidence: List[Dict[str, Any]]) -
         return score
     if any(str(e.get("type") or "") != _ACTION_EVIDENCE_TYPE for e in evidence):
         return score
-    voices = {str(e["voice_key"]) for e in evidence if e.get("voice_key")}
-    if len(voices) < 2:
+    if not has_two_action_voices((e.get("type"), e.get("voice_key")) for e in evidence):
         return score
     return min(score, _ACTION_VOICES_MAX_SCORE)
 

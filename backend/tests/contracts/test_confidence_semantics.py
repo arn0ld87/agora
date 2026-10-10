@@ -568,6 +568,87 @@ def test_speculative_claim_passes_contract() -> None:
     assert claim.confidence_label == ConfidenceLabel.speculative
 
 
+# ---------------------------------------------------------------------------
+# #1778 ADR-0002-Nachtrag 2026-10-10 — medium auch durch zwei Aktionsstimmen
+# ---------------------------------------------------------------------------
+
+
+def _action_item(voice: int | None, *, supports: bool = True) -> dict:
+    item: dict = {
+        "type": EvidenceType.agent_action.value,
+        "source": "simulation_actions",
+        "snippet": f"Beitrag {voice} aus der Simulation.",
+        "source_kind": EvidenceSourceKind.agent_action.value,
+        "supports_claim": supports,
+    }
+    if voice is not None:
+        item["voice_key"] = f"agent:{voice}"
+    return item
+
+
+def _seed_item() -> dict:
+    return {
+        "type": EvidenceType.seed_document.value,
+        "source": "seed-doc-1",
+        "snippet": "Passage aus dem Seed-Korpus.",
+        "source_kind": EvidenceSourceKind.seed_corpus.value,
+        "supports_claim": True,
+    }
+
+
+def _medium_claim(label: str, evidence: list[dict]) -> ReportClaimModel:
+    return ReportClaimModel(
+        claim_id="claim_01",
+        claim_text="Die Zielgruppe reagiert zurueckhaltend auf den Preis.",
+        confidence_label=label,  # type: ignore[arg-type]
+        confidence_score=0.7 if label == "medium" else 0.9,
+        evidence=evidence,  # type: ignore[arg-type]
+    )
+
+
+def test_medium_passes_with_two_distinct_action_voices() -> None:
+    claim = _medium_claim("medium", [_action_item(1), _action_item(2)])
+    assert claim.confidence_label == ConfidenceLabel.medium
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        [_action_item(1), _action_item(1)],
+        [_action_item(1)],
+        [_action_item(1), _action_item(None)],
+        [_action_item(1), _action_item(2, supports=False)],
+    ],
+    ids=["gleiche-stimme", "eine-stimme", "zweite-ohne-voice-key", "zweite-stuetzt-nicht"],
+)
+def test_medium_fails_without_two_distinct_supporting_action_voices(evidence: list[dict]) -> None:
+    with pytest.raises(ValidationError, match="Label 'medium' verlangt"):
+        _medium_claim("medium", evidence)
+
+
+def test_medium_with_one_action_voice_plus_seed_still_fails() -> None:
+    """Eine Aktionsstimme plus Seed ist weder Zitat plus Seed noch zwei Stimmen."""
+    with pytest.raises(ValidationError, match="Label 'medium' verlangt"):
+        _medium_claim("medium", [_action_item(1), _seed_item()])
+
+
+def test_medium_error_names_the_action_voice_alternative() -> None:
+    with pytest.raises(ValidationError) as excinfo:
+        _medium_claim("medium", [_action_item(1)])
+    assert "agent_action" in str(excinfo.value)
+    assert "verschiedenen Stimmen" in str(excinfo.value)
+
+
+def test_medium_quote_plus_seed_path_still_passes() -> None:
+    claim = _medium_claim("medium", [_agent_quote("Buerger"), _seed_item()])
+    assert claim.confidence_label == ConfidenceLabel.medium
+
+
+def test_high_stays_blocked_for_two_action_voices() -> None:
+    with pytest.raises(ValidationError, match="Stakeholder-Rollenfamilien"):
+        _medium_claim("high", [_action_item(1), _action_item(2)])
+
+
 def test_speculative_claim_without_evidence_passes() -> None:
     """speculative braucht wie low keine Evidence — der Claim bleibt gültig."""
     claim = ReportClaimModel(

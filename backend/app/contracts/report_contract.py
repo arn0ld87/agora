@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Mapping, Optional, Sequence, Union
+from typing import Any, Iterable, Literal, Mapping, Optional, Sequence, Union
 
 from pydantic import (
     BaseModel,
@@ -172,6 +172,35 @@ def counts_for_confidence(item: Any) -> bool:
     if isinstance(item, Mapping):
         return item.get("graph_origin") is None
     return getattr(item, "graph_origin", None) is None
+
+
+#: #1778 / ADR-0002-Nachtrag 2026-10-10: Mindestzahl verschiedener Aktionsstimmen,
+#: ab der ``medium`` auch ohne ``agent_quote`` plus ``seed_corpus`` zulässig ist.
+MIN_ACTION_VOICES_FOR_MEDIUM = 2
+
+
+def has_two_action_voices(pairs: Iterable[tuple[Any, Any]]) -> bool:
+    """``True``, wenn die Belege mind. zwei verschiedene Aktionsstimmen tragen.
+
+    ``pairs`` sind ``(Quellengattung, voice_key)``-Paare. Gezählt werden
+    verschiedene, nicht leere ``voice_key``-Werte von Belegen der Gattung
+    ``agent_action`` (``EvidenceSourceKind`` oder ``EvidenceType``, beide tragen
+    denselben Wert; Enum und String werden gleich behandelt). Der Aufrufer
+    filtert vorher nach stützenden Belegen und ADR-0022-Handarbeit.
+
+    Die eine Stelle für Vertrag (``agent_grounded_for_medium``), Bindung
+    (``_require_quote_and_seed``), Schreibpfad
+    (``report_agent.evidence.has_agent_grounded_evidence``) und Rechner
+    (``confidence_calculator``), damit die vier nicht auseinanderlaufen. Sie
+    berührt ``high``/``verified`` nicht: Anker 4 und 5 bleiben unverändert.
+    """
+    voices: set[str] = set()
+    for kind, voice_key in pairs:
+        if str(getattr(kind, "value", kind)) != "agent_action":
+            continue
+        if voice_key:
+            voices.add(str(voice_key))
+    return len(voices) >= MIN_ACTION_VOICES_FOR_MEDIUM
 
 
 class EntailmentVerdict(str, Enum):
@@ -714,6 +743,10 @@ class ReportClaimModel(BaseModel):
         # (Codex PR-Review #961 P2). Bisher passte ein seed_only-Claim mit Label
         # medium unbeanstandet — die Regel hing nur am Modellgehorsam. Der
         # Validator ist das Auffangnetz (ADR-0002 Risiko).
+        #
+        # ADR-0002-Nachtrag 2026-10-10 (#1778): Alternative zur Komposition —
+        # stützende agent_action-Evidence von mind. zwei verschiedenen Stimmen
+        # (voice_key). high/verified bleiben unberührt (Anker 4 und 5).
         if self.confidence_label != ConfidenceLabel.medium:
             return self
         has_agent_quote = any(
@@ -723,13 +756,19 @@ class ReportClaimModel(BaseModel):
         has_seed_corpus = any(
             e.source_kind == EvidenceSourceKind.seed_corpus for e in self.evidence
         )
-        if not (has_agent_quote and has_seed_corpus):
+        has_action_voices = has_two_action_voices(
+            (e.source_kind, e.voice_key) for e in self.evidence if e.supports_claim
+        )
+        if not ((has_agent_quote and has_seed_corpus) or has_action_voices):
             raise ValueError(
                 f"Label 'medium' verlangt Evidence aus mind. 1 agent_quote "
                 f"(mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 "
-                f"seed_corpus (ADR-0002 Stufe agent_grounded). "
+                f"seed_corpus (ADR-0002 Stufe agent_grounded) ODER stützende "
+                f"agent_action-Evidence von mind. {MIN_ACTION_VOICES_FOR_MEDIUM} "
+                f"verschiedenen Stimmen (voice_key). "
                 f"Gefunden: agent_quote={has_agent_quote}, "
-                f"seed_corpus={has_seed_corpus}."
+                f"seed_corpus={has_seed_corpus}, "
+                f"zwei_aktionsstimmen={has_action_voices}."
             )
         return self
 
@@ -1357,6 +1396,10 @@ def _require_quote_and_seed(
 
     Nur ``source_kind`` reicht beim Zitat nicht: ohne ``quote``-Feld traegt der
     Record keinen Wortlaut, den eine Persona tatsaechlich geaussert haette.
+
+    ADR-0002-Nachtrag 2026-10-10 (#1778): alternativ genuegen stuetzende
+    ``agent_action``-Belege von mind. zwei verschiedenen Stimmen (``voice_key``
+    am Record, ``supports_claim`` am Binding).
     """
     has_agent_quote = any(
         record.source_kind == EvidenceSourceKind.agent_quote and record.quote
@@ -1365,10 +1408,16 @@ def _require_quote_and_seed(
     has_seed = any(
         record.source_kind == EvidenceSourceKind.seed_corpus for _, record in resolved
     )
-    if not (has_agent_quote and has_seed):
+    has_action_voices = has_two_action_voices(
+        (record.source_kind, record.voice_key)
+        for binding, record in resolved
+        if binding.supports_claim
+    )
+    if not ((has_agent_quote and has_seed) or has_action_voices):
         raise ValueError(
             f"Section {section.section_index} Claim {claim.claim_id}: "
-            "medium verlangt agent_quote und seed_corpus."
+            "medium verlangt agent_quote und seed_corpus oder stuetzende "
+            "agent_action-Belege von mindestens zwei verschiedenen Stimmen."
         )
 
 

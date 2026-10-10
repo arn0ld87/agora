@@ -108,3 +108,11 @@ zu streng, bricht die Claim-Zahl ein. Beides ist an den Checks
 Das Enum bekommt die Stufe `speculative` unterhalb von `low`. Grund: Rechner, ReportV3-Vertrag, Prompt-Block (`max_confidence="speculative"`) und Frontend kennen sie bereits, nur das Enum nicht; acht Claims je Bericht wurden deshalb fälschlich auf `low` gesetzt. Kein Validator für `high` oder `verified` ändert sich.
 
 Freigabe: Maintainer, 2026-10-04.
+
+---
+
+## 2026-10-10: medium auch durch zwei Aktionsstimmen
+
+`medium` ist jetzt auch erreichbar, wenn stützende `agent_action`-Evidence von mindestens zwei verschiedenen Stimmen (`voice_key`) vorliegt, zusätzlich zur bisherigen Komposition aus `agent_quote` und `seed_corpus`. Grund ist Entscheidung 3 des Plans `simulation-im-bericht` (#1778): Simulationsbeiträge unabhängiger Personas gelten als quasi-unabhängige Quellen. `high` und `verified` bleiben unverändert (Validatoren `cross_stakeholder_for_high` und `reject_inferred_in_high_confidence`, der Block `evidence_gating`, der Hedge-Snapshot und `EvidenceSourceKind` werden nicht angefasst); die Regel steht an einer Stelle (`has_two_action_voices` in `report_contract.py`), die Vertrag, Schreibpfad und Rechner gemeinsam nutzen.
+
+Freigabe: Maintainer, 2026-10-10.
