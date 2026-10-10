@@ -102,6 +102,15 @@ def cancel_env(tmp_path, monkeypatch):
     monkeypatch.setattr(rg, "GraphToolsService", lambda **kwargs: MagicMock())
     monkeypatch.setattr(rg, "current_app", MagicMock())
 
+    # UAT-001: Die Persona-Floor-Vorabpruefung ist nicht Gegenstand dieses Tests
+    # (Abbruch-Verdrahtung). Der Fixture-Lauf hat kein Persona-Artefakt, die
+    # Vorabpruefung laese dort 0 Personas und wiese den Start ab.
+    monkeypatch.setattr(
+        rg.ReportGenerationService,
+        "_reject_if_persona_floor_not_reached",
+        staticmethod(lambda simulation_id: None),
+    )
+
     seen: dict[str, object] = {}
 
     class _RecordingAgent:

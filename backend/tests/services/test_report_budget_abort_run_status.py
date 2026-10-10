@@ -37,12 +37,13 @@ def _ensure_dir(path):
 
 
 @pytest.fixture()
-def budget_abort_env(tmp_path, monkeypatch):
+def budget_abort_env(tmp_path, monkeypatch, report_personas):
     """Isolierte Registry + gestubbte Report-Umgebung.
 
     ``TaskManager`` und ``RunRegistry`` bleiben echt — genau ihr Zusammenspiel
     ist der Prüfgegenstand.
     """
+    report_personas("sim_abc")
     registry_dir = tmp_path / "run_registry"
     registry_dir.mkdir()
     monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", str(registry_dir))

@@ -24,6 +24,20 @@ class TestReportGenerateActiveJobGuard:
     ohne konfigurierte AI-Route (``NoAiRouteCandidateError``).
     """
 
+    @pytest.fixture(autouse=True)
+    def _without_persona_floor_preflight(self, monkeypatch):
+        """UAT-001: Die Persona-Floor-Vorabpruefung ist nicht Gegenstand dieser Tests.
+
+        Die Durchlass-Faelle haben kein Persona-Artefakt; die Vorabpruefung
+        laese dort 0 Personas und wiese jeden Start ab. Geprueft wird hier
+        allein der Active-Job-Guard.
+        """
+        monkeypatch.setattr(
+            ReportGenerationService,
+            "_reject_if_persona_floor_not_reached",
+            staticmethod(lambda simulation_id: None),
+        )
+
     def test_active_report_generate_rejects_second_start(self, app: Flask) -> None:
         """Ein laufender report_generate-Run blockiert einen zweiten Start mit 409."""
         simulation_id = "sim_0123456789ab"

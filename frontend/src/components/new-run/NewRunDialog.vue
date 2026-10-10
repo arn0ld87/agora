@@ -37,6 +37,7 @@ import { getAvailableModels } from '@/api/simulation'
 import { setPendingUpload } from '@/store/pendingUpload'
 import { clearRunModelOverride, setRunModelOverride } from '@/store/runModelOverride'
 import { toRunParamsQuery, MAX_SIMULATION_DAYS } from '@/contracts/runParamsQuery'
+import { MIN_SIMULATION_AGENTS } from '@/constants/personaFloor'
 import type { DocumentRole } from '@/contracts/documentRoleContract'
 import type { LlmProfile } from '@/contracts/llmProfileContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
@@ -66,7 +67,10 @@ const id = (name: string): string => `${uid}-${name}`
 const opener: Element | null = typeof document === 'undefined' ? null : document.activeElement
 
 // ---- Grenzen (wie im Bestand von HeroNewRun / Schritt 2) ----
-const MIN_AGENTS = 10
+// Untergrenze der Personas-Obergrenze: geteilter Spiegel der Backend-Konstante
+// MIN_SIMULATION_AGENTS (siehe constants/personaFloor.ts). Eine kleinere
+// Obergrenze ist bewusst zulässig — sie senkt den wirksamen Report-Floor.
+const MIN_AGENTS = MIN_SIMULATION_AGENTS
 const DEFAULT_AGENTS = 30
 const MIN_ROUNDS = 3
 const MAX_ROUNDS = 30

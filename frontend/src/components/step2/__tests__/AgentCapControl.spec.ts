@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import AgentCapControl from '../AgentCapControl.vue'
+import de from '../../../i18n/locales/de.json'
+import en from '../../../i18n/locales/en.json'
 
 const localStorageMock = (() => {
   const store: Record<string, string> = {}
@@ -28,14 +30,14 @@ const i18n = createI18n({
   messages: { de: {}, en: {} },
 })
 
-function mountComponent(props = {}) {
+function mountComponent(props = {}, plugin = i18n) {
   return mount(AgentCapControl, {
     props: {
       useAgentCap: false,
       maxAgents: 50,
       ...props,
     },
-    global: { plugins: [i18n] },
+    global: { plugins: [plugin] },
   })
 }
 
@@ -97,5 +99,42 @@ describe('AgentCapControl (Issue #586)', () => {
       const hintId = el.attributes('aria-describedby')
       expect(wrapper.find(`[id="${hintId}"]`).text()).toBe('step2.agentCap.minimumHint')
     }
+  })
+})
+
+/**
+ * UAT-001 — Der Dialog nannte als einzige Mindestzahl 10 (Untergrenze des
+ * Feldes) und nie die Schwelle, an der der Bericht gemessen wird. Der Lauf
+ * endete mit „18/20 Personas vorhanden" und ohne Berichtstext.
+ */
+describe('AgentCapControl — wirksame Persona-Schwelle (UAT-001)', () => {
+  const realI18n = createI18n({
+    legacy: false,
+    locale: 'de',
+    missingWarn: false,
+    fallbackWarn: false,
+    messages: { de, en },
+  })
+
+  it('nennt ohne Obergrenze die Contract-Schwelle 20', () => {
+    const wrapper = mountComponent({ useAgentCap: false }, realI18n)
+    expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('20')
+  })
+
+  it('nennt mit Obergrenze 10 die gesenkte Schwelle 10', () => {
+    const wrapper = mountComponent({ useAgentCap: true, maxAgents: 10 }, realI18n)
+    expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('10')
+  })
+
+  it('nennt mit Obergrenze 30 weiterhin 20 (Contract deckelt)', () => {
+    const wrapper = mountComponent({ useAgentCap: true, maxAgents: 30 }, realI18n)
+    const text = wrapper.get('[data-testid="agent-cap-report-floor"]').text()
+    expect(text).toContain('20')
+    expect(text).not.toContain('30')
+  })
+
+  it.each([-1, 0, 5, 9])('nennt bei Eingabe %i das beim Submit wirksame Minimum', (maxAgents) => {
+    const wrapper = mountComponent({ useAgentCap: true, maxAgents }, realI18n)
+    expect(wrapper.get('[data-testid="agent-cap-report-floor"]').text()).toContain('10')
   })
 })

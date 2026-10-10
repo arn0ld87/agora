@@ -149,6 +149,42 @@ class ReportGenerationService:
         if active_runs:
             raise ValueError(ApiErrorCode.REPORT_GENERATE_IN_PROGRESS)
 
+    @staticmethod
+    def _reject_if_persona_floor_not_reached(simulation_id: str) -> None:
+        """Weist einen Report-Start ab, der unter der Persona-Schwelle liegt (UAT-001).
+
+        Der Floor wurde bisher erst im Report-Workflow geprueft
+        (``report_agent/workflow.py``) — nach Planning und Outline, also
+        nachdem die kostenpflichtigen Schritte bereits gelaufen waren. Der
+        Lauf endete dann als ``INCOMPLETE`` ohne Text. Produktionsbeleg:
+        Report ``report_fe62975999bc`` (18 Personas, Floor 20).
+
+        Anzahl und Schwelle kommen aus denselben Funktionen, die auch das
+        Gate benutzt — die Erklaerung vor dem Start kann deshalb nicht von
+        der Schwelle abweichen, an der der Workflow spaeter abbrechen wuerde.
+
+        Ein Lesefehler am Store blockiert nichts: ``load_persona_count_for``
+        liefert dann ``None`` und die Pruefung entfaellt (fail-open). Sonst
+        wuerde ein Store-Aussetzer jeden Bericht verhindern.
+        """
+        from .report_agent.workflow import load_persona_count_for, load_persona_floor_for
+
+        persona_count = load_persona_count_for(simulation_id)
+        if persona_count is None:
+            return
+        persona_floor = load_persona_floor_for(simulation_id)
+        if persona_count >= persona_floor:
+            return
+        raise ValueError(
+            f"Fuer diesen Lauf sind {persona_count} von mindestens {persona_floor} "
+            "Personas vorhanden. Ein Bericht wuerde an dieser Schwelle ohne Text "
+            "enden, nachdem die Analyse bereits Kosten verursacht hat; Agora "
+            f"startet ihn deshalb nicht. Auswertbar wird der Lauf erst mit "
+            f"mindestens {persona_floor} Personas — dazu den Lauf mit einem "
+            "groesseren Persona-Pool (oder mehreren handlungsfaehigen Entitaeten "
+            "in der Quelle) erneut vorbereiten."
+        )
+
     @classmethod
     def start_generation(cls, simulation_id, report_mode, force_regenerate, llm_model_override, llm_runtime, llm_profile_id=None, ai_model_ref=None, budget=None):
         manager = SimulationManager()
@@ -216,6 +252,8 @@ class ReportGenerationService:
         simulation_requirement = project.simulation_requirement
         if not simulation_requirement:
             raise ValueError("Missing simulation requirement description")
+
+        cls._reject_if_persona_floor_not_reached(simulation_id)
 
         report_id = f"report_{uuid.uuid4().hex[:12]}"
 

@@ -191,6 +191,22 @@ def _isolated_upload_dirs(monkeypatch, tmp_path_factory):
     return uploads
 
 
+@pytest.fixture
+def report_personas(_isolated_upload_dirs):
+    """Opt-in valid report input; never bypass the production persona preflight."""
+    from app.services.artifact_store import resolve_default_store
+    from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
+
+    def seed(simulation_id):
+        resolve_default_store().write_json(
+            simulation_id,
+            "reddit_profiles",
+            [{"agent_id": i} for i in range(MIN_PERSONA_TABLE_ROWS)],
+        )
+
+    return seed
+
+
 def _unregister_shutdown_hooks() -> None:
     """Meldet die ``atexit``-Hooks der Job-Terminalisierung ab.
 

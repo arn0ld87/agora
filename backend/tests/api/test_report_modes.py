@@ -107,8 +107,9 @@ def _make_mock_project():
 
 
 @pytest.fixture
-def _patched_generate():
+def _patched_generate(report_personas):
     """Patcht alle externen Deps von generate_report, damit kein echtes Threading."""
+    report_personas(VALID_SIM_ID)
     mock_state = _make_mock_simulation()
     mock_project = _make_mock_project()
     with (
