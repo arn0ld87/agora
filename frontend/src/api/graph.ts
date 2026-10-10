@@ -125,10 +125,17 @@ export function getTaskStatus(taskId: string): Promise<ApiResponse<TaskStatusRes
  * @param graphId - Graph ID
  */
 export function getGraphData(graphId: string): Promise<ApiResponse<GraphDataResponse>> {
-  return service({
-    url: `/api/graph/data/${graphId}`,
-    method: 'get'
-  })
+  // UAT-011: GET ist idempotent, transport-/serverseitige Fehler (Timeout,
+  // Network, 5xx) werden begrenzt retryiert — der /data-Abruf nach dem
+  // Phase-2-Wechsel soll einen kurzzeitigen Fehlschlag nicht dauerhaft als
+  // leeren Graphen stehen lassen. Semantische Ablehnungen (success:false,
+  // 4xx) bubbeln unverzögert.
+  return requestWithRetry(() =>
+    service({
+      url: `/api/graph/data/${graphId}`,
+      method: 'get'
+    })
+  )
 }
 
 /**

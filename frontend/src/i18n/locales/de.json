@@ -247,6 +247,7 @@
       "title": "Graph erkunden",
       "nodes": "Entitäten",
       "edges": "Beziehungen",
+      "countsPending": "Zählung läuft — Entitäten und Beziehungen folgen mit dem Graphdaten-Abruf.",
       "search": "Suche im Graphen…",
       "noResults": "Keine Treffer.",
       "openInBrowser": "Im Neo4j Browser öffnen"

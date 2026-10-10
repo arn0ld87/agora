@@ -34,6 +34,30 @@ type RouterAdapter = {
 
 type Translate = (key: string) => string
 
+/**
+ * UAT-011: Autoritative Zähler des abgeschlossenen Builds. Der Worker liest
+ * node_count/edge_count aus Neo4j, BEVOR er den Task als abgeschlossen
+ * meldet (dieselben Zahlen, die das Qualitätsgate bewertet) — sie stehen im
+ * Task-Ergebnis früher bereit als jeder erneute GET /api/graph/data-Call
+ * des Frontends und überbrücken dessen Latenz-/Fehlerfenster.
+ */
+export interface GraphBuildCounts {
+  node_count: number
+  edge_count: number
+}
+
+function extractBuildCounts(result: Record<string, unknown> | null | undefined): GraphBuildCounts | null {
+  const nodeCount = result?.['node_count']
+  const edgeCount = result?.['edge_count']
+  if (
+    typeof nodeCount === 'number' && Number.isFinite(nodeCount) && nodeCount >= 0 &&
+    typeof edgeCount === 'number' && Number.isFinite(edgeCount) && edgeCount >= 0
+  ) {
+    return { node_count: nodeCount, edge_count: edgeCount }
+  }
+  return null
+}
+
 export function useGraphBuildPipeline({
   projectId,
   router,
@@ -71,6 +95,10 @@ export function useGraphBuildPipeline({
   // durchgelaufen ist, das Ergebnis aber nachweislich schlechter ist als
   // es aussieht.
   const degradations = ref<PipelineDegradationReport>(EMPTY_DEGRADATION_REPORT)
+  // UAT-011: Counts aus dem Task-Ergebnis des Builds — null heißt „noch
+  // keine Quelle", die Abschlusskarte kennzeichnet das als ausstehend,
+  // statt eine schlichte 0 zu zeigen.
+  const buildCounts = ref<GraphBuildCounts | null>(null)
   let activeGeneration = 0
   const { systemLogs, addLog } = useSystemLog({ cap: 100 })
   const { resolveRunModel } = useRunModelResolver()
@@ -140,6 +168,7 @@ export function useGraphBuildPipeline({
       currentPhase.value = -1
       currentRunId.value = null
       degradations.value = EMPTY_DEGRADATION_REPORT
+      buildCounts.value = null
       graphIncomplete.value = false
     }
     addLog(t('common.starting'))
@@ -279,6 +308,7 @@ export function useGraphBuildPipeline({
       currentPhase.value = 1
       // Befunde des Vorlaufs gehören nicht zum neuen Build.
       degradations.value = EMPTY_DEGRADATION_REPORT
+      buildCounts.value = null
       buildProgress.value = { progress: 0, message: t('step1.build.running') }
       const payload: BuildGraphData = { project_id: currentProjectId.value }
       const aiModelRef = resolvedAiModelRef === undefined
@@ -348,6 +378,9 @@ export function useGraphBuildPipeline({
       if (!isCurrent(generation) || !response.success) return
       if (response.data.status !== 'completed') return
       applyDegradations(response.data.result)
+      // UAT-011: derselbe Task liefert die autoritativen Zähler mit — beim
+      // Wiedereinstieg gelten sie, sobald die Befunde gelten.
+      buildCounts.value = extractBuildCounts(response.data.result)
     } catch (caughtError) {
       // Ein nicht mehr auflösbarer Task darf den Wiedereinstieg nicht
       // blockieren — das Nachladen ist eine Verbesserung, kein Vertrag.
@@ -371,6 +404,9 @@ export function useGraphBuildPipeline({
         // trotzdem ein Ergebnis liefern, mit dem weiterzuarbeiten sich
         // nicht lohnt.
         applyDegradations(task.result)
+        // UAT-011: die Counts aus dem Worker-Read sofort übernehmen — die
+        // Abschlusskarte zeigt sie, bevor der /data-Refetch antwortet.
+        buildCounts.value = extractBuildCounts(task.result)
         currentPhase.value = 2
         const projectResponse = await getProject(currentProjectId.value)
         if (isCurrent(generation) && projectResponse.success && projectResponse.data.graph_id) {
@@ -428,6 +464,8 @@ export function useGraphBuildPipeline({
     // Issue #1029: stille Teilausfälle des Builds. Leer heißt „nichts
     // ausgefallen", nicht „nicht geprüft“.
     degradations,
+    // UAT-011: autoritative Zähler aus dem Task-Ergebnis (null = ausstehend).
+    buildCounts,
     graphIncomplete,
     initialize,
     // Issue #1023 (Befund B-08): GraphPanel/GraphToolbar emittieren

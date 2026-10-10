@@ -1,0 +1,3 @@
+### Fixed
+
+- Die Abschlussansicht nach dem Graphaufbau zeigt keine harten Nullen mehr, solange die Graphdaten noch nicht geladen sind: Die autoritativen Zähler (`node_count`/`edge_count`) werden sofort aus dem Task-Ergebnis des Builds übernommen — dieselben Zahlen, die das Qualitätsgate bewertet — und nur solange weder Task-Ergebnis noch geladene Graphdaten vorliegen, ist die Zählung ausdrücklich als ausstehend gekennzeichnet (Text mit `role="status"` statt „0 Entitäten / 0 Beziehungen“). `GET /api/graph/data/<graph_id>` wird bei transport-/serverseitigen Fehlern begrenzt wiederholt (3 Versuche, Backoff; GET ist idempotent). (UAT-011)
