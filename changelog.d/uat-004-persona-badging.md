@@ -1,0 +1,3 @@
+## Fixed
+
+- **Persona-Statusanzeige widerspruchsfrei (UAT-004, 10.10.2026):** Der Badge zeigte das Blokwort „Abgeschlossen" (Blokwort ersetzt Zahlen bei `phase > 1`), der Primär-Button blieb dauerhaft „Verarbeitet…", und der Zod-Spiegel verwieft das backend-autoritative `floor` aus `prepare_quota.py::compute_persona_target`. `useSimulationPrepare.ts` exponiert `personaFloor` aus dem Backend-Target, der Badge zeigt Zahlen neben completed/incomplete (orange unter dem wirksamen Floor) und der Button folgt `isPreparing` statt `phase !== 0`.
