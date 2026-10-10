@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { ApiError } from '@/api/envelope'
 import ReportSidePane from '../ReportSidePane.vue'
 import ReportOutlinePane from '../ReportOutlinePane.vue'
 import ReportReadingPane from '../ReportReadingPane.vue'
@@ -50,6 +51,21 @@ describe('ReportSidePane', () => {
     const api = okApi({ getReportEvidence: vi.fn().mockRejectedValue(new Error('offline')) })
     const { wrapper } = await mountWithReport(ReportSidePane, { panel: 'evidence' }, { api })
     expect(wrapper.get('[data-testid="report-evidence-failed"]').text()).toContain('offline')
+  })
+
+  it('UAT-010: Belege nicht gespeichert (404) sind ein sichtbarer Hinweis, kein Ladefehler', async () => {
+    const api = okApi({
+      getReportEvidence: vi
+        .fn()
+        .mockRejectedValue(new ApiError({ code: 'unknown_error', status: 404, message: 'No evidence map available for report: report_1' })),
+    })
+    const { wrapper } = await mountWithReport(ReportSidePane, { panel: 'evidence' }, { api })
+    const note = wrapper.get('[data-testid="report-evidence-unsaved"]')
+    expect(note.text()).toBe('Für diese Fassung sind keine Belege gespeichert.')
+    expect(note.attributes('role')).toBeUndefined()
+    expect(wrapper.find('[data-testid="report-evidence-failed"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('No evidence map available')
+    expect(wrapper.get('[data-testid="report-side-evidence"]').element.contains(note.element)).toBe(true)
   })
 })
 

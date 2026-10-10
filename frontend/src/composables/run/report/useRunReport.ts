@@ -20,8 +20,12 @@
  * Alle Zustände sind nach `status` diskriminiert:
  *   VersionsState  loading | ok { items, invalid } | failed { reason }
  *   ReportState    idle | loading | ok { report } | failed { kind, reason }
- *   EvidenceState  idle | loading | ok { map } | omitted { omission } | failed { kind, reason }
+ *   EvidenceState  idle | loading | ok { map } | omitted { omission } | unsaved | failed { kind, reason }
  * `idle` heißt: es gibt nichts zu laden (kein Bericht gewählt, Bericht läuft noch).
+ * `unsaved` ist die Antwort 404 des Evidence-Endpunkts für eine Fassung, die selbst
+ * geladen wurde: für sie ist keine Evidence-Map gespeichert (unvollständige Fassung
+ * ohne erzeugten Abschnitt, Altbericht). Das ist weder ein Ladefehler noch
+ * `evidence_omitted`.
  * `omitted` ist die Variante `evidence_omitted` des Evidence-Endpunkts: die Belege
  * existieren, ließen sich aber nicht vertragskonform ausliefern. Sie ist nie eine
  * Datenlücke. Jede Antwort läuft durch ein Zod-Schema (`safeParse`); eine
@@ -92,6 +96,7 @@ export type EvidenceState =
   | { status: 'loading' }
   | { status: 'ok'; map: EvidenceMap }
   | { status: 'omitted'; omission: EvidenceOmission }
+  | { status: 'unsaved' }
   | ({ status: 'failed' } & LoadFailure)
 
 export interface RunReportApi {
@@ -327,12 +332,17 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
     try {
       const res = await api.getReportEvidence(id)
       if (res.success !== true) {
-        const err = res as { error?: string }
+        const err = res as { error?: string; code?: string }
+        // Der Bericht-404 ist hier eindeutig "nicht gespeichert": die Fassung selbst wurde geladen.
+        // Das gilt auch für `completed`; dort ist es nur vertretbar, weil der Hinweis sichtbar bleibt.
+        if (err.code === 'not_found') return { status: 'unsaved' }
         return { status: 'failed', kind: 'transport', reason: err.error || 'getReportEvidence' }
       }
       if ('evidence_omitted' in res) return { status: 'omitted', omission: res.evidence_omitted }
       return { status: 'ok', map: res.data }
     } catch (err) {
+      // Siehe oben: 404 → `unsaved` gilt auch für `completed`, der Hinweis bleibt sichtbar.
+      if (err instanceof ApiError && err.status === 404) return { status: 'unsaved' }
       return { status: 'failed', ...failure(err) }
     }
   }

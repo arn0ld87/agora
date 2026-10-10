@@ -131,6 +131,37 @@ describe('useRunReport', () => {
     expect(ctx.report.value).toMatchObject({ status: 'failed', kind: 'notFound' })
   })
 
+  it('UAT-010: 404 der Belege einer geladenen Fassung ist unsaved, kein Ladefehler', async () => {
+    const incomplete = reportData({
+      status: 'incomplete',
+      missing_sections: ['Persona-Mindestanzahl nicht erreicht: 18/20 Personas vorhanden.'],
+    })
+    const base = {
+      listReports: vi.fn().mockResolvedValue(listEnvelope([incomplete])),
+      getReport: vi.fn().mockResolvedValue({ success: true, data: incomplete }),
+    }
+    const a = setup({
+      api: okApi({
+        ...base,
+        getReportEvidence: vi
+          .fn()
+          .mockRejectedValue(new ApiError({ code: 'unknown_error', status: 404, message: 'No evidence map available for report: report_1' })),
+      }),
+    })
+    await a.ctx.reload()
+    expect(a.ctx.report.value.status).toBe('ok')
+    expect(a.ctx.evidence.value).toEqual({ status: 'unsaved' })
+
+    const b = setup({
+      api: okApi({
+        ...base,
+        getReportEvidence: vi.fn().mockResolvedValue({ success: false, code: 'not_found', error: 'weg' }),
+      }),
+    })
+    await b.ctx.reload()
+    expect(b.ctx.evidence.value).toEqual({ status: 'unsaved' })
+  })
+
   it('Fassungswechsel über die Adresse lädt nur Bericht und Belege der neuen Fassung', async () => {
     const api = okApi()
     const { ctx, routed } = setup({ api, reportId: 'report_1' })
