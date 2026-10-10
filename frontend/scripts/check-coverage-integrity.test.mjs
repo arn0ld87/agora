@@ -87,6 +87,14 @@ describe('Scope', () => {
     const result = checkIntegrity({ root, readBase: noBase })
     expect(result.errors.join('\n')).toContain('src/lib/**/*.ts')
   })
+
+  test('Spread im exclude-Array faellt durch, auch wenn die Literale stimmen', () => {
+    const config = viteConfig().replace("'src/main.{js,ts}',", "'src/main.{js,ts}', ...extraExcludes,")
+    expect(config).toContain('...extraExcludes')
+    setup({ config })
+    const result = checkIntegrity({ root, readBase: noBase })
+    expect(result.errors.join('\n')).toContain('coverage.exclude darf nur String-Literale')
+  })
 })
 
 describe('Schwellen-Quelle', () => {

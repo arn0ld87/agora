@@ -56,7 +56,11 @@ function arrayAfter(source, key) {
     .split('\n')
     .map((line) => line.replace(/^\s*\/\/.*$/, ''))
     .join('\n')
-  return stringLiterals(body)
+  const items = stringLiterals(body)
+  // Alles ausser Literalen, Kommas und Leerraum (Spread, Variable, Aufruf) kann
+  // der Textparser nicht aufloesen und darf deshalb nicht still durchgehen.
+  const rest = body.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '').replace(/\/\/.*$/gm, '').replace(/[\s,]/g, '')
+  return { items, opaque: rest.length > 0 }
 }
 
 /** Liest coverage.include/exclude aus dem Quelltext der Vite-Konfiguration. */
@@ -67,7 +71,8 @@ export function readActiveScope(configSource) {
   const include = arrayAfter(tail, 'include')
   const exclude = arrayAfter(tail, 'exclude')
   if (!include || !exclude) return null
-  return { include, exclude }
+  const opaque = [include.opaque && 'include', exclude.opaque && 'exclude'].filter(Boolean)
+  return { include: include.items, exclude: exclude.items, opaque }
 }
 
 function checkScope(configSource, baseline) {
@@ -78,6 +83,9 @@ function checkScope(configSource, baseline) {
   }
   if (!configSource.includes(BASELINE_FILE)) {
     errors.push(`${CONFIG_FILE}: Schwellen muessen aus ${BASELINE_FILE} gelesen werden (Verweis fehlt)`)
+  }
+  for (const key of active.opaque) {
+    errors.push(`${CONFIG_FILE}: coverage.${key} darf nur String-Literale enthalten (kein Spread, keine Variable), sonst ist der Scope nicht pruefbar`)
   }
   const wanted = baseline.scope ?? { include: [], exclude: [] }
   for (const key of ['include', 'exclude']) {
