@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from pydantic import ValidationError
 
 from ...config import Config
+from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...llm.tokens import PROMPT_HEADROOM_TOKENS
 from ...contracts.report_v3 import (
     DEFAULT_REPORT_MODE,
@@ -23,9 +24,7 @@ from ...utils.provider_message import redacted_provider_message as _redacted_pro
 from ..artifact_store import resolve_default_store
 from ..simulation_agent_identity import align_config_to_profiles, load_simulation_profiles
 from ..report_intent import ReportIntent, detect_report_intent
-from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
-from .contract_validator import matches_known_preset, validate_required_sections
 from .evidence import validate_quote_anchors
 from .evidence_density import compute_evidence_density
 from .manager import ReportManager
@@ -1871,25 +1870,21 @@ def _persist_fallback_outline_marker(agent: Any, report_id: str) -> None:
     ReportManager.save_fallback_outline_used(report_id, used)
 
 
+def _validate_outline_structure(outline: Any) -> None:
+    ReportOutlineModel(
+        title=outline.title,
+        summary=outline.summary,
+        sections=[
+            ReportOutlineSectionModel(title=section.title, description=section.description)
+            for section in outline.sections
+        ],
+    )
+
+
 def _reusable_persisted_outline(
     existing_report: Optional["Report"], report_id: str
 ) -> Optional[Any]:
-    """Persistierten Outline nur wiederverwenden, wenn er echt geplant wurde.
-
-    Issue #1479 (Codex-Review Runde 5): seit Runde 4 der Read vor dem ersten
-    ``save_report`` liegt, ist ein persistierter Outline auf dem Resume-Pfad
-    tatsaechlich sichtbar — vorher sah ``generate_report`` hier immer den
-    frisch gespeicherten Report mit ``outline=None`` und plante ohnehin neu.
-    Damit wurde ein FALLBACK-Outline erstmals wiederverwendbar, und genau das
-    ist schaedlich: der Drei-Sektionen-Fallback besteht die
-    Required-Section-Pruefung nicht, ein Resume liefe sofort wieder in
-    ``INCOMPLETE`` und die angebotene Wiederaufnahme koennte eine nur
-    voruebergehende Planungsstoerung nie mehr heilen.
-
-    Ein als ``fallback_outline_used`` markierter Outline wird deshalb
-    verworfen und neu geplant. Ein reell geplanter Outline wird wie bisher
-    wiederverwendet — das ist der Sinn des Resume.
-    """
+    """Gueltige freie Outline wiederverwenden; alte Ersatzschemas neu planen."""
     outline = existing_report.outline if existing_report else None
     if outline is None:
         return None
@@ -1898,6 +1893,11 @@ def _reusable_persisted_outline(
             "Persistierter Outline stammt aus dem Fallback — wird verworfen und neu geplant",
             extra={"report_id": report_id},
         )
+        return None
+    try:
+        _validate_outline_structure(outline)
+    except ValidationError:
+        logger.info("Persistierter Outline ist strukturell ungueltig — wird neu geplant")
         return None
     return outline
 
@@ -2319,18 +2319,19 @@ def generate_report(
         outline = _reusable_persisted_outline(existing_outline, report_id)
         if outline is None:
             # Vor dem neuen Versuch den aus dem Vorlauf geerbten Marker
-            # loeschen (#1479 Codex-Runde 6) — nur der Fallback-Pfad dieses
-            # Versuchs darf ihn wieder setzen. Sonst gilt ein gelungener
-            # Retry weiterhin als Fallback.
+            # loeschen: ein gelungener neuer Plan darf nicht den alten
+            # Fallback-Status erben.
             clear_fallback_outline_used(agent)
             outline = plan_outline_impl(
                 agent,
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, prog // 5, msg) if progress_callback else None,
             )
+            _validate_outline_structure(outline)
             agent.report_logger.log_planning_complete(outline.to_dict())
             ReportManager.save_outline(report_id, outline)
             _persist_fallback_outline_marker(agent, report_id)
 
+        _validate_outline_structure(outline)
         report.outline = outline
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, {len(outline.sections)} sections in total", completed_sections=[])
         ReportManager.save_report(report)
@@ -2345,59 +2346,6 @@ def generate_report(
                 agent=agent,
                 progress_callback=progress_callback,
             )
-
-        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
-        outline_titles = [section.title for section in outline.sections]
-        # Ein Intent-Preset (opinion, risk, …) ist ein vollständiger Report für
-        # seine Fragestellung — nur der Full-Report schuldet die elf
-        # Pflichtabschnitte. Spiegelt ReportOutlineModel.require_default_sections.
-        missing = (
-            []
-            if matches_known_preset(outline_titles)
-            else validate_required_sections(outline_titles, required_titles)
-        )
-        if missing:
-            report.status = ReportStatus.INCOMPLETE
-            report.missing_sections = missing
-            # Issue #1479 (Codex-Review Runde 2, Finding 2): dieser fruehe
-            # Return erreicht die einzige Degradations-Aggregation (siehe
-            # unten, ~Zeile 1780) nie. Faellt plan_outline() in den Fallback
-            # (drei feste Ersatz-Sections, die weder ein Intent-Preset noch
-            # DEFAULT_REPORT_SECTIONS treffen), landet der Lauf garantiert
-            # hier — ohne diesen Eintrag wuerde die Fallback-Outline nie
-            # persistiert, und der Report verschwiege, dass seine Struktur
-            # nicht vom Modell stammt. Es sind an dieser Stelle noch keine
-            # Sections gelaufen; ein ``collect_run_degradations``-Aufruf mit
-            # ausschliesslich ``fallback_outline_used`` ist deshalb ehrlich
-            # und nicht unvollstaendig. ``apply_run_degradation_downgrade``
-            # braucht es hier nicht: der Status ist bereits INCOMPLETE.
-            # Issue #1479 (Codex-Review Runde 3, Finding 2): diese Zuweisung
-            # ersetzte in Runde 2 eine bereits persistierte Degradationsliste
-            # durch eine frisch berechnete — auf dem Resume-Pfad also durch
-            # eine leere. ``_merge_run_degradations`` bewahrt den zuvor
-            # persistierten Eintrag (``existing_outline`` wurde oben bereits
-            # geladen).
-            report.run_degradations = _merge_run_degradations(
-                existing_outline,
-                collect_run_degradations(
-                    fallback_outline_used=events_for(agent).fallback_outline_used,
-                ),
-            )
-            message = f"Fehlende Pflichtabschnitte: {', '.join(missing)}"
-            ReportManager.update_progress(
-                report_id,
-                "incomplete",
-                0,
-                message,
-                completed_sections=[],
-            )
-            ReportManager.save_report(report)
-            if progress_callback:
-                progress_callback("incomplete", 0, message)
-            if agent.console_logger:
-                agent.console_logger.close()
-                agent.console_logger = None
-            return report
 
         persona_count = _load_persona_count(agent)
         persona_floor = _load_persona_floor(agent)

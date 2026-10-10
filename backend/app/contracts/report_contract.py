@@ -974,49 +974,24 @@ class ReportSectionModel(BaseModel):
 
 
 class ReportOutlineSectionModel(BaseModel):
-    model_config = _STRICT
-    title: str = Field(min_length=3)
-    # max_length=2000 (war 500): deutsche Persona-Reaktions-Outlines können
-    # naturgemäß mehr Text brauchen als englische; 500 brach den realen
-    # gpt-5.4-nano-Outline-Pfad (Smoke-Live 2026-05-15). Quote/suggested_fix
-    # bleiben bei 500, weil sie strukturell kürzere Texttypen sind.
+    model_config = ConfigDict(**_STRICT, str_strip_whitespace=True)
+    title: str = Field(min_length=1)
     description: str = Field(min_length=1, max_length=2000)
 
 
 class ReportOutlineModel(BaseModel):
-    model_config = _STRICT
-    title: str = Field(min_length=3)
+    """Freie modellgeplante Gliederung; fachliche Abdeckung prueft der Workflow."""
+
+    model_config = ConfigDict(**_STRICT, str_strip_whitespace=True)
+    title: str = Field(min_length=1)
     summary: str = Field(min_length=1)
-    # M11.4b-Followup-2: max_length auf 15 angehoben (war 5).
-    # planning.py M11.8a entfernte den Section-Cap bei min=2/max=5 im LLM-Prompt,
-    # aber ReportOutlineModel blieb auf max_length=5 — ließ 11 Pflichtabschnitte
-    # im Stub-Modus (und bei echten Providern mit vollständigem Outline) fehlschlagen.
-    # 15 bietet großzügigen Puffer für alle 11 Pflichtabschnitte + Spielraum.
     sections: list[ReportOutlineSectionModel] = Field(min_length=1, max_length=15)
 
     @model_validator(mode="after")
-    def require_default_sections(self) -> "ReportOutlineModel":
-        from app.services.report_agent.contract_validator import (
-            matches_known_preset,
-            validate_required_sections,
-        )
-        from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
-
-        outline_titles = [section.title for section in self.sections]
-        # Intent-Presets (opinion, risk, comparison, explorative) haben bewusst
-        # nicht die elf Full-Report-Pflichtabschnitte. Eine Outline, die genau
-        # einem bekannten Preset entspricht, ist gültig; alles andere muss den
-        # vollständigen Pflichtsatz tragen.
-        if matches_known_preset(outline_titles):
-            return self
-
-        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
-        missing = validate_required_sections(outline_titles, required_titles)
-        if missing:
-            raise ValueError(
-                "ReportOutlineModel fehlt Pflichtabschnitte: "
-                + ", ".join(missing)
-            )
+    def reject_duplicate_titles(self) -> "ReportOutlineModel":
+        normalized = [" ".join(section.title.split()).casefold() for section in self.sections]
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("ReportOutlineModel enthält doppelte normalisierte Abschnittstitel")
         return self
 
 

@@ -333,21 +333,32 @@ export const ReportSectionSchema = z.object({
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
 export const ReportOutlineSectionSchema = z.object({
-  title: z.string().min(3),
-  // max(2000) — spiegelt backend/app/contracts/report_contract.py
-  // (Smoke-Live 2026-05-15: 500 brach reale Outline-Beschreibungen).
-  description: z.string().min(1).max(2000),
+  title: z.string().trim().min(1),
+  // max(2000) — spiegelt backend/app/contracts/report_contract.py.
+  description: z.string().trim().min(1).max(2000),
 }).strict();
 
 export const ReportOutlineSchema = z.object({
-  title: z.string().min(3),
-  summary: z.string().min(1),
-  // M11.4b-Followup-4: max auf 15 angehoben — spiegelt backend/app/contracts/report_contract.py
-  // ReportOutlineModel.sections (min_length=1, max_length=15, angehoben in M11.4b-Followup-2).
-  // War 5: Stub liefert 11 Pflichtabschnitte, Zod-Parse warf → schemaError gesetzt →
-  // reportOutline blieb null → ol.outline nie gerendert → E2E-Smoke schlug fehl.
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  // #1832: freie modellgeplante Titel, Backend-Grenzen 1..15.
   sections: z.array(ReportOutlineSectionSchema).min(1).max(15),
-}).strict();
+}).strict().superRefine((outline, ctx) => {
+  const titles = new Set<string>();
+  for (const [index, section] of outline.sections.entries()) {
+    // Gemeinsame Whitespace-/casefold-Naeherung; Unicode-Grenzen sind
+    // bei _stakeholderGroupKey dokumentiert. Keine NFKC-Normalisierung.
+    const key = _stakeholderGroupKey(section.title);
+    if (titles.has(key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sections', index, 'title'],
+        message: 'ReportOutlineModel enthält doppelte normalisierte Abschnittstitel',
+      });
+    }
+    titles.add(key);
+  }
+});
 export type ReportOutline = z.infer<typeof ReportOutlineSchema>;
 
 /**

@@ -954,6 +954,7 @@
     },
     "ReportOutlineModel": {
       "additionalProperties": false,
+      "description": "Freie modellgeplante Gliederung; fachliche Abdeckung prueft der Workflow.",
       "properties": {
         "sections": {
           "items": {
@@ -970,7 +971,7 @@
           "type": "string"
         },
         "title": {
-          "minLength": 3,
+          "minLength": 1,
           "title": "Title",
           "type": "string"
         }
@@ -993,7 +994,7 @@
           "type": "string"
         },
         "title": {
-          "minLength": 3,
+          "minLength": 1,
           "title": "Title",
           "type": "string"
         }

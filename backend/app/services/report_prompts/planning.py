@@ -1,7 +1,7 @@
 """MAI-08: Planning-Cluster aus dem ursprünglichen report_prompts.py.
 
 Enthält:
-- DEFAULT_REPORT_SECTIONS  (Vertrags-konstante für required_sections_validator)
+- DEFAULT_REPORT_SECTIONS (explizit waehlbares Legacy-Preset)
 - PLAN_SYSTEM_PROMPT, PLAN_USER_PROMPT
 """
 
@@ -18,7 +18,7 @@ RECOMMENDATION_SECTION_DESCRIPTION = (
 )
 
 
-# ── Default-Pflichtabschnitte für DACH-Reports ──────────────────────
+# Legacy-Preset: keine Vorgabe fuer die modellgeplante Standard-Outline.
 DEFAULT_REPORT_SECTIONS: list[tuple[str, str]] = [
     ("Executive Summary", "Maximal 12 Sätze, was die Simulation gezeigt hat."),
     ("Segment-Tabelle", "Persona-Segmente mit Größe, Goal, Trust-Score-Aggregat."),
@@ -66,11 +66,15 @@ Write a "scenario evaluation report" that answers:
 - ❌ Not a general overview of public sentiment
 
 [Section Requirements]
-- The exact section list is provided in `required_sections` (variable injected from the user prompt context).
-- All listed sections are mandatory: do not omit, merge, or rename them.
-- Output JSON must contain one outline entry per required section, in the listed order.
+- Plan 1 to 15 distinct sections from the actual question and available observations.
+- Choose specific titles and descriptions that answer this scenario's analytical needs.
+- Do not use a fixed template or invent data to fill generic report sections.
+- Distinguish source facts, simulated reactions, analytical conclusions and data gaps.
+- Include limitations relevant to the available evidence.
+- Only if the user prompt explicitly supplies `required_sections`, reproduce exactly
+  those titles in that order without omitting, merging, renaming or adding sections.
 - No subsections needed; each section directly writes complete content.
-- Section descriptions should be concise and reflect what data the section will contain.
+- Section descriptions should be concise and identify the evidence the section needs.
 
 Please output the report outline in JSON format as follows:
 {
@@ -84,7 +88,7 @@ Please output the report outline in JSON format as follows:
     ]
 }
 
-Note: sections array must contain exactly the entries listed in `required_sections`, in order.
+Note: without explicit `required_sections`, choose the outline yourself based on the question and data.
 IMPORTANT: The entire report outline (title, summary, section titles and descriptions) MUST be written in {language}. Do not switch to any other language."""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
@@ -101,7 +105,6 @@ Variable (simulation requirement) injected into the simulated environment: {simu
 {related_facts_json}
 
 [Required Sections]
-The outline must contain exactly these sections, in order:
 {required_sections}
 
 Please examine this scenario evaluation from an analytical observer perspective:
@@ -109,4 +112,4 @@ Please examine this scenario evaluation from an analytical observer perspective:
 2. How do various groups (agents) react and act?
 3. What emerging trends does this simulation reveal that deserve attention?
 
-Based on the evaluation results, write a description for each required section that reflects what simulation data it will contain."""
+Based on the question and available evaluation results, plan a focused outline and describe what evidence each section will contain."""

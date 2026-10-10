@@ -7,10 +7,8 @@ from ...config import Config
 from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...models.report import ReportOutline, ReportSection
 from ...utils.logger import get_logger
-from ..report_intent import ReportIntent, detect_report_intent, section_specs_for_intent
-from ..report_prompts import DEFAULT_REPORT_SECTIONS, format_required_sections
+from ..report_prompts import format_required_sections
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
-from .run_degradation import mark_fallback_outline_used
 from .schemas import PlanResponse
 
 logger = get_logger('agora.report_agent')
@@ -34,21 +32,12 @@ def plan_outline(
     if progress_callback:
         progress_callback("planning", 30, "Generating report outline...")
 
-    if required_sections is not None:
-        sections = required_sections
-    else:
-        # P1: Fragen wie "Was denken die Leute?" bekommen ein passendes,
-        # kompaktes Preset statt zwangsweise elf Marketingabschnitte. Ohne
-        # eindeutiges Intent bleibt es beim vollständigen Report.
-        intent = detect_report_intent(agent.simulation_requirement or "")
-        sections = section_specs_for_intent(intent)
-        if intent is not ReportIntent.FULL:
-            logger.info(
-                "plan_outline: Intent %r erkannt — %d statt %d Abschnitte.",
-                intent.value,
-                len(sections),
-                len(DEFAULT_REPORT_SECTIONS),
-            )
+    section_instructions = (
+        "Explicit required_sections (exact titles and order):\n"
+        + format_required_sections(required_sections)
+        if required_sections is not None
+        else "No explicit required_sections. Choose the sections from the question and available data."
+    )
     system_prompt = PLAN_SYSTEM_PROMPT_TEMPLATE.replace("{language}", Config.REPORT_LANGUAGE)
     user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
         simulation_requirement=agent.simulation_requirement,
@@ -57,7 +46,7 @@ def plan_outline(
         entity_types=list(context.get('graph_statistics', {}).get('entity_types', {}).keys()),
         total_entities=context.get('total_entities', 0),
         related_facts_json=json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2),
-        required_sections=format_required_sections(sections),
+        required_sections=section_instructions,
     )
 
     try:
@@ -109,12 +98,12 @@ def plan_outline(
         for section_data in response.get("sections", []):
             raw_desc = (section_data.get("description") or "").strip()
             pydantic_sections.append(ReportOutlineSectionModel(
-                title=(section_data.get("title") or "Section").strip() or "Section",
+                title=section_data.get("title") or "",
                 description=raw_desc if raw_desc else "—",
             ))
 
         pydantic_outline = ReportOutlineModel(
-            title=(response.get("title") or "Simulation Analysis Report").strip() or "Simulation Analysis Report",
+            title=response.get("title") or "",
             summary=(response.get("summary") or "").strip() or "—",
             sections=pydantic_sections,
         )
@@ -127,15 +116,10 @@ def plan_outline(
             for s in pydantic_outline.sections
         ]
 
-        # M11.8a-Followup auf Gemini-MEDIUM (PR #335): Section-Cap (Min 2 / Max 5)
-        # ist entfernt, aber ein leeres Outline-Array darf nicht durchgehen — ein
-        # Report ohne Sections ist trivial invalid. Harter Vertrag (len ==
-        # len(required_sections)) folgt erst in M11.8d (Strict-Schema-Forced-Output).
-        if not result_sections:
-            raise ValueError(
-                "plan_outline() received empty sections from LLM; refusing to "
-                "build an outline with zero entries (M11.8a)."
-            )
+        if required_sections is not None:
+            expected_titles = [title.strip() for title, _ in required_sections]
+            if [section.title for section in pydantic_outline.sections] != expected_titles:
+                raise ValueError("Report outline does not match explicit required_sections titles and order")
 
         outline = ReportOutline(
             title=pydantic_outline.title,
@@ -149,38 +133,10 @@ def plan_outline(
         logger.info(f"Outline planning completed: {len(result_sections)} sections")
         return outline
 
-    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        # Issue #978: Budgetabbruch (#764) ist kein Fallback-Fall — hart
-        # durchreichen, sonst läuft der Report nach einem harten Limit mit
-        # einem Default-Outline weiter statt mit termination_reason=budget_*
-        # zu enden.
-        from ..run_budget import BudgetExceededError
+    except Exception as e:  # noqa: BLE001 — logged and propagated to the workflow FAILED handler
+        logger.error("Outline planning failed: %s", e)
+        raise
 
-        if isinstance(e, BudgetExceededError):
-            raise
-        logger.error(f"Outline planning failed: {str(e)}")
-        # Issue #1479: der Bericht muss ausweisen, dass seine Struktur nicht
-        # vom Modell stammt, sondern aus diesem festen Ersatzschema.
-        mark_fallback_outline_used(agent)
-        # Return default outline (3 sections as fallback) — all descriptions filled.
-        return ReportOutline(
-            title="Scenario Evaluation Report",
-            summary="Emerging trends and risk analysis based on simulation observations",
-            sections=[
-                ReportSection(
-                    title="Evaluation Scenario and Core Findings",
-                    description="Overview of the simulated scenario and main findings",
-                ),
-                ReportSection(
-                    title="Persona Reaction Analysis",
-                    description="Analysis of how simulated personas reacted to key events",
-                ),
-                ReportSection(
-                    title="Trend Outlook and Risk Warning",
-                    description="Identified trends and potential risk signals from the simulation",
-                ),
-            ],
-        )
 
 
 __all__ = ["plan_outline"]

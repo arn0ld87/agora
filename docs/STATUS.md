@@ -292,7 +292,11 @@ Offen bleibt LLM-gestützte Koreferenz (#1470, laut Plan außerhalb des Scopes).
 
 ## Report, Evidence und Contracts
 
+**Run-Qualitätsaudit Hollerau (10.10.2026, [Epic #1831](https://github.com/arn0ld87/agora/issues/1831)):** Der Referenzlauf auf gns3 (`sim_c56d9430b50a`, Deployment `328d2b8d`) zeigte Quellenrollen-/Namensdrift in Personas und stark repetitive, überwiegend auf Startposts bezogene Kommentare. Der leere Bericht scheiterte vor einer Modellantwort am falsch eingebundenen Codex-Verzeichnis; der Mount wurde auf das vorhandene Agora-Verzeichnis korrigiert und ein echter `gpt-6-astra`-CLI-Aufruf erfolgreich geprüft. Das ist noch kein Nachweis eines vollständigen neuen Berichts. Die gespeicherte Report-Stage war `codex_cli/gpt-6-astra`, Personas/Simulation `openai/gpt-6-luna`; ein Urteil über Modellschwäche ist ohne kontrollierte Stage-Evaluation nicht belegt. [Skill und Ausführungsprompt](agents/gsd-agora-run-quality/SKILL.md), [Triage-/Arbeitsplan](plans/run-quality-1831/PLAN.md) und die Teilaufgaben #1832–#1836 halten Abnahme und offene Nachweise fest.
+
 ### Statuswahrheit
+
+- **Modellgeplante Gliederung (#1832, vorbereitet für 0.10.0-rc.1):** Freie Titel werden strukturell geprüft; Standardplanung erzwingt keinen Titelsatz und erzeugt bei Planungsfehlern kein Ersatzschema. Explizite Titelvorgaben bleiben möglich. Historische Ersatzgliederungen werden beim Resume neu geplant; Requirement-/Evidence-Gates bleiben aktiv. Backend-, Frontend- und Schema-Gates lokal grün; Deployment und vollständiger neuer Bericht noch ausstehend. [Verifikation](plans/run-quality-1831/01-VERIFICATION.md).
 
 - Contract-invalid Reports dürfen nicht als normal `completed` ausgeliefert werden.
 - Teilberichte aus Cancel-, Section-Failure- oder Fallback-Outline-Pfaden werden als `INCOMPLETE` klassifiziert; Resume bewahrt die Degradationsmarker und kann einen temporären Fallback-Outline neu planen (#1479).

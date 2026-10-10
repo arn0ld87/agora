@@ -489,6 +489,53 @@ describe('ReportOutlineSchema (Drift-Guard max-sections)', () => {
     description: `Beschreibung für ${title}.`,
   });
 
+  it('akzeptiert freie kurze Titel und entfernt aeussere Leerzeichen (#1832)', () => {
+    const parsed = ReportOutlineSchema.parse({
+      title: ' A ',
+      summary: ' Zusammenfassung. ',
+      sections: [{ title: ' X ', description: ' Beschreibung. ' }],
+    });
+    expect(parsed).toEqual({
+      title: 'A',
+      summary: 'Zusammenfassung.',
+      sections: [{ title: 'X', description: 'Beschreibung.' }],
+    });
+    expect(Object.keys(ReportOutlineSchema.shape)).toEqual(['title', 'summary', 'sections']);
+  });
+
+  it.each(['title', 'summary'] as const)('lehnt leeres Outline-Feld %s nach Trimmen ab', (field) => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [makeSection('Konflikt')], [field]: ' \t\n ',
+    }).success).toBe(false);
+  });
+
+  it.each(['title', 'description'] as const)('lehnt leeres Abschnittsfeld %s nach Trimmen ab', (field) => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [{ ...makeSection('Konflikt'), [field]: ' \t\n ' }],
+    }).success).toBe(false);
+  });
+
+  it.each([
+    ['Personal  und\tKapazitaet', ' personal und kapazitaet '],
+    ['Großhandel', 'GROSSHANDEL'],
+    ['ﬁnanzen', 'Finanzen'],
+  ])('lehnt normalisiert doppelte Abschnittstitel %s / %s ab', (first, second) => {
+    expect(ReportOutlineSchema.safeParse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [makeSection(first), makeSection(second)],
+    }).success).toBe(false);
+  });
+
+  it('behaelt Binnenabstaende freier Titel und unterscheidet Fullwidth-Zeichen', () => {
+    const parsed = ReportOutlineSchema.parse({
+      title: 'Freie Gliederung', summary: 'Zusammenfassung.',
+      sections: [makeSection('Personal  und Kapazitaet'), makeSection('Ａufsicht'), makeSection('Aufsicht')],
+    });
+    expect(parsed.sections[0].title).toBe('Personal  und Kapazitaet');
+  });
+
   it('akzeptiert 11 Sections (Stub-Pflichtabschnitte)', () => {
     const outline = {
       title: 'Stub-Report',

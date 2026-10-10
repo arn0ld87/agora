@@ -23,6 +23,7 @@ from ...contracts import (
     DataGap,
     Threshold,
 )
+from ...contracts.report_contract import ReportOutlineModel
 from .takeaway_confidence import normalize_takeaway_confidence
 from ..evidence_migrations import (
     CURRENT_SCHEMA_VERSION,
@@ -64,7 +65,7 @@ class PlanSection(BaseModel):
     )
 
 
-class PlanResponse(BaseModel):
+class PlanResponse(ReportOutlineModel):
     """Strukturierte LLM-Antwort für die Report-Outline-Planung.
 
     Wird als ``schema=PlanResponse`` an :func:`LLMClient.chat_json` übergeben.
@@ -72,17 +73,6 @@ class PlanResponse(BaseModel):
     bei Fallback-Providern greift llm_client.py automatisch auf json_object zurück.
     """
 
-    model_config = _STRICT
-
-    title: str = Field(min_length=1, description="Reporttitel")
-    summary: str = Field(
-        default="—",
-        description="Kurze Zusammenfassung des Reports",
-    )
-    sections: list[PlanSection] = Field(
-        default_factory=list,
-        description="Liste der geplanten Abschnitte",
-    )
 
 
 # ---------------------------------------------------------------------------

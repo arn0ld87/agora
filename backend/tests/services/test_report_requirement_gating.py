@@ -66,6 +66,7 @@ def _make_agent(*, simulation_requirement: str = "Requirement-Checker-Test") -> 
 def _make_outline_with_section(section_title: str = "Handlungsempfehlung") -> object:
     section = MagicMock()
     section.title = section_title
+    section.description = "Quellen und simulierte Stimmen prüfen"
     section.content = ""
     section.metadata = {}
 
@@ -133,12 +134,6 @@ def _run_generate(agent, report_id: str, *, assembled_markdown: str, config_enab
         )
         mock_migrate = stack.enter_context(
             patch("app.services.report_agent.workflow.migrate_v1_to_v2")
-        )
-        stack.enter_context(
-            patch(
-                "app.services.report_agent.workflow.validate_required_sections",
-                return_value=[],
-            )
         )
         if config_enabled is not None:
             stack.enter_context(
