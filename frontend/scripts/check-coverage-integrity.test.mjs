@@ -288,6 +288,16 @@ describe('Skip-Marker', () => {
     expect(text).not.toContain('src/B.vue')
   })
 
+  test('script-Block wird unabhängig von Schreibweise und Leerraum im End-Tag erkannt', () => {
+    setup({
+      files: {
+        'src/C.vue': "<template><p>x</p></template>\n<SCRIPT setup>\nit.skip('x', () => {})\n</Script >\n",
+      },
+    })
+    const text = checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')
+    expect(text).toContain('src/C.vue')
+  })
+
   test('Marker in Kommentaren und String-Literalen sind kein Skip', () => {
     setup({
       files: {

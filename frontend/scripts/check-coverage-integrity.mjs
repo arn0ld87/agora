@@ -271,7 +271,7 @@ function* walk(dir) {
  */
 function scannableText(file, text) {
   const code = file.endsWith('.vue')
-    ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n')
+    ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map((m) => m[1]).join('\n')
     : text
   return maskSource(code)
 }
