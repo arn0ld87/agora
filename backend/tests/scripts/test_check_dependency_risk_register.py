@@ -274,45 +274,87 @@ def test_workflow_scans_and_gates_every_image_without_suppression() -> None:
     assert not any(step.get("continue-on-error") for step in steps)
 
 
-def test_workflow_inventory_and_scan_happy_path(tmp_path: Path) -> None:
-    import os
+def _workflow_steps() -> dict[str, str]:
     import yaml
 
     workflow = yaml.safe_load((_REPO_ROOT / ".github/workflows/cve-monitor.yml").read_text())
-    steps = workflow["jobs"]["supabase-images"]["steps"]
-    inventory = next(step["run"] for step in steps if step["name"] == "Derive pinned Supabase image inventory")
+    return {step["name"]: step.get("run", "") for step in workflow["jobs"]["supabase-images"]["steps"]}
+
+
+def _derive_inventory(tmp_path: Path) -> tuple[Path, list[str]]:
+    inventory = _workflow_steps()["Derive pinned Supabase image inventory"]
     inventory = inventory.split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
     inventory_path = tmp_path / "images.txt"
     inventory = inventory.replace("/tmp/supabase-images.txt", str(inventory_path))
     result = subprocess.run([sys.executable, "-c", inventory], cwd=_REPO_ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    images = inventory_path.read_text().splitlines()
-    compose = yaml.safe_load((_REPO_ROOT / "supabase/docker-compose.yml").read_text())
-    expected = [service["image"].split(":-", 1)[1].removesuffix("}") for service in compose["services"].values() if "image" in service]
-    assert images == list(dict.fromkeys(expected))
-    assert len(images) >= 9
+    return inventory_path, inventory_path.read_text().splitlines()
+
+
+def _run_scan_step(tmp_path: Path, inventory_path: Path, entries: list[dict]) -> subprocess.CompletedProcess[str]:
+    """Fuehrt den Workflow-Schritt "Scan every tracked Supabase image" mit Fake-trivy/-uv aus.
+
+    Das Fake-uv bildet `--directory` echt nach (chdir nach backend/, hier ein
+    Symlink auf das reale backend/) und startet das Skript mit dem relativen Pfad
+    `scripts/check_dependency_risk_register.py` wie das echte `uv run`. Nur so
+    faellt ein relativer `--trivy-report`-Pfad (CR-01) im Test auf.
+    """
+    import os
 
     fake_bin = tmp_path / "bin"
-    fake_bin.mkdir()
+    fake_bin.mkdir(exist_ok=True)
+    (tmp_path / "backend").symlink_to(_REPO_ROOT / "backend")
     calls = tmp_path / "calls.jsonl"
     trivy = fake_bin / "trivy"
     trivy.write_text(f"#!{sys.executable}\n" +
         "import json, sys\nfrom pathlib import Path\n" +
         f"with Path({str(calls)!r}).open('a') as f: f.write(json.dumps(sys.argv[1:]) + chr(10))\n" +
-        "Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps({'ArtifactName': sys.argv[-1], 'Results': []}))\n")
+        "Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps({'ArtifactName': sys.argv[-1], 'Results': [{'Vulnerabilities': [{"
+        "'VulnerabilityID': 'CVE-2099-9999', 'PkgName': 'example-pkg', 'InstalledVersion': '1.0.0', 'Severity': 'HIGH'}]}]}))\n")
     trivy.chmod(0o755)
-    exceptions = _write_exceptions(tmp_path, [])
+    exceptions = _write_exceptions(tmp_path, entries)
     uv = fake_bin / "uv"
     uv.write_text(f"#!{sys.executable}\n" +
-        "import os, sys\n" +
-        f"os.execv({sys.executable!r}, [{sys.executable!r}, {str(SCRIPT_PATH)!r}, '--exceptions-file', {str(exceptions)!r}] + sys.argv[sys.argv.index('scripts/check_dependency_risk_register.py')+1:])\n")
+        "import os, sys\n"
+        "args = sys.argv[1:]\n"
+        "assert args[0] == 'run', args\n"
+        "if '--directory' in args:\n"
+        "    os.chdir(args[args.index('--directory') + 1])\n"
+        "script = args.index('scripts/check_dependency_risk_register.py')\n"
+        f"os.execv({sys.executable!r}, [{sys.executable!r}, args[script], '--exceptions-file', {str(exceptions)!r}] + args[script + 1:])\n")
     uv.chmod(0o755)
-    scan = next(step["run"] for step in steps if step["name"] == "Scan every tracked Supabase image")
+    scan = _workflow_steps()["Scan every tracked Supabase image"]
     scan = scan.replace("/tmp/supabase-images.txt", str(inventory_path))
     env = {**os.environ, "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", "")}
-    result = subprocess.run(["/bin/bash", "-c", scan], cwd=tmp_path, env=env, capture_output=True, text=True)
+    return subprocess.run(["/bin/bash", "-c", scan], cwd=tmp_path, env=env, capture_output=True, text=True)
+
+
+def _container_exceptions(images: list[str]) -> list[dict]:
+    return [{**_VALID_ENTRY, "source": "container", "severity": "High", "image": image} for image in images]
+
+
+def test_workflow_inventory_and_scan_happy_path(tmp_path: Path) -> None:
+    import yaml
+
+    inventory_path, images = _derive_inventory(tmp_path)
+    compose = yaml.safe_load((_REPO_ROOT / "supabase/docker-compose.yml").read_text())
+    expected = [service["image"].split(":-", 1)[1].removesuffix("}") for service in compose["services"].values() if "image" in service]
+    assert images == list(dict.fromkeys(expected))
+    assert len(images) >= 9
+
+    result = _run_scan_step(tmp_path, inventory_path, _container_exceptions(images))
     assert result.returncode == 0, result.stderr
-    scans = [json.loads(line) for line in calls.read_text().splitlines()]
+    scans = [json.loads(line) for line in (tmp_path / "calls.jsonl").read_text().splitlines()]
     assert [call[-1] for call in scans] == images
     assert len(list((tmp_path / "supabase-scan").glob("*.json"))) == len(images)
     assert all(call[0] == "image" and "--ignore-unfixed=false" in call for call in scans)
+
+
+def test_workflow_scan_evaluates_real_findings_from_every_report(tmp_path: Path) -> None:
+    """Der Checker muss die Reports wirklich lesen: ohne Ausnahmen schlaegt jedes Image an (CR-01)."""
+    inventory_path, images = _derive_inventory(tmp_path)
+    result = _run_scan_step(tmp_path, inventory_path, [])
+    assert result.returncode == 1
+    assert "No such file" not in result.stderr
+    for image in images:
+        assert f"HIGH: {image} / example-pkg / CVE-2099-9999: keine gültige Ausnahme" in result.stderr
