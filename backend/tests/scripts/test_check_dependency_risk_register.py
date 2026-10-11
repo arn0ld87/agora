@@ -248,6 +248,26 @@ def test_trivy_malformed_report_fails_closed(tmp_path: Path) -> None:
     assert result.returncode == 1
 
 
+def test_trivy_report_without_results_key_is_a_clean_image(tmp_path: Path) -> None:
+    """Trivy laesst "Results" bei einem Image ohne Funde weg; das ist kein Formatfehler (CR-03)."""
+    report = tmp_path / "trivy.json"
+    report.write_text(json.dumps({"ArtifactName": "postgrest/postgrest:v14.17"}), encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT_PATH), "--exceptions-file",
+        str(_write_exceptions(tmp_path, [])), "--date", "2026-01-01", "--trivy-report", str(report)],
+        capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("report", [{"ArtifactName": "x:1", "Results": None}, {"ArtifactName": "x:1", "Results": {}}, {"ArtifactName": "  "}])
+def test_trivy_report_with_invalid_results_or_artifact_still_fails_closed(tmp_path: Path, report: dict) -> None:
+    path = tmp_path / "trivy.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    result = subprocess.run([sys.executable, str(SCRIPT_PATH), "--exceptions-file",
+        str(_write_exceptions(tmp_path, [])), "--date", "2026-01-01", "--trivy-report", str(path)],
+        capture_output=True, text=True)
+    assert result.returncode == 1
+
+
 @pytest.mark.parametrize("reference", ["supabase/postgres", "supabase/postgres:latest", "supabase/postgres:nightly", "${IMAGE}", "${POSTGRES_IMAGE:-supabase/postgres:latest}"])
 def test_workflow_inventory_rejects_unpinned_refs(tmp_path: Path, reference: str) -> None:
     import yaml
@@ -291,7 +311,7 @@ def _derive_inventory(tmp_path: Path) -> tuple[Path, list[str]]:
     return inventory_path, inventory_path.read_text().splitlines()
 
 
-def _run_scan_step(tmp_path: Path, inventory_path: Path, entries: list[dict]) -> subprocess.CompletedProcess[str]:
+def _run_scan_step(tmp_path: Path, inventory_path: Path, entries: list[dict], *, clean_image: str | None = None) -> subprocess.CompletedProcess[str]:
     """Fuehrt den Workflow-Schritt "Scan every tracked Supabase image" mit Fake-trivy/-uv aus.
 
     Das Fake-uv bildet `--directory` echt nach (chdir nach backend/, hier ein
@@ -309,8 +329,11 @@ def _run_scan_step(tmp_path: Path, inventory_path: Path, entries: list[dict]) ->
     trivy.write_text(f"#!{sys.executable}\n" +
         "import json, sys\nfrom pathlib import Path\n" +
         f"with Path({str(calls)!r}).open('a') as f: f.write(json.dumps(sys.argv[1:]) + chr(10))\n" +
-        "Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps({'ArtifactName': sys.argv[-1], 'Results': [{'Vulnerabilities': [{"
-        "'VulnerabilityID': 'CVE-2099-9999', 'PkgName': 'example-pkg', 'InstalledVersion': '1.0.0', 'Severity': 'HIGH'}]}]}))\n")
+        "report = {'ArtifactName': sys.argv[-1], 'Results': [{'Vulnerabilities': [{"
+        "'VulnerabilityID': 'CVE-2099-9999', 'PkgName': 'example-pkg', 'InstalledVersion': '1.0.0', 'Severity': 'HIGH'}]}]}\n"
+        # Echtes Trivy laesst "Results" bei einem sauberen Image ganz weg (CR-03).
+        f"if sys.argv[-1] == {clean_image!r}: del report['Results']\n"
+        "Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps(report))\n")
     trivy.chmod(0o755)
     exceptions = _write_exceptions(tmp_path, entries)
     uv = fake_bin / "uv"
@@ -342,7 +365,9 @@ def test_workflow_inventory_and_scan_happy_path(tmp_path: Path) -> None:
     assert images == list(dict.fromkeys(expected))
     assert len(images) >= 9
 
-    result = _run_scan_step(tmp_path, inventory_path, _container_exceptions(images))
+    # Das erste Image ist sauber: sein Trivy-Report hat keinen "Results"-Schluessel.
+    clean_image, *vulnerable = images
+    result = _run_scan_step(tmp_path, inventory_path, _container_exceptions(vulnerable), clean_image=clean_image)
     assert result.returncode == 0, result.stderr
     scans = [json.loads(line) for line in (tmp_path / "calls.jsonl").read_text().splitlines()]
     assert [call[-1] for call in scans] == images
@@ -353,8 +378,11 @@ def test_workflow_inventory_and_scan_happy_path(tmp_path: Path) -> None:
 def test_workflow_scan_evaluates_real_findings_from_every_report(tmp_path: Path) -> None:
     """Der Checker muss die Reports wirklich lesen: ohne Ausnahmen schlaegt jedes Image an (CR-01)."""
     inventory_path, images = _derive_inventory(tmp_path)
-    result = _run_scan_step(tmp_path, inventory_path, [])
+    clean_image, *vulnerable = images
+    result = _run_scan_step(tmp_path, inventory_path, [], clean_image=clean_image)
     assert result.returncode == 1
+    assert "Results" not in result.stderr
+    assert clean_image not in result.stderr
     assert "No such file" not in result.stderr
-    for image in images:
+    for image in vulnerable:
         assert f"HIGH: {image} / example-pkg / CVE-2099-9999: keine gültige Ausnahme" in result.stderr

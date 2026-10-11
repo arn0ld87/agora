@@ -167,9 +167,10 @@ def check_trivy_report(path: Path, entries: list[dict]) -> list[str]:
         if not isinstance(report, dict) or not isinstance(report.get("ArtifactName"), str):
             raise ValueError("ArtifactName fehlt")
         image = report["ArtifactName"]
-        results = report.get("Results")
+        # Trivy laesst "Results" weg, wenn es nichts zu berichten gibt (sauberes Image).
+        results = report.get("Results", [])
         if not image.strip() or not isinstance(results, list):
-            raise ValueError("Results fehlt oder ist keine Liste")
+            raise ValueError("Results ist keine Liste")
         findings = []
         for result in results:
             if not isinstance(result, dict):
