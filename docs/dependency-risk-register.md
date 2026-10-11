@@ -86,7 +86,10 @@ fehlende, unaufgelöste oder bewegliche Tags wie `latest` brechen ab. Ein Versio
 ist ein Versions-Pin, kein unveränderlicher Digest. Trivy und die Setup-Action sind
 gepinnt. Der Scan umfasst HIGH/CRITICAL einschließlich ungefixter Befunde, ohne
 `.trivyignore`; rohe JSON-Reports und das Image-Inventar bleiben 30 Tage als
-Workflow-Artefakt verfügbar. Scan-/Downloadfehler und ungültige Reports failen geschlossen.
+Workflow-Artefakt verfügbar. Blockierend sind seit dem 11.10.2026 nur Befunde, für
+die Trivy eine `FixedVersion` nennt (`--fixable-only`, Maintainer-Entscheidung zu
+#1670). Befunde ohne verfügbaren Fix bleiben im Report und erscheinen im Job als
+Warnung mit Anzahl je Image; sie sind damit sichtbar, aber nicht freigegeben. Scan-/Downloadfehler und ungültige Reports failen geschlossen.
 
 Vor `0.10.0-rc.1` und erneut vor `1.0.0-rc.1` den CVE Monitor auf dem jeweiligen
 Release-Kandidaten ausführen und Commit, Run-URL, vollständiges Image-Inventar,

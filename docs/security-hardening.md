@@ -26,7 +26,9 @@ versionierten Images aus `supabase/docker-compose.yml` enthalten und jeder
 Inventarzeile muss ein JSON-Report zugeordnet sein. Commit-SHA, Run-URL,
 Trivy-Version, Inventar, Findings und freigegebene Ausnahmen als Release-Nachweis
 festhalten. Der Job scannt HIGH/CRITICAL einschließlich ungefixter Befunde ohne
-Ignore-Datei und führt danach den kanonischen Ausnahmeregister-Gate aus.
+Ignore-Datei und führt danach den kanonischen Ausnahmeregister-Gate aus. Der Gate
+blockiert nur Befunde mit verfügbarem Fix (`--fixable-only`); Befunde ohne Fix
+meldet er als Warnung mit Anzahl je Image und sie bleiben im Artefakt nachlesbar.
 
 Echte Critical-Befunde erfordern ein Image-Update. High-Befunde ohne Fix benötigen
 Evidence, Owner, Frist und Maintainerfreigabe; False Positives benötigen eine

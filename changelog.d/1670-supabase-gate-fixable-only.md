@@ -1,0 +1,3 @@
+### Changed
+
+- **Supabase-Image-Gate blockiert nur noch behebbare Befunde (#1670):** `check_dependency_risk_register.py` kennt `--fixable-only` und der Job „Supabase image CVEs + exception gate“ nutzt die Option. Blockierend sind HIGH/CRITICAL-Befunde, für die Trivy eine `FixedVersion` nennt; Befunde ohne verfügbaren Fix bleiben im vollständigen Trivy-Report und erscheinen als Warnung mit Anzahl je Image. Mit den Reports vom 11.10.2026 sind das 431 blockierende und 1162 nur gemeldete Befunde. Der Job bleibt rot, bis die Image-Pins angehoben oder Ausnahmen für den Rest freigegeben sind. (#1670)
