@@ -215,15 +215,23 @@ def test_documented_false_positive_is_accepted(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def _run_trivy(tmp_path: Path, entries: list[dict], *, severity: str = "HIGH", artifact: str = "supabase/postgres:17.6.1.136") -> subprocess.CompletedProcess[str]:
+def _run_trivy(
+    tmp_path: Path, entries: list[dict], *, severity: str = "HIGH",
+    artifact: str = "supabase/postgres:17.6.1.136", fixed_version: str | None = None,
+    fixable_only: bool = False,
+) -> subprocess.CompletedProcess[str]:
     report = tmp_path / "trivy.json"
-    report.write_text(json.dumps({"ArtifactName": artifact, "Results": [{"Vulnerabilities": [{
+    finding = {
         "VulnerabilityID": "CVE-2099-9999", "PkgName": "example-pkg",
         "InstalledVersion": "1.0.0", "Severity": severity,
-    }]}]}), encoding="utf-8")
+    }
+    if fixed_version is not None:
+        finding["FixedVersion"] = fixed_version
+    report.write_text(json.dumps({"ArtifactName": artifact, "Results": [{"Vulnerabilities": [finding]}]}), encoding="utf-8")
     return subprocess.run([sys.executable, str(SCRIPT_PATH), "--exceptions-file",
         str(_write_exceptions(tmp_path, entries)), "--date", "2026-01-01",
-        "--trivy-report", str(report)], capture_output=True, text=True)
+        "--trivy-report", str(report), *(["--fixable-only"] if fixable_only else [])],
+        capture_output=True, text=True)
 
 
 def test_trivy_container_finding_requires_matching_image_exception(tmp_path: Path) -> None:
@@ -238,6 +246,28 @@ def test_trivy_container_finding_requires_matching_image_exception(tmp_path: Pat
 def test_trivy_critical_cannot_use_real_risk_exception(tmp_path: Path) -> None:
     entry = {**_VALID_ENTRY, "source": "container", "severity": "High", "image": "supabase/postgres:17.6.1.136"}
     assert _run_trivy(tmp_path, [entry], severity="CRITICAL").returncode == 1
+
+
+@pytest.mark.parametrize("severity", ["HIGH", "CRITICAL"])
+@pytest.mark.parametrize("fixed_version", [None, "", "  "])
+def test_fixable_only_reports_but_does_not_block_findings_without_fix(
+    tmp_path: Path, severity: str, fixed_version: str | None
+) -> None:
+    result = _run_trivy(tmp_path, [], severity=severity, fixed_version=fixed_version, fixable_only=True)
+    assert result.returncode == 0, result.stderr
+    counts = "1 CRITICAL und 0 HIGH" if severity == "CRITICAL" else "0 CRITICAL und 1 HIGH"
+    assert f"supabase/postgres:17.6.1.136: {counts} ohne verfügbaren Fix nicht geprüft" in result.stdout
+
+
+@pytest.mark.parametrize("severity", ["HIGH", "CRITICAL"])
+def test_fixable_only_still_blocks_findings_with_available_fix(tmp_path: Path, severity: str) -> None:
+    result = _run_trivy(tmp_path, [], severity=severity, fixed_version="1.0.1", fixable_only=True)
+    assert result.returncode == 1
+    assert f"{severity}: supabase/postgres:17.6.1.136 / example-pkg / CVE-2099-9999: keine gültige Ausnahme" in result.stderr
+
+
+def test_without_fixable_only_findings_without_fix_still_block(tmp_path: Path) -> None:
+    assert _run_trivy(tmp_path, [], fixed_version=None).returncode == 1
 
 
 def test_trivy_malformed_report_fails_closed(tmp_path: Path) -> None:
@@ -294,7 +324,7 @@ def test_workflow_scans_and_gates_every_image_without_suppression() -> None:
     scan = next(step["run"] for step in steps if step["name"] == "Scan every tracked Supabase image")
     assert 'for i in "${!images[@]}"' in scan
     assert '--ignore-unfixed=false --ignorefile /dev/null --exit-code 0' in scan
-    assert 'check_dependency_risk_register.py "${reports[@]}"' in scan
+    assert 'check_dependency_risk_register.py --fixable-only "${reports[@]}"' in scan
     assert not any(step.get("continue-on-error") for step in steps)
 
 
@@ -334,7 +364,7 @@ def _run_scan_step(tmp_path: Path, inventory_path: Path, entries: list[dict], *,
         "import json, sys\nfrom pathlib import Path\n" +
         f"with Path({str(calls)!r}).open('a') as f: f.write(json.dumps(sys.argv[1:]) + chr(10))\n" +
         "report = {'ArtifactName': sys.argv[-1], 'Results': [{'Vulnerabilities': [{"
-        "'VulnerabilityID': 'CVE-2099-9999', 'PkgName': 'example-pkg', 'InstalledVersion': '1.0.0', 'Severity': 'HIGH'}]}]}\n"
+        "'VulnerabilityID': 'CVE-2099-9999', 'PkgName': 'example-pkg', 'InstalledVersion': '1.0.0', 'FixedVersion': '1.0.1', 'Severity': 'HIGH'}]}]}\n"
         # Echtes Trivy laesst "Results" bei einem sauberen Image ganz weg (CR-03).
         f"if sys.argv[-1] == {clean_image!r}: del report['Results']\n"
         "Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps(report))\n")

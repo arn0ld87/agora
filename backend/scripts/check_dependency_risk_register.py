@@ -88,6 +88,9 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--trivy-report", type=Path, action="append", default=[],
                    help="Trivy JSON image report; repeat for multiple images.")
+    p.add_argument("--fixable-only", action="store_true",
+                   help="Nur Trivy-Findings mit FixedVersion blockieren; Findings ohne "
+                        "verfügbaren Fix werden gezählt und als Warnung gemeldet.")
     return p.parse_args()
 
 
@@ -168,8 +171,13 @@ def check_deadline(entry: dict, today: date) -> str | None:
     return None
 
 
-def check_trivy_report(path: Path, entries: list[dict]) -> list[str]:
-    """Match actual image/package/version findings; malformed reports fail closed."""
+def check_trivy_report(path: Path, entries: list[dict], *, fixable_only: bool = False) -> list[str]:
+    """Match actual image/package/version findings; malformed reports fail closed.
+
+    Mit ``fixable_only`` blockieren nur Findings, für die Trivy eine ``FixedVersion``
+    nennt. Findings ohne Fix bleiben im Report und werden als Zahl gemeldet, statt
+    still zu verschwinden.
+    """
     try:
         report = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(report, dict) or not isinstance(report.get("ArtifactName"), str):
@@ -197,12 +205,17 @@ def check_trivy_report(path: Path, entries: list[dict]) -> list[str]:
         return [f"Trivy-Report {path}: {exc}"]
 
     errors = []
+    unfixed = {"HIGH": 0, "CRITICAL": 0}
     for finding in findings:
         severity = finding["Severity"].upper()
         if severity not in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"}:
             errors.append(f"Unbekannter Schweregrad: {severity}")
             continue
         if severity not in {"HIGH", "CRITICAL"}:
+            continue
+        fixed_version = finding.get("FixedVersion")
+        if fixable_only and not (isinstance(fixed_version, str) and fixed_version.strip()):
+            unfixed[severity] += 1
             continue
         matches = [entry for entry in entries if
             entry.get("source") == "container" and entry.get("image") == image
@@ -216,6 +229,11 @@ def check_trivy_report(path: Path, entries: list[dict]) -> list[str]:
         if not matches:
             errors.append(f"{severity}: {image} / {finding['PkgName']} / "
                           f"{finding['VulnerabilityID']}: keine gültige Ausnahme")
+    if fixable_only and any(unfixed.values()):
+        LOGGER.warning(
+            f"::warning::{image}: {unfixed['CRITICAL']} CRITICAL und {unfixed['HIGH']} HIGH "
+            "ohne verfügbaren Fix nicht geprüft (--fixable-only); sie stehen im Trivy-Report."
+        )
     return errors
 
 
@@ -254,7 +272,9 @@ def main() -> int:
             deadline_errors.append(err)
 
     for report in args.trivy_report:
-        validation_errors.extend(check_trivy_report(report, entries))
+        validation_errors.extend(
+            check_trivy_report(report, entries, fixable_only=args.fixable_only)
+        )
 
     if validation_errors:
         LOGGER.error("::error::Validierungsfehler in dependency-risk-exceptions.json:")
