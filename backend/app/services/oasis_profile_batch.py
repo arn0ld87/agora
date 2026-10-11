@@ -25,6 +25,7 @@ from ..contracts.persona_contract import (
     persona_role_plausibility_reason,
 )
 from .entity_reader import EntityNode
+from .persona_identity_binding import profile_name_is_locked, resolve_identity_binding
 from .oasis_profile_models import (
     OasisAgentProfile,
     PersonaDemographicSlot,
@@ -68,6 +69,19 @@ new_name :str ,
         pattern =re .compile (rf"\b{re .escape (source )}\b",re .IGNORECASE )
         profile .persona =pattern .sub (target ,profile .persona )
         profile .bio =pattern .sub (target ,profile .bio )
+
+
+def _entity_binding (generator :Any ,entity :EntityNode )->Dict [str ,Any ]:
+    """Bindung der Entitaet als JSON-Dump (#1833), fuer Resume und Notprofile."""
+    entity_type =entity .get_entity_type ()or "Entity"
+    return resolve_identity_binding (
+    entity_uuid =entity .uuid ,
+    entity_name =entity .name ,
+    entity_type =entity_type ,
+    attributes =entity .attributes ,
+    summary =entity .summary ,
+    is_collective_type =generator ._is_group_entity (entity_type ),
+    ).model_dump (mode ="json")
 
 
 def _resolve_demographic_slots (
@@ -117,6 +131,11 @@ seen_last_names :set ,
     ihr Personatext weiter die Organisation beschreibt. Freitext und Bio ziehen
     bei der Umbenennung nach (Issue #1759, A1).
     """
+    if profile_name_is_locked (profile ):
+    # Issue #1833: Der Name gehoert der Quelle. Bei Kollision wird das
+    # synthetische Profil umbenannt (siehe _dedupe_profile_names), nie die
+    # in der Quelle genannte Person.
+        return
     norm_name =(profile .name or "").strip ().lower ()
     last_name =generator ._last_name (profile .name or "")
     collides =norm_name in seen_names or (
@@ -148,6 +167,16 @@ def _dedupe_profile_names (generator :Any ,profiles :List [Optional ["OasisAgent
     seen_names :set =set ()
     seen_last_names :set =set ()
     seen_handles :set =set ()
+    # Issue #1833: Namen quellgebundener Personen zuerst verbuchen, damit ein
+    # frueherer erfundener Vertreter mit gleichem Namen oder Nachnamen
+    # umbenannt wird und nicht die Quellperson.
+    for profile in profiles :
+        if profile is None or profile .persona_kind =="collective"or not profile_name_is_locked (profile ):
+            continue
+        seen_names .add ((profile .name or "").strip ().lower ())
+        locked_last_name =generator ._last_name (profile .name or "")
+        if locked_last_name :
+            seen_last_names .add (locked_last_name )
     for profile in profiles :
         if profile is None or profile .persona_kind =="collective":
             continue
@@ -368,6 +397,10 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         # demografischen Slot (siehe ``already_done``-Docstring oben).
         if already_done is not None and idx in already_done :
             cached_profile =already_done [idx ]
+            if cached_profile .identity_binding is None :
+            # Issue #1833: Checkpoint eines aelteren Stands. Die Bindung wird
+            # aus der Entitaet nachgetragen, Text und Name bleiben unberuehrt.
+                cached_profile .identity_binding =_entity_binding (self ,entity )
             register_taken_display_name (self ,cached_profile )
             self ._print_generated_profile (entity .name ,entity_type ,cached_profile )
             return idx ,cached_profile ,None
@@ -425,6 +458,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             # als echte Stimme zu behandeln.
             generation_source ="rule_based",
             generation_error =str (e )[:160 ],
+            identity_binding =_entity_binding (self ,entity ),
             )
             return idx ,fallback_profile ,str (e )
 
@@ -574,6 +608,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
                 # nicht als echte Stimme zu behandeln.
                 generation_source ="rule_based",
                 generation_error =str (e )[:160 ],
+                identity_binding =_entity_binding (self ,entity ),
                 )
                 return idx ,fallback_profile ,str (e )
 

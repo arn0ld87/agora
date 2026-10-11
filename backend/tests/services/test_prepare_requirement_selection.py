@@ -143,6 +143,22 @@ class TestMindestsitze:
         assert group.basis == "named_group"
         assert group.seats == 2
 
+    def test_zweiter_gruppensitz_ist_markierte_synthetische_ergaenzung(
+        self, fake_client: _FakeClient
+    ) -> None:
+        """#1833: Der zweite Sitz traegt den Ergaenzungsmarker, sonst bekaemen zwei
+        Profile denselben gesperrten Quellnamen. Der erste bleibt die Quellentitaet."""
+        pool = _pool()
+        pool[1] = _entity("Dr. Svenja Meyer", "Schwangere")
+        selected, _, _ = _select(pool)
+        seats = [e for e in selected if e.name == "Dr. Svenja Meyer"]
+        assert len(seats) == 2
+        assert seats[0] is pool[1]
+        assert "identity_origin" not in pool[1].attributes
+        assert seats[1] is not pool[1]
+        assert seats[1].uuid == pool[1].uuid
+        assert seats[1].attributes["identity_origin"] == "synthetic_supplement"
+
     def test_genau_max_agents_plaetze(self, fake_client: _FakeClient) -> None:
         selected, reserve, _ = _select(_pool(), max_agents=8)
         assert len(selected) == 8

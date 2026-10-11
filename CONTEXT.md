@@ -40,6 +40,10 @@ Das lesbare Ergebnis eines Laufs. Ein Bericht besitzt einen eigenen Status und k
 
 Ein benannter Satz synthetischer Personas in der Bibliothek. Ein Lauf bekommt eine Kopie (Schnappschuss); nach dem ersten Lauf aus diesem Satz ist der Satz gesperrt, der Ausweg ist Duplizieren. Jeder Eintrag trägt seine Herkunft: `graph`, `manual`, `ai_draft` oder `fallback`.
 
+### Quellenidentität
+
+Die Herkunft der Identität einer Persona im Lauf (#1833): `source_person` (in der Quelle namentlich genannte Person, Name und belegte Funktion gesperrt), `source_collective` (genannte Organisation, Entitätsname, keine Demografie), `synthetic_representative` (erfundener Vertreter) oder `synthetic_supplement` (ausdrücklich synthetische Zusatzstimme aus Quote, Floor oder dem zweiten Gruppensitz der Hybrid-Auswahl, trägt nie den Quellnamen; ein wiederholtes Kollektiv bleibt `source_collective`). Sie steht je Lauf in `persona_identity_bindings.json`, nicht im Personasatz-Eintrag und nicht in der API. Alter und MBTI einer Quellperson bleiben synthetische Angaben; das Geschlecht stammt nur aus der Quelle.
+
 ### Graph
 
 Das aus Quellen extrahierte Wissensumfeld: Entitäten, Relationen, Quellenfragmente und Vektoren in Neo4j. Elemente können vor der ersten Simulation von Hand ergänzt oder bearbeitet werden; ihre Herkunft steht dann als `origin="manual"` beziehungsweise `origin="edited"` am Graph-Element. Ohne Herkunftsfeld gilt das Element als extrahiert.

@@ -249,6 +249,13 @@ class OasisAgentProfile:
     # bewusst regelbasierter Erzeugung bleibt es None.
     generation_error: Optional[str] = None
 
+    # Issue #1833: Herkunft der Identität (``PersonaIdentityBinding`` als
+    # JSON-Dump, damit ``dataclasses.asdict`` im Prepare-Checkpoint
+    # serialisierbar bleibt). Wird in keinem der drei Serialisierer
+    # ausgegeben; sichtbar wird sie im Laufartefakt
+    # ``persona_identity_bindings.json``.
+    identity_binding: Optional[Dict[str, Any]] = None
+
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
 
     def __post_init__(self) -> None:
