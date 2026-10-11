@@ -86,9 +86,9 @@ FROM base AS codex-cli
 # ein ungeprueftes Binary aus dem Netz gehoert nicht ins Laufzeit-Image.
 # Die Hashes stammen aus dem ``digest``-Feld der GitHub-Releases-API; den
 # Bump uebernimmt backend/scripts/bump_cli_binaries.py (#1861).
-ARG CODEX_VERSION=rust-v0.153.2
-ARG CODEX_SHA256_AMD64=e8cd1160071f725d2a10cab81073dd6818fc8b096372125d27ef6e66fdf0979e
-ARG CODEX_SHA256_ARM64=878693f9b370320ea21793f99ea1f5687b7d9aa1f2c733de693d9ec0baa4e62a
+ARG CODEX_VERSION=rust-v0.162.1
+ARG CODEX_SHA256_AMD64=86f268d81b898f3e144c5ecff2ad2fda2c5802e042d6195b72538fe0fa125057
+ARG CODEX_SHA256_ARM64=bf3ca2719f1143b1440fbd85c149379e696c782c50ad7991f8bfcec60b2600c1
 # Vertrags-Check (#1861): Version und Hashes hebt ein Workflow automatisch an
 # (.github/workflows/cli-binaries-bump.yml). ``codex --version`` bewiese nur,
 # dass das Binary startet — der Build prueft deshalb zusaetzlich, dass
