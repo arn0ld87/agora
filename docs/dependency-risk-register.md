@@ -96,6 +96,41 @@ Release-Kandidaten ausführen und Commit, Run-URL, vollständiges Image-Inventar
 Reports und freigegebene Ausnahmen dokumentieren. Die Implementierung des Jobs
 belegt noch keinen sauberen Stichtag-Scan; dessen Ergebnis wird separat festgehalten.
 
+### Supabase-Images: befristete High-Ausnahmen vom 11.10.2026
+
+Die neun Image-Pins in `supabase/docker-compose.yml` entsprechen dem Stand, den Supabase
+selbst in [`docker/docker-compose.yml`](https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml)
+führt (zuletzt geändert am 30.09.2026). Für 399 High-Befunde nennt Trivy zwar eine
+`FixedVersion` auf Paketebene, es gibt aber kein von Supabase veröffentlichtes und
+getestetes Image, das sie enthält. Der Maintainer hat diese Befunde am 11.10.2026
+befristet akzeptiert; sie stehen als `source: container`, `status: open` im Register.
+
+| Image | High-Ausnahmen |
+|---|---|
+| `supabase/studio:2026.09.07-sha-7996410` | 150 |
+| `supabase/storage-api:v1.74.0` | 71 |
+| `supabase/realtime:v2.134.10` | 56 |
+| `supabase/postgres:17.6.1.136` | 48 |
+| `supabase/postgres-meta:v0.99.0` | 42 |
+| `supabase/gotrue:v2.196.0` | 29 |
+| `envoyproxy/envoy:v1.39.1` | 2 |
+| `supabase/supavisor:2.9.12` | 1 |
+
+- **Frist:** 08.11.2026 für alle 399 Einträge. Danach schlägt der Deadline-Check fehl,
+  auch ohne neuen Scan.
+- **Evidence:** [Run 38113209635](https://github.com/arn0ld87/agora/actions/runs/38113209635)
+  mit den Trivy-Reports als Artefakt.
+- **Auflösung:** Sobald Supabase neue Image-Versionen in seinem Compose führt, Pins
+  anheben (mit [`runbooks/upgrade.md`](runbooks/upgrade.md)), neu scannen und die
+  erledigten Einträge auf `resolved` setzen. Jeder Eintrag gilt nur für das exakte
+  Image und die exakte installierte Paketversion.
+- **Nicht abgedeckt:** 30 Critical-Befunde mit verfügbarem Fix (Studio 18, postgres-meta 8,
+  Realtime 3, Storage 1; vor allem `perl`, `next`, `tar`). Die Regel oben lässt für
+  Critical keine Risikoakzeptanz zu. Der Job „Supabase image CVEs + exception gate“
+  bleibt deshalb rot, bis Supabase aktualisierte Images veröffentlicht.
+- Befunde ohne verfügbaren Fix brauchen keinen Eintrag: Der Gate meldet sie nur
+  (`--fixable-only`).
+
 ## Aktive Baseline
 
 Aktuell keine aktiven pip-audit-Ausnahmen. Die bisher einzigen Einträge betrafen
