@@ -26,7 +26,7 @@ export default {
         // Kommentar im Array
         ${exclude.map((item) => `'${item}'`).join(',\n        ')},
       ],
-      thresholds: { lines: coverageBaseline.line_min },
+      thresholds: { lines: coverageBaseline.line_min, functions: 28, branches: coverageBaseline.branch_min, statements: 28 },
     },
   },
 }
@@ -162,10 +162,49 @@ describe('Scope-Parser (Kommentare, Gueltigkeitsbereich)', () => {
 })
 
 describe('Schwellen-Quelle', () => {
-  test('hartkodierte Schwellen statt coverage-baseline.json fallen durch', () => {
-    setup({ config: viteConfig().replace('coverage-baseline.json', 'other.json') })
-    const result = checkIntegrity({ root, readBase: noBase })
-    expect(result.errors.join('\n')).toContain('coverage-baseline.json')
+  const run = (config) => {
+    setup({ config })
+    return checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')
+  }
+
+  test('lines/branches aus der Baseline gelesen geht durch', () => {
+    setup()
+    expect(checkIntegrity({ root, readBase: () => baseline() }).errors).toEqual([])
+  })
+
+  test('Baseline-Datei nicht per JSON.parse geladen faellt durch', () => {
+    expect(run(viteConfig().replace('coverage-baseline.json', 'other.json'))).toContain('Schwellen muessen aus coverage-baseline.json')
+  })
+
+  test('hartkodiertes lines faellt durch, auch wenn der Dateiname im Kommentar steht', () => {
+    const config = viteConfig().replace('lines: coverageBaseline.line_min', 'lines: 0 /* coverage-baseline.json */')
+    expect(config).toContain('coverage-baseline.json')
+    expect(run(config)).toContain('coverage.thresholds.lines muss coverageBaseline.line_min sein')
+  })
+
+  test('hartkodiertes branches faellt durch', () => {
+    expect(run(viteConfig().replace('branches: coverageBaseline.branch_min', 'branches: 10'))).toContain('coverage.thresholds.branches muss')
+  })
+
+  test('vertauschte Felder fallen durch', () => {
+    expect(run(viteConfig().replace('lines: coverageBaseline.line_min', 'lines: coverageBaseline.branch_min'))).toContain('coverage.thresholds.lines muss')
+  })
+
+  test('fehlendes lines oder branches faellt durch', () => {
+    expect(run(viteConfig().replace('lines: coverageBaseline.line_min, ', ''))).toContain('gefunden: fehlt')
+  })
+
+  test('auskommentiertes lines faellt durch', () => {
+    expect(run(viteConfig().replace('lines: coverageBaseline.line_min,', '// lines: coverageBaseline.line_min,\n lines: 5,'))).toContain('gefunden: 5')
+  })
+
+  test('thresholds-Block fehlt', () => {
+    expect(run(viteConfig().replace(/ {6}thresholds:.*\n/, ''))).toContain('coverage.thresholds nicht lesbar')
+  })
+
+  test('fremde Variable ohne Baseline-Bezug faellt durch', () => {
+    const config = viteConfig().replaceAll('coverageBaseline', 'other').replace("JSON.parse(readFileSync('coverage-baseline.json', 'utf-8'))", "JSON.parse(readFileSync('x.json', 'utf-8'))")
+    expect(run(config)).toContain('Schwellen muessen aus coverage-baseline.json')
   })
 })
 

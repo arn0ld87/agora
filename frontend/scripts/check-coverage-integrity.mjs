@@ -180,15 +180,54 @@ export function readActiveScope(configSource) {
   return { include: include.items, exclude: exclude.items, opaque }
 }
 
+/** Name der Variable, die per JSON.parse(... 'coverage-baseline.json' ...) geladen wird; null, wenn es keine gibt. */
+function baselineVariable(source, masked) {
+  const declaration = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*JSON\s*\.\s*parse\s*\(/g
+  for (const match of masked.matchAll(declaration)) {
+    const open = match.index + match[0].length - 1
+    const close = matchClose(masked, open)
+    if (close !== -1 && literalsIn(source, masked, open, close).includes(BASELINE_FILE)) return match[1]
+  }
+  return null
+}
+
+/**
+ * Die Schwellen lines/branches muessen im thresholds-Block tatsaechlich aus der
+ * Baseline kommen (`<var>.line_min` / `<var>.branch_min`, <var> = JSON.parse der
+ * Baseline-Datei). Ein Dateiname im Kommentar oder ein Literal wie `lines: 0` genuegt nicht.
+ * functions/statements sind bewusst nicht Teil dieser Pruefung (feste Werte, siehe vite.config.js).
+ */
+function checkThresholds(configSource) {
+  const masked = maskSource(configSource)
+  const block = coverageBlock(masked)
+  const thresholds = block && topLevelProperty(masked, block.from, block.to, 'thresholds')
+  if (!thresholds || masked[thresholds.start] !== '{') {
+    return [`${CONFIG_FILE}: coverage.thresholds nicht lesbar (Objekt-Literal im coverage-Block erwartet)`]
+  }
+  const variable = baselineVariable(configSource, masked)
+  if (!variable) {
+    return [`${CONFIG_FILE}: Schwellen muessen aus ${BASELINE_FILE} gelesen werden (kein "const x = JSON.parse(readFileSync(... '${BASELINE_FILE}' ...))")`]
+  }
+  const errors = []
+  const from = thresholds.start + 1
+  const to = matchClose(masked, thresholds.start)
+  for (const [key, field] of [['lines', 'line_min'], ['branches', 'branch_min']]) {
+    const range = topLevelProperty(masked, from, to, key)
+    const value = range ? configSource.slice(range.start, range.end).replace(/\s+/g, '') : null
+    if (value !== `${variable}.${field}`) {
+      errors.push(`${CONFIG_FILE}: coverage.thresholds.${key} muss ${variable}.${field} sein (Quelle ${BASELINE_FILE}), gefunden: ${value ?? 'fehlt'}`)
+    }
+  }
+  return errors
+}
+
 function checkScope(configSource, baseline) {
   const errors = []
   const active = readActiveScope(configSource)
   if (!active) {
     return [`${CONFIG_FILE}: coverage.include/exclude nicht lesbar (Block "coverage: { ... }" oder eines der Arrays fehlt bzw. ist keine Array-Literal)`]
   }
-  if (!configSource.includes(BASELINE_FILE)) {
-    errors.push(`${CONFIG_FILE}: Schwellen muessen aus ${BASELINE_FILE} gelesen werden (Verweis fehlt)`)
-  }
+  errors.push(...checkThresholds(configSource))
   for (const key of active.opaque) {
     errors.push(`${CONFIG_FILE}: coverage.${key} darf nur String-Literale enthalten (kein Spread, keine Variable), sonst ist der Scope nicht pruefbar`)
   }
