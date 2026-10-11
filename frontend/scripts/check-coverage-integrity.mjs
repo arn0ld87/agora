@@ -8,10 +8,11 @@
 //  2. Skip-Marker in src/ und tests/ nur mit Eintrag in coverage-skip-allowlist.json
 //     (Datei, Art, Anzahl); veraltete Eintraege sind ebenfalls ein Fehler.
 //  3. Ratchet gegen origin/main:frontend/coverage-baseline.json: line_min/branch_min
-//     sinken nicht, der Scope wird nicht weiter. Existiert die Datei dort nicht
-//     (Erstanlage), wird der Teil mit Hinweis uebersprungen.
+//     sinken nicht, der Scope wird nicht weiter. Fehlt die Datei dort oder ist sie
+//     nicht lesbar, ist das ein Fehler; nur die Erstanlage darf den Ratchet mit
+//     --allow-missing-base ueberspringen.
 //
-// Aufruf: bun scripts/check-coverage-integrity.mjs   (aus frontend/)
+// Aufruf: bun scripts/check-coverage-integrity.mjs [--allow-missing-base]   (aus frontend/)
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -22,82 +23,217 @@ const BASE_REF = 'origin/main'
 const BASELINE_FILE = 'coverage-baseline.json'
 const ALLOWLIST_FILE = 'coverage-skip-allowlist.json'
 const CONFIG_FILE = 'vite.config.js'
+// Wie `approved_by` (const) in schemas/dependency-risk-exceptions.schema.json.
+const MAINTAINERS = new Set(['arn0ld87'])
 const SCAN_DIRS = ['src', 'tests']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage'])
-const SCAN_EXT = /\.(?:[cm]?[jt]s|vue)$/
+const SCAN_EXT = /\.(?:[cm]?[jt]sx?|vue)$/
 
 // Reihenfolge zaehlt: spezifische Muster zuerst, jede Fundstelle nur einmal.
 const SKIP_PATTERNS = [
-  /\b(?:it|test|describe)\.(?:skip|todo)\b/g,
+  // Kettenmodifizierer (it.concurrent.skip, describe.sequential.todo) zaehlen mit.
+  /\b(?:it|test|describe)(?:\.\w+)*?\.(?:skip|todo)\b/g,
   /\bx(?:it|test|describe)(?=\s*\()/g,
   /(?<=\.)(?:skipIf|runIf)\b/g,
+  // Laufzeit-Skip ueber den Test-Kontext.
+  /\b(?:ctx|context)\.skip(?=\s*\()/g,
 ]
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
-function stringLiterals(text) {
-  const out = []
-  for (const match of text.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g)) {
-    out.push(match[1] ?? match[2])
+const OPEN = '[{('
+const CLOSE = ']})'
+const STRING_SPAN = /'_*'|"_*"/g
+
+/**
+ * Ersetzt Kommentare durch Leerzeichen und den Inhalt von String-Literalen durch '_'
+ * (gleiche Laenge, Zeilenumbrueche und Anfuehrungszeichen bleiben). Auf dem Ergebnis
+ * koennen Klammern, Schluessel und Kommas strukturell gesucht werden, ohne dass
+ * Kommentare oder Literale sie verfaelschen; Positionen gelten 1:1 fuer den Original-Text.
+ * '- und "-Literale enden spaetestens am Zeilenende, damit ein einzelnes Apostroph
+ * (Regex, JSX-Text) nicht den Rest der Datei verschluckt.
+ */
+export function maskSource(source) {
+  const n = source.length
+  let out = ''
+  let i = 0
+  while (i < n) {
+    const ch = source[i]
+    const next = source[i + 1]
+    if (ch === '/' && next === '/') {
+      const end = source.indexOf('\n', i)
+      const stop = end === -1 ? n : end
+      out += ' '.repeat(stop - i)
+      i = stop
+    } else if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2)
+      const stop = end === -1 ? n : end + 2
+      out += source.slice(i, stop).replace(/[^\n]/g, ' ')
+      i = stop
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      out += ch
+      i += 1
+      while (i < n) {
+        const c = source[i]
+        if (c === ch) {
+          out += c
+          i += 1
+          break
+        }
+        if (c === '\n' && ch !== '`') break
+        if (c === '\\') {
+          out += '_'
+          i += 1
+          if (i < n) {
+            out += source[i] === '\n' ? '\n' : '_'
+            i += 1
+          }
+          continue
+        }
+        out += c === '\n' ? '\n' : '_'
+        i += 1
+      }
+    } else {
+      out += ch
+      i += 1
+    }
   }
   return out
 }
 
-/** Position der schliessenden Klammer; ein ] in einem String-Literal (Glob wie 'src/[ab]/**') zaehlt nicht. */
-function closingBracket(source, start) {
-  let quote = null
-  for (let i = start; i < source.length; i += 1) {
-    const ch = source[i]
-    if (quote) {
-      if (ch === '\\') i += 1
-      else if (ch === quote) quote = null
-    } else if (ch === "'" || ch === '"') quote = ch
-    else if (ch === ']') return i
+/** Position der zur Klammer an `open` gehoerenden schliessenden Klammer in maskiertem Text; -1 wenn unausgeglichen. */
+function matchClose(masked, open) {
+  let depth = 0
+  for (let i = open; i < masked.length; i += 1) {
+    if (OPEN.includes(masked[i])) depth += 1
+    else if (CLOSE.includes(masked[i])) {
+      depth -= 1
+      if (depth === 0) return i
+    }
   }
   return -1
 }
 
-function arrayAfter(source, key) {
-  const keyMatch = new RegExp(`\\b${key}\\s*:\\s*\\[`).exec(source)
-  if (!keyMatch) return null
-  const start = keyMatch.index + keyMatch[0].length
-  const end = closingBracket(source, start)
-  if (end === -1) return null
-  const body = source
-    .slice(start, end)
-    .split('\n')
-    .map((line) => line.replace(/^\s*\/\/.*$/, ''))
-    .join('\n')
-  const items = stringLiterals(body)
-  // Alles ausser Literalen, Kommas und Leerraum (Spread, Variable, Aufruf) kann
-  // der Textparser nicht aufloesen und darf deshalb nicht still durchgehen.
-  const rest = body.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '').replace(/\/\/.*$/gm, '').replace(/[\s,]/g, '')
-  return { items, opaque: rest.length > 0 }
+/** Wertbereich von `key: ...` auf oberster Ebene von masked[from, to); null, wenn der Schluessel dort fehlt. */
+function topLevelProperty(masked, from, to, key) {
+  const head = new RegExp(`^${key}\\s*:\\s*`)
+  let depth = 0
+  for (let i = from; i < to; i += 1) {
+    const ch = masked[i]
+    if (OPEN.includes(ch)) depth += 1
+    else if (CLOSE.includes(ch)) depth -= 1
+    else if (depth === 0 && ch === key[0] && !/[\w$.]/.test(masked[i - 1] ?? ' ')) {
+      const match = head.exec(masked.slice(i, to))
+      if (!match) continue
+      const start = i + match[0].length
+      let end = start
+      for (let nested = 0; end < to; end += 1) {
+        const c = masked[end]
+        if (OPEN.includes(c)) nested += 1
+        else if (CLOSE.includes(c)) nested -= 1
+        else if (c === ',' && nested === 0) break
+      }
+      return { start, end }
+    }
+  }
+  return null
 }
 
-/** Liest coverage.include/exclude aus dem Quelltext der Vite-Konfiguration. */
-export function readActiveScope(configSource) {
-  const marker = /\bcoverage\s*:\s*\{/.exec(configSource)
+/** String-Literale (Original-Inhalt) aus masked[from, to). */
+function literalsIn(source, masked, from, to) {
+  return [...masked.slice(from, to).matchAll(STRING_SPAN)].map((m) =>
+    source.slice(from + m.index + 1, from + m.index + m[0].length - 1),
+  )
+}
+
+function arrayItems(source, masked, { start, end }) {
+  if (masked[start] !== '[') return null
+  const close = matchClose(masked, start)
+  if (close === -1 || close >= end) return null
+  const body = masked.slice(start + 1, close)
+  const items = literalsIn(source, masked, start + 1, close)
+  // Alles ausser Literalen, Kommas und Leerraum (Spread, Variable, Aufruf, Anhang
+  // nach dem Array) kann der Textparser nicht aufloesen und darf nicht still durchgehen.
+  const rest = body.replace(STRING_SPAN, '').replace(/[\s,]/g, '')
+  const trailing = masked.slice(close + 1, end).trim()
+  return { items, opaque: rest.length > 0 || trailing.length > 0 }
+}
+
+/** Bereich des Blocks `coverage: { ... }` (innerhalb der Klammern); null, wenn nicht vorhanden. */
+function coverageBlock(masked) {
+  const marker = /\bcoverage\s*:\s*\{/.exec(masked)
   if (!marker) return null
-  const tail = configSource.slice(marker.index + marker[0].length)
-  const include = arrayAfter(tail, 'include')
-  const exclude = arrayAfter(tail, 'exclude')
+  const open = marker.index + marker[0].length - 1
+  const close = matchClose(masked, open)
+  return close === -1 ? null : { from: open + 1, to: close }
+}
+
+/** Liest coverage.include/exclude aus dem Quelltext der Vite-Konfiguration (nur innerhalb des coverage-Blocks). */
+export function readActiveScope(configSource) {
+  const masked = maskSource(configSource)
+  const block = coverageBlock(masked)
+  if (!block) return null
+  const read = (key) => {
+    const range = topLevelProperty(masked, block.from, block.to, key)
+    return range ? arrayItems(configSource, masked, range) : null
+  }
+  const include = read('include')
+  const exclude = read('exclude')
   if (!include || !exclude) return null
   const opaque = [include.opaque && 'include', exclude.opaque && 'exclude'].filter(Boolean)
   return { include: include.items, exclude: exclude.items, opaque }
+}
+
+/** Name der Variable, die per JSON.parse(... 'coverage-baseline.json' ...) geladen wird; null, wenn es keine gibt. */
+function baselineVariable(source, masked) {
+  const declaration = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*JSON\s*\.\s*parse\s*\(/g
+  for (const match of masked.matchAll(declaration)) {
+    const open = match.index + match[0].length - 1
+    const close = matchClose(masked, open)
+    if (close !== -1 && literalsIn(source, masked, open, close).includes(BASELINE_FILE)) return match[1]
+  }
+  return null
+}
+
+/**
+ * Die Schwellen lines/branches muessen im thresholds-Block tatsaechlich aus der
+ * Baseline kommen (`<var>.line_min` / `<var>.branch_min`, <var> = JSON.parse der
+ * Baseline-Datei). Ein Dateiname im Kommentar oder ein Literal wie `lines: 0` genuegt nicht.
+ * functions/statements sind bewusst nicht Teil dieser Pruefung (feste Werte, siehe vite.config.js).
+ */
+function checkThresholds(configSource) {
+  const masked = maskSource(configSource)
+  const block = coverageBlock(masked)
+  const thresholds = block && topLevelProperty(masked, block.from, block.to, 'thresholds')
+  if (!thresholds || masked[thresholds.start] !== '{') {
+    return [`${CONFIG_FILE}: coverage.thresholds nicht lesbar (Objekt-Literal im coverage-Block erwartet)`]
+  }
+  const variable = baselineVariable(configSource, masked)
+  if (!variable) {
+    return [`${CONFIG_FILE}: Schwellen muessen aus ${BASELINE_FILE} gelesen werden (kein "const x = JSON.parse(readFileSync(... '${BASELINE_FILE}' ...))")`]
+  }
+  const errors = []
+  const from = thresholds.start + 1
+  const to = matchClose(masked, thresholds.start)
+  for (const [key, field] of [['lines', 'line_min'], ['branches', 'branch_min']]) {
+    const range = topLevelProperty(masked, from, to, key)
+    const value = range ? configSource.slice(range.start, range.end).replace(/\s+/g, '') : null
+    if (value !== `${variable}.${field}`) {
+      errors.push(`${CONFIG_FILE}: coverage.thresholds.${key} muss ${variable}.${field} sein (Quelle ${BASELINE_FILE}), gefunden: ${value ?? 'fehlt'}`)
+    }
+  }
+  return errors
 }
 
 function checkScope(configSource, baseline) {
   const errors = []
   const active = readActiveScope(configSource)
   if (!active) {
-    return [`${CONFIG_FILE}: coverage.include/exclude nicht lesbar (Block "coverage: { ... }" fehlt)`]
+    return [`${CONFIG_FILE}: coverage.include/exclude nicht lesbar (Block "coverage: { ... }" oder eines der Arrays fehlt bzw. ist keine Array-Literal)`]
   }
-  if (!configSource.includes(BASELINE_FILE)) {
-    errors.push(`${CONFIG_FILE}: Schwellen muessen aus ${BASELINE_FILE} gelesen werden (Verweis fehlt)`)
-  }
+  errors.push(...checkThresholds(configSource))
   for (const key of active.opaque) {
     errors.push(`${CONFIG_FILE}: coverage.${key} darf nur String-Literale enthalten (kein Spread, keine Variable), sonst ist der Scope nicht pruefbar`)
   }
@@ -129,12 +265,23 @@ function* walk(dir) {
   }
 }
 
+/**
+ * Text, in dem nach Skip-Markern gesucht wird: Kommentare und String-Inhalte sind
+ * maskiert (ein Marker darin ist kein Skip), bei .vue zaehlen nur die script-Bloecke.
+ */
+function scannableText(file, text) {
+  const code = file.endsWith('.vue')
+    ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map((m) => m[1]).join('\n')
+    : text
+  return maskSource(code)
+}
+
 function countSkips(root) {
   const counts = new Map() // "datei\u0000art" -> Anzahl
   for (const dir of SCAN_DIRS) {
     for (const file of walk(join(root, dir))) {
       const rel = relative(root, file).split(sep).join('/')
-      const text = readFileSync(file, 'utf-8')
+      const text = scannableText(file, readFileSync(file, 'utf-8'))
       const taken = []
       for (const pattern of SKIP_PATTERNS) {
         for (const match of text.matchAll(pattern)) {
@@ -185,8 +332,10 @@ function checkRatchet(current, base, notes) {
   const errors = []
   const approval = current.lowering_approval ?? {}
   const approved =
+    approval !== null &&
     typeof approval === 'object' &&
-    ['approved_by', 'reason'].every((field) => String(approval[field] ?? '').trim())
+    MAINTAINERS.has(String(approval.approved_by ?? '').trim()) &&
+    String(approval.reason ?? '').trim() !== ''
   for (const key of ['line_min', 'branch_min']) {
     const value = Number(current[key])
     const floor = Number(base[key])
@@ -197,7 +346,7 @@ function checkRatchet(current, base, notes) {
       continue
     }
     errors.push(
-      `${BASELINE_FILE}: ${key} ${value.toFixed(2)} < ${floor.toFixed(2)} (${BASE_REF}) ohne passende lowering_approval (approved_by, reason, ${key} >= ${value.toFixed(2)})`,
+      `${BASELINE_FILE}: ${key} ${value.toFixed(2)} < ${floor.toFixed(2)} (${BASE_REF}) ohne passende lowering_approval (approved_by in [${[...MAINTAINERS].join(', ')}], reason, ${key} >= ${value.toFixed(2)})`,
     )
   }
   const baseScope = base.scope ?? { include: [], exclude: [] }
@@ -217,25 +366,47 @@ function checkRatchet(current, base, notes) {
   return errors
 }
 
-/** Liest die Baseline von origin/main; null, wenn die Datei dort fehlt. */
+/**
+ * Liest die Baseline von origin/main. Null nur, wenn die Datei dort nachweislich nicht
+ * existiert (Erstanlage); jeder andere Fehler (git, kaputtes JSON) wirft.
+ */
 export function readBaseFromGit(root) {
+  const git = (args) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf-8')
   try {
-    execFileSync('git', ['rev-parse', '--verify', '--quiet', `${BASE_REF}^{commit}`], { cwd: root, stdio: 'ignore' })
+    git(['rev-parse', '--verify', '--quiet', `${BASE_REF}^{commit}`])
   } catch {
     throw new Error(`Referenz ${BASE_REF} nicht verfuegbar (git fetch origin main ausfuehren)`)
   }
+  let listing
   try {
-    const out = execFileSync('git', ['show', `${BASE_REF}:./${BASELINE_FILE}`], {
-      cwd: root,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-    return JSON.parse(out.toString('utf-8'))
-  } catch {
-    return null
+    listing = git(['ls-tree', '--name-only', BASE_REF, '--', BASELINE_FILE]).trim()
+  } catch (error) {
+    throw new Error(`git ls-tree ${BASE_REF} ${BASELINE_FILE} fehlgeschlagen: ${error.message}`, { cause: error })
   }
+  if (!listing) return null
+  let raw
+  try {
+    raw = git(['show', `${BASE_REF}:./${BASELINE_FILE}`])
+  } catch (error) {
+    throw new Error(`git show ${BASE_REF}:${BASELINE_FILE} fehlgeschlagen: ${error.message}`, { cause: error })
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein gueltiges JSON: ${error.message}`, { cause: error })
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein JSON-Objekt`)
+  }
+  return parsed
 }
 
-export function checkIntegrity({ root, readBase = () => readBaseFromGit(root) }) {
+/**
+ * allowMissingBase: nur fuer die Erstanlage der Baseline-Datei. Danach ist ein fehlender
+ * Stand auf origin/main ein Fehler, damit der Ratchet nicht still abgeschaltet wird.
+ */
+export function checkIntegrity({ root, readBase = () => readBaseFromGit(root), allowMissingBase = false }) {
   const errors = []
   const notes = []
   const baseline = readJson(join(root, BASELINE_FILE))
@@ -245,20 +416,23 @@ export function checkIntegrity({ root, readBase = () => readBaseFromGit(root) })
   try {
     base = readBase()
   } catch (error) {
-    errors.push(`Ratchet: ${error.message}`)
+    errors.push(`Ratchet: ${error.message}`, { cause: error })
     return { errors, notes }
   }
   if (base) {
     errors.push(...checkRatchet(baseline, base, notes))
+  } else if (allowMissingBase) {
+    notes.push(`Ratchet uebersprungen: ${BASELINE_FILE} existiert auf ${BASE_REF} noch nicht (Erstanlage, --allow-missing-base)`)
   } else {
-    notes.push(`Ratchet uebersprungen: ${BASELINE_FILE} existiert auf ${BASE_REF} noch nicht (Erstanlage)`)
+    errors.push(`Ratchet: ${BASELINE_FILE} existiert auf ${BASE_REF} nicht; ohne Vergleichsstand ist der Ratchet wirkungslos (nur bei der Erstanlage mit --allow-missing-base)`)
   }
   return { errors, notes }
 }
 
 function main() {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-  const { errors, notes } = checkIntegrity({ root })
+  const allowMissingBase = process.argv.includes('--allow-missing-base')
+  const { errors, notes } = checkIntegrity({ root, allowMissingBase })
   for (const note of notes) console.log(`Hinweis: ${note}`)
   if (errors.length > 0) {
     console.error('Coverage-Integritaet verletzt:')

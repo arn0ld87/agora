@@ -19,22 +19,30 @@ Exit-Codes:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import sys
 
-from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema import Draft202012Validator, FormatChecker, SchemaError
 from datetime import date
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EXCEPTIONS_FILE = REPO_ROOT / "docs" / "dependency-risk-exceptions.json"
 SCHEMA_FILE = REPO_ROOT / "schemas" / "dependency-risk-exceptions.schema.json"
-SCHEMA = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
-Draft202012Validator.check_schema(SCHEMA)
-VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker()).evolve(
-    schema={"$ref": "#/$defs/Exception", "$defs": SCHEMA["$defs"]}
-)
+
+
+@functools.cache
+def get_validator() -> Draft202012Validator:
+    """Laedt das Ausnahmeschema erst bei Bedarf, nicht beim Import des Moduls."""
+    schema = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema, format_checker=FormatChecker()).evolve(
+        schema={"$ref": "#/$defs/Exception", "$defs": schema["$defs"]}
+    )
+
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -123,7 +131,7 @@ def validate_entry(entry: dict, index: int) -> list[str]:
             f"Eintrag #{index} ({entry.get('advisory_id', '?')}): "
             f"Pflichtfelder fehlen: {', '.join(sorted(missing))}"
         )
-    for error in VALIDATOR.iter_errors(entry):
+    for error in get_validator().iter_errors(entry):
         errors.append(f"Eintrag #{index} ({entry.get('advisory_id', '?')}): {error.message}")
     # Deadline-Format prüfen (wenn vorhanden)
     deadline_raw = entry.get("deadline", "")
@@ -167,9 +175,10 @@ def check_trivy_report(path: Path, entries: list[dict]) -> list[str]:
         if not isinstance(report, dict) or not isinstance(report.get("ArtifactName"), str):
             raise ValueError("ArtifactName fehlt")
         image = report["ArtifactName"]
-        results = report.get("Results")
+        # Trivy laesst "Results" weg, wenn es nichts zu berichten gibt (sauberes Image).
+        results = report.get("Results", [])
         if not image.strip() or not isinstance(results, list):
-            raise ValueError("Results fehlt oder ist keine Liste")
+            raise ValueError("Results ist keine Liste")
         findings = []
         for result in results:
             if not isinstance(result, dict):
@@ -226,6 +235,12 @@ def main() -> int:
             return 1
     else:
         today = date.today()
+
+    try:
+        get_validator()
+    except (OSError, ValueError, KeyError, SchemaError) as exc:
+        LOGGER.error(f"::error::Ausnahmeschema {SCHEMA_FILE} nicht ladbar: {exc}")
+        return 1
 
     entries = load_exceptions(args.exceptions_file)
 
