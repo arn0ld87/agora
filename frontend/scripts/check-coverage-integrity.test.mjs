@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { checkIntegrity } from './check-coverage-integrity.mjs'
+import { checkIntegrity, maskSource, readActiveScope } from './check-coverage-integrity.mjs'
 
 const INCLUDE = ['src/**/*.{js,ts,vue}']
 const EXCLUDE = ['src/**/*.{test,spec}.{js,ts}', 'src/main.{js,ts}']
@@ -104,6 +104,60 @@ describe('Scope', () => {
     const text = result.errors.join('\n')
     expect(text).toContain('src/[ab]/**')
     expect(text).not.toContain('darf nur String-Literale')
+  })
+})
+
+describe('Scope-Parser (Kommentare, Gueltigkeitsbereich)', () => {
+  test('Zeilenende-Kommentar mit Literal wird nicht als Scope gelesen', () => {
+    const config = viteConfig().replace(
+      "include: ['src/**/*.{js,ts,vue}'],",
+      "include: ['src/lib/**', // 'src/**/*.{js,ts,vue}'\n      ],",
+    )
+    expect(readActiveScope(config).include).toEqual(['src/lib/**'])
+    setup({ config })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
+    // Das verengte include faellt auf, statt als Soll-Scope durchzugehen.
+    expect(result.errors.join('\n')).toContain('fehlt "src/**/*.{js,ts,vue}"')
+  })
+
+  test('Apostroph im Kommentar macht das Array nicht unlesbar', () => {
+    const config = viteConfig().replace("// Kommentar im Array", "// don't panic, it's fine")
+    expect(readActiveScope(config).exclude).toEqual(EXCLUDE)
+    setup({ config })
+    expect(checkIntegrity({ root, readBase: () => baseline() }).errors).toEqual([])
+  })
+
+  test('Blockkommentar im Array wird ignoriert, auch mit Literal darin', () => {
+    const config = viteConfig().replace("// Kommentar im Array", "/* 'src/phantom/**', \n 'x' */")
+    expect(readActiveScope(config).exclude).toEqual(EXCLUDE)
+  })
+
+  test('Kommentarzeichen innerhalb eines Literals bleiben Teil des Literals', () => {
+    const config = viteConfig().replace("'src/main.{js,ts}',", "'src/main.{js,ts}', 'src//x/**', 'a/*b*/c',")
+    expect(readActiveScope(config).exclude).toEqual([...EXCLUDE, 'src//x/**', 'a/*b*/c'])
+  })
+
+  test('fehlt coverage.exclude, wird kein spaeteres Array als Scope gelesen', () => {
+    const config = viteConfig().replace(/ {6}exclude: \[\n[\s\S]*?\],\n/, '') + "\nexport const other = { server: { exclude: ['src/phantom/**'] } }\n"
+    expect(readActiveScope(config)).toBeNull()
+    setup({ config })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
+    expect(result.errors.join('\n')).toContain('nicht lesbar')
+  })
+
+  test('test.exclude vor dem coverage-Block wird nicht mit coverage.exclude verwechselt', () => {
+    const scope = readActiveScope(viteConfig())
+    expect(scope.exclude).toEqual(EXCLUDE)
+    expect(scope.exclude).not.toContain('node_modules/**')
+  })
+
+  test('maskSource erhaelt Laenge und Zeilenumbrueche', () => {
+    const source = "a // c1\n/* c2\n c3 */ 'x\\'y' \"z\" `t\nu`\nit's\n"
+    const masked = maskSource(source)
+    expect(masked.length).toBe(source.length)
+    expect([...masked].filter((c) => c === '\n').length).toBe([...source].filter((c) => c === '\n').length)
+    expect(masked).not.toContain('c1')
+    expect(masked).not.toContain('c2')
   })
 })
 

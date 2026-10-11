@@ -37,53 +37,144 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf-8'))
 }
 
-function stringLiterals(text) {
-  const out = []
-  for (const match of text.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"/g)) {
-    out.push(match[1] ?? match[2])
+const OPEN = '[{('
+const CLOSE = ']})'
+const STRING_SPAN = /'_*'|"_*"/g
+
+/**
+ * Ersetzt Kommentare durch Leerzeichen und den Inhalt von String-Literalen durch '_'
+ * (gleiche Laenge, Zeilenumbrueche und Anfuehrungszeichen bleiben). Auf dem Ergebnis
+ * koennen Klammern, Schluessel und Kommas strukturell gesucht werden, ohne dass
+ * Kommentare oder Literale sie verfaelschen; Positionen gelten 1:1 fuer den Original-Text.
+ * '- und "-Literale enden spaetestens am Zeilenende, damit ein einzelnes Apostroph
+ * (Regex, JSX-Text) nicht den Rest der Datei verschluckt.
+ */
+export function maskSource(source) {
+  const n = source.length
+  let out = ''
+  let i = 0
+  while (i < n) {
+    const ch = source[i]
+    const next = source[i + 1]
+    if (ch === '/' && next === '/') {
+      const end = source.indexOf('\n', i)
+      const stop = end === -1 ? n : end
+      out += ' '.repeat(stop - i)
+      i = stop
+    } else if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2)
+      const stop = end === -1 ? n : end + 2
+      out += source.slice(i, stop).replace(/[^\n]/g, ' ')
+      i = stop
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      out += ch
+      i += 1
+      while (i < n) {
+        const c = source[i]
+        if (c === ch) {
+          out += c
+          i += 1
+          break
+        }
+        if (c === '\n' && ch !== '`') break
+        if (c === '\\') {
+          out += '_'
+          i += 1
+          if (i < n) {
+            out += source[i] === '\n' ? '\n' : '_'
+            i += 1
+          }
+          continue
+        }
+        out += c === '\n' ? '\n' : '_'
+        i += 1
+      }
+    } else {
+      out += ch
+      i += 1
+    }
   }
   return out
 }
 
-/** Position der schliessenden Klammer; ein ] in einem String-Literal (Glob wie 'src/[ab]/**') zaehlt nicht. */
-function closingBracket(source, start) {
-  let quote = null
-  for (let i = start; i < source.length; i += 1) {
-    const ch = source[i]
-    if (quote) {
-      if (ch === '\\') i += 1
-      else if (ch === quote) quote = null
-    } else if (ch === "'" || ch === '"') quote = ch
-    else if (ch === ']') return i
+/** Position der zur Klammer an `open` gehoerenden schliessenden Klammer in maskiertem Text; -1 wenn unausgeglichen. */
+function matchClose(masked, open) {
+  let depth = 0
+  for (let i = open; i < masked.length; i += 1) {
+    if (OPEN.includes(masked[i])) depth += 1
+    else if (CLOSE.includes(masked[i])) {
+      depth -= 1
+      if (depth === 0) return i
+    }
   }
   return -1
 }
 
-function arrayAfter(source, key) {
-  const keyMatch = new RegExp(`\\b${key}\\s*:\\s*\\[`).exec(source)
-  if (!keyMatch) return null
-  const start = keyMatch.index + keyMatch[0].length
-  const end = closingBracket(source, start)
-  if (end === -1) return null
-  const body = source
-    .slice(start, end)
-    .split('\n')
-    .map((line) => line.replace(/^\s*\/\/.*$/, ''))
-    .join('\n')
-  const items = stringLiterals(body)
-  // Alles ausser Literalen, Kommas und Leerraum (Spread, Variable, Aufruf) kann
-  // der Textparser nicht aufloesen und darf deshalb nicht still durchgehen.
-  const rest = body.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '').replace(/\/\/.*$/gm, '').replace(/[\s,]/g, '')
-  return { items, opaque: rest.length > 0 }
+/** Wertbereich von `key: ...` auf oberster Ebene von masked[from, to); null, wenn der Schluessel dort fehlt. */
+function topLevelProperty(masked, from, to, key) {
+  const head = new RegExp(`^${key}\\s*:\\s*`)
+  let depth = 0
+  for (let i = from; i < to; i += 1) {
+    const ch = masked[i]
+    if (OPEN.includes(ch)) depth += 1
+    else if (CLOSE.includes(ch)) depth -= 1
+    else if (depth === 0 && ch === key[0] && !/[\w$.]/.test(masked[i - 1] ?? ' ')) {
+      const match = head.exec(masked.slice(i, to))
+      if (!match) continue
+      const start = i + match[0].length
+      let end = start
+      for (let nested = 0; end < to; end += 1) {
+        const c = masked[end]
+        if (OPEN.includes(c)) nested += 1
+        else if (CLOSE.includes(c)) nested -= 1
+        else if (c === ',' && nested === 0) break
+      }
+      return { start, end }
+    }
+  }
+  return null
 }
 
-/** Liest coverage.include/exclude aus dem Quelltext der Vite-Konfiguration. */
-export function readActiveScope(configSource) {
-  const marker = /\bcoverage\s*:\s*\{/.exec(configSource)
+/** String-Literale (Original-Inhalt) aus masked[from, to). */
+function literalsIn(source, masked, from, to) {
+  return [...masked.slice(from, to).matchAll(STRING_SPAN)].map((m) =>
+    source.slice(from + m.index + 1, from + m.index + m[0].length - 1),
+  )
+}
+
+function arrayItems(source, masked, { start, end }) {
+  if (masked[start] !== '[') return null
+  const close = matchClose(masked, start)
+  if (close === -1 || close >= end) return null
+  const body = masked.slice(start + 1, close)
+  const items = literalsIn(source, masked, start + 1, close)
+  // Alles ausser Literalen, Kommas und Leerraum (Spread, Variable, Aufruf, Anhang
+  // nach dem Array) kann der Textparser nicht aufloesen und darf nicht still durchgehen.
+  const rest = body.replace(STRING_SPAN, '').replace(/[\s,]/g, '')
+  const trailing = masked.slice(close + 1, end).trim()
+  return { items, opaque: rest.length > 0 || trailing.length > 0 }
+}
+
+/** Bereich des Blocks `coverage: { ... }` (innerhalb der Klammern); null, wenn nicht vorhanden. */
+function coverageBlock(masked) {
+  const marker = /\bcoverage\s*:\s*\{/.exec(masked)
   if (!marker) return null
-  const tail = configSource.slice(marker.index + marker[0].length)
-  const include = arrayAfter(tail, 'include')
-  const exclude = arrayAfter(tail, 'exclude')
+  const open = marker.index + marker[0].length - 1
+  const close = matchClose(masked, open)
+  return close === -1 ? null : { from: open + 1, to: close }
+}
+
+/** Liest coverage.include/exclude aus dem Quelltext der Vite-Konfiguration (nur innerhalb des coverage-Blocks). */
+export function readActiveScope(configSource) {
+  const masked = maskSource(configSource)
+  const block = coverageBlock(masked)
+  if (!block) return null
+  const read = (key) => {
+    const range = topLevelProperty(masked, block.from, block.to, key)
+    return range ? arrayItems(configSource, masked, range) : null
+  }
+  const include = read('include')
+  const exclude = read('exclude')
   if (!include || !exclude) return null
   const opaque = [include.opaque && 'include', exclude.opaque && 'exclude'].filter(Boolean)
   return { include: include.items, exclude: exclude.items, opaque }
@@ -93,7 +184,7 @@ function checkScope(configSource, baseline) {
   const errors = []
   const active = readActiveScope(configSource)
   if (!active) {
-    return [`${CONFIG_FILE}: coverage.include/exclude nicht lesbar (Block "coverage: { ... }" fehlt)`]
+    return [`${CONFIG_FILE}: coverage.include/exclude nicht lesbar (Block "coverage: { ... }" oder eines der Arrays fehlt bzw. ist keine Array-Literal)`]
   }
   if (!configSource.includes(BASELINE_FILE)) {
     errors.push(`${CONFIG_FILE}: Schwellen muessen aus ${BASELINE_FILE} gelesen werden (Verweis fehlt)`)
