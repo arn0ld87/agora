@@ -38,7 +38,7 @@ from ..contracts.persona_identity_contract import (
     PersonaIdentityBindingManifest,
     UnverifiableReason,
 )
-from ..utils.json_io import write_json_atomic
+from .artifact_store import LocalFilesystemArtifactStore
 from .entity_semantic_class import SemanticEntityClass, classify_entity
 
 #: Obergrenze für den in den Prompt eingesetzten Quellnamen (Größenordnung der
@@ -518,6 +518,8 @@ def role_deviation_reason(
 
 #: Dateiname des Laufartefakts neben den Profildateien.
 IDENTITY_BINDING_MANIFEST_FILENAME = "persona_identity_bindings.json"
+#: Logischer Name im Artefakt-Adapter (``artifact_store._ARTIFACT_FILENAMES``).
+IDENTITY_BINDING_MANIFEST_ARTIFACT = "persona_identity_bindings"
 
 
 def build_identity_binding_manifest(
@@ -542,8 +544,10 @@ def write_identity_binding_manifest(
 ) -> PersonaIdentityBindingManifest:
     """Schreibt ``persona_identity_bindings.json`` atomar; Schreibfehler werden nicht geschluckt."""
     manifest = build_identity_binding_manifest(simulation_id, profiles)
-    write_json_atomic(
-        os.path.join(sim_dir, IDENTITY_BINDING_MANIFEST_FILENAME),
-        manifest.model_dump(mode="json"),
+    # Über den Artefakt-Adapter (kein direkter json_io-Zugriff aus services/).
+    # ``sim_dir`` bleibt maßgeblich: Wurzel und Verzeichnisname stammen daraus.
+    root, directory = os.path.split(os.path.normpath(sim_dir))
+    LocalFilesystemArtifactStore(simulations_root=root).write_json(
+        directory, IDENTITY_BINDING_MANIFEST_ARTIFACT, manifest.model_dump(mode="json")
     )
     return manifest

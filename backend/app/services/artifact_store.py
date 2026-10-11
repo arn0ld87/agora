@@ -49,6 +49,9 @@ _ARTIFACT_FILENAMES: dict[str, str] = {
     # abgebrochener Prepare fortgesetzt werden kann statt von vorn zu
     # beginnen. Interner Laufzeitzustand, nie Teil einer API-Antwort.
     "prepare_checkpoint": "prepare_persona_checkpoint.json",
+    # Issue #1833: Herkunft der Identität jeder Persona eines Laufs. Internes
+    # Laufartefakt, nie Teil einer API-Antwort.
+    "persona_identity_bindings": "persona_identity_bindings.json",
 }
 
 _IPC_COMMAND_DIR = "ipc_commands"
