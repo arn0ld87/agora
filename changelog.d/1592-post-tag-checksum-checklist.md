@@ -1,0 +1,3 @@
+### Changed
+
+- **Checkliste für den Checksummen-Nachweis am ersten RC-Tag** — `docs/runbooks/release-artefakte-pruefen.md` beschreibt jetzt ausführbar, wie nach der Veröffentlichung von `v0.10.0-rc.1` geprüft wird: Tag-Identität, kein Draft, Pre-Release-Kennzeichnung, exakter Asset-Satz (`SHA256SUMS`, `agora-image-digests.txt`, beide SBOMs), Abgleich der `SHA256SUMS`-Einträge mit den geladenen Dateien und `sha256sum -c` mit Exit-Code 0. `docs/STATUS.md` führt den Nachweis weiter als ausstehend. Reine Dokumentation: Es wurde nichts ausgeführt, kein Tag gesetzt und kein Release veröffentlicht. (#1592)
