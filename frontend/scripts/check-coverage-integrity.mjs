@@ -8,10 +8,11 @@
 //  2. Skip-Marker in src/ und tests/ nur mit Eintrag in coverage-skip-allowlist.json
 //     (Datei, Art, Anzahl); veraltete Eintraege sind ebenfalls ein Fehler.
 //  3. Ratchet gegen origin/main:frontend/coverage-baseline.json: line_min/branch_min
-//     sinken nicht, der Scope wird nicht weiter. Existiert die Datei dort nicht
-//     (Erstanlage), wird der Teil mit Hinweis uebersprungen.
+//     sinken nicht, der Scope wird nicht weiter. Fehlt die Datei dort oder ist sie
+//     nicht lesbar, ist das ein Fehler; nur die Erstanlage darf den Ratchet mit
+//     --allow-missing-base ueberspringen.
 //
-// Aufruf: bun scripts/check-coverage-integrity.mjs   (aus frontend/)
+// Aufruf: bun scripts/check-coverage-integrity.mjs [--allow-missing-base]   (aus frontend/)
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -347,25 +348,47 @@ function checkRatchet(current, base, notes) {
   return errors
 }
 
-/** Liest die Baseline von origin/main; null, wenn die Datei dort fehlt. */
+/**
+ * Liest die Baseline von origin/main. Null nur, wenn die Datei dort nachweislich nicht
+ * existiert (Erstanlage); jeder andere Fehler (git, kaputtes JSON) wirft.
+ */
 export function readBaseFromGit(root) {
+  const git = (args) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf-8')
   try {
-    execFileSync('git', ['rev-parse', '--verify', '--quiet', `${BASE_REF}^{commit}`], { cwd: root, stdio: 'ignore' })
+    git(['rev-parse', '--verify', '--quiet', `${BASE_REF}^{commit}`])
   } catch {
     throw new Error(`Referenz ${BASE_REF} nicht verfuegbar (git fetch origin main ausfuehren)`)
   }
+  let listing
   try {
-    const out = execFileSync('git', ['show', `${BASE_REF}:./${BASELINE_FILE}`], {
-      cwd: root,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-    return JSON.parse(out.toString('utf-8'))
-  } catch {
-    return null
+    listing = git(['ls-tree', '--name-only', BASE_REF, '--', BASELINE_FILE]).trim()
+  } catch (error) {
+    throw new Error(`git ls-tree ${BASE_REF} ${BASELINE_FILE} fehlgeschlagen: ${error.message}`)
   }
+  if (!listing) return null
+  let raw
+  try {
+    raw = git(['show', `${BASE_REF}:./${BASELINE_FILE}`])
+  } catch (error) {
+    throw new Error(`git show ${BASE_REF}:${BASELINE_FILE} fehlgeschlagen: ${error.message}`)
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein gueltiges JSON: ${error.message}`)
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein JSON-Objekt`)
+  }
+  return parsed
 }
 
-export function checkIntegrity({ root, readBase = () => readBaseFromGit(root) }) {
+/**
+ * allowMissingBase: nur fuer die Erstanlage der Baseline-Datei. Danach ist ein fehlender
+ * Stand auf origin/main ein Fehler, damit der Ratchet nicht still abgeschaltet wird.
+ */
+export function checkIntegrity({ root, readBase = () => readBaseFromGit(root), allowMissingBase = false }) {
   const errors = []
   const notes = []
   const baseline = readJson(join(root, BASELINE_FILE))
@@ -380,15 +403,18 @@ export function checkIntegrity({ root, readBase = () => readBaseFromGit(root) })
   }
   if (base) {
     errors.push(...checkRatchet(baseline, base, notes))
+  } else if (allowMissingBase) {
+    notes.push(`Ratchet uebersprungen: ${BASELINE_FILE} existiert auf ${BASE_REF} noch nicht (Erstanlage, --allow-missing-base)`)
   } else {
-    notes.push(`Ratchet uebersprungen: ${BASELINE_FILE} existiert auf ${BASE_REF} noch nicht (Erstanlage)`)
+    errors.push(`Ratchet: ${BASELINE_FILE} existiert auf ${BASE_REF} nicht; ohne Vergleichsstand ist der Ratchet wirkungslos (nur bei der Erstanlage mit --allow-missing-base)`)
   }
   return { errors, notes }
 }
 
 function main() {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-  const { errors, notes } = checkIntegrity({ root })
+  const allowMissingBase = process.argv.includes('--allow-missing-base')
+  const { errors, notes } = checkIntegrity({ root, allowMissingBase })
   for (const note of notes) console.log(`Hinweis: ${note}`)
   if (errors.length > 0) {
     console.error('Coverage-Integritaet verletzt:')

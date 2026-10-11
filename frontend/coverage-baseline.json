@@ -22,8 +22,9 @@
     "- Ratchet gegen origin/main: line_min/branch_min sinken nicht, der Soll-Scope",
     "  wird nicht weiter. Eine Absenkung braucht lowering_approval = {approved_by,",
     "  reason, line_min und/oder branch_min} mit Freigabe des Maintainers; sie gilt",
-    "  nur bis zu den genannten Werten. Existiert die Datei auf origin/main noch",
-    "  nicht (Erstanlage), wird der Ratchet uebersprungen."
+    "  nur bis zu den genannten Werten. Fehlt die Datei auf origin/main oder ist",
+    "  sie dort nicht lesbar, schlaegt das Gate fehl; nur die Erstanlage darf den",
+    "  Ratchet mit --allow-missing-base ueberspringen."
   ],
   "measured": {
     "line": 84.57,

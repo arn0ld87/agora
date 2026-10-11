@@ -3,11 +3,12 @@
 //   bun test ./scripts/check-coverage-integrity.test.mjs
 // (Vitest sammelt scripts/ nicht ein: test.include deckt nur src/ und tests/ ab.)
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { checkIntegrity, maskSource, readActiveScope } from './check-coverage-integrity.mjs'
+import { checkIntegrity, maskSource, readActiveScope, readBaseFromGit } from './check-coverage-integrity.mjs'
 
 const INCLUDE = ['src/**/*.{js,ts,vue}']
 const EXCLUDE = ['src/**/*.{test,spec}.{js,ts}', 'src/main.{js,ts}']
@@ -78,13 +79,13 @@ describe('Scope', () => {
 
   test('neues exclude-Muster in vite.config.js faellt durch', () => {
     setup({ config: viteConfig({ exclude: [...EXCLUDE, 'src/components/**'] }) })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain('src/components/**')
   })
 
   test('engeres include faellt durch', () => {
     setup({ config: viteConfig({ include: ['src/lib/**/*.ts'] }) })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain('src/lib/**/*.ts')
   })
 
@@ -92,7 +93,7 @@ describe('Scope', () => {
     const config = viteConfig().replace("'src/main.{js,ts}',", "'src/main.{js,ts}', ...extraExcludes,")
     expect(config).toContain('...extraExcludes')
     setup({ config })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain('coverage.exclude darf nur String-Literale')
   })
 
@@ -100,7 +101,7 @@ describe('Scope', () => {
     const config = viteConfig().replace("'src/main.{js,ts}',", "'src/main.{js,ts}', 'src/[ab]/**',")
     expect(config).toContain("'src/[ab]/**'")
     setup({ config })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     const text = result.errors.join('\n')
     expect(text).toContain('src/[ab]/**')
     expect(text).not.toContain('darf nur String-Literale')
@@ -211,7 +212,7 @@ describe('Schwellen-Quelle', () => {
 describe('Skip-Marker', () => {
   test('neuer Skip ohne Allowlist faellt durch', () => {
     setup({ files: { 'src/b.test.js': "it.skip('x', () => {})\n" } })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain('src/b.test.js')
     expect(result.errors.join('\n')).toContain('it.skip')
   })
@@ -223,7 +224,7 @@ describe('Skip-Marker', () => {
         entries: [{ file: 'src/b.test.js', kind: 'it.skip', count: 1, reason: 'Browser-API fehlt in jsdom' }],
       },
     })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors).toEqual([])
   })
 
@@ -234,7 +235,7 @@ describe('Skip-Marker', () => {
         entries: [{ file: 'src/b.test.js', kind: 'it.skip', count: 1, reason: 'eins erlaubt' }],
       },
     })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain('src/b.test.js')
   })
 
@@ -244,24 +245,24 @@ describe('Skip-Marker', () => {
         entries: [{ file: 'src/gone.test.js', kind: 'describe.skip', count: 1, reason: 'war mal' }],
       },
     })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain('src/gone.test.js')
   })
 
   test.each(['test.skip', 'describe.skip', 'it.todo', 'xit', 'xdescribe'])('%s wird erkannt', (kind) => {
     const line = kind.startsWith('x') ? `${kind}('x', () => {})\n` : `${kind}('x')\n`
     setup({ files: { 'src/c.test.js': line } })
-    const result = checkIntegrity({ root, readBase: noBase })
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors.join('\n')).toContain(kind)
   })
 
   test.each(['skipIf', 'runIf'])('%s wird erkannt', (kind) => {
     const files = { 'src/c.test.js': `it.${kind}(true)('x', () => {})\n` }
     setup({ files })
-    expect(checkIntegrity({ root, readBase: noBase }).errors.join('\n')).toContain(kind)
+    expect(checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')).toContain(kind)
     // Der Allowlist-Schluessel ist der Marker ohne fuehrenden Punkt.
     setup({ files, allowlist: { entries: [{ file: 'src/c.test.js', kind, count: 1, reason: 'bedingt' }] } })
-    expect(checkIntegrity({ root, readBase: noBase }).errors).toEqual([])
+    expect(checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors).toEqual([])
   })
 })
 
@@ -296,10 +297,81 @@ describe('Ratchet gegen origin/main', () => {
     expect(result.errors.join('\n')).toContain('src/views/**')
   })
 
-  test('fehlende Datei auf origin/main wird uebersprungen', () => {
+  test('fehlende Datei auf origin/main ist ein Fehler', () => {
     setup()
     const result = checkIntegrity({ root, readBase: noBase })
+    expect(result.errors.join('\n')).toContain('existiert auf origin/main nicht')
+  })
+
+  test('fehlende Datei wird nur mit allowMissingBase (Erstanlage) uebersprungen', () => {
+    setup()
+    const result = checkIntegrity({ root, readBase: noBase, allowMissingBase: true })
     expect(result.errors).toEqual([])
     expect(result.notes.join('\n')).toContain('origin/main')
+  })
+
+  test('Lesefehler der Basis ist ein Fehler, auch mit allowMissingBase', () => {
+    setup()
+    const result = checkIntegrity({
+      root,
+      readBase: () => {
+        throw new Error('kaputt')
+      },
+      allowMissingBase: true,
+    })
+    expect(result.errors.join('\n')).toContain('Ratchet: kaputt')
+  })
+})
+
+describe('readBaseFromGit', () => {
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' })
+  const initRepo = () => {
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.email', 'test@example.invalid')
+    git('config', 'user.name', 'Test')
+    git('config', 'commit.gpgsign', 'false')
+    put('keep.txt', 'x\n')
+    git('add', '.')
+    git('commit', '-q', '-m', 'init')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+  }
+  const commitBaseline = (content) => {
+    put('coverage-baseline.json', content)
+    git('add', '.')
+    git('commit', '-q', '-m', 'baseline')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+  }
+
+  test('fehlende Datei auf der Basis liefert null (Erstanlage)', () => {
+    initRepo()
+    expect(readBaseFromGit(root)).toBeNull()
+  })
+
+  test('vorhandene Datei wird gelesen, auch aus einem Unterverzeichnis', () => {
+    initRepo()
+    mkdirSync(join(root, 'frontend'))
+    put('frontend/coverage-baseline.json', baseline())
+    git('add', '.')
+    git('commit', '-q', '-m', 'baseline')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    expect(readBaseFromGit(join(root, 'frontend')).line_min).toBe(83.57)
+  })
+
+  test('kaputtes JSON auf der Basis wirft statt null zu liefern', () => {
+    initRepo()
+    commitBaseline('{ kaputt')
+    expect(() => readBaseFromGit(root)).toThrow('kein gueltiges JSON')
+  })
+
+  test('JSON ohne Objekt auf der Basis wirft', () => {
+    initRepo()
+    commitBaseline('[]')
+    expect(() => readBaseFromGit(root)).toThrow('kein JSON-Objekt')
+  })
+
+  test('fehlende Referenz origin/main wirft', () => {
+    initRepo()
+    git('update-ref', '-d', 'refs/remotes/origin/main')
+    expect(() => readBaseFromGit(root)).toThrow('nicht verfuegbar')
   })
 })
