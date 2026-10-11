@@ -1,0 +1,162 @@
+# Hebt die im Dockerfile gepinnten CLI-Provider-Binaries an (#1861).
+#
+# `claude` und `codex` sind per Version plus zwei SHA256-Werten gepinnt.
+# Dependabot erfasst solche ARG-Downloads nicht, die Pins alterten still.
+# Dieser Workflow ermittelt je Werkzeug die Zielversion (Claude Code: Kanal
+# `stable`; Codex: neuestes Nicht-Prerelease), prüft die Hashes gegen die
+# ausgelieferten Dateien und öffnet je einen eigenen Pull Request.
+#
+# Der PR entsteht unter `arn0ld87-bot` (Secret BUMP_BOT_TOKEN): ein mit dem
+# Standard-GITHUB_TOKEN geöffneter PR löst keine weiteren Workflows aus, die
+# Pflicht-Checks blieben dann für immer auf "Expected".
+#
+# Gate ist der reguläre PR-Lauf, vor allem `build-only` in docker-image.yml:
+# Der Image-Build prüft Hash, `--version` und die von den Providern benutzten
+# Flags. Dieser Workflow merged nicht selbst.
+#
+# Runbook: docs/runbooks/cli-binaries-bump.md
+name: CLI-Binaries anheben
+
+on:
+  schedule:
+    # Montags 05:20 UTC, zwischen den übrigen Montags-Jobs.
+    - cron: "20 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: "Welches Binary"
+        required: true
+        type: choice
+        default: beide
+        options: [beide, claude, codex]
+      version:
+        description: "Feste Zielversion (nur mit einzelnem Binary, z. B. 2.1.287 oder rust-v0.162.1)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Bump ${{ matrix.tool }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(inputs.tool == 'claude' && '["claude"]' || inputs.tool == 'codex' && '["codex"]' || '["claude","codex"]') }}
+    # Zwei gleichzeitige Läufe für dasselbe Binary würden sich den Branch
+    # gegenseitig überschreiben.
+    concurrency:
+      group: cli-binaries-bump-${{ matrix.tool }}
+      cancel-in-progress: false
+    env:
+      TOOL: ${{ matrix.tool }}
+      BRANCH: build/bump-${{ matrix.tool }}-cli
+      TARGET_VERSION: ${{ inputs.version }}
+      SELECTED_TOOL: ${{ inputs.tool }}
+      GH_TOKEN: ${{ secrets.BUMP_BOT_TOKEN }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            downloads.claude.ai:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+
+      - name: Eingaben prüfen
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::Secret BUMP_BOT_TOKEN fehlt (siehe docs/runbooks/cli-binaries-bump.md)."
+            exit 1
+          fi
+          if [ -n "${TARGET_VERSION}" ] && [ "${SELECTED_TOOL}" = "beide" ]; then
+            echo "::error::Eine feste Version braucht ein einzelnes Binary (tool=claude oder tool=codex)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.BUMP_BOT_TOKEN }}
+
+      - name: Bump-Branch vorbereiten
+        run: |
+          set -euo pipefail
+          git config user.name "arn0ld87-bot"
+          git config user.email "334919281+arn0ld87-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null; then
+            open_pr="$(gh pr list --head "${BRANCH}" --state open --json number --jq 'length')"
+            if [ "${open_pr}" = "0" ]; then
+              # Rest eines gemergten oder geschlossenen Bumps.
+              git push origin --delete "${BRANCH}"
+              git switch -c "${BRANCH}"
+            else
+              # Offenen Bump-PR fortschreiben statt einen zweiten zu öffnen.
+              git fetch origin "${BRANCH}"
+              git switch -c "${BRANCH}" FETCH_HEAD
+              git merge --no-edit -X theirs origin/main
+            fi
+          else
+            git switch -c "${BRANCH}"
+          fi
+
+      - name: Zielversion ermitteln und Dockerfile anheben
+        id: bump
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -n "${TARGET_VERSION}" ]; then
+            python3 backend/scripts/bump_cli_binaries.py --tool "${TOOL}" --version "${TARGET_VERSION}"
+          else
+            python3 backend/scripts/bump_cli_binaries.py --tool "${TOOL}"
+          fi
+
+      - name: Commit und Push
+        id: push
+        env:
+          OLD_VERSION: ${{ steps.bump.outputs.old_version }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          if [ "${TOOL}" = "claude" ]; then label="Claude-Code"; else label="Codex"; fi
+          echo "title=build(deps): ${label}-Binary auf ${NEW_VERSION} anheben" >> "${GITHUB_OUTPUT}"
+          git add Dockerfile changelog.d
+          if ! git diff --cached --quiet; then
+            git commit -m "build(deps): ${label}-Binary von ${OLD_VERSION} auf ${NEW_VERSION} anheben" \
+              -m "Automatischer Bump (#1861). Hashes aus der Herstellerquelle, vor dem Push gegen die ausgelieferten Dateien geprüft."
+          fi
+          if [ "$(git rev-list --count origin/main..HEAD)" = "0" ]; then
+            echo "Pin ist aktuell (${NEW_VERSION}), kein Pull Request nötig."
+            echo "pushed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          git push origin "${BRANCH}"
+          echo "pushed=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Pull Request öffnen oder fortschreiben
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          PR_TITLE: ${{ steps.push.outputs.title }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          body="$(printf '%s\n\n%s\n\n%s\n' \
+            "Automatischer Bump des gepinnten \`${TOOL}\`-Binaries auf \`${NEW_VERSION}\` (#1861)." \
+            "Version und beide SHA256-Werte stammen aus der Herstellerquelle und wurden vor dem Push gegen die ausgelieferten Dateien geprüft. Gate ist der Image-Build (\`build-only\`): Hash, \`--version\` und die von den Providern benutzten Flags." \
+            "Nicht geprüft wird die Ausgabeform der CLI. Runbook: \`docs/runbooks/cli-binaries-bump.md\`.")"
+          if [ "$(gh pr list --head "${BRANCH}" --state open --json number --jq 'length')" = "0" ]; then
+            gh pr create --base main --head "${BRANCH}" --title "${PR_TITLE}" --body "${body}"
+          else
+            gh pr edit "${BRANCH}" --title "${PR_TITLE}" --body "${body}"
+          fi

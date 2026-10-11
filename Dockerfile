@@ -84,11 +84,18 @@ FROM base AS codex-cli
 
 # Version und Hashes bewusst gepinnt (dasselbe Muster wie die FROM-Digests):
 # ein ungeprueftes Binary aus dem Netz gehoert nicht ins Laufzeit-Image.
-# Die Hashes stammen aus dem ``digest``-Feld der GitHub-Releases-API und
-# muessen bei einem Versionsbump beide mitgezogen werden.
+# Die Hashes stammen aus dem ``digest``-Feld der GitHub-Releases-API; den
+# Bump uebernimmt backend/scripts/bump_cli_binaries.py (#1861).
 ARG CODEX_VERSION=rust-v0.153.2
 ARG CODEX_SHA256_AMD64=e8cd1160071f725d2a10cab81073dd6818fc8b096372125d27ef6e66fdf0979e
 ARG CODEX_SHA256_ARM64=878693f9b370320ea21793f99ea1f5687b7d9aa1f2c733de693d9ec0baa4e62a
+# Vertrags-Check (#1861): Version und Hashes hebt ein Workflow automatisch an
+# (.github/workflows/cli-binaries-bump.yml). ``codex --version`` bewiese nur,
+# dass das Binary startet — der Build prueft deshalb zusaetzlich, dass
+# ``codex exec`` jedes Flag kennt, das build_codex_cli_command() uebergibt, und
+# dass ``codex debug models`` (Modell-Discovery) existiert. Die Liste wird von
+# backend/tests/scripts/test_bump_cli_binaries.py gegen den Provider abgeglichen.
+ARG CODEX_REQUIRED_EXEC_FLAGS="--skip-git-repo-check --sandbox --model"
 # TARGETARCH befuellt BuildKit nur im Multi-Platform-Kontext; ein schlichtes
 # `docker compose build` laesst die Variable LEER. Ein Default darauf waere
 # eine Falle: mit `=amd64` zog ein aarch64-Server das x86_64-Binary und der
@@ -126,7 +133,14 @@ RUN set -eux; \
     test -n "${_bin}"; \
     install -m 0755 "${_bin}" /usr/local/bin/codex; \
     rm -rf /tmp/codex.tar.gz /tmp/codex-extract; \
-    codex --version
+    codex --version; \
+    _help="$(codex exec --help)"; \
+    for _flag in ${CODEX_REQUIRED_EXEC_FLAGS}; do \
+      printf '%s\n' "${_help}" | grep -Eq -- "${_flag}([^a-z-]|\$)" \
+        || { echo "codex exec: Flag ${_flag} fehlt in --help" >&2; exit 1; }; \
+    done; \
+    codex debug --help | grep -Eq '^[[:space:]]+models([[:space:]]|$)' \
+      || { echo "codex debug: Unterbefehl models fehlt" >&2; exit 1; }
 
 # ---------- claude-cli (Binary-Bezug, landet per COPY in dev und prod) ----------
 # Der claude_cli-Provider ruft das ``claude``-Binary als Subprozess auf
@@ -140,7 +154,7 @@ RUN set -eux; \
 # Frueher lief ``curl https://claude.ai/install.sh | bash`` — ein ungepruefter
 # downloadThenRun (Scorecard PinnedDependencies, #1670). Die Hashes stammen aus
 # ``.../<version>/manifest.json`` (Feld ``platforms[linux-x64|linux-arm64]
-# .checksum``) und muessen bei einem Versionsbump beide mitgezogen werden.
+# .checksum``); den Bump uebernimmt backend/scripts/bump_cli_binaries.py (#1861).
 # ``base`` ist Debian/glibc, daher die Nicht-musl-Plattformen.
 #
 # Architektur-Erkennung identisch zur codex-Stage (TARGETARCH-Override,
@@ -155,6 +169,10 @@ FROM base AS claude-cli
 ARG CLAUDE_CODE_VERSION=2.1.278
 ARG CLAUDE_CODE_SHA256_AMD64=5c4735937844e84f8a93306e841a5b0e12252909b07870f789b190468da147ab
 ARG CLAUDE_CODE_SHA256_ARM64=7de6cab134e48321148e30182c98614118e8f4666819412bead45865190b34ed
+# Vertrags-Check wie bei codex (#1861): jedes Flag, das
+# build_claude_cli_command() uebergibt, muss in ``claude --help`` stehen
+# (``-p`` ist dort als ``--print`` gefuehrt).
+ARG CLAUDE_CODE_REQUIRED_FLAGS="--print --output-format --tools --permission-prompts --model"
 ARG TARGETARCH
 
 RUN set -eux; \
@@ -176,7 +194,12 @@ RUN set -eux; \
     echo "${_sha}  /tmp/claude" | sha256sum -c -; \
     install -m 0755 /tmp/claude /usr/local/bin/claude; \
     rm -f /tmp/claude; \
-    claude --version
+    claude --version; \
+    _help="$(claude --help)"; \
+    for _flag in ${CLAUDE_CODE_REQUIRED_FLAGS}; do \
+      printf '%s\n' "${_help}" | grep -Eq -- "${_flag}([^a-z-]|\$)" \
+        || { echo "claude: Flag ${_flag} fehlt in --help" >&2; exit 1; }; \
+    done
 
 # ---------- dev (default) ----------
 FROM base AS dev
