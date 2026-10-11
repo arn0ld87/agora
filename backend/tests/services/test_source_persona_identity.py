@@ -835,6 +835,33 @@ def test_collective_clinic_stays_collective_despite_person_answer(generator):
     assert profile.generation_error is None
 
 
+def test_collective_replica_stays_collective_with_entity_name(generator):
+    """Ein Floor- oder Quoten-Replikat eines Kollektivs bleibt das Kollektiv:
+    der Kollektivtyp geht dem Ergänzungsmarker vor, das Modell benennt nicht um."""
+    source = _entity("Klinikum Hollerau-Nord", "Hospital")
+    replica = _apply_persona_floor_to_entities([source], minimum=2)[1]
+    assert replica.attributes["identity_origin"] == SYNTHETIC_SUPPLEMENT_MARKER
+    _stub_llm(generator, "Tobias Neumann", "Notfallsanitäter", age=35, gender="male")
+
+    profile = generator.generate_profile_from_entity(
+        replica,
+        user_id=2,
+        use_llm=True,
+        demographic_slot=PersonaDemographicSlot(age=35, gender="male", mbti="ESTJ"),
+    )
+
+    assert profile.persona_kind == "collective"
+    assert profile.name == "Klinikum Hollerau-Nord"
+    assert (profile.age, profile.gender, profile.mbti, profile.profession) == (
+        None,
+        None,
+        None,
+        None,
+    )
+    assert profile.identity_binding is not None
+    assert profile.identity_binding["origin"] == "source_collective"
+
+
 # ----------------------------------------------------------------- Batch
 
 

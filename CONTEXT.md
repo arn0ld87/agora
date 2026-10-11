@@ -42,7 +42,7 @@ Ein benannter Satz synthetischer Personas in der Bibliothek. Ein Lauf bekommt ei
 
 ### Quellenidentität
 
-Die Herkunft der Identität einer Persona im Lauf (#1833): `source_person` (in der Quelle namentlich genannte Person, Name und belegte Funktion gesperrt), `source_collective` (genannte Organisation, Entitätsname, keine Demografie), `synthetic_representative` (erfundener Vertreter) oder `synthetic_supplement` (ausdrücklich synthetische Zusatzstimme aus Quoten oder Floor, trägt nie den Quellnamen). Sie steht je Lauf in `persona_identity_bindings.json`, nicht im Personasatz-Eintrag und nicht in der API. Alter und MBTI einer Quellperson bleiben synthetische Angaben; das Geschlecht stammt nur aus der Quelle.
+Die Herkunft der Identität einer Persona im Lauf (#1833): `source_person` (in der Quelle namentlich genannte Person, Name und belegte Funktion gesperrt), `source_collective` (genannte Organisation, Entitätsname, keine Demografie), `synthetic_representative` (erfundener Vertreter) oder `synthetic_supplement` (ausdrücklich synthetische Zusatzstimme aus Quote, Floor oder dem zweiten Gruppensitz der Hybrid-Auswahl, trägt nie den Quellnamen; ein wiederholtes Kollektiv bleibt `source_collective`). Sie steht je Lauf in `persona_identity_bindings.json`, nicht im Personasatz-Eintrag und nicht in der API. Alter und MBTI einer Quellperson bleiben synthetische Angaben; das Geschlecht stammt nur aus der Quelle.
 
 ### Graph
 

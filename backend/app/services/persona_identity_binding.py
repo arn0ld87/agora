@@ -13,6 +13,7 @@ der Quelle kommt; die Form allein genügt bewusst nicht („Sozialer Dienst“).
 """
 from __future__ import annotations
 
+import copy
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -139,6 +140,23 @@ def _origin_marked_as_supplement(attributes: Optional[Mapping[str, Any]]) -> boo
     )
 
 
+def synthetic_supplement_copy(entity: Any) -> Any:
+    """Flache Kopie der Entität, ausdrücklich als synthetische Ergänzung markiert.
+
+    Für jede Wiederholung einer Entität in der Generierungsliste (Quote, Floor,
+    zweiter Gruppensitz der Hybrid-Auswahl). Die Kopie behält Quell-UUID und
+    Name; das Attribut ``identity_origin`` sorgt dafür, dass der Generator sie
+    nicht als in der Quelle genannte Person behandelt. Die Quellentität bleibt
+    unverändert.
+    """
+    replica = copy.copy(entity)
+    replica.attributes = {
+        **(getattr(entity, "attributes", None) or {}),
+        IDENTITY_ORIGIN_ATTRIBUTE: SYNTHETIC_SUPPLEMENT_MARKER,
+    }
+    return replica
+
+
 def resolve_identity_binding(
     *,
     entity_uuid: Optional[str],
@@ -150,8 +168,10 @@ def resolve_identity_binding(
 ) -> PersonaIdentityBinding:
     """Löst die Herkunft einer Entität auf (Reihenfolge ist verbindlich).
 
-    1. Marker ``identity_origin=synthetic_supplement`` → ``synthetic_supplement``.
-    2. Kollektivtyp → ``source_collective``.
+    1. Kollektivtyp → ``source_collective``. Das gilt auch für ein Replikat mit
+       Ergänzungsmarker: ein wiederholtes Kollektiv bleibt das Kollektiv und
+       behält den Entitätsnamen.
+    2. Marker ``identity_origin=synthetic_supplement`` → ``synthetic_supplement``.
     3. Personenförmiger Name, Klasse ``person``/``other`` und mindestens ein
        positives Personensignal → ``source_person``.
     4. Sonst ``synthetic_representative``; sieht der Name wie ein Personenname
@@ -159,10 +179,10 @@ def resolve_identity_binding(
     """
     name = (entity_name or "").strip() or "?"
     common: dict[str, Any] = {"source_entity_uuid": entity_uuid, "source_name": name}
-    if _origin_marked_as_supplement(attributes):
-        return PersonaIdentityBinding(origin="synthetic_supplement", **common)
     if is_collective_type:
         return PersonaIdentityBinding(origin="source_collective", **common)
+    if _origin_marked_as_supplement(attributes):
+        return PersonaIdentityBinding(origin="synthetic_supplement", **common)
 
     person_shaped = is_person_shaped_name(name)
     semantic_class = classify_entity(name, entity_type or "")

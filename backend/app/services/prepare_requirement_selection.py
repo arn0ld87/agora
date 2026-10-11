@@ -43,6 +43,7 @@ from ..contracts.entity_selection_contract import (
 )
 from .degradation_collector import describe_exception
 from .persona_domain_coherence import _type_words, is_collective_entity_type
+from .persona_identity_binding import synthetic_supplement_copy
 from .run_budget import BudgetExceededError
 
 if TYPE_CHECKING:
@@ -370,7 +371,10 @@ def select_entities_with_requirement(
     decisions: List[EntitySelectionDecision] = []
     seeded_types: Dict[str, int] = {}
     for plan in plans:
-        selected.extend([plan.entity] * plan.seats)
+        # Der erste Sitz bleibt die quellengebundene Entitaet, jeder weitere
+        # ist eine ausdruecklich synthetische Zusatzstimme (#1833).
+        selected.append(plan.entity)
+        selected.extend(synthetic_supplement_copy(plan.entity) for _ in range(plan.seats - 1))
         seeded_types[_entity_type(plan.entity)] = (
             seeded_types.get(_entity_type(plan.entity), 0) + plan.seats
         )
