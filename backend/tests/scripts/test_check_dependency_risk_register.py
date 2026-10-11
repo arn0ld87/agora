@@ -390,3 +390,33 @@ def test_workflow_scan_evaluates_real_findings_from_every_report(tmp_path: Path)
     assert "No such file" not in result.stderr
     for image in vulnerable:
         assert f"HIGH: {image} / example-pkg / CVE-2099-9999: keine gültige Ausnahme" in result.stderr
+
+
+def test_missing_schema_is_reported_without_traceback_and_import_has_no_side_effects(tmp_path: Path) -> None:
+    """Das Schema wird erst in main() geladen; ein Importfehler-Traceback ist ausgeschlossen (WR-06)."""
+    import shutil
+
+    scripts = tmp_path / "backend" / "scripts"
+    scripts.mkdir(parents=True)
+    isolated = scripts / "check_dependency_risk_register.py"
+    shutil.copy(SCRIPT_PATH, isolated)  # tmp_path/schemas/ existiert bewusst nicht
+    imported = subprocess.run([sys.executable, "-c", f"import sys; sys.path.insert(0, {str(scripts)!r}); import check_dependency_risk_register"],
+        capture_output=True, text=True)
+    assert imported.returncode == 0, imported.stderr
+    result = subprocess.run([sys.executable, str(isolated), "--exceptions-file", str(_write_exceptions(tmp_path, []))],
+        capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "nicht ladbar" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_audit_job_installs_checker_dependencies_before_running_checker() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((_REPO_ROOT / ".github/workflows/cve-monitor.yml").read_text())
+    steps = workflow["jobs"]["audit"]["steps"]
+    names = [step["name"] for step in steps]
+    checker = next(i for i, step in enumerate(steps) if "check_dependency_risk_register.py" in step.get("run", ""))
+    sync = next(i for i, step in enumerate(steps) if "uv sync --only-group dev --frozen" in step.get("run", ""))
+    assert sync < checker, names
+    assert steps[sync]["working-directory"] == "backend"
