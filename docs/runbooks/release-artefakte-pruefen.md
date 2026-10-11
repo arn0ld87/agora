@@ -44,7 +44,7 @@ Erwartet: beide `jq`-Aufrufe geben `true` aus und enden mit Exit-Code 0. Der Ass
 
 - `tagName` weicht ab: Es wurde das falsche Release abgefragt, der Nachweis gilt nicht.
 - `isDraft` ist `true`: Das Release ist nicht veröffentlicht. Den Draft nach [`../release-process.md`](../release-process.md) §9 veröffentlichen (siehe auch „Wenn Dateien fehlen").
-- `isPrerelease` ist `false`: Das Release ist nicht als RC gekennzeichnet. Mit `gh release edit "$TAG" --repo "$REPO" --prerelease` korrigieren und den Nachweis wiederholen. Weder `docker-image.yml` noch §9 setzen das Flag.
+- `isPrerelease` ist `false`: Das Release ist nicht als RC gekennzeichnet. Mit `gh release edit "$TAG" --repo "$REPO" --prerelease` korrigieren und den Nachweis wiederholen. `docker-image.yml` setzt das Flag nicht; §9 verlangt es bei RC-Tags ausdrücklich.
 - Asset-Satz weicht ab: fehlende Dateien nach „Wenn Dateien fehlen" nachliefern. Unerwartete Zusatzdateien klären, bevor der Nachweis gilt.
 
 ## 1. Dateien laden und Checksummen prüfen

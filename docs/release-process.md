@@ -248,6 +248,8 @@ gh release edit "v$NEW" \
   --draft=false
 ```
 
+Bei einem RC-Tag (`vX.Y.Z-rc.N`) beide Befehle zusätzlich mit `--prerelease` aufrufen. Weder `gh release create` noch `docker-image.yml` setzen die Kennzeichnung von selbst, und der Nachweis in [`runbooks/release-artefakte-pruefen.md`](runbooks/release-artefakte-pruefen.md) §0 verlangt `isPrerelease == true`.
+
 Bei bereits veröffentlichtem Tag niemals still den Tag auf einen anderen Commit bewegen. Korrekturen erfolgen als neues Patch-Release.
 
 ---
