@@ -381,20 +381,20 @@ export function readBaseFromGit(root) {
   try {
     listing = git(['ls-tree', '--name-only', BASE_REF, '--', BASELINE_FILE]).trim()
   } catch (error) {
-    throw new Error(`git ls-tree ${BASE_REF} ${BASELINE_FILE} fehlgeschlagen: ${error.message}`)
+    throw new Error(`git ls-tree ${BASE_REF} ${BASELINE_FILE} fehlgeschlagen: ${error.message}`, { cause: error })
   }
   if (!listing) return null
   let raw
   try {
     raw = git(['show', `${BASE_REF}:./${BASELINE_FILE}`])
   } catch (error) {
-    throw new Error(`git show ${BASE_REF}:${BASELINE_FILE} fehlgeschlagen: ${error.message}`)
+    throw new Error(`git show ${BASE_REF}:${BASELINE_FILE} fehlgeschlagen: ${error.message}`, { cause: error })
   }
   let parsed
   try {
     parsed = JSON.parse(raw)
   } catch (error) {
-    throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein gueltiges JSON: ${error.message}`)
+    throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein gueltiges JSON: ${error.message}`, { cause: error })
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${BASELINE_FILE} auf ${BASE_REF} ist kein JSON-Objekt`)
@@ -416,7 +416,7 @@ export function checkIntegrity({ root, readBase = () => readBaseFromGit(root), a
   try {
     base = readBase()
   } catch (error) {
-    errors.push(`Ratchet: ${error.message}`)
+    errors.push(`Ratchet: ${error.message}`, { cause: error })
     return { errors, notes }
   }
   if (base) {
