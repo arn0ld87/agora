@@ -274,14 +274,28 @@ describe('Ratchet gegen origin/main', () => {
   })
 
   test('abgesenkte Schwelle mit passender lowering_approval geht durch', () => {
-    const approval = { approved_by: 'Maintainer', reason: 'Testdatei entfernt', line_min: 70 }
+    const approval = { approved_by: 'arn0ld87', reason: 'Testdatei entfernt', line_min: 70 }
     setup({ base: baseline({ line_min: 70, lowering_approval: approval }) })
     const result = checkIntegrity({ root, readBase: () => baseline() })
     expect(result.errors).toEqual([])
   })
 
+  test.each(['x', 'Maintainer', '', 'ARN0LD87'])('lowering_approval von nicht freigabeberechtigtem approved_by "%s" zaehlt nicht', (who) => {
+    const approval = { approved_by: who, reason: 'Selbstfreigabe', line_min: 0 }
+    setup({ base: baseline({ line_min: 0, lowering_approval: approval }) })
+    const result = checkIntegrity({ root, readBase: () => baseline() })
+    expect(result.errors.join('\n')).toContain('lowering_approval')
+  })
+
+  test('lowering_approval ohne Begruendung zaehlt nicht', () => {
+    const approval = { approved_by: 'arn0ld87', reason: '  ', line_min: 70 }
+    setup({ base: baseline({ line_min: 70, lowering_approval: approval }) })
+    const result = checkIntegrity({ root, readBase: () => baseline() })
+    expect(result.errors.join('\n')).toContain('line_min')
+  })
+
   test('lowering_approval deckt keine weitere Absenkung', () => {
-    const approval = { approved_by: 'Maintainer', reason: 'Testdatei entfernt', line_min: 70 }
+    const approval = { approved_by: 'arn0ld87', reason: 'Testdatei entfernt', line_min: 70 }
     setup({ base: baseline({ line_min: 60, lowering_approval: approval }) })
     const result = checkIntegrity({ root, readBase: () => baseline() })
     expect(result.errors.join('\n')).toContain('line_min')

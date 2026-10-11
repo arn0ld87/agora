@@ -23,6 +23,8 @@ const BASE_REF = 'origin/main'
 const BASELINE_FILE = 'coverage-baseline.json'
 const ALLOWLIST_FILE = 'coverage-skip-allowlist.json'
 const CONFIG_FILE = 'vite.config.js'
+// Wie `approved_by` (const) in schemas/dependency-risk-exceptions.schema.json.
+const MAINTAINERS = new Set(['arn0ld87'])
 const SCAN_DIRS = ['src', 'tests']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage'])
 const SCAN_EXT = /\.(?:[cm]?[jt]s|vue)$/
@@ -316,8 +318,10 @@ function checkRatchet(current, base, notes) {
   const errors = []
   const approval = current.lowering_approval ?? {}
   const approved =
+    approval !== null &&
     typeof approval === 'object' &&
-    ['approved_by', 'reason'].every((field) => String(approval[field] ?? '').trim())
+    MAINTAINERS.has(String(approval.approved_by ?? '').trim()) &&
+    String(approval.reason ?? '').trim() !== ''
   for (const key of ['line_min', 'branch_min']) {
     const value = Number(current[key])
     const floor = Number(base[key])
@@ -328,7 +332,7 @@ function checkRatchet(current, base, notes) {
       continue
     }
     errors.push(
-      `${BASELINE_FILE}: ${key} ${value.toFixed(2)} < ${floor.toFixed(2)} (${BASE_REF}) ohne passende lowering_approval (approved_by, reason, ${key} >= ${value.toFixed(2)})`,
+      `${BASELINE_FILE}: ${key} ${value.toFixed(2)} < ${floor.toFixed(2)} (${BASE_REF}) ohne passende lowering_approval (approved_by in [${[...MAINTAINERS].join(', ')}], reason, ${key} >= ${value.toFixed(2)})`,
     )
   }
   const baseScope = base.scope ?? { include: [], exclude: [] }
