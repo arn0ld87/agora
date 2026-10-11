@@ -256,6 +256,59 @@ describe('Skip-Marker', () => {
     expect(result.errors.join('\n')).toContain(kind)
   })
 
+  test.each([
+    ['it.concurrent.skip', "it.concurrent.skip('x', () => {})\n"],
+    ['describe.concurrent.skip', "describe.concurrent.skip('x', () => {})\n"],
+    ['describe.sequential.todo', "describe.sequential.todo('x')\n"],
+    ['ctx.skip', "it('x', (ctx) => {\n  ctx.skip()\n})\n"],
+    ['context.skip', "it('x', (context) => {\n  context.skip()\n})\n"],
+  ])('%s wird erkannt', (kind, line) => {
+    setup({ files: { 'src/c.test.js': line } })
+    const text = checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')
+    expect(text).toContain('src/c.test.js')
+    expect(text).toContain(kind)
+  })
+
+  test('Skip in .tsx und .jsx wird erkannt', () => {
+    setup({ files: { 'src/c.test.tsx': "it.skip('x', () => {})\n", 'src/d.test.jsx': "test.todo('y')\n" } })
+    const text = checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')
+    expect(text).toContain('src/c.test.tsx')
+    expect(text).toContain('src/d.test.jsx')
+  })
+
+  test('Skip im script-Block einer .vue-Datei wird erkannt, Template-Text nicht', () => {
+    setup({
+      files: {
+        'src/A.vue': "<template><p>it.skip und don't</p></template>\n<script>\nit.skip('x', () => {})\n</script>\n",
+        'src/B.vue': "<template><p>describe.skip</p></template>\n",
+      },
+    })
+    const text = checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')
+    expect(text).toContain('src/A.vue')
+    expect(text).not.toContain('src/B.vue')
+  })
+
+  test('Marker in Kommentaren und String-Literalen sind kein Skip', () => {
+    setup({
+      files: {
+        'src/c.test.js': [
+          '// frueher it.skip(...)',
+          '/* test.todo und describe.skip */',
+          "const name = 'it.skip und xit('",
+          'const tpl = `ctx.skip()`',
+          "it('laeuft', () => {})",
+          '',
+        ].join('\n'),
+      },
+    })
+    expect(checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors).toEqual([])
+  })
+
+  test('ein Apostroph in einem Kommentar blendet spaetere Skips nicht aus', () => {
+    setup({ files: { 'src/c.test.js': "// don't hide\nit.skip('x', () => {})\n" } })
+    expect(checkIntegrity({ root, readBase: noBase, allowMissingBase: true }).errors.join('\n')).toContain('it.skip')
+  })
+
   test.each(['skipIf', 'runIf'])('%s wird erkannt', (kind) => {
     const files = { 'src/c.test.js': `it.${kind}(true)('x', () => {})\n` }
     setup({ files })

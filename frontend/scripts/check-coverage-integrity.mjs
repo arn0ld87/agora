@@ -27,13 +27,16 @@ const CONFIG_FILE = 'vite.config.js'
 const MAINTAINERS = new Set(['arn0ld87'])
 const SCAN_DIRS = ['src', 'tests']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage'])
-const SCAN_EXT = /\.(?:[cm]?[jt]s|vue)$/
+const SCAN_EXT = /\.(?:[cm]?[jt]sx?|vue)$/
 
 // Reihenfolge zaehlt: spezifische Muster zuerst, jede Fundstelle nur einmal.
 const SKIP_PATTERNS = [
-  /\b(?:it|test|describe)\.(?:skip|todo)\b/g,
+  // Kettenmodifizierer (it.concurrent.skip, describe.sequential.todo) zaehlen mit.
+  /\b(?:it|test|describe)(?:\.\w+)*?\.(?:skip|todo)\b/g,
   /\bx(?:it|test|describe)(?=\s*\()/g,
   /(?<=\.)(?:skipIf|runIf)\b/g,
+  // Laufzeit-Skip ueber den Test-Kontext.
+  /\b(?:ctx|context)\.skip(?=\s*\()/g,
 ]
 
 function readJson(path) {
@@ -262,12 +265,23 @@ function* walk(dir) {
   }
 }
 
+/**
+ * Text, in dem nach Skip-Markern gesucht wird: Kommentare und String-Inhalte sind
+ * maskiert (ein Marker darin ist kein Skip), bei .vue zaehlen nur die script-Bloecke.
+ */
+function scannableText(file, text) {
+  const code = file.endsWith('.vue')
+    ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n')
+    : text
+  return maskSource(code)
+}
+
 function countSkips(root) {
   const counts = new Map() // "datei\u0000art" -> Anzahl
   for (const dir of SCAN_DIRS) {
     for (const file of walk(join(root, dir))) {
       const rel = relative(root, file).split(sep).join('/')
-      const text = readFileSync(file, 'utf-8')
+      const text = scannableText(file, readFileSync(file, 'utf-8'))
       const taken = []
       for (const pattern of SKIP_PATTERNS) {
         for (const match of text.matchAll(pattern)) {
