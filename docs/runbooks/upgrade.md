@@ -1,7 +1,7 @@
 # Runbook: Upgrade zwischen Release-Linien
 
 Zugehöriges Issue: [#1673](https://github.com/arn0ld87/agora/issues/1673) (Release-Gate vor `0.10.0-rc.1`, siehe [`../../ROADMAP.md`](../../ROADMAP.md)).
-**Stand:** 13.10.2026, Produktversion `0.9.7` ([`VERSION`](../../VERSION)). `0.10.0-rc.1` ist noch nicht geschnitten.
+**Stand:** 13.10.2026, Produktversion `0.9.8` ([`VERSION`](../../VERSION)). `0.10.0-rc.1` ist noch nicht geschnitten.
 
 ## Warum dieses Runbook existiert
 
@@ -9,6 +9,7 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 | Sprung | Stand | Abschnitt |
 |---|---|---|
+| `0.9.7` → `0.9.8` | beschrieben | [unten](#097--098) |
 | `0.9.6` → `0.9.7` | beschrieben | [unten](#096--097) |
 | `0.9.x` → `0.10` | beschrieben | [unten](#09x--010) |
 | `0.10` → `1.0` | Platzhalter, wird im Freeze gefüllt | [unten](#010--10) |
@@ -137,12 +138,18 @@ Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0
 
 ---
 
+## 0.9.7 → 0.9.8
+
+Kein Pflichtschritt: keine Migrationen, keine neuen Env-Variablen, keine Compose-Änderungen am Laufzeitstack. Image `v0.9.8` einspielen und neu starten. Zu `v0.9.7` gibt es keine GHCR-Images. Wer von `0.9.6` kommt, springt deshalb direkt auf `v0.9.8` und folgt dem Abschnitt `0.9.6 → 0.9.7` unten. **Rollback:** Image `v0.9.6` (siehe dort), da `v0.9.7` kein Image hat.
+
+---
+
 ## 0.9.6 → 0.9.7
 
 `0.9.7` ist ein Zwischenrelease ohne eigenen Migrationspfad. Alle betriebsrelevanten Änderungen seit `v0.9.6` stehen oben unter „Persistenz-Änderungen außerhalb des Versionssprungs“ und „Env-Default-Änderungen außerhalb des Versionssprungs“. Dieser Abschnitt nennt nur die Reihenfolge.
 
 1. **Backup** wie in Schritt 1 von `0.9.x → 0.10` unten.
-2. **Ziel-Stand einspielen** (Image `v0.9.7` bzw. Commit des Tags). Bei reinem Dateibetrieb, also wenn alle `AGORA_*_BACKEND` auf ihrem Legacy-Default stehen, ist **kein weiterer Pflichtschritt** nötig.
+2. **Ziel-Stand einspielen** (Image `v0.9.8`, denn zu `v0.9.7` gibt es keine Images, oder Commit des Tags). Bei reinem Dateibetrieb, also wenn alle `AGORA_*_BACKEND` auf ihrem Legacy-Default stehen, ist **kein weiterer Pflichtschritt** nötig.
 3. **Nur wenn ein `AGORA_*_BACKEND` auf `postgres` steht:** vor dem Start `cd backend && uv run alembic -c migrations/alembic.ini upgrade head`. Seit `v0.9.6` kamen acht Revisionen hinzu, der einzige Head ist `3b7f9d21a8c4` (`persona_sets`). Das Head-Startup-Gate (#1582) verweigert den Start bei abweichendem Schema.
 4. **Linux-Hosts mit bestehendem Klon:** den HuggingFace-Cache wie oben unter „HuggingFace-Cache-Verzeichnis im Repository“ beschrieben räumen oder umschreiben, sonst scheitert der `git pull` bzw. der Simulationsstart.
 5. **Verhaltenswechsel ohne Zutun prüfen:** mehrere Simulations-Defaults ändern sich (`AGORA_SIM_MAX_CONCURRENCY`, `AGORA_SIM_INPUT_TOKENS_PER_MINUTE`, Agentengedächtnis, Feed-Kommentare, Aktivitätsmodell, Standardbudgets). Die Rückweg-Werte stehen jeweils oben. Läufe vor und nach dem Upgrade sind deshalb nicht direkt vergleichbar.

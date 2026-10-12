@@ -1,3 +1,0 @@
-### Fixed
-
-- **Prod-Proxy-Smoke beim Tag scheiterte an `backend/data` (Tag `v0.9.7`, 13.10.2026).** Der Smoke-Job in `docker-image.yml` gab vor `compose up` nur `backend/uploads` per ACL für den Container-User (uid 1000) frei. `backend/data` und `backend/instance` gehören auf dem Runner uid 1001 und sind ebenfalls per Bind-Mount eingehängt. `verify-deploy.sh` meldete deshalb „backend/data im Container schreibbar“ als FAIL, und Publish und Release-Assets für `v0.9.7` wurden übersprungen. Jetzt erhalten alle drei Verzeichnisse die ACL. Ein Vertragstest (`test_docker_smoke_bind_mount_acl.py`) prüft, dass jeder schreibende `./backend/*`-Bind-Mount aus `docker-compose.yml` im Smoke vorbereitet wird. Den Fehler gibt es nur in der CI: Das Image selbst ist nicht betroffen.

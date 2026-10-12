@@ -4,7 +4,7 @@
 
 **Geprüfte Main-Baseline:** `d8ed737068aa7c11cca16ee8f7caa8ae5511fe4b` (GitHub-Issue-/CI-Abgleich vom 13.10.2026; keine neue lokale Vollsuite)
 
-**Produktversion:** `0.9.7` (Release-Schnitt, Stability Beta)
+**Produktversion:** `0.9.8` (Release-Schnitt, Stability Beta)
 
 Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete und Akzeptanzkriterien in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`changelog.d/`](../changelog.d/README.md). Historische Audits, Pläne und Referenzläufe behalten ihren damaligen Stand und sind keine aktuelle Steuerungsquelle.
 
@@ -13,6 +13,8 @@ Diese Datei ist die **Single Source of Truth für den verifizierten Istzustand**
 Agora besitzt eine vollständige Single-User-Pipeline von Dokumentaufnahme und Knowledge Graph über Persona-Erzeugung und OASIS/CAMEL-Simulation bis zu evidenzorientiertem Report, Vergleich und Export. Die Stabilisierung der 0.9.x-Linie hat insbesondere Contracts, Run-Lifecycle, Crash-/Restart-Verhalten, Budgetdurchsetzung, Installationspfade und Evidence-Persistenz deutlich gehärtet.
 
 Die `0.9.x`-Linie ist weiterhin **keine 1.0-Freigabe**. Recovery/Resume für Prepare, Report und Graph-Build, Neo4j-Backup, Embedding-Runtime-SSoT, Manifest-/Replay-Fixes, Alias-/Entitätsklassen, Role-Leakage-Markierung sowie Integration-CI und CodeQL-Triage sind abgeschlossen. Die Test-Isolation vom echten Datenbestand ist mit #1632 umgesetzt. Dateiartefakt-Versionierung (#1663), Kompatibilitätsregeln (#1664), Release-Checksummen (#1661) Backend-Ratchet (#1671) und Frontend-Coverage-Ratchet (#1672) sind gelandet. Offen bleibt das Release-Gate #1670: Der Supabase-Image-Job ist seit dem Merge von #1817 auf `main` rot (siehe Eintrag vom 11.10.2026). Die Auswertbarkeit ist mit #1860/#1863 hergestellt und 399 High-Befunde sind mit #1866 befristet als Ausnahme eingetragen; auf `main@d8ed7370` ist der Job weiterhin rot, ein grüner Lauf und die Baseline-Entscheidung des Maintainers stehen aus. Weiter offen sind Eval-Seed-Gegenlauf und Ops-/Produktnachweise. Der Frontend-Umbau (#1790) hat mit Personasätzen (#1811) und Graphen bearbeiten (#1812) alle acht Etappen auf `main` gelandet; offen ist der operative Rest des Epics (Docker-e2e, Verifikation gegen eine echte Neo4j, Bauplan-Punkt 11f). Der Python-Dependency-Audit ist seit #1748 (pypdf 6.19.0) bereinigt; die danach sichtbar gewordenen Befunde im Frontend-Audit und im Proxy-Image hat #1751 behoben. Abgleich vom 10.10.2026: auf `main@328d2b8d` ist `ci.yml` einschließlich „Security scans“ grün ([CI-Run 38042850060](https://github.com/arn0ld87/agora/actions/runs/38042850060)); die Tabelle unten bleibt der Nachweis für den Commit vom 02.10.2026. Out-of-Process-Worker und Simulation-Resume bleiben spätere Arbeit.
+
+**`0.9.8`-Schnitt (13.10.2026):** Korrektur-Patch auf `0.9.7` mit dem CI-Fix für den Prod-Proxy-Smoke (#1873), damit die GHCR-Images und Release-Artefakte erstmals für einen Tag erzeugt werden, und dem 409-Fix für den Bericht-Reiter (#1872). Ob der Tag-Lauf diesmal durchkommt, prüft erst der Tag selbst. Keine Migrationen, keine neuen Env-Variablen.
 
 **`0.9.7`-Schnitt (13.10.2026, 229 Commits/215 Changelog-Fragmente seit `v0.9.6`):** ein weiteres Zwischenrelease, ausdrücklich **kein** `0.10.0` und kein Release Candidate. Es bündelt die Repository-Ports und acht Alembic-Revisionen für PostgreSQL-Metadaten (Code-Defaults weiterhin Legacy), die acht Etappen des Frontend-Umbaus (#1790), Simulations-, Persona- und Berichtshärtungen sowie die Release-Ratchets (#1661/#1663/#1664/#1671/#1672). CI-Abgleich auf `main@d8ed7370` vom 13.10.2026: Backend-, Frontend-, Integrations-, Contract-, Schema-, Version-Drift-, Security- und Playwright-Smoke-Jobs grün; rot ist allein „Supabase image CVEs + exception gate“ (#1670). Die Gates des Tags selbst prüft der Release-PR. Details: [`CHANGELOG.md`](../CHANGELOG.md), [Release Notes](2026-10-13-v0.9.7-release-notes.md).
 
@@ -25,9 +27,9 @@ Die `0.9.x`-Linie ist weiterhin **keine 1.0-Freigabe**. Recovery/Resume für Pre
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.7 |
-| Frontend | `frontend/package.json` | 0.9.7 |
-| Root | `package.json` | 0.9.7 |
+| Backend | `backend/pyproject.toml` | 0.9.8 |
+| Frontend | `frontend/package.json` | 0.9.8 |
+| Root | `package.json` | 0.9.8 |
 <!-- END_AUTOGEN_VERSIONS -->
 
 Die README-Badges müssen denselben Wert tragen. Der Versions-Cut ist in [`runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
@@ -39,7 +41,7 @@ Die Testzähler in diesem Markerblock werden **nur durch `scripts/sync-status.sh
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 11239 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 11245 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 331 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -48,7 +50,7 @@ Die Testzähler in diesem Markerblock werden **nur durch `scripts/sync-status.sh
 Zusätzliche aktuelle Nachweise:
 
 - **13.10.2026, Bericht-Reiter nach 409:** Ein zweiter Start bei laufender Erzeugung (409 `report_generate_in_progress`) ließ den Bericht-Reiter bei „Noch keine Fassung“ stehen (gns3, `sim_6430ab3849f1` / `report_238ba4371858`). Behoben in drei Teilen: `ReportStatusService.get_status` übernimmt bei reiner `simulation_id` die `report_id` des aktiven `report_generate`-Runs aus der Run-Registry; `useReportGeneration.launch` hängt sich bei 409 über diese Statusabfrage an den laufenden Bericht; `generate_report` persistiert `generating` sofort statt erst nach dem ersten Abschnitt. Regressionstests: `test_report_status_resolution_paths.py`, `test_report_generating_status_persisted.py`, `useReportGeneration.spec.ts`. Der Live-UAT auf gns3 steht aus.
-- **13.10.2026, Tag `v0.9.7`:** Der Tag-Lauf von `docker-image.yml` ([Run 38320813298](https://github.com/arn0ld87/agora/actions/runs/38320813298)) scheiterte im Prod-Proxy-Smoke an „backend/data im Container schreibbar“. Ursache war die CI: Der Smoke gab nur `backend/uploads` per ACL für uid 1000 frei. Die Korrektur ist dieser PR. Für `v0.9.7` gibt es deshalb noch keine GHCR-Images und keine Release-Assets (`SHA256SUMS`, Digests, SBOMs). Das GitHub-Release selbst ist veröffentlicht.
+- **13.10.2026, Tag `v0.9.7`:** Der Tag-Lauf von `docker-image.yml` ([Run 38320813298](https://github.com/arn0ld87/agora/actions/runs/38320813298)) scheiterte im Prod-Proxy-Smoke an „backend/data im Container schreibbar“. Ursache war die CI: Der Smoke gab nur `backend/uploads` per ACL für uid 1000 frei. Korrigiert mit #1873, nachgeholt mit `v0.9.8`. Für `v0.9.7` gibt es noch keine GHCR-Images und keine Release-Assets (`SHA256SUMS`, Digests, SBOMs). Das GitHub-Release selbst ist veröffentlicht.
 
 - **10.10.2026, UAT-010:** Der Bericht-Reiter stellte zwei erwartbare 404-Antworten als Ladefehler dar. (a) `GET /api/report/<id>` direkt nach dem Start: der Datensatz entsteht erst im Worker nach `_compute_stance_analysis`, bis dahin 404, der Reiter zeigte „Der Bericht wurde nicht gefunden“. (b) `GET /api/report/<id>/evidence` bei einer Fassung ohne `evidence_map.json` (frühe `INCOMPLETE`-Ausgänge ohne erzeugten Abschnitt, Altberichte): roter Ladefehler mit Backendtext. Frontend-only-Fix in `useRunReport.ts` und `ReportSidePane.vue`: 404 des Berichts bei bekannter Erzeugung (`generationFor` oder Statusprobe über `run_id` + `pending`/`processing` der Run-Registry) ist `idle` mit Fortschrittsanzeige; 404 der Belege einer geladenen Fassung ist der neue Zustand `unsaved` („Für diese Fassung sind keine Belege gespeichert.“). Unbekannte Berichts-ID, gescheiterter oder fremder Job, `evidence_omitted`, `artifact_omitted`, 5xx und Vertragsbruch bleiben sichtbar. Regressionstests: `useRunReport.spec.ts`, `ReportPanes.spec.ts`, `ReportEvidencePanel.spec.ts`. Offen: die HTTP-404 und der `console.error` des API-Clients bleiben in Netzwerk und Konsole; der Wiedereinstieg ohne Berichts-ID im Anlagefenster bietet noch „Bericht starten“ an; das späte Speichern des Datensatzes liegt im Backend (`workflow.py`, #1832).
 

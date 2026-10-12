@@ -5,6 +5,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-10-13
+
+Korrektur-Patch auf `0.9.7`, ausdrücklich **kein** `0.10.0` und kein RC. Der Tag-Lauf von `docker-image.yml` für `v0.9.7` ist im Prod-Proxy-Smoke an einem reinen CI-Fehler gescheitert. Zum Tag `v0.9.7` gibt es deshalb keine GHCR-Images und keine Release-Artefakte (`SHA256SUMS`, Digests, SBOMs). Das Image selbst war nicht betroffen. `0.9.8` liefert sie mit dem korrigierten Smoke nach (#1873). Außerdem folgt der Bericht-Reiter jetzt nach einem zweiten Start (409) dem laufenden Bericht (#1872). Neue Funktionen, Migrationen oder Env-Variablen gibt es nicht.
+
+### Fixed
+
+- **Prod-Proxy-Smoke beim Tag scheiterte an `backend/data` (Tag `v0.9.7`, 13.10.2026).** Der Smoke-Job in `docker-image.yml` gab vor `compose up` nur `backend/uploads` per ACL für den Container-User (uid 1000) frei. `backend/data` und `backend/instance` gehören auf dem Runner uid 1001 und sind ebenfalls per Bind-Mount eingehängt. `verify-deploy.sh` meldete deshalb „backend/data im Container schreibbar“ als FAIL, und Publish und Release-Assets für `v0.9.7` wurden übersprungen. Jetzt erhalten alle drei Verzeichnisse die ACL. Ein Vertragstest (`test_docker_smoke_bind_mount_acl.py`) prüft, dass jeder schreibende `./backend/*`-Bind-Mount aus `docker-compose.yml` im Smoke vorbereitet wird. Den Fehler gibt es nur in der CI: Das Image selbst ist nicht betroffen.
+
+### Fixed
+
+- **Bericht-Reiter blieb nach einem zweiten Start bei „Noch keine Fassung“, obwohl der Bericht lief (gns3, 11.10.2026).** Ein Start-Klick bei laufender Erzeugung endet im Backend mit 409 `report_generate_in_progress`. Das Frontend zeigte nur die Fehlermeldung und lud die Fassungsliste nicht neu. Jetzt fragt `useReportGeneration` den Status mit der Simulations-ID ab und folgt dem laufenden Bericht wie nach einem eigenen Start. Dafür ermittelt `ReportStatusService.get_status` bei reiner `simulation_id` den aktiven `report_generate`-Run in der Run-Registry. Bisher kam dort „Task handle unknown“ mit `progress=0` und ohne `report_id` zurück. Außerdem speichert der Report-Workflow den Wechsel nach `generating` sofort. Vorher stand `meta.json` bis zum ersten fertigen Abschnitt auf `planning`.
+
+
 ## [0.9.7] - 2026-10-13
 
 Ein weiteres Zwischenrelease auf dem Weg zu `0.10.0`: 229 Commits seit `v0.9.6` (20.09.2026), 215 eingesammelte Changelog-Fragmente. Wie `0.9.6` ist es ausdrücklich **kein `0.10.0`** und kein Release Candidate. Es beansprucht keines der 0.10-Gates, und der nächste geplante Schnitt bleibt `0.10.0-rc.1`.
