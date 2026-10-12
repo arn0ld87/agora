@@ -2374,6 +2374,11 @@ def generate_report(
             return report
 
         report.status = ReportStatus.GENERATING
+        # Den Wechsel sofort persistieren: sonst stand ``meta.json`` bis zum
+        # ersten fertigen Abschnitt auf ``planning``, und Fassungsliste und
+        # Bericht-Reiter zeigten waehrend der Abschnittserzeugung die falsche
+        # Phase (beobachtet an report_238ba4371858).
+        ReportManager.save_report(report)
         # #1738: der Kurzschluss nach einem nicht-transienten Provider-400
         # gilt pro Generierungslauf, nicht über einen Resume hinweg.
         events_for(agent).persistent_provider_error = None

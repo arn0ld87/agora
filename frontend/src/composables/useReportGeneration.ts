@@ -95,6 +95,23 @@ interface ApiResult {
     simulation_id?: string
   }
   error?: string
+  /** Fehlercode des Envelopes, z. B. `report_generate_in_progress`. */
+  code?: string
+}
+
+/** Backend-Code fuer „fuer diese Simulation laeuft bereits ein Report“ (HTTP 409). */
+export const REPORT_GENERATE_IN_PROGRESS_CODE = 'report_generate_in_progress'
+
+/**
+ * Erkennt die 409-Antwort eines zweiten Starts. Der API-Client wirft sie als
+ * `ApiError` (`code`); ein Fake in Tests kann sie auch als Envelope liefern.
+ */
+function isGenerateInProgress(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { code?: unknown }).code === REPORT_GENERATE_IN_PROGRESS_CODE
+  )
 }
 
 interface StatusApiResult {
@@ -387,6 +404,40 @@ export function useReportGeneration(
   }
 
   /**
+   * Haengt die Ansicht an den bereits laufenden Report dieser Simulation.
+   *
+   * Ein zweiter Start endet im Backend mit 409 `report_generate_in_progress`
+   * (eine Generierung je Simulation). Bisher landete das nur als Fehlertext im
+   * Hinweis, `onStarted` lief nie — der Bericht-Reiter blieb bei „Noch keine
+   * Fassung“, obwohl der Bericht lief (gns3, report_238ba4371858). Jetzt
+   * liefert die Statusabfrage mit reiner Simulations-ID die `report_id` des
+   * laufenden Laufs, und die Ansicht folgt ihm wie nach einem eigenen Start.
+   *
+   * Gibt `false` zurueck, wenn sich kein laufender Report ermitteln laesst;
+   * dann bleibt es beim bisherigen Fehlerpfad.
+   */
+  async function attachToRunningReport(simId: string): Promise<boolean> {
+    try {
+      const res = (await api.getReportStatus({ simulationId: simId })) as StatusApiResult
+      const runningId = res?.success ? res.data?.report_id : undefined
+      const runningStatus = res?.data?.status ?? ''
+      if (!runningId || ['completed', 'incomplete', 'failed'].includes(runningStatus)) {
+        return false
+      }
+      resetProgress()
+      options.onLifecycleChange('processing')
+      options.onStarted(runningId)
+      options.addLog(
+        options.t('step4.status.alreadyRunning') || 'Für diesen Lauf entsteht bereits ein Bericht. Die Anzeige folgt jetzt diesem Bericht.'
+      )
+      startPolling()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
    * Gemeinsamer Rumpf von `start()` und `regenerate()`. Einziger Unterschied
    * ist `force_regenerate` und die Frage, ob ein Fehlschlag den Nutzer wieder
    * in die Startbestaetigung zurueckwirft — beim Erststart ja, beim
@@ -422,11 +473,14 @@ export function useReportGeneration(
         options.onLifecycleChange('processing')
         options.onStarted(res.data.report_id as string)
         startPolling()
+      } else if (isGenerateInProgress(res) && (await attachToRunningReport(simId))) {
+        return
       } else {
         options.addLog(`Fehler: ${res?.error || 'unbekannt'}`)
         if (opts.restorePendingOnFailure) pending.value = true
       }
     } catch (err) {
+      if (isGenerateInProgress(err) && (await attachToRunningReport(simId))) return
       options.addLog((err as Error).message)
       if (opts.restorePendingOnFailure) pending.value = true
     } finally {
