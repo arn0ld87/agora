@@ -46,6 +46,8 @@ def _layer(
     tasks: Optional[list] = None,
     task: Optional[MagicMock] = None,
     tasks_raise: Optional[Exception] = None,
+    active_runs: Optional[list] = None,
+    active_runs_raise: Optional[Exception] = None,
 ) -> Iterator[MagicMock]:
     """Legt die gesamte Umgebung von ``get_status`` still.
 
@@ -58,8 +60,14 @@ def _layer(
     else:
         task_manager.list_tasks.return_value = tasks or []
 
+    list_runs = MagicMock(return_value=active_runs or [])
+    if active_runs_raise is not None:
+        list_runs.side_effect = active_runs_raise
+
     with patch.object(
         report_status_module.run_registry, "get_latest_by_linked_id", return_value=run
+    ), patch.object(
+        report_status_module.run_registry, "list_runs", list_runs
     ), patch.object(
         report_status_module.ReportManager, "get_progress", return_value=progress or {}
     ), patch.object(
@@ -337,3 +345,55 @@ class TestFallbackAndValidation:
         with _layer():
             with pytest.raises(ValueError):
                 ReportStatusService.get_status()
+
+
+class TestActiveRunForSimulation:
+    """Stufe −1 — nur ``simulation_id`` bekannt, ein Report läuft bereits.
+
+    Regression gns3 (sim_6430ab3849f1 / report_238ba4371858): nach einem 409
+    ``report_generate_in_progress`` fragte der Bericht-Reiter mit reiner
+    Simulations-ID und bekam „Task handle unknown“, ``progress=0`` und keine
+    ``report_id`` zurück.
+    """
+
+    _ACTIVE = [{"run_id": "run_7", "linked_ids": {"simulation_id": "sim_1", "report_id": "rep_live"}}]
+
+    def test_simulation_only_query_adopts_running_report(self):
+        run = {
+            "run_id": "run_7",
+            "status": "processing",
+            "progress": 65,
+            "message": "Section 10",
+            "linked_ids": {"simulation_id": "sim_1", "report_id": "rep_live"},
+        }
+        with _layer(run=run, report=_report(ReportStatus.GENERATING), active_runs=self._ACTIVE):
+            result = ReportStatusService.get_status(simulation_id="sim_1")
+
+        assert result["report_id"] == "rep_live"
+        assert result["status"] == "processing"
+        assert result["progress"] == 65
+        assert result.get("message_key") == "report.generating"
+
+    def test_known_report_id_is_not_replaced_by_active_run(self):
+        """Eine explizit erfragte ``report_id`` bleibt die Frage."""
+        with _layer(
+            report=_report(ReportStatus.COMPLETED, simulation_id="sim_1"),
+            active_runs=self._ACTIVE,
+        ):
+            result = ReportStatusService.get_status(simulation_id="sim_1", report_id="rep_old")
+
+        assert result["report_id"] == "rep_old"
+        assert result["status"] == "completed"
+
+    def test_without_active_run_chain_is_unchanged(self):
+        with _layer(active_runs=[]):
+            result = ReportStatusService.get_status(simulation_id="sim_1")
+
+        assert result["message_key"] == "report.awaiting_task"
+        assert "report_id" not in result
+
+    def test_registry_failure_falls_back_to_acknowledge(self):
+        with _layer(active_runs_raise=RuntimeError("store down")):
+            result = ReportStatusService.get_status(simulation_id="sim_1")
+
+        assert result["message_key"] == "report.awaiting_task"
