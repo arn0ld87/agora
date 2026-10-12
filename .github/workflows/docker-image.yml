@@ -437,12 +437,16 @@ jobs:
       - name: Bind-Mount-Verzeichnisse fuer Container-UID vorbereiten
         # GitHub-Runner-Workspace gehoert uid 1001, der Prod-Container laeuft als
         # uid 1000 (`USER agora`). Bei Bind-Mounts bleiben die Host-Rechte
-        # erhalten, daher braucht der Smoke-Test hier eine explizit beschreibbare
-        # uploads-Registry auf dem Runner.
+        # erhalten, daher braucht der Smoke-Test hier explizit beschreibbare
+        # Verzeichnisse fuer jeden schreibenden Bind-Mount aus docker-compose.yml:
+        # uploads (Run-Registry), instance (UI-Einstellungen) und data
+        # (Provider-Secrets, #450 P1.3). Ohne data scheiterte verify-deploy.sh
+        # beim Tag v0.9.7 an „backend/data im Container schreibbar“ und
+        # blockierte Publish und Release-Assets.
         run: |
-          mkdir -p backend/uploads/run_registry
+          mkdir -p backend/uploads/run_registry backend/instance backend/data
           command -v setfacl >/dev/null 2>&1 || { echo "::error::setfacl fehlt auf dem Runner"; exit 1; }
-          setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
+          setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry backend/instance backend/data
 
       - name: Compose-Stack starten
         # --no-build: Beide Images kommen aus build-only (docker load oben).
