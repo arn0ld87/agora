@@ -1,10 +1,10 @@
 # Agora Roadmap
 
-**Stand:** 10.10.2026
+**Stand:** 13.10.2026
 
-**Geprüfte Main-Baseline:** `328d2b8d` (GitHub-Issue-/CI-Abgleich vom 10.10.2026; keine neue lokale Vollsuite)
+**Geprüfte Main-Baseline:** `d8ed7370` (GitHub-Issue-/CI-Abgleich vom 13.10.2026; keine neue lokale Vollsuite)
 
-**Aktuelle Produktversion:** `0.9.6` (getaggt, Stability Beta) — nächster Schnitt `0.10.0-rc.1`
+**Aktuelle Produktversion:** `0.9.7` (Release-Schnitt, Stability Beta) — nächster Schnitt `0.10.0-rc.1`
 **Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
 
 Diese Datei beschreibt ausschließlich die **strategische Release-Reihenfolge**. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt. Ein erledigter Commit gehört nicht als Mini-Changelog hier hinein; dafür existiert `changelog.d/`. Offenbar braucht selbst Dokumentation eine Gewaltenteilung.
@@ -65,6 +65,24 @@ Die verbleibenden Punkte werden nicht durch weitere 0.9-Featureflächen verdeckt
 
 ---
 
+## 0.9.7 — Zwischenrelease
+
+`0.9.7` folgt am 13.10.2026 auf `0.9.6` und umfasst 229 Commits sowie 215 Changelog-Fragmente seit `v0.9.6`. Es ist wie `0.9.6` ausdrücklich **kein** `0.10.0` und kein Release Candidate. Der Feature-Freeze beginnt erst mit `0.10.0-rc.1`.
+
+### Was `0.9.7` enthält
+
+- **PostgreSQL-Metadaten über alle Domänen**: Repository-Ports mit Datei- und Postgres-Adapter für Simulationen, Runs, Berichte und Workspaces (#1578–#1588, #1612), acht neue Alembic-Revisionen bis Head `3b7f9d21a8c4`, Head-Startup-Gate (#1582) und Rollback-Gate (#1589). Auf armserver sind die fünf Metadaten-Domänen seit dem 25.09.2026 produktiv umgeschaltet ([#1592](https://github.com/arn0ld87/agora/issues/1592)); die Code-Defaults bleiben beim Dateipfad.
+- **Frontend-Umbau** ([#1790](https://github.com/arn0ld87/agora/issues/1790)): alle acht Etappen auf `main`, mit einer Hülle mit Seitenleiste, Bibliotheken für Läufe, Graphen und Personasätze sowie einem Lauf-Arbeitsbereich.
+- **Simulation und Personas**: belegtes Aktivitätsmodell, Kommentar-Aktionsräume, begrenzter Agenten-Speicher (#1772), Persona-Auswahl entlang der Streitfrage, Schutz von Quellenidentität und Rolle (#1833), Role-Leakage-Audit (#1323).
+- **Bericht und Evidence**: Claim-Typen (#1400), aggregierte Belege für Quantoren (#1345), Belegdichte, Positionierungsquote (#1778), Ausfallquote der Simulationsaufrufe als Degradation.
+- **Release-Disziplin**: `schema_version` für Dateiverträge (#1663), Kompatibilitäts-Policy (#1664), Release-Checksummen (#1661), Coverage-Ratchets (#1671/#1672), Test-Isolation (#1632), GHCR-Images (#1708).
+
+### Was `0.9.7` nicht behauptet
+
+`0.9.7` erfüllt die 0.10-/1.0-Gates nicht. Offen sind insbesondere das Supabase-Image-Gate ([#1670](https://github.com/arn0ld87/agora/issues/1670), auf dem Release-Stand rot), die Ops-Nachweise ([#766](https://github.com/arn0ld87/agora/issues/766)), der formale Cutover-Abschluss ([#1592](https://github.com/arn0ld87/agora/issues/1592)), der Eval-Gegenlauf ([#1240](https://github.com/arn0ld87/agora/issues/1240)) und der Baseline-Vergleich ([#1662](https://github.com/arn0ld87/agora/issues/1662)).
+
+---
+
 ## 0.9.6 — Zwischenrelease
 
 `0.9.6` liegt zwischen `0.9.5` (11.08.2026) und `0.10.0` und enthält mehr als 330 Commits sowie 184 Changelog-Fragmente seit `v0.9.5`. Es ist ausdrücklich **kein** `0.10.0` und erfüllt dessen Release-Gates (siehe unten) nicht — Feature-Freeze beginnt erst mit dem ersten `0.10.0`-RC.
@@ -91,7 +109,7 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 
 ## Release-Sequenz
 
-`v0.9.6` ist getaggt. Der beschlossene Weg ([#1651](https://github.com/arn0ld87/agora/issues/1651), [#1658](https://github.com/arn0ld87/agora/issues/1658)) lautet:
+`v0.9.6` ist getaggt, `0.9.7` folgt als weiteres Zwischenrelease. Der beschlossene Weg ([#1651](https://github.com/arn0ld87/agora/issues/1651), [#1658](https://github.com/arn0ld87/agora/issues/1658)) lautet:
 
 1. `0.10.0-rc.1`: Feature-Freeze, sobald der P0-Blocker geschlossen und alle verhaltens- oder vertragsändernden Nicht-Bugs gelandet sind.
 2. Weitere `0.10.0-rc.N`: nur Fixes, Tests und Dokumentation. `0.10.0` stabil erst ohne offene P0/P1 im 0.10-Milestone; es ist die Upgrade-Quelle für 1.0.

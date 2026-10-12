@@ -1,7 +1,7 @@
 # Runbook: Upgrade zwischen Release-Linien
 
 Zugehöriges Issue: [#1673](https://github.com/arn0ld87/agora/issues/1673) (Release-Gate vor `0.10.0-rc.1`, siehe [`../../ROADMAP.md`](../../ROADMAP.md)).
-**Stand:** 30.09.2026, Produktversion `0.9.6` ([`VERSION`](../../VERSION)). `0.10.0-rc.1` ist noch nicht geschnitten.
+**Stand:** 13.10.2026, Produktversion `0.9.7` ([`VERSION`](../../VERSION)). `0.10.0-rc.1` ist noch nicht geschnitten.
 
 ## Warum dieses Runbook existiert
 
@@ -9,6 +9,7 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 | Sprung | Stand | Abschnitt |
 |---|---|---|
+| `0.9.6` → `0.9.7` | beschrieben | [unten](#096--097) |
 | `0.9.x` → `0.10` | beschrieben | [unten](#09x--010) |
 | `0.10` → `1.0` | Platzhalter, wird im Freeze gefüllt | [unten](#010--10) |
 
@@ -133,6 +134,20 @@ Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0
 **Agentengedächtnis der Simulation ([#1772](https://github.com/arn0ld87/agora/issues/1772)): `AGORA_SIM_MEMORY_PRUNE_FEEDS`, `AGORA_SIM_MEMORY_KEEP_FEEDS`, `AGORA_SIM_MEMORY_TOKEN_CAP`.** Defaults `true`, `4`, `32000`; **das ändert das Verhalten neuer Läufe ohne jede Einstellung.** Bisher wuchs das CAMEL-Gedächtnis jedes Agenten über den Lauf bis zum Modell-Kontextlimit (`LLM_CONTEXT_LIMIT`, Default 262.144), weil jeder Feed für immer im Verlauf blieb. Jetzt ersetzt Agora nach jeder Runde die Feeds älterer Aktivierungen durch einen Platzhalter (behalten werden die letzten `AGORA_SIM_MEMORY_KEEP_FEEDS`, Minimum 1) und begrenzt das Gedächtnis-Token-Limit auf `AGORA_SIM_MEMORY_TOKEN_CAP` (`0` = keine Obergrenze, Werte unter 8.192 werden auf 8.192 angehoben). Der Schalter `AGORA_SIM_MEMORY_PRUNE_FEEDS=false` plus `AGORA_SIM_MEMORY_TOKEN_CAP=0` stellt den alten Zustand her. Folgen: weniger Eingabe-Tokens und Kosten je Lauf; Agenten kennen ältere Feeds nicht mehr, nur ihre eigenen früheren Aktionen. Läufe mit unterschiedlicher Einstellung sind nicht vergleichbar. Die Variablen stehen in `SAFE_ENV_KEYS` und erreichen den Simulations-Subprozess über die Umgebung des Backends (Compose-`environment:` oder `.env`). Kein Datenbestand betroffen, kein Migrationsschritt; ein Rollback auf eine ältere Version ignoriert die Variablen.
 
 **`AGORA_SIM_FEED_MAX_COMMENTS`** (ebenfalls [#1772](https://github.com/arn0ld87/agora/issues/1772)). Default `5`, `0` = aus; **ändert das Verhalten neuer Läufe ohne Einstellung:** Im Feed jedes Agenten stehen je Post höchstens die neuesten fünf Kommentare, die Zahl der weggelassenen steht als `omitted_comments` am Post, und das Feed-JSON ist kompakt statt eingerückt. Mit `0` bleibt der Feed byte-identisch zu OASIS. Die Variable steht in `SAFE_ENV_KEYS`; kein Datenbestand betroffen, kein Migrationsschritt. Läufe mit unterschiedlichem Wert sind nicht vergleichbar (der Agent sieht andere Diskussionsstände).
+
+---
+
+## 0.9.6 → 0.9.7
+
+`0.9.7` ist ein Zwischenrelease ohne eigenen Migrationspfad. Alle betriebsrelevanten Änderungen seit `v0.9.6` stehen oben unter „Persistenz-Änderungen außerhalb des Versionssprungs“ und „Env-Default-Änderungen außerhalb des Versionssprungs“. Dieser Abschnitt nennt nur die Reihenfolge.
+
+1. **Backup** wie in Schritt 1 von `0.9.x → 0.10` unten.
+2. **Ziel-Stand einspielen** (Image `v0.9.7` bzw. Commit des Tags). Bei reinem Dateibetrieb, also wenn alle `AGORA_*_BACKEND` auf ihrem Legacy-Default stehen, ist **kein weiterer Pflichtschritt** nötig.
+3. **Nur wenn ein `AGORA_*_BACKEND` auf `postgres` steht:** vor dem Start `cd backend && uv run alembic -c migrations/alembic.ini upgrade head`. Seit `v0.9.6` kamen acht Revisionen hinzu, der einzige Head ist `3b7f9d21a8c4` (`persona_sets`). Das Head-Startup-Gate (#1582) verweigert den Start bei abweichendem Schema.
+4. **Linux-Hosts mit bestehendem Klon:** den HuggingFace-Cache wie oben unter „HuggingFace-Cache-Verzeichnis im Repository“ beschrieben räumen oder umschreiben, sonst scheitert der `git pull` bzw. der Simulationsstart.
+5. **Verhaltenswechsel ohne Zutun prüfen:** mehrere Simulations-Defaults ändern sich (`AGORA_SIM_MAX_CONCURRENCY`, `AGORA_SIM_INPUT_TOKENS_PER_MINUTE`, Agentengedächtnis, Feed-Kommentare, Aktivitätsmodell, Standardbudgets). Die Rückweg-Werte stehen jeweils oben. Läufe vor und nach dem Upgrade sind deshalb nicht direkt vergleichbar.
+
+**Rollback:** vorherigen Image-Tag `v0.9.6` setzen. Bei Dateibetrieb genügt das. Bei Postgres-Betrieb vorher mit `alembic downgrade` auf den alten Head `7a3c1e84f209` zurück, sonst bricht der alte Stand am Head-Startup-Gate ab. Revisionen und Reihenfolge stehen in [`metadata-postgres-cutover.md`](metadata-postgres-cutover.md).
 
 ---
 

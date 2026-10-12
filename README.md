@@ -12,7 +12,7 @@
 
 **Documents → Knowledge Graph → Personas → Simulation → auditable report**
 
-[![Version](https://img.shields.io/badge/version-0.9.6-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.7-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -31,6 +31,74 @@
 
 ## Demo
 
+The screenshots and clips below were recorded on 12–13 October 2026 against `main@d8ed7370`, the code base of `0.9.7`. They show a real run through the current interface. The scenario is entirely fictional: a six-month pilot of free Saturday buses in the made-up town of “Lindenhafen”. The input was a single one-page German source document ([`source-lindenhafen.md`](./media/tour/source-lindenhafen.md)). From it, Agora extracted a graph of 28 entities and 30 relations and generated 20 personas. The simulation ran 12 rounds on both platforms and produced 84 actions (46 Twitter, 38 Reddit). No personal profiles or access settings are visible. Waiting time is cut from the clips.
+
+### 1. Start a run and build the graph
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/01-new-run.jpg" alt="New-run dialog with model, language, number of rounds, agent activity mode, and optional token, cost, time, and call budgets"></td>
+    <td width="50%"><img src="./media/tour/02-knowledge-graph.jpg" alt="Graph Build view: knowledge graph of the Lindenhafen scenario with entity types, relation labels, and GraphML/SVG/PNG/PDF/HTML export"></td>
+  </tr>
+  <tr>
+    <td><sub>The new-run dialog. It sets the model, language, rounds, and agent activity, plus optional hard or soft budgets.</sub></td>
+    <td><sub>The extracted knowledge graph, with entity types, relation labels, and export formats.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="./media/tour/graph-build.mp4"><img src="./media/tour/graph-build-poster.jpg" alt="Clip: starting a run and the Graph Build stage" width="70%"></a><br>
+  <sub><a href="./media/tour/graph-build.mp4">▶ Clip: from the start dialog into the Graph Build stage (14 s)</a></sub>
+</p>
+
+### 2. Review the personas
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/03-persona-setup.jpg" alt="Persona setup: model, agent language, optional dispute question, activity mode, and agent cap"></td>
+    <td width="50%"><img src="./media/tour/04-persona-detail.jpg" alt="Persona detail for a synthetic persona with prompt hint, attributes, interests, and biography, plus edit, reject, regenerate, and approve actions"></td>
+  </tr>
+  <tr>
+    <td><sub>Persona setup. It takes an optional dispute question, an activity mode, and an agent cap.</sub></td>
+    <td><sub>Each synthetic persona can be edited, rejected, regenerated, or approved before the simulation starts.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="./media/tour/persona-detail.mp4"><img src="./media/tour/persona-detail-poster.jpg" alt="Clip: reading a persona profile" width="70%"></a><br>
+  <sub><a href="./media/tour/persona-detail.mp4">▶ Clip: persona detail (13 s)</a></sub>
+</p>
+
+### 3. Follow the simulation
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/05-simulation-feed.jpg" alt="Simulation feed: synthetic Twitter posts marked SIM, with round, persona, and text filters and a replay slider"></td>
+    <td width="50%"><img src="./media/tour/06-rounds.jpg" alt="Round overview of the simulation with posts, comments, and likes per round and platform"></td>
+  </tr>
+  <tr>
+    <td><sub>The live feed. Every post carries a visible <code>SIM</code> marker for synthetic content. A slider replays the feed round by round.</sub></td>
+    <td><sub>The round overview shows platform activity for each round.</sub></td>
+  </tr>
+</table>
+
+### 4. Settings
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/settings-pipeline.jpg" alt="Pipeline settings: ontology parameters with source and value per field"></td>
+    <td width="50%"><img src="./media/tour/settings-budgets.jpg" alt="Default budgets for tokens, cost, runtime, and model calls, with hard or soft enforcement"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./media/tour/settings-profiles.jpg" alt="Model profiles and the default model per stage"></td>
+    <td width="50%"><img src="./media/tour/settings-appearance.jpg" alt="Appearance: color scheme, density, and font size"></td>
+  </tr>
+</table>
+
+The report for this run was still being generated when these recordings were made, so it is not shown here.
+
+### End-to-end recording with report (earlier interface)
+
 <p align="center">
   <a href="./media/agora-demo.mp4">
     <img src="./media/agora-demo-poster.jpg" alt="Agora showcase run: Graph Build, simulation, live feed, and evidence-oriented report" width="100%">
@@ -39,7 +107,7 @@
 
 <p align="center">
   <strong><a href="./media/agora-demo.mp4">▶ Open the showcase demo</a></strong><br>
-  <sub>A real Agora run for the fictional “Geburtshilfe Hollerau” scenario. Browser and operating-system chrome are excluded from the published media.</sub>
+  <sub><a href="./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.md">Reference run 8</a>, recorded on 25 September 2026 for the fictional “Geburtshilfe Hollerau” scenario. It covers the full path from Graph Build to the report. The recording predates the frontend rebuild (#1790), so the interface looks different from the screenshots above.</sub>
 </p>
 
 ## What Agora does
@@ -230,15 +298,23 @@ Run `bun run build` for the frontend production build. The [pre-push gate](./doc
 
 ## Current status
 
-**Current product version:** `0.9.6` Stability Beta.
+**Current product version:** `0.9.7` Stability Beta, released on 13 October 2026. It is an interim release, like `0.9.6`, and **not** `0.10.0`. It does not claim any of the 0.10 release gates. The next planned cut is still `0.10.0-rc.1`. The changes are listed in [`CHANGELOG.md`](./CHANGELOG.md) and the [release notes](./docs/2026-10-13-v0.9.7-release-notes.md).
 
 The exact verified state, recent test evidence, known gaps, and current baseline are maintained in [`docs/STATUS.md`](./docs/STATUS.md). Release priorities and 0.10/1.0 gates are maintained in [`ROADMAP.md`](./ROADMAP.md). This README deliberately avoids embedding fast-aging test counters.
 
-Release-state check on **2 October 2026**, against `main@4cbf0eb8`: recovery for Prepare/Report/Graph jobs, embedding runtime SSoT, alias/entity handling, role-leakage marking, the Twitter recommender, quantifier gates and manifest/replay fixes are closed. Their remaining limits are documented in `docs/STATUS.md`; closing these tickets does not establish empirical product validity. As of **5 October 2026** (`main@444b2680`), the Python dependency audit ([PR #1748](https://github.com/arn0ld87/agora/pull/1748), [PR #1751](https://github.com/arn0ld87/agora/pull/1751)), file-artifact versioning ([#1663](https://github.com/arn0ld87/agora/issues/1663)), the compatibility policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)), release checksums ([#1661](https://github.com/arn0ld87/agora/issues/1661)), test isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)) and the backend coverage ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671)) are closed as well.
+Since `0.9.6`, these items have been closed:
+
+- recovery for Prepare, Report, and Graph jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
+- the embedding runtime SSoT, alias/entity handling, role-leakage marking, quantifier gates, and manifest/replay fixes,
+- file-artifact versioning ([#1663](https://github.com/arn0ld87/agora/issues/1663)) and the compatibility policy ([#1664](https://github.com/arn0ld87/agora/issues/1664)),
+- release checksums ([#1661](https://github.com/arn0ld87/agora/issues/1661)) and test isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)),
+- the backend and frontend coverage ratchets ([#1671](https://github.com/arn0ld87/agora/issues/1671), [#1672](https://github.com/arn0ld87/agora/issues/1672)).
+
+All eight stages of the frontend rebuild ([#1790](https://github.com/arn0ld87/agora/issues/1790)) are on `main`. The operational rest of that epic is still open. Closed tickets do not establish empirical product validity, and their remaining limits are documented in `docs/STATUS.md`.
 
 The remaining release work is concentrated on:
 
-- the Supabase image scan/exception register and the frontend coverage gate ([#1670](https://github.com/arn0ld87/agora/issues/1670), [#1672](https://github.com/arn0ld87/agora/issues/1672)),
+- the exception register for the Supabase image scan ([#1670](https://github.com/arn0ld87/agora/issues/1670)),
 - clean evaluation fixtures and a documented counter-run ([#1240](https://github.com/arn0ld87/agora/issues/1240)),
 - formal cutover and fresh-host install/restore evidence ([#1592](https://github.com/arn0ld87/agora/issues/1592), [#766](https://github.com/arn0ld87/agora/issues/766)),
 - the AURORA comparison against single-prompt and static-persona baselines and visible product limits ([#1662](https://github.com/arn0ld87/agora/issues/1662), [#1674](https://github.com/arn0ld87/agora/issues/1674)). The full calibration suite [#765](https://github.com/arn0ld87/agora/issues/765) is scheduled after 1.0.
@@ -249,7 +325,7 @@ The remaining release work is concentrated on:
 
 ## Reference run
 
-The current **visual end-to-end showcase** is [Reference run 8: Geburtshilfe Hollerau](./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.md). It captures the current Graph Build → simulation/live-feed → report experience on a fictional public-sector scenario.
+The most recent documented **visual end-to-end showcase with a report** is [Reference run 8: Geburtshilfe Hollerau](./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.md). It follows a fictional public-sector scenario through Graph Build, simulation and live feed, and report. It was recorded before the frontend rebuild. The [demo](#demo) above shows the current interface.
 
 For Report-/Trust-pipeline regression work, [Reference run 7: AURORA with Red-Team review](./docs/reference-runs/2026-08-17-aurora-red-team/README.md) remains the technical reference. Run 8 deliberately does not hide its degradations: its exported ReportV3 contains 2 validated claims, 31 hypotheses, 6 data gaps, and five sections that failed generation because of LLM errors.
 
