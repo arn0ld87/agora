@@ -12,7 +12,7 @@
 
 **Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
-[![Version](https://img.shields.io/badge/version-0.9.7-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.8-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -298,7 +298,7 @@ cd frontend && bun run typecheck  # Vue/TypeScript
 
 ## Aktueller Stand
 
-**Aktuelle Produktversion:** `0.9.7` Stability Beta, veröffentlicht am 13.10.2026. Wie `0.9.6` ist es ein Zwischenrelease und **kein** `0.10.0`. Es beansprucht keines der 0.10-Release-Gates. Der nächste geplante Schnitt bleibt `0.10.0-rc.1`. Die Änderungen stehen in [`CHANGELOG.md`](./CHANGELOG.md) und in den [Release Notes](./docs/2026-10-13-v0.9.7-release-notes.md).
+**Aktuelle Produktversion:** `0.9.8` Stability Beta, veröffentlicht am 13.10.2026. Es ist ein Korrektur-Patch auf `0.9.7` und **kein** `0.10.0`. Zum Tag `v0.9.7` gibt es keine Container-Images und keine Release-Artefakte, weil die Release-Pipeline an einem reinen CI-Fehler gescheitert ist. `0.9.8` liefert sie nach und behebt außerdem den Bericht-Reiter nach einem zweiten Start. Die Änderungen stehen in den Release Notes zu [`0.9.8`](./docs/2026-10-13-v0.9.8-release-notes.md) und [`0.9.7`](./docs/2026-10-13-v0.9.7-release-notes.md) sowie in [`CHANGELOG.md`](./CHANGELOG.md). Der nächste geplante Schnitt bleibt `0.10.0-rc.1`.
 
 Der exakt verifizierte Stand, aktuelle Testnachweise, bekannte Grenzen und die geprüfte Baseline werden in [`docs/STATUS.md`](./docs/STATUS.md) gepflegt. Release-Prioritäten und die Gates für 0.10/1.0 stehen in [`ROADMAP.md`](./ROADMAP.md). Diese README enthält bewusst keine schnell alternden Testzähler.
 
