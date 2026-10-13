@@ -17,7 +17,6 @@ dieselbe Feldliste/-logik noch einmal nachgebildet statt importiert.
 
 from __future__ import annotations
 
-import csv
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, get_args
@@ -247,9 +246,8 @@ def _translate_persona(
         "source_entity_type": persona.get("source_entity_type") or "persona_library",
         "persona_kind": persona.get("persona_kind") or "individual",
         "is_manual": bool(persona.get("is_manual", False)),
-        # Immer gesetzt (nie nur bei Fallback): ``_write_twitter_csv`` leitet die
-        # Spalten aus dem ersten Profil ab, ein spaeteres Profil mit
-        # zusaetzlichem Schluessel brachte den CSV-Writer zum Absturz.
+        # Immer gesetzt (nie nur bei Fallback), damit alle Profile dieselben
+        # Schluessel tragen.
         "generation_source": (
             "rule_based" if persona.get("generation_source") == "rule_based" else "llm"
         ),
@@ -277,12 +275,19 @@ def _coerce_karma(karma_raw: Any) -> int:
 
 
 def _write_twitter_csv(sim_dir: str, profiles: List[Dict[str, Any]]) -> None:
-    path = os.path.join(sim_dir, "twitter_profiles.csv")
-    fieldnames = list(profiles[0].keys())
-    with open(path, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(profiles)
+    """Schreibt die Twitter-CSV über den kanonischen OASIS-Schreiber.
+
+    Die Profile tragen das Reddit-Format; OASIS verlangt für Twitter aber
+    ``user_char``/``description`` und brach ohne sie beim Laden der Agenten mit
+    ``KeyError: 'user_char'`` ab. ``persona_set_origin`` bleibt als
+    Zusatzspalte erhalten, wenn der Lauf aus einem Personasatz stammt (#1807).
+    """
+    from .oasis_profile_persistence import write_twitter_csv  # avoid import cycle
+
+    extra_columns = ["persona_set_origin"] if "persona_set_origin" in profiles[0] else []
+    write_twitter_csv(
+        os.path.join(sim_dir, "twitter_profiles.csv"), profiles, extra_columns
+    )
 
 
 def _build_config(state: "SimulationState", profile_count: int) -> Dict[str, Any]:
