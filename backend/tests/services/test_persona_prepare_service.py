@@ -200,6 +200,19 @@ class TestSuccessfulPrepare:
         assert [row["user_id"] for row in rows] == ["0", "1"]
         assert [row["source_user_id"] for row in rows] == ["1", "2"]
 
+    def test_twitter_csv_tolerates_non_string_bio_and_persona(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        """Inline-Personas sind ungeprüfte Dicts: kein Absturz bei Nicht-Text."""
+        persona_prepare_service.prepare_from_personas(
+            manager, created_id, [{"username": "alice", "bio": 42, "persona": ["a", "b"]}]
+        )
+        csv_path = os.path.join(manager._get_simulation_dir(created_id), "twitter_profiles.csv")
+        with open(csv_path, "r", encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        assert rows[0]["description"] == "42"
+        assert rows[0]["user_char"] == "42 ['a', 'b']"
+
     def test_written_profiles_carry_schema_version(
         self, manager: SimulationManager, created_id: str
     ) -> None:

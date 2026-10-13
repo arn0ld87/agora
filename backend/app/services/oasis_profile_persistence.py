@@ -87,8 +87,10 @@ extra_columns :Sequence [str ]=(),
         writer .writerow ([*TWITTER_CSV_HEADERS ,*extra_columns ])
 
         for idx ,profile in enumerate (profiles ):
-            bio =profile .get ("bio")or ""
-            persona =profile .get ("persona")
+            # Inline-Personas aus ``create-from-personas`` sind ungeprüfte Dicts;
+            # ein Wert, der kein Text ist, darf hier nicht zum 500 werden.
+            bio =str (profile .get ("bio")or "")
+            persona =str (profile .get ("persona")or "")
             user_char =bio
             if persona and persona !=bio :
                 user_char =f"{bio } {persona }"
