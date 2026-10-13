@@ -295,3 +295,121 @@ class TestGuardsAroundStatusAndExistence:
             persona_prepare_service.prepare_from_personas(
                 manager, created_id, [MINIMAL_PERSONA]
             )
+
+
+class TestAgentConfigsAndTwitterCsv:
+    """Regression 2026-10-13: Läufe aus Personas aktivierten nie einen Agenten
+    (``agent_configs=[]``, ``sim_f5571e56cb74``) und brachen auf Twitter mit
+    ``KeyError: 'user_char'`` ab (``sim_414abc908ced``).
+    """
+
+    PERSONAS = [
+        {"username": "alice", "name": "Alice", "bio": "Pflegerin", "persona": "Skeptisch."},
+        {"username": "bob", "name": "Bob"},
+        {"username": "verband", "name": "Verband", "persona_kind": "collective"},
+        {"username": "dora", "name": "Dora"},
+    ]
+
+    def _prepare(self, manager: SimulationManager, created_id: str) -> dict:
+        persona_prepare_service.prepare_from_personas(manager, created_id, self.PERSONAS)
+        return manager._store.read_json(created_id, "simulation_config", default=None)
+
+    def test_every_persona_gets_an_agent_config_matching_its_profile(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        config = self._prepare(manager, created_id)
+        profiles = manager._store.read_json(created_id, "reddit_profiles", default=None)
+
+        agent_configs = config["agent_configs"]
+        assert [a["agent_id"] for a in agent_configs] == [p["user_id"] for p in profiles]
+        assert [a["entity_name"] for a in agent_configs] == ["Alice", "Bob", "Verband", "Dora"]
+        for agent_config in agent_configs:
+            assert 0.0 < agent_config["activity_level"] <= 1.0
+            assert set(range(8, 23)) <= set(agent_config["active_hours"])
+            assert agent_config["stance"] == "neutral"
+            assert agent_config["config_source"] == "persona_default"
+        assert [a["actor_class"] for a in agent_configs] == [
+            "individual",
+            "individual",
+            "organisation",
+            "individual",
+        ]
+
+    def test_round_selection_activates_the_personas(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        """Der Auswahlpfad beider Runner findet Kandidaten, und zwar alle."""
+        import random
+
+        from app.services.simulation_activity_model import select_round_agent_ids
+        from app.services.simulation_agent_identity import align_config_to_profiles
+
+        config = self._prepare(manager, created_id)
+        profiles = manager._store.read_json(created_id, "reddit_profiles", default=None)
+        # Der Runner arbeitet auf OASIS-Positionen (Position des Profils in der Datei).
+        aligned, without_profile = align_config_to_profiles(config, profiles)
+        assert without_profile == []
+        positions = set(range(len(profiles)))
+
+        rng = random.Random(1779)
+        activated: set = set()
+        for round_num, hour in enumerate(range(8, 23)):
+            activated.update(
+                select_round_agent_ids(
+                    aligned,
+                    hour,
+                    round_num,
+                    seed=1,
+                    platform="reddit",
+                    platforms=["reddit"],
+                    rng=rng,
+                    existing_agent_ids=positions,
+                )
+            )
+
+        assert activated == positions
+
+    def test_agents_per_hour_never_exceeds_the_persona_count(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        time_config = self._prepare(manager, created_id)["time_config"]
+        assert 1 <= time_config["agents_per_hour_min"] <= len(self.PERSONAS)
+        assert time_config["agents_per_hour_max"] <= len(self.PERSONAS)
+
+    def test_twitter_csv_has_the_columns_oasis_reads(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        self._prepare(manager, created_id)
+        profiles = manager._store.read_json(created_id, "reddit_profiles", default=None)
+        csv_path = os.path.join(manager._get_simulation_dir(created_id), "twitter_profiles.csv")
+        with open(csv_path, encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+
+        assert len(rows) == len(self.PERSONAS)
+        for row in rows:
+            assert {"user_id", "name", "username", "user_char", "description"} <= set(row)
+            assert row["user_char"]
+            assert row["description"]
+        assert rows[0]["description"] == "Pflegerin"
+        assert rows[0]["user_char"] == "Pflegerin Skeptisch."
+        # user_id = Zeilenposition (so liest OASIS), source_user_id = Agent (#1778).
+        assert [row["user_id"] for row in rows] == ["0", "1", "2", "3"]
+        assert [int(row["source_user_id"]) for row in rows] == [p["user_id"] for p in profiles]
+
+    def test_twitter_only_run_can_map_config_to_csv_rows(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        """Ohne Reddit-Datei ordnet der Runner über ``source_user_id`` zu."""
+        from app.services.simulation_agent_identity import (
+            align_config_to_profiles,
+            load_simulation_profiles,
+        )
+
+        config = self._prepare(manager, created_id)
+        # ``reddit_profiles`` liegt im In-Memory-Store, im Verzeichnis nur die CSV.
+        csv_profiles = load_simulation_profiles(manager._get_simulation_dir(created_id))
+        assert len(csv_profiles) == len(self.PERSONAS)
+
+        aligned, without_profile = align_config_to_profiles(config, csv_profiles)
+        assert without_profile == []
+        assert [a["agent_id"] for a in aligned["agent_configs"]] == [0, 1, 2, 3]

@@ -10,7 +10,7 @@ from typing import Any
 from . import oasis_profile_generator as _legacy
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 from .oasis_profile_models import OasisAgentProfile
 
 def _print_generated_profile (self: Any ,entity_name :str ,entity_type :str ,profile :OasisAgentProfile ):
@@ -54,8 +54,26 @@ platform :str ="reddit"
 
 
 def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path :str ):
+    """Methodenform von :func:`write_twitter_profiles_csv` (``self`` bleibt ungenutzt)."""
+    write_twitter_profiles_csv (profiles ,file_path )
+
+
+def write_twitter_profiles_csv (
+profiles :List [OasisAgentProfile ],
+file_path :str ,
+extra_columns :Optional [Dict [str ,List [Any ]]]=None ,
+):
     """
     Save Twitter Profile as CSV format (compliant with OASIS official requirements)
+
+    Einziger Writer der ``twitter_profiles.csv``. Auch der Pfad ohne Generator
+    (``persona_prepare_service``) schreibt hierüber: eine zweite Implementierung
+    dort ließ ``user_char`` und ``description`` aus, und OASIS brach beim Laden
+    mit ``KeyError: 'user_char'`` ab.
+
+    ``extra_columns``: zusätzliche Spalten hinter den festen, je Spalte ein Wert
+    pro Profil in derselben Reihenfolge. OASIS greift über Spaltennamen zu,
+    weitere Spalten stören dort nicht.
 
     OASIS Twitter required CSV fields:
     - user_id: User ID (starting from 0 based on CSV order)
@@ -90,7 +108,14 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
         # Konfiguration auch bei fehlenden Profilen richtig zuordnen kann
         # (``simulation_agent_identity.align_config_to_profiles``).
         headers =['user_id','name','username','user_char','description','schema_version','voice_register','source_user_id']
-        writer .writerow (headers )
+        extras =extra_columns or {}
+        for column ,values in extras .items ():
+            if column in headers or len (values )!=len (profiles ):
+                raise ValueError (
+                f"Zusatzspalte {column !r} kollidiert mit einer festen Spalte "
+                "oder hat nicht einen Wert je Profil"
+                )
+        writer .writerow (headers +list (extras ))
 
         # Write data rows
         for idx ,profile in enumerate (profiles ):
@@ -114,6 +139,7 @@ def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path 
             profile .voice_register or "",# voice_register (#1759)
             profile .user_id if profile .user_id is not None else idx ,# source_user_id (#1778)
             ]
+            row .extend (values [idx ]for values in extras .values ())
             writer .writerow (row )
 
     _legacy .logger .info (f"Saved {len (profiles )} Twitter profiles to {file_path } (OASIS CSV format)")

@@ -59,7 +59,8 @@ class AgentActivityConfig:
 
     # Herkunft des Eintrags (#1779): ``llm`` (Antwort des Konfigurationsmodells),
     # ``rule_fallback`` (Regel-Defaults, weil die Modellantwort für diesen Agenten
-    # fehlte oder der Batch ausfiel) oder ``synthetic_skeptic`` (Quotenregel). Die
+    # fehlte oder der Batch ausfiel), ``synthetic_skeptic`` (Quotenregel) oder
+    # ``persona_default`` (Lauf direkt aus Personas, Standardwerte ohne Modell). Die
     # Regel erfindet keine Haltung; das Feld macht den Rückfall im Artefakt
     # sichtbar, statt ihn als normalen Eintrag durchgehen zu lassen. Konfigurationen
     # vor diesem Feld lesen sich als ``llm``.
