@@ -49,6 +49,23 @@ class ActorClass(str, Enum):
     MEDIA = "media"
 
 
+class AgentConfigSource(str, Enum):
+    """Herkunft eines ``agent_configs``-Eintrags in ``simulation_config.json``.
+
+    Geschlossene Wertemenge von ``AgentActivityConfig.config_source``. Ein
+    Eintrag ohne das Feld (Konfigurationen vor #1779) liest sich als ``llm``.
+    """
+
+    #: Antwort des Konfigurationsmodells.
+    LLM = "llm"
+    #: Regel-Defaults, weil die Modellantwort fehlte oder der Batch ausfiel.
+    RULE_FALLBACK = "rule_fallback"
+    #: Synthetischer Skeptiker der Quotenregel.
+    SYNTHETIC_SKEPTIC = "synthetic_skeptic"
+    #: Lauf direkt aus Personas (``create-from-personas``): Standardwerte ohne Modell.
+    PERSONA_DEFAULT = "persona_default"
+
+
 class ActivityModelConfig(BaseModel):
     """Aktivitätsmodell: Tagesraten je Akteursklasse, Stundenprofil, Obergrenzen."""
 
