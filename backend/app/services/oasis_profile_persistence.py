@@ -9,8 +9,9 @@ from typing import Any
 
 from . import oasis_profile_generator as _legacy
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
+import csv
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 from .oasis_profile_models import OasisAgentProfile
 
 def _print_generated_profile (self: Any ,entity_name :str ,entity_type :str ,profile :OasisAgentProfile ):
@@ -53,27 +54,66 @@ platform :str ="reddit"
         self ._save_reddit_json (profiles ,file_path )
 
 
-def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path :str ):
-    """Methodenform von :func:`write_twitter_profiles_csv` (``self`` bleibt ungenutzt)."""
-    write_twitter_profiles_csv (profiles ,file_path )
+#: Kopfzeile der Twitter-CSV, wie OASIS sie liest (``pd.read_csv``, Zugriff
+#: ueber Spaltennamen; zusaetzliche Spalten stoeren dort nicht).
+#: ``schema_version``: Issue #1663. ``voice_register``: Issue #1759 (A7), damit
+#: der Parallel-Runner die Laengengrenze pro Register setzen kann.
+#: ``source_user_id``: Issue #1778 — ``user_id`` ist die Zeilenposition (so
+#: liest OASIS die CSV), ``source_user_id`` traegt die Nummer des Agenten in
+#: der Simulationskonfiguration
+#: (``simulation_agent_identity.align_config_to_profiles``).
+TWITTER_CSV_HEADERS =['user_id','name','username','user_char','description','schema_version','voice_register','source_user_id']
 
 
-def write_twitter_profiles_csv (
-profiles :List [OasisAgentProfile ],
+def write_twitter_csv (
 file_path :str ,
-extra_columns :Optional [Dict [str ,List [Any ]]]=None ,
-):
+profiles :List [Dict [str ,Any ]],
+extra_columns :Sequence [str ]=(),
+)->None :
+    """Schreibt ``twitter_profiles.csv`` im OASIS-Format.
+
+    Einziger Schreiber dieses Formats: ``OasisProfileGenerator`` und der Pfad
+    ``create-from-personas`` (``persona_prepare_service``) rufen beide hier
+    hinein. ``profiles`` sind Dicts mit ``name``, ``username``, ``bio``,
+    ``persona`` und optional ``voice_register``/``user_id``.
+
+    - ``user_char``: bio + persona ohne Zeilenumbrueche (LLM-System-Prompt)
+    - ``description``: bio ohne Zeilenumbrueche (oeffentliche Kurzvita)
+
+    ``extra_columns`` haengt weitere Profilschluessel als Spalten an.
+    """
+    with open (file_path ,'w',newline ='',encoding ='utf-8')as f :
+        writer =csv .writer (f )
+        writer .writerow ([*TWITTER_CSV_HEADERS ,*extra_columns ])
+
+        for idx ,profile in enumerate (profiles ):
+            # Inline-Personas aus ``create-from-personas`` sind ungeprüfte Dicts;
+            # ein Wert, der kein Text ist, darf hier nicht zum 500 werden.
+            bio =str (profile .get ("bio")or "")
+            persona =str (profile .get ("persona")or "")
+            user_char =bio
+            if persona and persona !=bio :
+                user_char =f"{bio } {persona }"
+            user_char =user_char .replace ('\n',' ').replace ('\r',' ')
+            description =bio .replace ('\n',' ').replace ('\r',' ')
+            source_user_id =profile .get ("user_id")
+
+            writer .writerow ([
+            idx ,# user_id: Sequential ID starting from 0
+            profile .get ("name"),
+            profile .get ("username"),
+            user_char ,
+            description ,
+            PERSONA_SCHEMA_VERSION ,
+            profile .get ("voice_register")or "",
+            source_user_id if source_user_id is not None else idx ,
+            *[profile .get (column ,"")for column in extra_columns ],
+            ])
+
+
+def _save_twitter_csv (self: Any ,profiles :List [OasisAgentProfile ],file_path :str ):
     """
     Save Twitter Profile as CSV format (compliant with OASIS official requirements)
-
-    Einziger Writer der ``twitter_profiles.csv``. Auch der Pfad ohne Generator
-    (``persona_prepare_service``) schreibt hierüber: eine zweite Implementierung
-    dort ließ ``user_char`` und ``description`` aus, und OASIS brach beim Laden
-    mit ``KeyError: 'user_char'`` ab.
-
-    ``extra_columns``: zusätzliche Spalten hinter den festen, je Spalte ein Wert
-    pro Profil in derselben Reihenfolge. OASIS greift über Spaltennamen zu,
-    weitere Spalten stören dort nicht.
 
     OASIS Twitter required CSV fields:
     - user_id: User ID (starting from 0 based on CSV order)
@@ -86,61 +126,24 @@ extra_columns :Optional [Dict [str ,List [Any ]]]=None ,
     - user_char: Internal use, LLM system prompt, determines how agent thinks and acts
     - description: External display, visible to other users
     """
-    import csv
-
     # Ensure file extension is .csv
     if not file_path .endswith ('.csv'):
         file_path =file_path .replace ('.json','.csv')
 
-    with open (file_path ,'w',newline ='',encoding ='utf-8')as f :
-        writer =csv .writer (f )
-
-        # Write OASIS required header
-        # Issue #1663: ``schema_version`` als zusätzliche Spalte. OASIS liest
-        # die CSV per ``pd.read_csv`` und greift über Spaltennamen zu, eine
-        # weitere Spalte stört dort nicht.
-        # Issue #1759 (A7): ``voice_register`` als weitere Spalte, damit der
-        # Parallel-Runner die Laengengrenze pro Register setzen kann, ohne das
-        # Register aus dem Entitaetstyp zu raten.
-        # Issue #1778: ``user_id`` ist hier die Zeilenposition (so liest OASIS die
-        # CSV). ``source_user_id`` traegt die Nummer des Agenten in der
-        # Simulationskonfiguration, damit ein Lauf nur mit Twitter die
-        # Konfiguration auch bei fehlenden Profilen richtig zuordnen kann
-        # (``simulation_agent_identity.align_config_to_profiles``).
-        headers =['user_id','name','username','user_char','description','schema_version','voice_register','source_user_id']
-        extras =extra_columns or {}
-        for column ,values in extras .items ():
-            if column in headers or len (values )!=len (profiles ):
-                raise ValueError (
-                f"Zusatzspalte {column !r} kollidiert mit einer festen Spalte "
-                "oder hat nicht einen Wert je Profil"
-                )
-        writer .writerow (headers +list (extras ))
-
-        # Write data rows
-        for idx ,profile in enumerate (profiles ):
-        # user_char: Complete persona (bio + persona) for LLM system prompt
-            user_char =profile .bio
-            if profile .persona and profile .persona !=profile .bio :
-                user_char =f"{profile .bio } {profile .persona }"
-                # Handle newlines (replace with space in CSV)
-            user_char =user_char .replace ('\n',' ').replace ('\r',' ')
-
-            # description: Short bio for external display
-            description =profile .bio .replace ('\n',' ').replace ('\r',' ')
-
-            row =[
-            idx ,# user_id: Sequential ID starting from 0
-            profile .name ,# name: Real name
-            profile .user_name ,# username: Username
-            user_char ,# user_char: Complete persona (internal LLM use)
-            description ,# description: Short bio (external display)
-            PERSONA_SCHEMA_VERSION ,# schema_version: Formatversion (#1663)
-            profile .voice_register or "",# voice_register (#1759)
-            profile .user_id if profile .user_id is not None else idx ,# source_user_id (#1778)
-            ]
-            row .extend (values [idx ]for values in extras .values ())
-            writer .writerow (row )
+    write_twitter_csv (
+    file_path ,
+    [
+    {
+    "name":profile .name ,
+    "username":profile .user_name ,
+    "bio":profile .bio ,
+    "persona":profile .persona ,
+    "voice_register":profile .voice_register ,
+    "user_id":profile .user_id ,
+    }
+    for profile in profiles
+    ],
+    )
 
     _legacy .logger .info (f"Saved {len (profiles )} Twitter profiles to {file_path } (OASIS CSV format)")
 

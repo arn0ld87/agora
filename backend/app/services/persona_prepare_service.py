@@ -34,8 +34,6 @@ from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .llm_routing_seed import workspace_credential_metadata
-from .oasis_profile_models import OasisAgentProfile
-from .oasis_profile_persistence import write_twitter_profiles_csv
 from .run_registry import RunRegistry
 from .simulation_activity_policy import (
     enforce_active_hours_floor,
@@ -291,32 +289,19 @@ def _coerce_karma(karma_raw: Any) -> int:
 
 
 def _write_twitter_csv(sim_dir: str, profiles: List[Dict[str, Any]]) -> None:
-    """Schreibt ``twitter_profiles.csv`` über den kanonischen Writer.
+    """Schreibt die Twitter-CSV über den kanonischen OASIS-Schreiber.
 
-    OASIS liest ``user_char`` und ``description`` ungeschützt
-    (``agents_generator.py``: ``KeyError: 'user_char'``). Die frühere eigene
-    Schreibroutine legte die Schlüssel des Reddit-Profils als Spalten an und
-    kannte beide nicht. ``user_id`` ist in der CSV die Zeilenposition, die
-    Nummer des Agenten steht in ``source_user_id`` (#1778).
-
-    ``persona_set_origin`` bleibt als Zusatzspalte erhalten, wenn der Lauf aus
-    einem Personasatz stammt (#1807).
+    Die Profile tragen das Reddit-Format; OASIS verlangt für Twitter aber
+    ``user_char``/``description`` und brach ohne sie beim Laden der Agenten mit
+    ``KeyError: 'user_char'`` ab. ``persona_set_origin`` bleibt als
+    Zusatzspalte erhalten, wenn der Lauf aus einem Personasatz stammt (#1807).
     """
-    path = os.path.join(sim_dir, "twitter_profiles.csv")
-    oasis_profiles = [
-        OasisAgentProfile(
-            user_id=profile["user_id"],
-            user_name=profile["username"],
-            name=profile["name"],
-            bio=profile["bio"],
-            persona=profile["persona"],
-        )
-        for profile in profiles
-    ]
-    extra_columns: Dict[str, List[Any]] = {}
-    if all("persona_set_origin" in profile for profile in profiles):
-        extra_columns["persona_set_origin"] = [p["persona_set_origin"] for p in profiles]
-    write_twitter_profiles_csv(oasis_profiles, path, extra_columns=extra_columns)
+    from .oasis_profile_persistence import write_twitter_csv  # avoid import cycle
+
+    extra_columns = ["persona_set_origin"] if "persona_set_origin" in profiles[0] else []
+    write_twitter_csv(
+        os.path.join(sim_dir, "twitter_profiles.csv"), profiles, extra_columns
+    )
 
 
 def _build_agent_configs(profiles: List[Dict[str, Any]]) -> List[AgentActivityConfig]:
