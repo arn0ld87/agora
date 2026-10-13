@@ -20,6 +20,7 @@ import pytest
 
 from app.services import persona_prepare_service
 from app.services.artifact_store import InMemoryArtifactStore
+from app.services.oasis_profile_persistence import TWITTER_CSV_HEADERS
 from app.services.run_registry import RunRegistry
 from app.services.simulation_manager import SimulationManager, SimulationStatus
 
@@ -166,6 +167,51 @@ class TestSuccessfulPrepare:
             rows = list(csv.DictReader(handle))
         assert len(rows) == 1
         assert rows[0]["username"] == "alice"
+
+    def test_twitter_csv_has_the_columns_oasis_reads(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        """Regression: ohne ``user_char`` bricht OASIS beim Laden der Agenten ab.
+
+        ``generate_twitter_agent_graph`` indiziert ``agent_info["user_char"]``
+        und ``["description"]`` ungeschützt (``KeyError: 'user_char'`` in
+        sim_414abc908ced). Die CSV trug vorher die Schlüssel des Reddit-Profils.
+        """
+        persona_prepare_service.prepare_from_personas(
+            manager,
+            created_id,
+            [
+                {"username": "alice", "name": "Alice", "bio": "Lehrerin", "persona": "Zeile 1\nZeile 2"},
+                MINIMAL_PERSONA | {"username": "bob"},
+            ],
+        )
+        csv_path = os.path.join(manager._get_simulation_dir(created_id), "twitter_profiles.csv")
+        with open(csv_path, "r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+
+        assert fieldnames == TWITTER_CSV_HEADERS
+        assert rows[0]["user_char"] == "Lehrerin Zeile 1 Zeile 2"
+        assert rows[0]["description"] == "Lehrerin"
+        assert all(row["user_char"] and row["description"] for row in rows)
+        # user_id ist die Zeilenposition (so liest OASIS), source_user_id die
+        # user_id des Reddit-Profils (#1778).
+        assert [row["user_id"] for row in rows] == ["0", "1"]
+        assert [row["source_user_id"] for row in rows] == ["1", "2"]
+
+    def test_twitter_csv_tolerates_non_string_bio_and_persona(
+        self, manager: SimulationManager, created_id: str
+    ) -> None:
+        """Inline-Personas sind ungeprüfte Dicts: kein Absturz bei Nicht-Text."""
+        persona_prepare_service.prepare_from_personas(
+            manager, created_id, [{"username": "alice", "bio": 42, "persona": ["a", "b"]}]
+        )
+        csv_path = os.path.join(manager._get_simulation_dir(created_id), "twitter_profiles.csv")
+        with open(csv_path, "r", encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        assert rows[0]["description"] == "42"
+        assert rows[0]["user_char"] == "42 ['a', 'b']"
 
     def test_written_profiles_carry_schema_version(
         self, manager: SimulationManager, created_id: str
