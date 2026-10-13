@@ -1,0 +1,4 @@
+### Fixed (Läufe aus Personas: Agenten und Twitter-CSV — 2026-10-13)
+
+- **`POST /api/simulation/create-from-personas` schreibt je Persona einen `agent_configs`-Eintrag:** Bisher blieb die Liste leer. Die Rundenauswahl zieht ihre Kandidaten nur daraus, also wurde nie ein Agent aktiviert, und der Lauf endete mit 0 Aktionen als `completed`. Die Einträge tragen `agent_id` = `user_id` des Profils, Standardwerte ohne Modell und `config_source="persona_default"`. (#1876)
+- **`twitter_profiles.csv` aus diesem Pfad ist für OASIS lesbar:** Die Datei trug die Schlüssel des Reddit-Profils, `user_char` und `description` fehlten (`KeyError: 'user_char'`). Der Pfad nutzt jetzt den kanonischen Writer `write_twitter_profiles_csv`; `persona_set_origin` bleibt als Zusatzspalte. Vor dem Fix angelegte Läufe aus Personas müssen neu angelegt werden. (#1876)
