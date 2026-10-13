@@ -459,3 +459,18 @@ class TestAgentConfigsAndTwitterCsv:
         aligned, without_profile = align_config_to_profiles(config, csv_profiles)
         assert without_profile == []
         assert [a["agent_id"] for a in aligned["agent_configs"]] == [0, 1, 2, 3]
+
+    def test_config_source_is_limited_to_the_contract_values(self) -> None:
+        """``config_source`` ist ein Vertragswert, kein freier Text."""
+        from app.contracts.simulation_activity_contract import AgentConfigSource
+        from app.services.simulation_config_models import AgentActivityConfig
+
+        assert AgentConfigSource.PERSONA_DEFAULT.value == "persona_default"
+        with pytest.raises(ValueError):
+            AgentActivityConfig(
+                agent_id=1,
+                entity_uuid="persona-1",
+                entity_name="Alice",
+                entity_type="persona_library",
+                config_source="persona_defualt",
+            )

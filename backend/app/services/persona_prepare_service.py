@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, get_args
 from ..config import Config
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 from ..contracts.persona_set_contract import PersonaOrigin
-from ..contracts.simulation_activity_contract import ActorClass
+from ..contracts.simulation_activity_contract import ActorClass, AgentConfigSource
 from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
@@ -65,9 +65,6 @@ _ALWAYS_PRESENT_DEFAULTS = {
     "profession": "",
     "interested_topics": [],
 }
-
-#: ``agent_configs[].config_source`` dieses Pfads: Standardwerte ohne Modell.
-PERSONA_DEFAULT_CONFIG_SOURCE = "persona_default"
 
 # Standardwerte der Datenklasse ``AgentActivityConfig`` (vor den Untergrenzen).
 _DEFAULT_ACTIVITY_LEVEL = 0.5
@@ -336,7 +333,7 @@ def _build_agent_configs(profiles: List[Dict[str, Any]]) -> List[AgentActivityCo
                 activity_level=enforce_activity_level_floor(_DEFAULT_ACTIVITY_LEVEL),
                 active_hours=enforce_active_hours_floor(_DEFAULT_ACTIVE_HOURS),
                 actor_class=actor_class.value,
-                config_source=PERSONA_DEFAULT_CONFIG_SOURCE,
+                config_source=AgentConfigSource.PERSONA_DEFAULT.value,
             )
         )
     return configs

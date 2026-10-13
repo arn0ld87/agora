@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 
 from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
-from ..contracts.simulation_activity_contract import ActorClass
+from ..contracts.simulation_activity_contract import ActorClass, AgentConfigSource
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .entity_reader import EntityNode
@@ -112,9 +112,9 @@ def _degradations_of(self) -> Optional[DegradationCollector]:
     return value if isinstance(value, DegradationCollector) else None
 
 
-_LLM_SOURCE = 'llm'
-_RULE_FALLBACK_SOURCE = 'rule_fallback'
-_SYNTHETIC_SKEPTIC_SOURCE = 'synthetic_skeptic'
+_LLM_SOURCE = AgentConfigSource.LLM.value
+_RULE_FALLBACK_SOURCE = AgentConfigSource.RULE_FALLBACK.value
+_SYNTHETIC_SKEPTIC_SOURCE = AgentConfigSource.SYNTHETIC_SKEPTIC.value
 # Betrag des Vorzeichens, das die Regel einer aus dem Graph belegten Haltung gibt.
 _RULE_BIAS_MAGNITUDE = 0.5
 
