@@ -357,6 +357,6 @@ Siehe [`SECURITY.md`](./SECURITY.md), [`docs/auth.md`](./docs/auth.md), [`docs/s
 
 ## Lizenz und Herkunft
 
-Agora ist Open Source unter der **AGPL-3.0-Lizenz**. Das Projekt entstand im März 2026 als Fork von [MiroFish](https://github.com/666ghj/MiroFish) und wird seit April 2026 eigenständig weiterentwickelt. Details zur Attribution stehen in [`NOTICE`](./NOTICE).
+Agora ist Open Source unter der **AGPL-3.0-Lizenz**. Das Projekt geht auf [MiroFish](https://github.com/666ghj/MiroFish) zurück, und zwar über [MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline) von Nik (GitHub: nikmcfly), das im März 2026 Zep Cloud durch Neo4j und Ollama ersetzt hat, und wird seit April 2026 unter dem Namen Agora eigenständig weiterentwickelt. Details zur Attribution stehen in [`NOTICE`](./NOTICE).
 
 Teile der Simulationslaufzeit verwenden das CAMEL-AI-/OASIS-Ökosystem.
