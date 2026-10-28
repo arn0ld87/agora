@@ -33,7 +33,7 @@
           </svg>
         </span>
         <!-- Schritt-Nummer bei nicht erledigt -->
-        <span v-else class="pipeline-stepper__icon" aria-hidden="true">{{ step.id }}</span>
+        <span v-else class="pipeline-stepper__icon" aria-hidden="true">{{ `${step.id} ` }}</span>
 
         <!-- Label -->
         <span class="pipeline-stepper__label">{{ step.label }}</span>
