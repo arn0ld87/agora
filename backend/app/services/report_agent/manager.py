@@ -970,6 +970,66 @@ class ReportManager:
         }
 
     @classmethod
+    def save_forced_final_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert Abschnitte, die per mark_forced_final forciert wurden."""
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["forced_final_sections"] = sorted(
+            {int(index) for index in section_indices}
+        )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_forced_final_sections(cls, report_id: str) -> set:
+        """Liest persistierte forced_final_sections; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("forced_final_sections") or [])
+        }
+
+    @classmethod
+    def save_metadata_failed_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert Abschnitte mit fehlgeschlagener Metadaten-Generierung."""
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["metadata_failed_sections"] = sorted(
+            {int(index) for index in section_indices}
+        )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_metadata_failed_sections(cls, report_id: str) -> set:
+        """Liest persistierte metadata_failed_sections; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("metadata_failed_sections") or [])
+        }
+
+    @classmethod
+    def save_quote_validation_failed_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert Abschnitte mit fehlgeschlagener Zitatvalidierung."""
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["quote_validation_failed_sections"] = sorted(
+            {int(index) for index in section_indices}
+        )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_quote_validation_failed_sections(cls, report_id: str) -> set:
+        """Liest persistierte quote_validation_failed_sections; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("quote_validation_failed_sections") or [])
+        }
+
+    @classmethod
     def save_fallback_outline_used(cls, report_id: str, used: bool) -> None:
         """Persistiert den Fallback-Outline-Marker im selben Run-Events-
         Artefakt wie die Work-Trace-Marker (Issue #1479, Codex-Review

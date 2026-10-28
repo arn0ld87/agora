@@ -975,3 +975,63 @@ def test_an_invalid_threshold_env_does_not_break_config_import(raw):
     assert _env_ratio({"X": raw}, "X", 0.5) == 0.5
     assert _env_ratio({"X": "0.3"}, "X", 0.5) == 0.3
     assert _env_ratio({}, "X", 0.5) == 0.5
+
+
+# --- Resume Persistence Tests -----------------------------------------------
+
+
+def test_resume_persistence_of_forced_final_sections(tmp_path, monkeypatch):
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    report_id = "test_rep_forced"
+
+    assert ReportManager.load_forced_final_sections(report_id) == set()
+
+    ReportManager.save_forced_final_sections(report_id, [1, 3])
+    loaded = ReportManager.load_forced_final_sections(report_id)
+    assert loaded == {1, 3}
+
+
+def test_resume_persistence_of_metadata_failed_sections(tmp_path, monkeypatch):
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    report_id = "test_rep_meta"
+
+    assert ReportManager.load_metadata_failed_sections(report_id) == set()
+
+    ReportManager.save_metadata_failed_sections(report_id, [2, 4])
+    loaded = ReportManager.load_metadata_failed_sections(report_id)
+    assert loaded == {2, 4}
+
+
+def test_resume_persistence_of_quote_validation_failed_sections(tmp_path, monkeypatch):
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    report_id = "test_rep_quote_val"
+
+    assert ReportManager.load_quote_validation_failed_sections(report_id) == set()
+
+    ReportManager.save_quote_validation_failed_sections(report_id, [1, 2])
+    loaded = ReportManager.load_quote_validation_failed_sections(report_id)
+    assert loaded == {1, 2}
+
+
+def test_workflow_restore_and_persist_work_trace_markers(tmp_path, monkeypatch):
+    from app.services.report_agent.workflow import (
+        _persist_work_trace_markers,
+        _restore_work_trace_markers,
+    )
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path))
+    report_id = "test_rep_restore"
+
+    agent1 = MagicMock()
+    events_for(agent1).work_trace_removed_sections = {1}
+    events_for(agent1).forced_final_sections = {2}
+    events_for(agent1).metadata_failed_sections = {3}
+
+    _persist_work_trace_markers(agent1, report_id)
+
+    # Neuer Agent simuliert Resume
+    agent2 = MagicMock()
+    _restore_work_trace_markers(agent2, report_id)
+
+    assert events_for(agent2).work_trace_removed_sections == {1}
+    assert events_for(agent2).forced_final_sections == {2}
+    assert events_for(agent2).metadata_failed_sections == {3}
