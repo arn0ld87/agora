@@ -1375,6 +1375,7 @@ def _require_two_supporting_groups(
         _role_family_key(record)
         for binding, record in resolved
         if binding.supports_claim
+        and counts_for_confidence(record)
         and record.source_kind == EvidenceSourceKind.agent_quote
         and record.persona_stakeholder_group
     }
@@ -1414,14 +1415,17 @@ def _require_quote_and_seed(
     has_agent_quote = any(
         record.source_kind == EvidenceSourceKind.agent_quote and record.quote
         for _, record in resolved
+        if counts_for_confidence(record)
     )
     has_seed = any(
-        record.source_kind == EvidenceSourceKind.seed_corpus for _, record in resolved
+        record.source_kind == EvidenceSourceKind.seed_corpus
+        for _, record in resolved
+        if counts_for_confidence(record)
     )
     has_action_voices = has_two_action_voices(
         (record.source_kind, record.voice_key)
         for binding, record in resolved
-        if binding.supports_claim
+        if binding.supports_claim and counts_for_confidence(record)
     )
     if not ((has_agent_quote and has_seed) or has_action_voices):
         raise ValueError(

@@ -100,7 +100,7 @@ def _collect_datapoints(reader: InMemoryMetricReader, instrument_name: str) -> l
     """Sammelt DataPoints für ein bestimmtes Instrument aus dem Reader."""
     data = reader.get_metrics_data()
     result = []
-    for rm in data.resource_metrics:
+    for rm in (data.resource_metrics if data else []):
         for sm in rm.scope_metrics:
             for metric in sm.metrics:
                 if metric.name == instrument_name:

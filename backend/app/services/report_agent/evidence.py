@@ -363,7 +363,7 @@ def has_agent_grounded_evidence(
             continue
         record = index.get(str(entry.get("evidence_id") or ""))
         source = record if isinstance(record, dict) else entry
-        if not counts_for_confidence(source):
+        if not counts_for_confidence(entry) or not counts_for_confidence(source):
             continue
         sk = source.get("source_kind")
         if sk == "agent_quote" and source.get("quote"):
