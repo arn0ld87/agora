@@ -920,8 +920,8 @@ class ReportManager:
         status: str, 
         progress: int, 
         message: str,
-        current_section: str = None,
-        completed_sections: List[str] = None
+        current_section: Optional[str] = None,
+        completed_sections: Optional[List[str]] = None
     ) -> None:
         """
         UpdateReportgenerateProgress
@@ -1160,7 +1160,7 @@ class ReportManager:
         import re
         
         lines = content.split('\n')
-        processed_lines = []
+        processed_lines: List[str] = []
         prev_was_heading = False
         
         # collectoutlineinallSection Title
