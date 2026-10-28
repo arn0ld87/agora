@@ -44,7 +44,6 @@
           v-else
           class="topbar__search"
           type="button"
-          :aria-label="t('topbar.search')"
           :title="t('cmd.trigger')"
           :data-testid="ShellTestId.cmdkTrigger"
           @click="openPalette"
@@ -54,7 +53,7 @@
             <line x1="11" y1="11" x2="14.5" y2="14.5" />
           </svg>
           <span class="topbar__search-label">{{ t('topbar.search') }}</span>
-          <span class="kbd">⌘K</span>
+          <span class="kbd" aria-hidden="true">⌘K</span>
         </button>
 
         <!-- Neuer Lauf → Startdialog „Neuer Lauf“ (Route NewRun, Fenster ueber der Ansicht) -->
@@ -86,7 +85,7 @@
             class="topbar__badge"
             data-testid="topbar-console-badge"
             aria-hidden="true"
-          >{{ unreadErrors }}</span>
+          >{{ ` ${unreadErrors}` }}</span>
         </button>
 
         <!-- Profilmenü: Konto, Workspace, Darstellung (inkl. Dichte), Abmelden -->
@@ -138,7 +137,7 @@ withDefaults(
 
 const consoleLabel = computed(() =>
   unreadErrors.value > 0
-    ? `${t('topbar.consoleToggle')}, ${t('topbar.consoleUnread', { count: unreadErrors.value })}`
+    ? `${t('topbar.consoleToggle')}, ${t('topbar.console')} ${t('topbar.consoleUnread', { count: unreadErrors.value })}`
     : t('topbar.consoleToggle'),
 )
 
