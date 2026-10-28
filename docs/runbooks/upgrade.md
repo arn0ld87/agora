@@ -23,6 +23,11 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 ## Persistenz-Änderungen außerhalb des Versionssprungs
 
+**`run_events.json` bei Berichts-Resumes (PR #1884).** `uploads/reports/<report_id>/run_events.json` speichert zusätzlich die drei optionalen Listenfelder `forced_final_sections`, `metadata_failed_sections` und `quote_validation_failed_sections` (jeweils `list[int]`), damit ein unterbrochener und per Resume fortgesetzter Berichtslauf die Qualitäts-Signale bereits abgeschlossener Abschnitte bei der finalen `status`-/`status_reason`-Ableitung nicht verliert.
+
+- **Upgrade:** Keine Migration nötig. Bestehende Läufe ohne diese Schlüssel werden beim Resume über Default-Listen (`[]`) eingelesen.
+- **Rollback-Implikation:** Ein älterer Code-Stand liest `run_events.json` selektiv über bekannte Schlüssel und ignoriert die zusätzlichen Felder ohne Fehler.
+
 **`twitter_profiles.csv` bei Läufen aus Personas (PR #1875).** `POST /api/simulation/create-from-personas` schreibt die Datei jetzt im OASIS-Format (`user_id`, `name`, `username`, `user_char`, `description`, `schema_version`, `voice_register`, `source_user_id`, bei einem Lauf aus einem Personasatz zusätzlich `persona_set_origin`). Vorher trug sie die Schlüssel des Reddit-Profils, und der Simulationsstart auf Twitter brach mit `KeyError: 'user_char'` ab. `reddit_profiles.json` und Simulationen aus dem normalen Prepare-Pfad sind nicht betroffen.
 
 - **Upgrade:** Keine Migration. Betroffen sind nur Simulationen, die vor diesem Stand über `create-from-personas` angelegt wurden und auf Twitter laufen sollen; erkennbar daran, dass der Kopfzeile von `uploads/simulations/<sim_id>/twitter_profiles.csv` die Spalte `user_char` fehlt. Ihre Datei wird nicht nachträglich umgeschrieben. Solche Simulationen aus derselben Personaliste bzw. demselben Personasatz neu anlegen. Läufe nur auf Reddit funktionieren unverändert weiter.
