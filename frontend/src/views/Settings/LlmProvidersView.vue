@@ -390,9 +390,7 @@ onBeforeUnmount(() => {
             <Input
               v-if="!isCliTransport(selectedProvider)"
               v-model="ensureDraft(selectedProvider).baseUrl"
-              :placeholder="isOllama(selectedProvider)
-                ? t('settings.v4.llmProviders.localBaseUrlPlaceholder', 'http://localhost:11434')
-                : t('settings.v4.llmProviders.baseUrlPlaceholder', 'https://api.example.com/v1')"
+              :placeholder="isOllama(selectedProvider) ? t('settings.v4.llmProviders.localBaseUrlPlaceholder', 'http://localhost:11434') : t('settings.v4.llmProviders.baseUrlPlaceholder', 'https://api.example.com/v1')"
             />
           </div>
 
