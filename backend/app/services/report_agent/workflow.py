@@ -1,3 +1,4 @@
+# ruff: noqa: F401, E402, F811
 from __future__ import annotations
 
 import json
@@ -10,7 +11,6 @@ from pydantic import ValidationError
 
 from ...config import Config
 from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
-from ...llm.tokens import PROMPT_HEADROOM_TOKENS
 from ...contracts.report_v3 import (
     DEFAULT_REPORT_MODE,
     RED_TEAM_FINDINGS_LIMIT,
@@ -18,12 +18,16 @@ from ...contracts.report_v3 import (
     ReportMode,
     ReportV3,
 )
+from ...llm.tokens import PROMPT_HEADROOM_TOKENS
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ...utils.provider_message import redacted_provider_message as _redacted_provider_message
 from ..artifact_store import resolve_default_store
-from ..simulation_agent_identity import align_config_to_profiles, load_simulation_profiles
+from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
 from ..report_intent import ReportIntent, detect_report_intent
+from ..run_budget import reraise_if_budget_exceeded
+from ..sim.action_log_reader import action_log_health
+from ..simulation_agent_identity import align_config_to_profiles, load_simulation_profiles
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .evidence import validate_quote_anchors
 from .evidence_density import compute_evidence_density
@@ -37,27 +41,34 @@ from .output_contract import (
     resolve_report_status,
     sanitize_final_content,
 )
+from .planning import plan_outline as plan_outline_impl
+from .postprocess_timing import PostprocessPhaseTracker
 from .requirement_checker import (
     checklist_for_intent,
     collect_requirement_degradations,
     find_missing_requirements,
 )
 from .run_degradation import (
-    stance_analysis_unavailable,
     apply_run_degradation_downgrade,
     assert_run_invariants,
+    clear_fallback_outline_used,
     collect_run_degradations,
     events_for,
-    clear_fallback_outline_used,
     mark_fallback_outline_used,
     mark_forced_final,
     mark_metadata_failure,
     mark_work_traces_removed,
+    stance_analysis_unavailable,
 )
-from .tool_circuit_breaker import breaker_for
-
-from .planning import plan_outline as plan_outline_impl
-from .postprocess_timing import PostprocessPhaseTracker
+from .schemas import EvidenceMapModel, _section_schema_for
+from .search_dedup import (
+    dedup_key,
+    is_search_tool,
+    query_of,
+    registry_for,
+    repeated_empty_search_message,
+)
+from .section_coverage import section_has_sufficient_evidence
 from .section_kinds import coerce_section_kind
 from .section_pipeline import (
     SectionContext,
@@ -65,14 +76,10 @@ from .section_pipeline import (
     _section_expects_quotes,
     process_section,
 )
-from .search_dedup import (
-    dedup_key,
-    is_search_tool,
-    query_of,
-    repeated_empty_search_message,
-    registry_for,
+from .simulation_snapshot import (
+    capture_simulation_snapshot,
+    load_simulation_llm_call_stats,
 )
-from .section_coverage import section_has_sufficient_evidence
 from .stance_analysis import (
     build_stance_analysis,
     contested_statement_of,
@@ -81,2184 +88,82 @@ from .stance_analysis import (
     save_stance_analysis,
     voices_match_config,
 )
-from ..run_budget import reraise_if_budget_exceeded
-from ..sim.action_log_reader import action_log_health
-from .simulation_snapshot import (
-    capture_simulation_snapshot,
-    load_simulation_llm_call_stats,
-)
 from .text_verification import verify_prose
 from .threshold_deviation import prior_threshold_lines, threshold_conflict_findings
-from .schemas import (
-    EvidenceMapModel,
-    _section_schema_for,
+from .tool_circuit_breaker import breaker_for
+from .workflow_finalization import (
+    METADATA_MAX_CONTENT_CHARS,
+    METADATA_MAX_OUTPUT_TOKENS,
+    _INTERVIEW_EVIDENCE_TYPE,
+    _INVARIANT_FINDINGS,
+    _RED_TEAM_ECHO_THRESHOLD,
+    _RED_TEAM_EXCERPT_BUDGET,
+    _RED_TEAM_MANDATORY_INTENTS,
+    _RED_TEAM_MAX_TOKENS,
+    _RED_TEAM_SYSTEM_PROMPT,
+    _RED_TEAM_USER_TEMPLATE,
+    _apply_requirement_check,
+    _build_and_validate_report_v3,
+    _build_partial_report,
+    _build_red_team_excerpt,
+    _count_interview_evidence,
+    _deterministic_red_team_findings,
+    _get_echo_index,
+    _is_cancel_requested,
+    _merge_findings,
+    _merge_run_degradations,
+    _persist_evidence_density,
+    _persist_fallback_outline_marker,
+    _persist_work_trace_markers,
+    _prior_thresholds_prompt,
+    _record_metadata_truncation_degradation,
+    _red_team_required,
+    _restore_work_trace_markers,
+    _run_red_team_review,
+    _sections_with_persisted_evidence,
+    generate_section_metadata,
 )
-from ..evidence_migrations import migrate_v1_to_v2, normalize_persisted_evidence_map
-#: Evidence-*Typ* einer Interview-Antwort.
-#:
-#: Nicht die Quellengattung: ``source_kind`` fasst Interview-Antwort und
-#: Simulationsbeitrag beide zu ``agent_quote`` zusammen (ADR-0002 Anker 3,
-#: bewusst). Wer danach zählt, hält jeden Post der Simulation für ein
-#: Interview — und findet ausgerechnet dann Interviews, wenn eine Simulation
-#: lief und keines zustande kam. Genau der Fall des Referenzlaufs.
-_INTERVIEW_EVIDENCE_TYPE = "agent_interview"
-
-
-def _count_interview_evidence(agent: Any) -> int:
-    """Wie viele Interviews tatsächlich Evidence hinterlassen haben.
-
-    Bewusst aus dem Index abgeleitet statt separat mitgezählt: der Index ist
-    das, was der Bericht am Ende benutzt. Ein Interview, das dort nichts
-    hinterlässt, hat für den Bericht nicht stattgefunden — egal was der
-    Tool-Aufruf gemeldet hat.
-    """
-    index = (getattr(agent, "evidence_map", None) or {}).get("evidence_index") or {}
-    return sum(
-        1
-        for record in index.values()
-        if isinstance(record, dict)
-        and record.get("type") == _INTERVIEW_EVIDENCE_TYPE
-    )
-
-
-logger = get_logger('agora.report_agent')
-
-# Die Abschnittsverarbeitung liegt seit Issue #1212 in ``section_pipeline``.
-# ``_section_expects_quotes`` bleibt hier als Name erreichbar, damit bestehende
-# Referenzen auf ``workflow`` nicht brechen.
-__all__ = ["_section_expects_quotes", "chat", "generate_report", "generate_section_react"]
-
-
-def _load_persona_count(agent: Any) -> int:
-    """Best-effort count of generated personas for the report contract gate."""
-    for attr in ("personas", "profiles", "persona_ids"):
-        value = getattr(agent, attr, None)
-        if isinstance(value, list):
-            return len(value)
-
-    # ``or 0`` ist die Gate-Semantik: "nicht ermittelbar" darf hier nicht
-    # durchrutschen (UAT-001). Die Vorabpruefung beim Report-Start nutzt
-    # dagegen ``load_persona_count_for`` direkt und unterscheidet None von 0.
-    return load_persona_count_for(getattr(agent, "simulation_id", None)) or 0
-
-
-def load_persona_count_for(simulation_id: Any) -> Optional[int]:
-    """Anzahl gespeicherter Personas eines Laufs — ``None``, wenn nicht lesbar.
-
-    Einzige Quelle fuer das Gate (``_load_persona_count``) und die
-    Vorabpruefung beim Report-Start (``report_generation``, UAT-001), damit
-    beide dieselbe Zahl sehen und die Erklaerung vor dem Start nicht von der
-    Schwelle abweicht, an der der Lauf sonst spaeter scheitert.
-
-    ``None`` heisst "nicht ermittelbar", nicht "null": ein Lesefehler am
-    Store darf eine Vorabpruefung nicht als Floor-Unterschreitung auslegen
-    und damit einen moeglichen Bericht blockieren.
-    """
-    try:
-        profiles = resolve_default_store().read_json(
-            simulation_id,
-            "reddit_profiles",
-            default=None,
-        )
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning(
-            "persona-floor check: failed to read profiles for simulation %s: %r",
-            simulation_id,
-            exc,
-        )
-        return None
-    return len(profiles) if isinstance(profiles, list) else None
-
-
-def _compute_stance_analysis(agent: Any, report_id: str) -> Optional[Dict[str, Any]]:
-    """Haltung je Beitrag und Positionierungsquote des Laufs (Issue #1778).
-
-    Läuft einmal vor dem ersten Abschnitt. Die Klassifikation nutzt den
-    LLM-Client des Report-Agenten, damit ihre Aufrufe im Budget-Ledger des
-    Berichts landen; ``BudgetExceededError`` wird nicht gefangen.
-
-    Kann die Analyse nicht gerechnet werden, bleibt das sichtbar
-    (``stance_analysis_unavailable``, Review PR #1780): ein Lese- oder
-    Rechtefehler, ein fehlendes Aktionsprotokoll oder beschädigte
-    Protokollzeilen sind keine Quote von null. Nur ohne Simulationskonfiguration
-    wird nichts behauptet (``None``) — dann ist nicht bekannt, ob der Lauf
-    überhaupt eine Streitfrage hat.
-    """
-    simulation_id = getattr(agent, "simulation_id", "<unknown>")
-    report_folder = ReportManager._get_report_folder(report_id)
-    actions: list[Dict[str, Any]] = []
-    try:
-        from ..simulation_runner import SimulationRunner
-
-        config = resolve_default_store().read_json(
-            agent.simulation_id,
-            "simulation_config",
-            default=None,
-        )
-        if not isinstance(config, dict):
-            return None
-        # Issue #1778: Das Aktionsprotokoll zählt die Agenten nach ihrer
-        # Position in der Profildatei (so nummeriert OASIS). Die
-        # Konfiguration wird darauf umgeschrieben, sonst bekäme eine Stimme
-        # Namen und Starthaltung eines anderen Agenten, sobald ein Profil
-        # fehlt.
-        config, _agents_without_profile = align_config_to_profiles(
-            config,
-            load_simulation_profiles(
-                os.path.join(SimulationRunner.RUN_STATE_DIR, agent.simulation_id)
-            ),
-        )
-        # Ein Resume derselben ``report_id`` übernimmt die gespeicherte
-        # Analyse, statt alle Beiträge erneut zu klassifizieren (Budget des
-        # Resumes) — aber nur, wenn sie zur aktuellen Streitfrage gehört.
-        stored = load_stance_analysis(report_folder)
-        # Und nur, wenn ihre Stimmen zur angeglichenen Konfiguration passen:
-        # eine Analyse mit verschobenen Agenten-Nummern wird neu gerechnet
-        # (#1778).
-        if (
-            stored is not None
-            and stored.contested_statement == contested_statement_of(config)
-            and voices_match_config(stored, config)
-        ):
-            return stored.model_dump(mode="json")
-        # Ohne Streitfrage ist die Analyse nicht anwendbar: das Protokoll
-        # wird dann gar nicht erst gelesen.
-        if has_contested_statement(config):
-            actions = [
-                action.to_dict()
-                for action in SimulationRunner.get_all_actions(agent.simulation_id)
-            ]
-            log_files, unreadable_lines = action_log_health(
-                agent.simulation_id, SimulationRunner.RUN_STATE_DIR
-            )
-            if log_files == 0:
-                logger.warning("stance analysis: no action log for simulation %s", simulation_id)
-                return stance_analysis_unavailable("action_log_missing")
-            if unreadable_lines:
-                logger.warning(
-                    "stance analysis: %d unreadable action log lines for simulation %s",
-                    unreadable_lines,
-                    simulation_id,
-                )
-                return stance_analysis_unavailable("action_log_unreadable")
-    except Exception as exc:  # noqa: BLE001 — logged; surfaced as run degradation
-        reraise_if_budget_exceeded(exc)
-        logger.warning(
-            "stance analysis: failed to read config or actions for simulation %s: %r",
-            simulation_id,
-            exc,
-        )
-        return stance_analysis_unavailable("read_failed")
-
-    analysis = build_stance_analysis(
-        agent.simulation_id, config, actions, None, agent.llm
-    )
-    save_stance_analysis(report_folder, analysis)
-    return analysis.model_dump(mode="json")
-
-
-def _stance_analysis_of(agent: Any) -> Optional[Dict[str, Any]]:
-    """Die am Agenten abgelegte Analyse; ein Test-Double liefert ``None``."""
-    analysis = getattr(agent, "stance_analysis", None)
-    return analysis if isinstance(analysis, dict) else None
-
-
-def _persist_evidence_density(agent: Any, report_id: str) -> None:
-    """Schreibt ``evidence_density.json`` zur fertigen Evidence-Map (Issue #1779).
-
-    Gilt für ``COMPLETED`` und ``INCOMPLETE`` gleichermaßen: die Zählung hängt
-    nur an der Evidence-Map, nicht am Status. Ein Fehler beim Zählen bricht den
-    Bericht nicht ab und bleibt im Log sichtbar. Ein Speicher- oder
-    Berechtigungsfehler beim Schreiben wird dagegen nicht abgefangen: Fehler
-    beim Schreiben von Berichtsartefakten werden nie geschluckt (Review #1779).
-    ``BudgetExceededError`` wird nie geschluckt.
-    """
-    evidence_map = getattr(agent, "evidence_map", None)
-    if not isinstance(evidence_map, dict):
-        return
-    try:
-        density = compute_evidence_density(evidence_map)
-    except Exception as exc:  # noqa: BLE001 — logged; the report must not fail on a metric
-        reraise_if_budget_exceeded(exc)
-        logger.warning(
-            "report %s: Belegdichte konnte nicht gezählt werden, evidence_density.json fehlt: %r",
-            report_id,
-            exc,
-        )
-        return
-    ReportManager.save_evidence_density(report_id, density)
-    logger.info(
-        "report %s: Belegdichte claims=%d single_support=%s action_support=%s "
-        "single_source_cap=%s multi_independent=%s",
-        report_id,
-        density.claims_total,
-        density.single_support_ratio,
-        density.action_support_ratio,
-        density.single_source_cap_ratio,
-        density.multi_independent_ratio,
-    )
-
-
-def _load_persona_fallback_stats(agent: Any) -> tuple[int, int]:
-    """(Platzhalter, gesamt) fuer die Degradierungssumme des Laufs (#1419).
-
-    Gezaehlt wird ``generation_error``, nicht ``generation_source``: die
-    bewusste Wahl ``use_llm_for_profiles=False`` erzeugt ebenfalls
-    regelbasierte Profile und ist keine Degradierung. Nur der Ausfall nach
-    gescheiterten LLM-Versuchen zaehlt.
-
-    Wie beim Persona-Floor gilt: das Gate darf am Store nicht scheitern.
-    Ohne lesbare Profile wird nichts behauptet.
-    """
-    try:
-        profiles = resolve_default_store().read_json(
-            agent.simulation_id,
-            "reddit_profiles",
-            default=[],
-        )
-    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
-        logger.warning(
-            "persona-fallback check: failed to read profiles for simulation %s: %r",
-            getattr(agent, "simulation_id", "<unknown>"),
-            exc,
-        )
-        return (0, 0)
-
-    if not isinstance(profiles, list):
-        return (0, 0)
-
-    failed = sum(
-        1
-        for profile in profiles
-        if isinstance(profile, dict) and profile.get("generation_error")
-    )
-    return (failed, len(profiles))
-
-
-def _load_persona_floor(agent: Any) -> int:
-    """Effektiver Persona-Floor für das Report-Contract-Gate.
-
-    Liest den bei der Preparation persistierten ``persona_floor`` aus dem
-    Simulation-State (Task: 50-Personas-Minimum dynamisch). Fallback ist
-    MIN_PERSONA_TABLE_ROWS; ein persistierter Wert kann den Floor nur
-    senken, nie über den Contract anheben.
-    """
-    return load_persona_floor_for(getattr(agent, "simulation_id", None))
-
-
-def load_persona_floor_for(simulation_id: Any) -> int:
-    """Wirksamer Persona-Floor eines Laufs — Gate und Vorabpruefung (UAT-001).
-
-    Dieselbe Aufloesung wie ``_load_persona_floor``: persistierter
-    ``persona_floor`` aus dem Simulation-State, gedeckelt durch
-    ``MIN_PERSONA_TABLE_ROWS``. Ein nicht lesbarer State faellt auf den
-    Contract-Wert zurueck — der Floor ist die Zusage, nicht der Istzustand.
-    """
-    try:
-        data = resolve_default_store().read_json(
-            simulation_id,
-            "state",
-            default=None,
-        )
-    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
-        logger.warning(
-            "persona-floor check: failed to read state for simulation %s: %r",
-            simulation_id,
-            exc,
-        )
-        return MIN_PERSONA_TABLE_ROWS
-
-    floor = data.get("persona_floor") if isinstance(data, dict) else None
-    if isinstance(floor, int) and floor > 0:
-        return min(floor, MIN_PERSONA_TABLE_ROWS)
-    return MIN_PERSONA_TABLE_ROWS
-
-
-def _load_persona_candidate_count(agent: Any) -> Optional[int]:
-    """Kandidatenzahl vor der Profilgenerierung, fuer die Gate-Fehlermeldung (#1420).
-
-    ``state.entities_count`` wird in ``prepare_service.py::_phase_read_entities``
-    nach Dedup und Cap, aber vor dem Aufruf des Persona-Generators persistiert
-    (``state.entities_count = filtered.filtered_count``) — das deckt sich mit
-    dem Log ``Simulation preparation completed: entities=N, profiles=M``. Diese
-    Zahl ist die Kandidatenmenge, die der Generator sieht.
-
-    ``None`` wenn der Wert (noch) nicht vorliegt — der Aufrufer degradiert dann
-    auf die knappe Fehlermeldung ohne Ablehnungszahl.
-    """
-    try:
-        data = resolve_default_store().read_json(
-            agent.simulation_id,
-            "state",
-            default=None,
-        )
-    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
-        logger.warning(
-            "persona-floor check: failed to read entities_count for simulation %s: %r",
-            getattr(agent, "simulation_id", "<unknown>"),
-            exc,
-        )
-        return None
-
-    if not isinstance(data, dict):
-        return None
-    count = data.get("entities_count")
-    return count if isinstance(count, int) and count > 0 else None
-
-
-def _mark_incomplete_for_persona_floor(
-    report: Report,
-    *,
-    report_id: str,
-    persona_count: int,
-    floor: int = MIN_PERSONA_TABLE_ROWS,
-    candidate_count: Optional[int] = None,
-    progress_callback: Optional[Callable[[str, int, str], None]] = None,
-) -> Report:
-    report.status = ReportStatus.INCOMPLETE
-    message = (
-        "Persona-Mindestanzahl nicht erreicht: "
-        f"{persona_count}/{floor} Personas vorhanden."
-    )
-    # Issue #1420 / Review-Nachbesserung (PR #1454): ohne diesen Zusatz sieht
-    # die Meldung wie ein reiner Unterlauf aus, obwohl 15/20 durchaus aus 23
-    # Kandidaten entstanden sein koennen. Die Differenz aber dem Eignungs-Gate
-    # zuzuschreiben waere unbelegt: ``candidate_count`` (state.entities_count)
-    # wird bei Branches unveraendert von der Quelle kopiert
-    # (``branching_service.py::create_branch``), waehrend
-    # ``_apply_persona_overrides`` und die manuelle Persona-Loeschroute
-    # (``simulation_profiles.py``) nur ``reddit_profiles`` mutieren, nicht
-    # diesen Zaehler. 20 kopierte Kandidaten mit einer absichtlich entfernten
-    # Persona saehen dann wie eine Gate-Ablehnung aus, obwohl keine
-    # stattgefunden hat. Reserve-Backfills koennen die Differenz ebenfalls von
-    # der tatsaechlichen Ablehnungszahl des Generators abweichen lassen. Die
-    # Meldung benennt die Differenz deshalb als Defizit, nicht als Ablehnung;
-    # die tatsaechliche Ablehnungszahl kennt nur
-    # ``OasisProfileGenerator.generate_profiles_from_entities`` (lokal,
-    # aktuell nicht persistiert — Folgearbeit).
-    if candidate_count is not None and candidate_count >= persona_count:
-        deficit_count = candidate_count - persona_count
-        message += (
-            f" Von {candidate_count} Persona-Kandidaten sind nur {persona_count} "
-            f"als Personas vorhanden — ein Defizit von {deficit_count}. Moegliche "
-            "Ursachen sind das Eignungs-Gate (Ablehnung technischer Artefakte "
-            "ohne eigene Interessenlage) oder eine nachtraegliche Entfernung "
-            "(z. B. in einem Branch); aus dieser Zahl allein laesst sich das "
-            "nicht unterscheiden."
-        )
-    report.missing_sections = [message]
-    report.error = message
-    ReportManager.update_progress(
-        report_id,
-        "incomplete",
-        0,
-        message,
-        completed_sections=[],
-    )
-    ReportManager.save_report(report)
-    if progress_callback:
-        progress_callback("incomplete", 0, message)
-    return report
-
-
-def _get_echo_index(agent: Any) -> float:
-    """Liest den aktuellen echo_chamber_index aus den Simulations-Metriken.
-
-    Gibt 0.0 zurück wenn keine Metriken verfügbar sind.
-    """
-    try:
-        from ..network_analytics import NetworkAnalyticsService
-        from ..simulation_runner import SimulationRunner
-
-        actions = SimulationRunner.get_all_actions(agent.simulation_id)
-        action_dicts = [a.to_dict() for a in actions]
-        if not action_dicts:
-            return 0.0
-        metrics = NetworkAnalyticsService().compute_metrics(
-            action_dicts,
-            simulation_id=agent.simulation_id,
-        ).to_dict()
-        return float(metrics.get("echo_chamber_index") or 0.0)
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning("_get_echo_index: %r", exc)
-        return 0.0
-
-
-#: Ab diesem Echo-Chamber-Index lohnt der Red-Team-Call auch bei Report-Typen,
-#: für die er nicht ohnehin verpflichtend ist.
-_RED_TEAM_ECHO_THRESHOLD = 0.6
-
-#: Report-Typen, bei denen die Red-Team-Stage unabhängig vom Echo-Index läuft.
-#: Ein Risiko- oder Vergleichsreport und der vollständige Report stützen eine
-#: Entscheidung — dort ist die Gegenprüfung Teil des Produkts, keine Zugabe für
-#: unausgewogene Personas. Bei Meinungsbild und explorativem Report bleibt die
-#: Schwelle als Kostenbremse.
-_RED_TEAM_MANDATORY_INTENTS = frozenset(
-    {ReportIntent.RISK, ReportIntent.COMPARISON, ReportIntent.FULL}
+from .workflow_outline import (
+    _compute_stance_analysis,
+    _load_persona_candidate_count,
+    _load_persona_count,
+    _load_persona_fallback_stats,
+    _load_persona_floor,
+    _mark_incomplete_for_persona_floor,
+    _reusable_persisted_outline,
+    _stance_analysis_of,
+    _validate_outline_structure,
+    load_persona_count_for,
+    load_persona_floor_for,
+)
+from .workflow_react import (
+    SECTION_EMPTY_RESPONSE_BODY,
+    SECTION_FALLBACK_BODY,
+    SECTION_FALLBACK_ERROR_BODY,
+    SECTION_FALLBACK_HINT_BAD_REQUEST,
+    SECTION_FALLBACK_HINT_GENERIC,
+    SECTION_FALLBACK_HINT_SKIPPED,
+    SECTION_FALLBACK_TITLE,
+    SECTION_UNUSABLE_OUTPUT_BODY,
+    _POST_SEARCH_TOOL,
+    _PROMPT_SPECIFIC_400_CODES,
+    _PROMPT_SPECIFIC_400_PHRASES,
+    _draft_content,
+    _finalize_content,
+    _forced_final_response,
+    _is_persistent_provider_400,
+    _persistent_error_note,
+    _prefetch_into_prompt,
+    _prefetch_simulation_posts,
+    _request_coverage_retrieval,
+    _run_post_search,
+    _safe_generate_section_react,
+    _section_error_fallback,
+    _section_has_sufficient_evidence,
+    generate_section_react,
 )
 
-
-def _red_team_required(intent: ReportIntent, echo_index: float) -> bool:
-    """Entscheidet, ob die Red-Team-Stage einen LLM-Call machen darf."""
-    if intent in _RED_TEAM_MANDATORY_INTENTS:
-        return True
-    return echo_index > _RED_TEAM_ECHO_THRESHOLD
-
-
-_RED_TEAM_SYSTEM_PROMPT = (
-    "Du bist ein kritischer Qualitätsprüfer für Szenarienanalysen. "
-    "Du prüfst einen Berichtsentwurf auf Schwachstellen im Wording-Glossar v1 "
-    "(VERBOTEN: 'Vorhersage', 'Prognose', 'wird eintreten'; ERLAUBT: Simulation, "
-    "Szenarienanalyse, Reaktionsmuster, Einschätzung). "
-    "Antworte ausschliesslich auf Deutsch."
-)
-
-_RED_TEAM_USER_TEMPLATE = (
-    "Berichtsentwurf:\n\n{report_excerpt}\n\n"
-    "Die Kennung vor jedem Eintrag nennt den Abschnitt: C3_02 ist der zweite "
-    "Claim aus Abschnitt 3, T7_01 der erste Schwellenwert aus Abschnitt 7. "
-    "Widersprüche zwischen weit auseinanderliegenden "
-    "Abschnitten sind besonders zu prüfen — dort fallen sie beim Lesen am "
-    "wenigsten auf.\n\n"
-    "Identifiziere:\n"
-    "(a) Widersprüche zwischen den Claims\n"
-    "(b) Widersprüchliche operative Zahlen (zwei Schwellen für dieselbe Größe "
-    "mit unterschiedlichen Werten, ohne vermerkte begründete Abweichung)\n"
-    "(c) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
-    "als hoch-konfident markiert sind)\n"
-    "(d) Fehlende Cross-Segment-Reaktionen\n\n"
-    "Liefere maximal 10 Befunde als JSON-Objekt mit Feld 'findings' (Liste von Strings). "
-    "Kein Markdown, reines JSON."
-)
-
-#: Obergrenze für die Antwort: zehn Befunde als Strings. Ausdrücklich gesetzt,
-#: weil bei Ollama Prompt und Ausgabe ein Fenster teilen — eine großzügige
-#: Ausgabe-Erlaubnis nimmt dem Entwurf den Platz weg
-#: (``resolve_num_ctx_for_output``), und der Fehler käme still: der
-#: ``except``-Zweig unten schriebe leere findings.
-_RED_TEAM_MAX_TOKENS = 1_500
-
-#: Zeichenbudget für den Berichtsentwurf, abgeleitet aus dem Platz, den der
-#: Prompt bei Ollama sicher hat (``PROMPT_HEADROOM_TOKENS``). Gerechnet wird
-#: mit knapp drei Zeichen je Token — deutscher Fachtext liegt eher darüber,
-#: die Schätzung ist also die vorsichtige Richtung. Vom Ergebnis bleiben
-#: 4000 Zeichen für System-Prompt und Rahmentext reserviert.
-#:
-#: Der Wert ist eine Kostenbremse gegen entartete Läufe (gemessen: bis 372
-#: Claims in einem Artefakt), keine inhaltliche Auswahl.
-_RED_TEAM_EXCERPT_BUDGET = PROMPT_HEADROOM_TOKENS * 3 - 4_000
-
-
-def _build_red_team_excerpt(report_v3: ReportV3) -> str:
-    """Baut den Berichtsentwurf für die Red-Team-Review (Issue #1359 B).
-
-    Vorher sah der Reviewer ``claims[:20]``, ``hypotheses[:10]`` und davon die
-    ersten 4000 Zeichen. Gemessen an acht Artefakten griff die Zeichengrenze in
-    fünf Fällen — mitten im Satz. Im Referenzlauf hat der Reviewer daraus einen
-    Befund erzeugt, der Bericht breche ab; das war der Schnitt des Excerpts,
-    nicht des Berichts. Ein Reviewer, der einen Abbruch meldet, den es nicht
-    gibt, ist schlimmer als keiner: er verbraucht Aufmerksamkeit für ein
-    Artefakt des Werkzeugs.
-
-    Die **Schwellen fehlten vollständig**. Genau darin lag der Widerspruch, den
-    zu finden die Aufgabe der Stage ist: vier Wochen Pilotbetrieb in Abschnitt
-    1, mindestens acht in Abschnitt 7. Der Reviewer konnte ihn nicht sehen.
-
-    Gekürzt wird nur noch am Zeilenende und mit sichtbarer Marke, damit eine
-    Kürzung als Kürzung erkennbar bleibt.
-    """
-    # Die Schwellen stehen zuerst, und das ist keine Frage der Lesbarkeit: die
-    # Claim-Liste ist unbegrenzt (gemessen: 372 Stück). Stünden die Schwellen
-    # dahinter, verbrauchten gerade die grossen Berichte — also die, bei denen
-    # ein Widerspruch am ehesten unbemerkt bleibt — das Budget vor der ersten
-    # Schwelle. Die Zahlen, wegen derer diese Stage existiert, fielen dann
-    # genau dort weg, wo sie am nötigsten sind.
-    lines: List[str] = []
-    for threshold in report_v3.thresholds or []:
-        # Issue #1359: eine begründete Abweichung steht mit im Entwurf —
-        # sonst meldet der Reviewer sie als Widerspruch.
-        deviation = (
-            f"; weicht begründet ab von [{threshold.deviates_from}]: "
-            f"{threshold.deviation_rationale}"
-            if threshold.deviates_from
-            else ""
-        )
-        # display_value statt f"{value:g} {unit}" (#1343): ein Datum trägt
-        # keine Einheit, und ':g' an einem ISO-String würde den Entwurf
-        # mitten in der Review-Vorbereitung sprengen.
-        lines.append(
-            f"- [{threshold.id}] [schwelle: {threshold.purpose}] {threshold.label}: "
-            f"{threshold.display_value} "
-            f"(Herkunft: {threshold.origin}, Beleglage: {threshold.evidence_status}"
-            f"{deviation})"
-        )
-    for claim in report_v3.claims or []:
-        lines.append(f"- [{claim.id}] [{claim.confidence}] {claim.statement}")
-    for hypothesis in report_v3.hypotheses or []:
-        lines.append(f"- [{hypothesis.id}] [hypothese] {hypothesis.hypothesis_text}")
-
-    if not lines:
-        return "(kein Inhalt)"
-
-    kept: List[str] = []
-    used = 0
-    for index, line in enumerate(lines):
-        if used + len(line) + 1 > _RED_TEAM_EXCERPT_BUDGET and kept:
-            kept.append(
-                f"[gekürzt: {len(lines) - index} weitere Einträge ausgelassen — "
-                "der Bericht ist vollständig, dieser Auszug nicht]"
-            )
-            break
-        kept.append(line)
-        used += len(line) + 1
-    return "\n".join(kept)
-
-
-def _merge_findings(first: Sequence[str], second: Sequence[str]) -> List[str]:
-    """Führt zwei Befundlisten ohne Dubletten zusammen und hält das Limit ein."""
-    merged = list(dict.fromkeys([*first, *second]))
-    return merged[:RED_TEAM_FINDINGS_LIMIT]
-
-
-#: Menschenlesbarer Wortlaut je Invariantenverletzung. Er steht im Bericht
-#: neben den LLM-Befunden und muss ohne Codekenntnis verständlich sein.
-_INVARIANT_FINDINGS = {
-    "interviews_requested_but_none_succeeded_and_not_degraded": (
-        "Interviews waren Teil des Plans, es kam keines zustande — der Bericht "
-        "weist das nicht als Einschränkung aus."
-    ),
-    "simulation_unhealthy_and_degradation_log_empty": (
-        "Die Simulation endete nicht regulär, der Bericht führt dazu keine "
-        "Einschränkung."
-    ),
-    "degraded_run_reported_as_completed": (
-        "Der Lauf trägt Qualitätsmängel und gilt trotzdem als vollständig."
-    ),
-}
-
-
-def _deterministic_red_team_findings(agent: Any, report: Any) -> List[str]:
-    """Abzählbare Befunde über den Lauf — ohne LLM.
-
-    Das Red Team des Referenzlaufs ``report_cc2ef45da5e9`` übersah null
-    erfolgreiche Interviews, eine gescheiterte Simulation und einen leeren
-    Degradation-Log. Alle drei lassen sich abzählen, und Abzählbares gehört
-    nicht in einen Prompt: ein Sprachmodell kann sie übersehen, eine
-    Invariante nicht.
-
-    Läuft deshalb auch dann, wenn das LLM-Red-Team übersprungen wird.
-    """
-    snapshot = getattr(report, "simulation_snapshot", None) or {}
-    violations = assert_run_invariants(
-        status=str(getattr(getattr(report, "status", None), "value", "")),
-        run_degradations=list(getattr(report, "run_degradations", []) or []),
-        simulation_status=str(snapshot.get("simulation_status") or ""),
-        interviews_requested=breaker_for(agent).request_count("interview_agents"),
-        interviews_succeeded=_count_interview_evidence(agent),
-    )
-    return [
-        _INVARIANT_FINDINGS.get(violation, violation) for violation in violations
-    ]
-
-
-def _run_red_team_review(
-    agent: Any,
-    report_v3: ReportV3,
-    echo_index: float,
-    *,
-    intent: ReportIntent,
-    deterministic_findings: Sequence[str] = (),
-) -> ReportV3:
-    """Führt die Red-Team-Review-Stage aus und schreibt Findings in report_v3.
-
-    Wird vor report_synthesis aufgerufen. Macht einen LLM-Call mit dem
-    bestehenden agent.llm. Ob der Call stattfindet, entscheidet
-    :func:`_red_team_required` aus Report-Typ und Echo-Index — bei
-    entscheidungstragenden Reports immer, sonst ab der Echo-Schwelle. Bei
-    Fehlern wird geloggt und unverändert zurückgegeben.
-
-    Ein übersprungener Lauf hinterlässt keinen ``red_team``-Eintrag in
-    ``model_attribution``; daran ist er von einem Lauf ohne Befunde
-    unterscheidbar.
-
-    Slice 5 (Issue #497), Intent-Gate aus dem Evidence-Chain-Audit (#1160).
-    """
-    # Issue #1359: Dieselbe Größe mit zwei Werten ohne begründete Abweichung
-    # lässt sich abzählen — das Modell kann sie übersehen, die Prüfung nicht.
-    deterministic_findings = [
-        *deterministic_findings,
-        *threshold_conflict_findings(report_v3.thresholds),
-    ]
-    # Die deterministischen Befunde hängen nicht am Intent-Gate: sie kosten
-    # keinen LLM-Call und gelten für jeden Lauf.
-    if not _red_team_required(intent, echo_index):
-        logger.info(
-            "_run_red_team_review: intent=%s, echo_index=%.3f <= %.1f — kein LLM-Call "
-            "(balanced Personas, kein entscheidungstragender Report)",
-            intent.value,
-            echo_index,
-            _RED_TEAM_ECHO_THRESHOLD,
-        )
-        if deterministic_findings:
-            return report_v3.model_copy(
-                update={
-                    "red_team_findings": _merge_findings(
-                        deterministic_findings, report_v3.red_team_findings
-                    )
-                }
-            )
-        return report_v3
-
-    user_msg = _RED_TEAM_USER_TEMPLATE.format(
-        report_excerpt=_build_red_team_excerpt(report_v3)
-    )
-
-    started_at = datetime.now(timezone.utc)
-    try:
-        raw = agent.llm.chat_json(
-            messages=[
-                {"role": "system", "content": _RED_TEAM_SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=0.3,
-            context="report",
-            max_tokens=_RED_TEAM_MAX_TOKENS,
-        )
-        findings_raw = raw.get("findings") if isinstance(raw, dict) else None
-        if isinstance(findings_raw, list):
-            findings = [str(f) for f in findings_raw if str(f).strip()][:10]
-        else:
-            findings = []
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        # Issue #978: Budgetabbruch (#764) ist kein Review-Fehler — hart
-        # durchreichen, sonst schreibt der Red-Team-Schritt nach einem harten
-        # Limit klaglos leere findings und der Run endet auf completed.
-        from ..run_budget import BudgetExceededError
-
-        if isinstance(exc, BudgetExceededError):
-            raise
-        logger.warning("_run_red_team_review: LLM-Call fehlgeschlagen: %r", exc)
-        findings = []
-
-    latency_ms = (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
-
-    provider = getattr(getattr(agent, "llm", None), "provider", "unknown") or "unknown"
-    model_id = getattr(getattr(agent, "llm", None), "model", "unknown") or "unknown"
-
-    attribution = ModelAttribution(
-        stage="red_team",
-        provider=str(provider),
-        model_id=str(model_id),
-        latency_ms=round(latency_ms, 1),
-        started_at=started_at,
-    )
-    updated_attribution = list(report_v3.model_attribution) + [attribution]
-
-    report_v3 = report_v3.model_copy(
-        update={
-            # Die abzählbaren Befunde zuerst: sie sind sicher, die des Modells
-            # sind Einschätzungen.
-            "red_team_findings": _merge_findings(deterministic_findings, findings),
-            "model_attribution": updated_attribution,
-        }
-    )
-    logger.info(
-        "_run_red_team_review: %d Befunde, intent=%s, echo_index=%.3f",
-        len(findings),
-        intent.value,
-        echo_index,
-    )
-    return report_v3
-
-
-SECTION_FALLBACK_BODY = (
-    "Diese Section konnte nicht generiert werden, weil der LLM-Aufruf "
-    "fehlgeschlagen ist (siehe Server-Log: report_id={report_id}, "
-    "section_index={section_index}). Mögliche Ursachen: ungültiger API-Key, "
-    "Rate-Limit, Modell nicht verfügbar. Konfiguriere ein gültiges LLM-Profil "
-    "(Settings → LLM-Provider) und starte den Report neu."
-)
-SECTION_FALLBACK_TITLE = "Section nicht generiert (LLM-Fehler)"
-
-# #1738: Fallback-Text mit Fehlerklasse und gekürzter Providermeldung. Beginnt
-# bewusst mit dem Marker "konnte nicht generiert werden", damit
-# ``is_fallback_content`` ihn erkennt.
-SECTION_FALLBACK_ERROR_BODY = (
-    "Diese Section konnte nicht generiert werden, weil der LLM-Aufruf "
-    "fehlgeschlagen ist (siehe Server-Log: report_id={report_id}, "
-    "section_index={section_index}). Fehlerklasse: {error_class}. "
-    "Providermeldung: {message} {hint}"
-)
-SECTION_FALLBACK_HINT_GENERIC = (
-    "Mögliche Ursachen: ungültiger API-Key, Rate-Limit, Modell nicht "
-    "verfügbar. Konfiguriere ein gültiges LLM-Profil "
-    "(Settings → LLM-Provider) und starte den Report neu."
-)
-SECTION_FALLBACK_HINT_BAD_REQUEST = (
-    "Der Provider hat die Anfrage als ungültig abgelehnt (HTTP 400); "
-    "dieselbe Konfiguration wiederholt den Fehler deterministisch. Prüfe "
-    "Modell und Parameter der Route (Settings → LLM-Provider) und starte "
-    "den Report neu."
-)
-SECTION_FALLBACK_HINT_SKIPPED = (
-    "Diese Section wurde übersprungen, weil ein vorheriger Abschnitt mit "
-    "demselben nicht-transienten Provider-Fehler (HTTP 400) scheiterte; es "
-    "wurde kein weiterer LLM-Aufruf abgesetzt. Prüfe Modell und Parameter "
-    "der Route (Settings → LLM-Provider) und starte den Report neu."
-)
-
-# 400er, die am Inhalt eines einzelnen Abschnitts hängen (zu langer Kontext,
-# Content-Filter): ein anderer Abschnitt kann trotzdem gelingen.
-_PROMPT_SPECIFIC_400_CODES = frozenset(
-    {"context_length_exceeded", "content_policy_violation", "content_filter"}
-)
-_PROMPT_SPECIFIC_400_PHRASES = (
-    "context length",
-    "context_length",
-    "maximum context",
-    "too many tokens",
-    "content policy",
-    "content_filter",
-)
-
-
-def _is_persistent_provider_400(exc: BaseException) -> bool:
-    """HTTP 400 des Providers, der für jeden Abschnitt gleich ausfiele (#1738).
-
-    Kein 408/429/5xx, kein Timeout: nur ein echtes 400 (``BadRequestError``).
-    Ausgenommen sind 400er, die am Prompt eines Abschnitts hängen.
-    """
-    if getattr(exc, "status_code", None) != 400:
-        return False
-    body = getattr(exc, "body", None)
-    message = str(exc).lower()
-    if isinstance(body, dict):
-        if str(body.get("code") or "").lower() in _PROMPT_SPECIFIC_400_CODES:
-            return False
-        message += " " + str(body.get("message") or "").lower()
-    return not any(phrase in message for phrase in _PROMPT_SPECIFIC_400_PHRASES)
-
-
-def _persistent_error_note(persistent_error: Optional[tuple[str, str]]) -> str:
-    """Ursachen-Zusatz fuer ``report.error`` bei nicht-transientem 400 (#1738)."""
-    if persistent_error is None:
-        return ""
-    return f" Ursache: {persistent_error[0]}: {persistent_error[1]}"
-
-
-def _section_error_fallback(
-    *,
-    report_id: str,
-    section_index: int,
-    error_class: str,
-    message: str,
-    hint: str,
-) -> str:
-    return SECTION_FALLBACK_ERROR_BODY.format(
-        report_id=report_id,
-        section_index=section_index,
-        error_class=error_class,
-        message=message,
-        hint=hint,
-    )
-
-SECTION_EMPTY_RESPONSE_BODY = (
-    "Dieser Abschnitt konnte nicht generiert werden: Das Modell lieferte eine "
-    "leere Antwort. Bitte später erneut versuchen."
-)
-
-SECTION_UNUSABLE_OUTPUT_BODY = (
-    "Dieser Abschnitt konnte nicht generiert werden: Das Modell lieferte "
-    "ausschließlich interne Arbeitsschritte statt Berichtsinhalt ({reason}). "
-    "Bitte später erneut versuchen."
-)
-
-
-def _finalize_content(
-    response: str,
-    *,
-    section_title: str,
-    section_index: int,
-    agent: Any = None,
-) -> str:
-    """Wendet den Final-Content-Contract auf einen Modelloutput an.
-
-    Ersetzt das frühere ``response.strip()``: interne Arbeitsschritte werden
-    entfernt, und wenn danach kein Berichtsinhalt übrig bleibt, liefert die
-    Funktion einen als solchen erkennbaren Fehlertext statt Modelloutput.
-    Dieser Text wird von :func:`is_fallback_content` erkannt und weder zu
-    Claims noch zu Evidence verarbeitet.
-
-    Mit ``agent`` trägt eine Bereinigung mit erhaltenem Inhalt das Ereignis
-    in ``RunEventLog.work_trace_removed_sections`` ein — Issue #1321: vorher
-    stand sie nur im Server-Log, und der Bericht wies den Abschnitt aus wie
-    jeden unangetasteten. Ohne ``agent`` bleibt es beim Log; der
-    FinalContentRejected-Fall wird hier bewusst nicht markiert, er ist über
-    ``generation_failed`` bzw. ``failed_section_indices`` bereits sichtbar.
-    """
-    try:
-        sanitized = sanitize_final_content(response)
-    except FinalContentRejected as exc:
-        logger.warning(
-            "section %d (%r): Final-Content-Contract hat den Output abgelehnt (%s). "
-            "%d Arbeitsspur-Segment(e) verworfen.",
-            section_index,
-            section_title,
-            exc.reason,
-            len(exc.removed_segments),
-        )
-        return SECTION_UNUSABLE_OUTPUT_BODY.format(reason=exc.reason)
-
-    if sanitized.removed_segments:
-        logger.info(
-            "section %d (%r): %d Arbeitsspur-Segment(e) aus dem Abschnittsinhalt entfernt.",
-            section_index,
-            section_title,
-            len(sanitized.removed_segments),
-        )
-        if agent is not None:
-            mark_work_traces_removed(agent, section_index)
-    return sanitized.content
-
-
-def _draft_content(response: Optional[str]) -> str:
-    """Berichtsinhalt eines Entwurfs, ohne ``_finalize_content``-Nebenwirkung.
-
-    Leer, wenn der Final-Content-Contract den Output ablehnt — ein solcher
-    Entwurf ist weder deckungsfähig noch als Rückfall für Forced-Final
-    brauchbar.
-    """
-    if response is None:
-        return ""
-    try:
-        content = sanitize_final_content(response).content
-    except FinalContentRejected:
-        return ""
-    return "" if is_fallback_content(content) else content
-
-
-def _section_has_sufficient_evidence(agent: Any, draft: str) -> bool:
-    """Issue #1294: Deckung statt Tool-Call-Anzahl entscheidet über Retrieval."""
-    return section_has_sufficient_evidence(
-        draft,
-        section_evidence=getattr(agent, "_active_section_evidence", None),
-        evidence_map=getattr(agent, "evidence_map", None),
-    )
-
-
-def _request_coverage_retrieval(
-    messages: List[Dict[str, str]],
-    response: str,
-    template: str,
-    tool_calls_count: int,
-    unused_tools: set,
-) -> None:
-    """Weist den ungedeckten Entwurf zurück und fordert gezieltes Retrieval an."""
-    unused_hint = (
-        f"(These tools have not been used, recommend using them: {', '.join(unused_tools)})"
-        if unused_tools else ""
-    )
-    messages.append({"role": "assistant", "content": response})
-    messages.append({
-        "role": "user",
-        "content": template.format(
-            tool_calls_count=tool_calls_count,
-            unused_hint=unused_hint,
-        ),
-    })
-
-
-def _forced_final_response(
-    agent: Any,
-    messages: List[Dict[str, str]],
-    toolcall_mode: str,
-    pending_draft: Optional[str],
-) -> Optional[str]:
-    """Antwort für den Abschnitt, nachdem die Iterationen erschöpft sind.
-
-    Issue #1294: liegt ein gültiger, nur mangels Deckung zurückgewiesener
-    Entwurf vor, bleibt er stehen. Eine erneute Endgenerierung kann ihn
-    nicht verbessern — die inzwischen erhobene Evidence wird ohnehin an
-    seine Claims gebunden —, aber leer oder unbrauchbar ausfallen.
-    """
-    if pending_draft is not None:
-        return pending_draft
-    messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
-    if toolcall_mode == "native":
-        force_result = agent.llm.chat_with_tools(
-            messages=messages,
-            tools=agent._get_openai_tools_schema(),
-            tool_choice="none",
-            temperature=0.5,
-            max_tokens=4096,
-            context="report",
-        )
-        return force_result["content"]
-    return agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
-
-
-def _safe_generate_section_react(
-    agent: Any,
-    section,
-    outline,
-    previous_sections: List[str],
-    progress_callback: Optional[Callable],
-    section_index: int,
-    report_id: str,
-) -> str:
-    """Track-3a-Wrapper: fängt Exceptions und leere Responses aus
-    :func:`generate_section_react` und liefert einen sichtbaren Fallback-Text,
-    damit die Pipeline nicht mit ``ReportV3.model_validate``-ValidationError
-    aussteigt, wenn ein LLM-Call (z. B. 401 unauthorized) failed.
-    """
-    # #1738: Ein vorheriger Abschnitt scheiterte an einem deterministischen
-    # Provider-400. Derselbe Request scheitert für jeden weiteren Abschnitt —
-    # kein weiterer LLM-Call, der Abschnitt endet als sichtbarer Fallback
-    # (``is_fallback_content`` → failed → Bericht INCOMPLETE).
-    persistent = events_for(agent).persistent_provider_error
-    if persistent is not None:
-        logger.warning(
-            "section %d (%r): übersprungen, vorheriger nicht-transienter "
-            "Provider-400 (%s) — kein LLM-Call.",
-            section_index,
-            getattr(section, "title", "<unbekannt>"),
-            persistent[0],
-        )
-        return _section_error_fallback(
-            report_id=report_id,
-            section_index=section_index,
-            error_class=persistent[0],
-            message=persistent[1],
-            hint=SECTION_FALLBACK_HINT_SKIPPED,
-        )
-    try:
-        result = generate_section_react(
-            agent,
-            section=section,
-            outline=outline,
-            previous_sections=previous_sections,
-            progress_callback=progress_callback,
-            section_index=section_index,
-        )
-    except Exception as exc:  # noqa: BLE001 — Pipeline darf nicht crashen
-        # Budgetabbruch (#764) ist kein Fallback-Fall: hart durchreichen, damit
-        # der Run deterministisch mit termination_reason budget_* endet.
-        from ..run_budget import BudgetExceededError
-
-        if isinstance(exc, BudgetExceededError):
-            raise
-        logger.error(
-            "section %d (%r): generate_section_react warf eine Exception: %r — "
-            "Fallback-Content wird eingefügt.",
-            section_index,
-            getattr(section, "title", "<unbekannt>"),
-            exc,
-        )
-        error_class = type(exc).__name__
-        message = _redacted_provider_message(exc)
-        persistent_400 = _is_persistent_provider_400(exc)
-        if persistent_400:
-            events_for(agent).persistent_provider_error = (error_class, message)
-        return _section_error_fallback(
-            report_id=report_id,
-            section_index=section_index,
-            error_class=error_class,
-            message=message,
-            hint=(
-                SECTION_FALLBACK_HINT_BAD_REQUEST
-                if persistent_400
-                else SECTION_FALLBACK_HINT_GENERIC
-            ),
-        )
-    if not isinstance(result, str) or not result.strip():
-        logger.warning(
-            "section %d (%r) in report=%s: generate_section_react gab leeren/"
-            "non-string Output zurück (type=%s) — Fallback-Content wird eingefügt.",
-            section_index,
-            getattr(section, "title", "<unbekannt>"),
-            report_id,
-            type(result).__name__,
-        )
-        return SECTION_FALLBACK_BODY.format(
-            report_id=report_id,
-            section_index=section_index,
-        )
-    return result
-
-
-#: Werkzeugname der Beitragssuche (Issue #1778).
-_POST_SEARCH_TOOL = "search_simulation_actions"
-
-
-def _prefetch_simulation_posts(
-    agent: Any,
-    section: Any,
-    section_index: int,
-    report_context: str,
-) -> tuple[Optional[str], int]:
-    """Führt die Beitragssuche für den Abschnitt aus (Issue #1778).
-
-    Der Report-Agent rief ``search_simulation_actions`` im Abnahmelauf
-    ``report_89d20c11edc1`` in zwei von sieben Abschnitten auf. Ein Abschnitt
-    ohne Suche schreibt allein aus Interviews, und kein Claim kann sich dann
-    auf einen Simulationsbeitrag stützen. Die Suche läuft deshalb zu Beginn
-    jedes Abschnitts durch das System, über denselben Weg wie ein Aufruf des
-    Modells: Die Treffer werden als Belege ``agent_action`` registriert und
-    tragen ihre Evidence-ID.
-
-    Rückgabe: ``(Trefferlistentext oder None, Zahl der ausgeführten Suchen)``.
-    Jede ausgeführte Suche zählt beim Aufrufer gegen das Werkzeuglimit des
-    Abschnitts, auch eine ohne Treffer — höchstens zwei (Review PR #1785).
-    Ohne das Werkzeug wird nichts ausgeführt.
-    """
-    tools = getattr(agent, "tools", None)
-    if not isinstance(tools, dict) or _POST_SEARCH_TOOL not in tools:
-        return None, 0
-    # Erst mit den Wörtern des Abschnitts suchen. Die Fragestellung des Laufs
-    # steht in fast jedem Beitrag; als Teil der Anfrage füllte sie die
-    # begrenzte Trefferliste mit beliebigen Beiträgen statt mit denen des
-    # Abschnitts (Review PR #1785). Sie ist nur der Rückfall, wenn der
-    # Abschnitt selbst nichts findet.
-    section_query = " ".join(
-        part
-        for part in (section.title, getattr(section, "description", "") or "")
-        if isinstance(part, str) and part
-    )
-    requirement = agent.simulation_requirement
-    queries = [section_query]
-    if isinstance(requirement, str) and requirement:
-        queries.append(requirement)
-    executed = 0
-    for query in queries:
-        if not query:
-            continue
-        executed += 1
-        result = _run_post_search(
-            agent, section, section_index, report_context, {"query": query, "limit": 12}
-        )
-        if result is not None:
-            return result, executed
-    return None, executed
-
-
-def _run_post_search(
-    agent: Any,
-    section: Any,
-    section_index: int,
-    report_context: str,
-    parameters: Dict[str, Any],
-) -> Optional[str]:
-    """Ein Aufruf der Beitragssuche; ``None`` ohne Treffer oder bei Werkzeugfehler."""
-    if agent.report_logger:
-        agent.report_logger.log_tool_call(
-            section_title=section.title,
-            section_index=section_index,
-            tool_name=_POST_SEARCH_TOOL,
-            parameters=parameters,
-            iteration=0,
-        )
-    result = agent._execute_tool(_POST_SEARCH_TOOL, parameters, report_context=report_context)
-    if agent.report_logger:
-        agent.report_logger.log_tool_result(
-            section_title=section.title,
-            section_index=section_index,
-            tool_name=_POST_SEARCH_TOOL,
-            result=result,
-            iteration=0,
-        )
-    # ``ActionSearchResult.to_text`` beginnt mit „Simulation posts"; ein
-    # Leertreffer und ein Werkzeugfehler sind kein Material für den Abschnitt.
-    if not isinstance(result, str) or not result.startswith("Simulation posts"):
-        return None
-    if "no matching posts" in result.splitlines()[0]:
-        return None
-    return result
-
-
-def _prefetch_into_prompt(
-    agent: Any,
-    section: Any,
-    section_index: int,
-    report_context: str,
-    messages: List[Dict[str, Any]],
-    used_tools: set,
-) -> int:
-    """Hängt die Vorab-Treffer an den ersten Prompt; liefert die Zahl der Suchen."""
-    prefetched_posts, prefetch_calls = _prefetch_simulation_posts(
-        agent, section, section_index, report_context
-    )
-    if prefetch_calls:
-        used_tools.add(_POST_SEARCH_TOOL)
-    if prefetched_posts is not None:
-        messages[-1]["content"] += agent.REACT_PREFETCHED_POSTS_TEMPLATE.format(
-            result=prefetched_posts,
-            tool_calls_count=prefetch_calls,
-            max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
-        )
-    elif prefetch_calls:
-        # Auch ohne Treffer sind die Aufrufe verbraucht; der Agent plant sonst
-        # mit fünf statt mit dem verbleibenden Budget.
-        messages[-1]["content"] += agent.REACT_PREFETCH_EMPTY_NOTE.format(
-            tool_calls_count=prefetch_calls,
-            max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
-        )
-    return prefetch_calls
-
-
-def generate_section_react(
-    agent: Any,
-    section,
-    outline,
-    previous_sections: List[str],
-    progress_callback: Optional[Callable] = None,
-    section_index: int = 0,
-) -> str:
-    logger.info(f"ReACT generating section: {section.title}")
-    agent._current_section_index = section_index
-    agent._active_section_evidence = []
-    agent._active_section_unresolved_evidence = []
-
-    if agent.report_logger:
-        agent.report_logger.log_section_start(section.title, section_index)
-
-    system_prompt = agent.SECTION_SYSTEM_PROMPT_TEMPLATE.format(
-        report_title=outline.title,
-        report_summary=outline.summary,
-        simulation_requirement=agent.simulation_requirement,
-        section_title=section.title,
-        tools_description=agent._get_tools_description(),
-        language=Config.REPORT_LANGUAGE,
-    )
-
-    if previous_sections:
-        previous_parts = []
-        for sec in previous_sections:
-            truncated = sec[:4000] + "..." if len(sec) > 4000 else sec
-            previous_parts.append(truncated)
-        previous_content = "\n\n---\n\n".join(previous_parts)
-    else:
-        previous_content = "(This is the first section)"
-
-    user_prompt = agent.SECTION_USER_PROMPT_TEMPLATE.format(
-        previous_content=previous_content,
-        section_title=section.title,
-    )
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-
-    tool_calls_count = 0
-    max_iterations = 5
-    # Issue #1294: letzter gültiger Entwurf, der nur mangels Deckung
-    # zurückgewiesen wurde — Forced-Final darf ihn nicht verschlechtern.
-    pending_draft: Optional[str] = None
-    conflict_retries = 0
-    # Issue #1191: die Merkliste ergebnisloser Suchen gilt pro Abschnitt. Ein
-    # anderer Abschnitt darf dieselbe Suche erneut versuchen — sein Kontext ist
-    # ein anderer, und die Suche ist billig genug, um sie nicht
-    # abschnittsuebergreifend zu verbieten.
-    # registry_for statt agent.empty_searches: der Zugriff muss auch dann eine
-    # echte Merkliste liefern, wenn der Agent ein Test-Double ist — ein
-    # MagicMock gaebe sonst fuer jede Suche ein truthy "war schon leer"
-    # zurueck und wuerde alle Tool-Calls unterdruecken.
-    registry_for(agent).reset()
-    used_tools = set()
-    all_tools = {
-        "insight_forge",
-        "panorama_search",
-        "quick_search",
-        "interview_agents",
-        "search_simulation_actions",
-    }
-    report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
-
-    # Issue #1778: die Beitragssuche läuft vorab; jede ausgeführte Suche zählt
-    # gegen das Werkzeuglimit des Abschnitts — das Limit selbst bleibt
-    # unverändert.
-    tool_calls_count += _prefetch_into_prompt(
-        agent, section, section_index, report_context, messages, used_tools
-    )
-
-    # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten
-    # andere Casings/Werte einschleusen. Unbekannte Werte fallen auf den Default
-    # "native" — symmetrisch zu Config/AgoraSettings, damit ein Fehlwert nicht
-    # ausgerechnet in einen anderen Modus wechselt als der Nicht-gesetzt-Fall.
-    _raw_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "native").strip().lower()
-    _toolcall_mode = (
-        _raw_toolcall_mode if _raw_toolcall_mode in ("native", "xml") else "native"
-    )
-
-    for iteration in range(max_iterations):
-        if progress_callback:
-            progress_callback(
-                "generating",
-                int((iteration / max_iterations) * 100),
-                f"Deep retrieval and writing in progress ({tool_calls_count}/{agent.MAX_TOOL_CALLS_PER_SECTION})",
-            )
-
-        if _toolcall_mode == "native":
-            # Nativer OpenAI function-calling Pfad
-            openai_tools = agent._get_openai_tools_schema()
-            native_result = agent.llm.chat_with_tools(
-                messages=messages,
-                tools=openai_tools,
-                tool_choice="auto",
-                temperature=0.5,
-                max_tokens=4096,
-                context="report",
-            )
-            response = native_result["content"]
-            native_tool_calls = native_result["tool_calls"]
-
-            if native_tool_calls:
-                # Normalisiere zu internem Format {name, parameters}
-                tool_calls = [
-                    {"name": tc["name"], "parameters": tc["arguments"]}
-                    for tc in native_tool_calls
-                ]
-                has_tool_calls = True
-                has_final_answer = False
-            else:
-                # Kein nativer Tool-Call — Soft-Fallback: XML-Parser einmal probieren.
-                # Issue #1277-1: ``content`` kann bei erschöpftem max_tokens,
-                # Safety-Filter oder leerer Completion None sein. Dann wirft
-                # ``_parse_tool_calls(None)`` (und ``"…" in None``) einen
-                # TypeError, den ``_safe_generate_section_react`` abfängt — der
-                # Section wird dauerhaft ``generation_failed``, obwohl der
-                # vorgesehene None-Retry (weiter unten) einen weiteren Versuch
-                # erlaubt. Hier None frühzeitig abfangen und den Retry-Pfad
-                # erreichen lassen.
-                if response is None:
-                    tool_calls = []
-                    has_tool_calls = False
-                    has_final_answer = False
-                else:
-                    xml_fallback = agent._parse_tool_calls(response)
-                    if xml_fallback:
-                        tool_calls = xml_fallback
-                        has_tool_calls = True
-                        has_final_answer = False
-                    else:
-                        tool_calls = []
-                        has_tool_calls = False
-                        has_final_answer = "Final Answer:" in response
-        else:
-            # Legacy XML-Pfad
-            response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
-            tool_calls = []
-            has_tool_calls = False
-            has_final_answer = False
-
-        if response is None:
-            logger.warning(f"Section {section.title} round {iteration + 1} iteration: LLM returned None")
-            if iteration < max_iterations - 1:
-                messages.append({"role": "assistant", "content": "(Response empty)"})
-                messages.append({"role": "user", "content": "Please continue generating content."})
-                continue
-            break
-
-        if _toolcall_mode == "xml":
-            logger.debug(f"LLM response: {response[:200]}...")
-            tool_calls = agent._parse_tool_calls(response)
-            has_tool_calls = bool(tool_calls)
-            has_final_answer = "Final Answer:" in response
-
-        if has_tool_calls and has_final_answer:
-            conflict_retries += 1
-            logger.warning(
-                f"Section {section.title} round {iteration+1} : "
-                f"LLM simultaneously output tool calls and Final Answer (round {conflict_retries} conflicts)"
-            )
-            if conflict_retries <= 2:
-                messages.append({"role": "assistant", "content": response})
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "[Format Error] You cannot include both tool calls and Final Answer in one reply.\n"
-                        "Each reply can only do one of the following:\n"
-                        "- Call a tool (output a <tool_call> block, don't write Final Answer)\n"
-                        "- Output final content (starting with 'Final Answer:', don't include <tool_call>)\n"
-                        "Please reply again and only do one of these."
-                    ),
-                })
-                continue
-            logger.warning(
-                "Section %s: %s consecutive conflicts, falling back to truncating the "
-                "reply after the first tool call",
-                section.title,
-                conflict_retries,
-            )
-            first_tool_end = response.find('</tool_call>')
-            if first_tool_end != -1:
-                response = response[:first_tool_end + len('</tool_call>')]
-                tool_calls = agent._parse_tool_calls(response)
-                has_tool_calls = bool(tool_calls)
-            has_final_answer = False
-            conflict_retries = 0
-
-        if agent.report_logger:
-            agent.report_logger.log_llm_response(
-                section_title=section.title,
-                section_index=section_index,
-                response=response,
-                iteration=iteration + 1,
-                has_tool_calls=has_tool_calls,
-                has_final_answer=has_final_answer,
-            )
-
-        if has_final_answer:
-            # Issue #1294: nicht die Zahl der Tool-Calls entscheidet, sondern ob
-            # vorhandene Evidence den Entwurf deckt (siehe section_coverage).
-            draft = _draft_content(response)
-            if not _section_has_sufficient_evidence(agent, draft):
-                pending_draft = response if draft else pending_draft
-                _request_coverage_retrieval(
-                    messages,
-                    response,
-                    agent.REACT_INSUFFICIENT_TOOLS_MSG,
-                    tool_calls_count,
-                    all_tools - used_tools,
-                )
-                continue
-
-            final_answer = _finalize_content(
-                response,
-                section_title=section.title,
-                section_index=section_index,
-                agent=agent,
-            )
-            logger.info(
-                "Section %s generation completed (tool calls: %s)",
-                section.title,
-                tool_calls_count,
-            )
-            if agent.report_logger:
-                agent.report_logger.log_section_content(
-                    section_title=section.title,
-                    section_index=section_index,
-                    content=final_answer,
-                    tool_calls_count=tool_calls_count,
-                )
-            agent._current_section_index = None
-            return final_answer
-
-        if has_tool_calls:
-            if tool_calls_count >= agent.MAX_TOOL_CALLS_PER_SECTION:
-                messages.append({"role": "assistant", "content": response})
-                messages.append({
-                    "role": "user",
-                    "content": agent.REACT_TOOL_LIMIT_MSG.format(
-                        tool_calls_count=tool_calls_count,
-                        max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
-                    ),
-                })
-                continue
-
-            call = tool_calls[0]
-            # Issue #1191: eine bereits ergebnislose Suche wird nicht mit einem
-            # anderen Werkzeug wiederholt. Der Versuch zaehlt bewusst NICHT
-            # gegen tool_calls_count — sonst spart die Unterdrueckung keine
-            # Iteration ein und der Iterationsanschlag kommt genauso.
-            _call_params = call.get("parameters", {}) or {}
-            _call_query = query_of(_call_params)
-            # Issue #1778: die Beitragssuche hat einen eigenen Schlüsselraum —
-            # ein Leertreffer im Graphen sperrt sie nicht (``dedup_key``).
-            if is_search_tool(call["name"]) and registry_for(agent).was_empty(
-                dedup_key(call["name"], _call_params)
-            ):
-                logger.info(
-                    "section %r: Suche %r uebersprungen — in diesem Abschnitt "
-                    "bereits ergebnislos (Werkzeug %s)",
-                    section.title,
-                    _call_query,
-                    call["name"],
-                )
-                messages.append({"role": "assistant", "content": response})
-                messages.append({
-                    "role": "user",
-                    "content": repeated_empty_search_message(
-                        call["name"],
-                        _call_params,
-                        tool_calls_count=tool_calls_count,
-                        max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
-                    ),
-                })
-                continue
-
-            if agent.report_logger:
-                agent.report_logger.log_tool_call(
-                    section_title=section.title,
-                    section_index=section_index,
-                    tool_name=call["name"],
-                    parameters=call.get("parameters", {}),
-                    iteration=iteration + 1,
-                )
-            result = agent._execute_tool(call["name"], call.get("parameters", {}), report_context=report_context)
-            if agent.report_logger:
-                agent.report_logger.log_tool_result(
-                    section_title=section.title,
-                    section_index=section_index,
-                    tool_name=call["name"],
-                    result=result,
-                    iteration=iteration + 1,
-                )
-            tool_calls_count += 1
-            used_tools.add(call['name'])
-            unused_tools = all_tools - used_tools
-            unused_hint = ""
-            if unused_tools and tool_calls_count < agent.MAX_TOOL_CALLS_PER_SECTION:
-                unused_hint = agent.REACT_UNUSED_TOOLS_HINT.format(unused_list=", ".join(unused_tools))
-            messages.append({"role": "assistant", "content": response})
-            messages.append({
-                "role": "user",
-                "content": agent.REACT_OBSERVATION_TEMPLATE.format(
-                    tool_name=call["name"],
-                    result=result,
-                    tool_calls_count=tool_calls_count,
-                    max_tool_calls=agent.MAX_TOOL_CALLS_PER_SECTION,
-                    used_tools_str=", ".join(used_tools),
-                    unused_hint=unused_hint,
-                ),
-            })
-            continue
-
-        draft = _draft_content(response)
-        if not _section_has_sufficient_evidence(agent, draft):
-            pending_draft = response if draft else pending_draft
-            _request_coverage_retrieval(
-                messages,
-                response,
-                agent.REACT_INSUFFICIENT_TOOLS_MSG_ALT,
-                tool_calls_count,
-                all_tools - used_tools,
-            )
-            continue
-
-        # Kein "Final Answer:"-Präfix: der Output geht trotzdem durch den
-        # Final-Content-Contract. Vorher wurde hier jeder Modelloutput
-        # ungeprüft zum Abschnittsinhalt — inklusive "Thought:"-Spuren.
-        final_answer = _finalize_content(
-            response,
-            section_title=section.title,
-            section_index=section_index,
-            agent=agent,
-        )
-        logger.info(
-            "Section %s: no 'Final Answer:' prefix detected, using the sanitized LLM "
-            "output as final content (tool calls: %s)",
-            section.title,
-            tool_calls_count,
-        )
-        if agent.report_logger:
-            agent.report_logger.log_section_content(
-                section_title=section.title,
-                section_index=section_index,
-                content=final_answer,
-                tool_calls_count=tool_calls_count,
-            )
-        agent._current_section_index = None
-        return final_answer
-
-    logger.warning(
-        "Section %s reached the maximum iteration count, forcing final generation",
-        section.title,
-    )
-    # Der Abschnitt entsteht unter Abbruchbedingungen. Bis hierher stand das
-    # nur im Log — der Leser sah einen Abschnitt, dem er nicht ansehen konnte,
-    # dass dem Agenten die Schritte ausgegangen waren.
-    mark_forced_final(agent, section_index)
-    response = _forced_final_response(agent, messages, _toolcall_mode, pending_draft)
-    if response is None:
-        final_answer = SECTION_EMPTY_RESPONSE_BODY
-    else:
-        final_answer = _finalize_content(
-            response,
-            section_title=section.title,
-            section_index=section_index,
-            agent=agent,
-        )
-    if agent.report_logger:
-        agent.report_logger.log_section_content(
-            section_title=section.title,
-            section_index=section_index,
-            content=final_answer,
-            tool_calls_count=tool_calls_count,
-        )
-    agent._current_section_index = None
-    return final_answer
-
-
-#: Notbremse für die Metadata-Extraktion: reale Sections liegen bei 5-12k
-#: Zeichen; erst weit darüber wird gekürzt (und geloggt), damit keine
-#: falschen "Abschnitt bricht ab"-Data-Gaps aus einem Preview entstehen.
-METADATA_MAX_CONTENT_CHARS = 24000
-
-#: Issue #1321: der frühere Aufruf setzte kein eigenes ``max_tokens`` und erbte
-#: damit ``LLM_MAX_TOKENS_FLOOR`` — einen Boden, der für volle Fließtext-
-#: Sections gedacht ist. Die Metadaten-Extraktion ist eine andere Aufgabe und
-#: soll nicht mitwandern, wenn jemand den Prosa-Boden nachjustiert. Deshalb
-#: ein eigener Wert plus ``enforce_token_floor=False``.
-#:
-#: **Bewusst nicht kleiner.** Naheliegend wäre ein enger Wert gewesen — die
-#: Extraktion liefert kompaktes JSON. Genau das wäre hier falsch: im
-#: beobachteten Lauf lief sie in das Ausgabelimit von ``gemini-2.0-flash``
-#: (8192, ``app/llm/tokens.py::_MODEL_OUTPUT_LIMITS``). Dieses Modell ist
-#: Legacy; aktuelle Gemini-Modelle greifen über den ``gemini-3``-Präfix und
-#: lösen auf 65536 auf. Ein Deckel von 8192 hätte ihnen das Legacy-Limit
-#: aufgezwungen — ausgerechnet den Wert, bei dem die Truncation auftrat.
-#:
-#: 32768 entspricht dem, was für Modelle mit ausreichendem Limit ohnehin galt.
-#: Der Wert ist damit heute verhaltensneutral; was sich ändert, ist die
-#: Entkopplung vom Prosa-Boden. ``resolve_max_tokens`` deckelt weiterhin auf
-#: das Modell-Limit, Legacy-Modelle bekommen also unverändert ihre 8192 — und
-#: ein Anschlag dort bleibt nicht mehr stumm (siehe
-#: ``_record_metadata_truncation_degradation``). Der Hebel gegen die
-#: Truncation selbst liegt auf der Eingangsseite
-#: (``METADATA_MAX_CONTENT_CHARS``, Schemagröße) und gehört in einen eigenen
-#: Slice.
-METADATA_MAX_OUTPUT_TOKENS = 32768
-
-
-def _record_metadata_truncation_degradation(
-    agent: Any,
-    *,
-    section_index: int,
-    schema_name: str,
-    exc: Exception,
-) -> None:
-    """Haengt einen Truncation-Eintrag an ``agent.evidence_map['degradation_log']``.
-
-    Feldform folgt ``EvidenceDegradationModel`` (``report_contract.py``) — das
-    Feld ist additiv und Teil des persistierten ``EvidenceMapModel``-Contracts,
-    daher keine freien Zusatzfelder. ``claim_id`` bleibt leer: die Extraktion
-    ist an dieser Stelle abgebrochen, bevor irgendein Claim entstand.
-
-    Defensiv: ``generate_section_metadata`` läuft früh in der Section-Pipeline;
-    ``agent.evidence_map`` kann dort noch ``None`` sein (siehe
-    ``ReportAgent.__init__``) oder in Tests ein ``MagicMock``. In beiden Fällen
-    wird nur geloggt, nicht geschrieben — der Aufrufer bleibt unblockiert.
-    """
-    evidence_map = getattr(agent, "evidence_map", None)
-    if not isinstance(evidence_map, dict):
-        logger.warning(
-            "generate_section_metadata: section=%d LLMOutputTruncatedError, aber "
-            "agent.evidence_map ist kein dict (%r) — degradation_log-Eintrag "
-            "übersprungen.",
-            section_index,
-            type(evidence_map),
-        )
-        return
-    entry = {
-        "section_index": section_index,
-        "claim_id": "",
-        "violation": "metadata_extraction_truncated",
-        "action": "dropped",
-        "detail": (
-            f"generate_section_metadata: LLM-Output für schema={schema_name} "
-            f"wurde am Token-Limit abgeschnitten ({exc}) — strukturierte "
-            f"Metadaten für Section {section_index} fehlen, Report-Status "
-            "kann dadurch auf 'incomplete' abgestuft werden."
-        ),
-    }
-    evidence_map["degradation_log"] = (
-        list(evidence_map.get("degradation_log") or []) + [entry]
-    )
-
-
-def _prior_thresholds_prompt(
-    agent: Any, schema_cls: type, section_index: int
-) -> str:
-    """Issue #1359: Zahlen früherer Abschnitte, auf die ein Wert verweisen kann.
-
-    Ohne sie kennt die Extraktion nur den eigenen Abschnitt — eine gewollte
-    Abweichung von einem Wert aus Abschnitt 1 ließe sich in Abschnitt 7 gar
-    nicht ausdrücken.
-    """
-    if "thresholds" not in getattr(schema_cls, "model_fields", {}):
-        return ""
-    evidence_map = getattr(agent, "evidence_map", None)
-    sections = evidence_map.get("sections") if isinstance(evidence_map, dict) else None
-    lines = prior_threshold_lines(sections, section_index)
-    if not lines:
-        return ""
-    return (
-        "\n\n## Bereits erfasste operative Zahlen früherer Abschnitte\n"
-        + "\n".join(lines)
-        + "\n\nNur als Bezug für deviates_from: nicht in die eigene Liste "
-        "übernehmen. Nennt dieser Abschnitt für dieselbe Größe einen anderen "
-        "Wert und begründet ihn, setze deviates_from auf die Kennung in "
-        "eckigen Klammern und übernimm die Begründung in deviation_rationale."
-    )
-
-
-def generate_section_metadata(
-    agent: Any,
-    section_title: str,
-    section_content: str,
-    section_index: int,
-    section_kind: str | None = None,
-) -> Dict[str, Any]:
-    """Extrahiert strukturierte Metadaten aus einem fertig generierten Abschnitt.
-
-    Wählt via :func:`_section_schema_for` das passende ReportV3-DTO aus
-    und übergibt es als ``schema=`` an :meth:`LLMClient.chat_json`.
-    Bei nicht-strict-fähigen Providern greift llm_client.py automatisch
-    auf json_object zurück — kein manueller Fallback nötig.
-
-    Args:
-        agent: Report-Agent-Instanz mit ``llm``-Attribut.
-        section_title: Titel des Abschnitts (steuert DTO-Auswahl).
-        section_content: Markdown-Text des generierten Abschnitts.
-        section_index: 1-basierter Abschnittsindex (für Logging).
-
-    Returns:
-        Validiertes dict aus dem gewählten DTO (via model_dump).
-        Bei Fehler leeres dict — die Hauptgenerierung ist nicht blockiert.
-    """
-    schema_cls = _section_schema_for(section_title, section_kind)
-    schema_name = f"section_metadata_{schema_cls.__name__.lower()}"
-
-    schema_json = json.dumps(
-        schema_cls.model_json_schema(), ensure_ascii=False, indent=2
-    )
-    system_msg = (
-        "Du bist ein Analyse-Assistent. Extrahiere strukturierte Metadaten "
-        "aus dem folgenden Report-Abschnitt.\n\n"
-        f"## Pflicht-Schema ({schema_cls.__name__})\n"
-        f"```json\n{schema_json}\n```\n\n"
-        "## Harte Regeln\n"
-        "1. Verwende AUSSCHLIESSLICH die im Schema definierten Feldnamen "
-        "in snake_case (z. B. `field_name` statt `fieldName`).\n"
-        "2. KEINE zusätzlichen Felder. Das Schema ist strict "
-        "(`additionalProperties=false`); jedes unbekannte Feld lässt die "
-        "Validierung fehlschlagen.\n"
-        "3. Verwende nur Informationen, die explizit im Abschnittstext stehen. "
-        "Erfinde keine Daten.\n"
-        "4. Bei fehlenden Informationen: leere Liste oder Default-Wert. "
-        "Nicht halluzinieren, nicht auffüllen."
-    )
-    # Der frühere 6000-Zeichen-Cap schnitt reale Sections mittendrin ab —
-    # die Metadata-Extraktion meldete daraufhin erfundene Data-Gaps wie
-    # "Abschnitt bricht ab", obwohl der persistierte Text vollständig war
-    # (report_06f654800817, Sections 3-6). Der Guard bleibt nur als
-    # Notbremse gegen entartete Inhalte weit oberhalb realer Sectionlängen.
-    if len(section_content) > METADATA_MAX_CONTENT_CHARS:
-        logger.warning(
-            "generate_section_metadata: section=%d Inhalt %d Zeichen > %d — "
-            "Metadaten sehen einen gekürzten Text.",
-            section_index,
-            len(section_content),
-            METADATA_MAX_CONTENT_CHARS,
-        )
-    user_msg = (
-        f"## Abschnittstitel\n{section_title}\n\n"
-        f"## Inhalt\n{section_content[:METADATA_MAX_CONTENT_CHARS]}"
-    ) + _prior_thresholds_prompt(agent, schema_cls, section_index)
-
-    try:
-        result = agent.llm.chat_json(
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=0.2,
-            max_tokens=METADATA_MAX_OUTPUT_TOKENS,
-            # Kompakte Extraktion, kein Fließtext — der generische Report-Boden
-            # (siehe Kommentar an METADATA_MAX_OUTPUT_TOKENS) ist hier fehl am Platz.
-            enforce_token_floor=False,
-            schema=schema_cls,
-            schema_name=schema_name,
-            context="report",
-        )
-        logger.info(
-            "generate_section_metadata: section=%d title=%r schema=%s",
-            section_index,
-            section_title,
-            schema_cls.__name__,
-        )
-        return result
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        # Issue #978: Budgetabbruch (#764) ist kein Extraktionsfehler — hart
-        # durchreichen, sonst läuft die Section-Schleife nach einem harten
-        # Limit klaglos weiter statt mit termination_reason=budget_* zu enden.
-        from ..run_budget import BudgetExceededError
-
-        if isinstance(exc, BudgetExceededError):
-            raise
-        logger.warning(
-            "generate_section_metadata: section=%d schema=%s extraction failed: %r",
-            section_index,
-            schema_cls.__name__,
-            exc,
-        )
-        # Issue #1321: Truncation lief bisher stumm in dieses generische
-        # except — status=incomplete (#1299) hatte danach keine sichtbare
-        # Begründung im console_log.txt. LLMOutputTruncatedError bekommt
-        # deshalb einen eigenen degradation_log-Eintrag; weiterhin nicht
-        # blockierend, ``return {}`` bleibt unten unverändert bestehen.
-        from ...llm.errors import LLMOutputTruncatedError
-
-        if isinstance(exc, LLMOutputTruncatedError):
-            _record_metadata_truncation_degradation(
-                agent,
-                section_index=section_index,
-                schema_name=schema_cls.__name__,
-                exc=exc,
-            )
-        # Unabhängig von der Ursache: für diesen Abschnitt gibt es keine
-        # strukturierten Metadaten. Personas, Schwellenwerte und
-        # Reibungspunkte daraus fehlen im Artefakt, und das gehört in die
-        # Qualitätsbilanz des Laufs — nicht nur ins Log.
-        mark_metadata_failure(agent, section_index)
-        return {}
-
-
-def _is_cancel_requested(run_id: Optional[str]) -> bool:
-    """Prüft das Cancel-Flag für ``run_id``; kein Fehler wenn run_id None."""
-    if not run_id:
-        return False
-    try:
-        from ..sim.cancel_flag import is_cancel_requested
-        return is_cancel_requested(run_id)
-    except Exception:  # noqa: BLE001 — cancel check fallback; returns False on failure
-        return False
-
-
-def _restore_work_trace_markers(agent: Any, report_id: str) -> None:
-    """Issue #1321 (Review-Finding PR #1378): Resume baut einen neuen
-    Agenten; bereits persistierte Sections laufen nicht erneut durch
-    _finalize_content, ihr Sanitization-Marker wäre also endgültig
-    verloren. Der Zustand wird pro Lauf persistiert und hier — vor der
-    ersten Cancel-Grenze — wiederhergestellt.
-
-    Issue #1479 (Codex-Review Runde 3, Finding 2): derselbe Verlust betrifft
-    ``fallback_outline_used`` — ein Resume baut einen neuen Agenten mit
-    ``fallback_outline_used = False``, und eine bereits persistierte
-    Fallback-Outline umgeht die erneute LLM-Planung, in der der Marker
-    sonst gesetzt würde. Wiederhergestellt aus demselben Run-Events-
-    Artefakt wie die Work-Trace-Marker."""
-    for index in sorted(ReportManager.load_work_trace_removed_sections(report_id)):
-        mark_work_traces_removed(agent, index)
-    for index in sorted(ReportManager.load_forced_final_sections(report_id)):
-        mark_forced_final(agent, index)
-    for index in sorted(ReportManager.load_metadata_failed_sections(report_id)):
-        mark_metadata_failure(agent, index)
-    # ``is True`` statt Truthy-Check: ein in Tests unkonfigurierter
-    # ``ReportManager``-MagicMock liefert für einen beliebigen Methodenaufruf
-    # ein truthy MagicMock-Objekt zurück, das den Marker sonst überall dort
-    # fälschlich setzen würde, wo ``load_fallback_outline_used`` nicht
-    # explizit auf ``True``/``False`` gestellt ist. Die echte Implementierung
-    # liefert immer einen echten ``bool``.
-    if ReportManager.load_fallback_outline_used(report_id) is True:
-        mark_fallback_outline_used(agent)
-
-
-def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
-    """Issue #1321 (Review-Finding PR #1378): der Marker muss den Lauf
-    überleben — Crash, Budgetabbruch und kooperativer Cancel dürfen ihn
-    nicht mit dem Prozess vergessen. Deshalb pro Section fortschreiben,
-    nicht erst am Laufende."""
-    markers = events_for(agent).work_trace_removed_sections
-    if markers:
-        ReportManager.save_work_trace_removed_sections(report_id, markers)
-    forced = events_for(agent).forced_final_sections
-    if forced:
-        ReportManager.save_forced_final_sections(report_id, forced)
-    meta_failed = events_for(agent).metadata_failed_sections
-    if meta_failed:
-        ReportManager.save_metadata_failed_sections(report_id, meta_failed)
-
-
-def _persist_fallback_outline_marker(agent: Any, report_id: str) -> None:
-    """Issue #1479 (Codex-Review Runde 3, Finding 2): der Marker muss den
-    Lauf überleben, sonst verliert ihn ein Resume mit neuem Agenten — siehe
-    ``_restore_work_trace_markers``."""
-    used = bool(events_for(agent).fallback_outline_used)
-    # Auch das ``False`` schreiben: heilt ein Resume die Planungsstoerung,
-    # muss der Marker das sagen — sonst verwirft ``_reusable_persisted_outline``
-    # den nun reell geplanten Outline bei jedem weiteren Resume erneut.
-    ReportManager.save_fallback_outline_used(report_id, used)
-
-
-def _validate_outline_structure(outline: Any) -> None:
-    ReportOutlineModel(
-        title=outline.title,
-        summary=outline.summary,
-        sections=[
-            ReportOutlineSectionModel(
-                title=section.title,
-                description=section.description,
-                # #1832: Kind aus der persistierten Section uebernehmen; alte
-                # Bestandsdaten ohne Kind fallen auf generic zurueck.
-                # #1832: tolerant gegen Bestandsdaten und Fremdobjekte — jeder
-                # Wert ausserhalb des Enums wird zu generic normalisiert.
-                section_kind=coerce_section_kind(getattr(section, "kind", None)),
-            )
-            for section in outline.sections
-        ],
-    )
-
-
-def _reusable_persisted_outline(
-    existing_report: Optional["Report"], report_id: str
-) -> Optional[Any]:
-    """Gueltige freie Outline wiederverwenden; alte Ersatzschemas neu planen."""
-    outline = existing_report.outline if existing_report else None
-    if outline is None:
-        return None
-    if ReportManager.load_fallback_outline_used(report_id) is True:
-        logger.info(
-            "Persistierter Outline stammt aus dem Fallback — wird verworfen und neu geplant",
-            extra={"report_id": report_id},
-        )
-        return None
-    try:
-        _validate_outline_structure(outline)
-    except ValidationError:
-        logger.info("Persistierter Outline ist strukturell ungueltig — wird neu geplant")
-        return None
-    return outline
-
-
-def _merge_run_degradations(
-    existing_report: Optional["Report"],
-    freshly_collected: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """Führt eine bereits persistierte Degradationsliste mit frisch
-    berechneten Einträgen zusammen, statt sie zu ersetzen.
-
-    Issue #1479 (Codex-Review Runde 3, Finding 2): die in Runde 2 in den
-    ``missing``-Zweig eingebaute Zuweisung ersetzte eine zuvor persistierte
-    Degradationsliste (z. B. ``outline_planning`` und ``run_cancellation``
-    aus einem Cancel an der Post-Outline-Grenze im vorigen Aufruf) durch
-    eine frisch berechnete — auf dem Resume-Pfad, wo der neue Agent
-    ``fallback_outline_used`` erst wieder aus dem Run-Events-Artefakt lernt,
-    potenziell eine leere oder unvollständige Liste. Deduplikation über
-    ``(component, reason)``, damit ein wiederholter Lauf keinen Eintrag
-    verdoppelt.
-    """
-    existing = existing_report.run_degradations if existing_report else None
-    merged: List[Dict[str, Any]] = list(existing or [])
-    seen = {
-        (entry.get("component"), entry.get("reason"))
-        for entry in merged
-        if isinstance(entry, dict)
-    }
-    for entry in freshly_collected:
-        key = (entry.get("component"), entry.get("reason"))
-        if key not in seen:
-            merged.append(entry)
-            seen.add(key)
-    return merged
-
-
-def _build_partial_report(
-    report: "Report",
-    *,
-    report_id: str,
-    completed_section_titles: List[str],
-    outline: Any,
-    agent: Any,
-    progress_callback: Optional[Callable[[str, int, str], None]],
-    quote_validation_failed_section_indices: Optional[List[int]] = None,
-    failed_section_indices: Optional[List[int]] = None,
-) -> "Report":
-    """Finalisiert einen Teil-Report nach kooperativem Cancel.
-
-    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections
-    und ermittelt den ehrlichen Status: ``COMPLETED`` nur wenn tatsächlich
-    alle Sections vorliegen und keine blockierende Degradation greift, sonst
-    ``INCOMPLETE`` (Issue #1479 — ein Teil-Report mit Cancel-bedingt
-    fehlenden Sections lief bislang unbedingt als COMPLETED hinaus).
-    Persistiert zusätzlich einen separaten Partial-Metadata-JSON-Artifact
-    neben dem Report.
-    """
-    from ...models.report import ReportStatus
-    from datetime import datetime
-    import os
-
-    cancelled_at = datetime.now().isoformat()
-    report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
-    total_sections = len(outline.sections)
-    report.status = resolve_report_status(
-        total_sections=total_sections,
-        failed_section_indices=failed_section_indices or [],
-        required_section_indices=list(range(1, total_sections + 1)),
-    )
-    evidence_map = agent.evidence_map if isinstance(agent.evidence_map, dict) else {}
-    report.status = apply_degradation_downgrade(
-        report.status,
-        evidence_map.get("degradation_log") or [],
-    )
-    report.status = apply_quote_validation_downgrade(
-        report.status,
-        quote_validation_failed_section_indices or [],
-    )
-    report.completed_at = cancelled_at
-
-    # Issue #1321 (Review-Finding PR #1378): der Teil-Report erreichte die
-    # einzige Degradations-Aggregation am normalen Laufende nie — eine vor
-    # dem Cancel still bereinigte Section war damit auch im Partial Report
-    # von einer unangetasteten nicht zu unterscheiden. Im flüchtigen
-    # RunEventLog ist die Menge zu diesem Zeitpunkt vollständig; hier wird
-    # die Summe gezogen, statt sie beim Abbruch zu verlieren.
-    # Issue #1419 (Codex-Review PR #1420): auch der Teil-Report muss sagen,
-    # worauf er beruht. Ohne die Persona-Zahlen ging ein nach dem Abbruch
-    # finalisierter Bericht als COMPLETED hinaus, obwohl saemtliche Stimmen
-    # darin regelbasierte Platzhalter waren — genau die Luecke, die der
-    # Normalpfad seit diesem Issue schliesst.
-    persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
-    # Issue #1479: Sections, die die Schleife nach dem Cancel nie mehr
-    # anfasste, sind kein Nebenaspekt — ``completed_section_titles`` zählt
-    # auch fehlgeschlagene, aber immerhin versuchte Sections mit; die
-    # Differenz zur Outline-Länge ist ausschließlich das, was der Abbruch
-    # verhindert hat.
-    missing_section_count = max(
-        len(outline.sections) - len(completed_section_titles), 0
-    )
-    # Issue #1766: auch der Teil-Report muss ausweisen, wenn die Simulation
-    # an fehlgeschlagenen LLM-Aufrufen litt.
-    sim_llm_total, sim_llm_failed = load_simulation_llm_call_stats(
-        report.simulation_id
-    )
-    fresh_degradations = collect_run_degradations(
-        simulation_snapshot=report.simulation_snapshot,
-        simulation_llm_calls_total=sim_llm_total,
-        simulation_llm_calls_failed=sim_llm_failed,
-        persona_fallback_count=persona_fallbacks,
-        persona_total=persona_total,
-        interviews_requested=breaker_for(agent).request_count("interview_agents"),
-        interviews_succeeded=_count_interview_evidence(agent),
-        interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
-        failed_section_indices=failed_section_indices or [],
-        fallback_outline_used=events_for(agent).fallback_outline_used,
-        cancelled_missing_section_count=missing_section_count,
-        forced_final_section_indices=events_for(agent).forced_final_sections,
-        work_trace_removed_section_indices=sorted(
-            events_for(agent).work_trace_removed_sections
-        ),
-        metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
-        stance_analysis=_stance_analysis_of(agent),
-    )
-    report.run_degradations = _merge_run_degradations(report, fresh_degradations)
-    report.status = apply_run_degradation_downgrade(
-        report.status, report.run_degradations
-    )
-    # Issue #1479: auch der Teil-Report muss durch die Vollständigkeits-
-    # prüfung — sonst zeigt ein abgebrochener Lauf ohne fehlende Section
-    # (Cancel exakt an der letzten Grenze) trotzdem inhaltlich dünnen Text
-    # als COMPLETED aus.
-    _apply_requirement_check(report, agent, report_id)
-
-    ReportManager.save_report(report)
-    _persist_evidence_density(agent, report_id)
-
-    # Partial-Marker als separates Artifact persistieren
-    # (Report-Dataclass hat kein metadata-Feld — Erweiterung ohne Schema-Migration)
-    partial_metadata: Dict[str, Any] = {
-        "partial": True,
-        "cancelled_at": cancelled_at,
-        "completed_stages": list(completed_section_titles),
-        "report_id": report_id,
-    }
-    partial_path = os.path.join(
-        ReportManager._ensure_report_folder(report_id), "partial_metadata.json"
-    )
-    try:
-        ReportManager._write_json_atomic(partial_path, partial_metadata)
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        logger.warning(
-            "_build_partial_report: could not write partial_metadata.json: %r", exc
-        )
-
-    # Issue #1479 (Codex-Review Runde 2, Finding 1): der Status oben kann
-    # bereits ehrlich INCOMPLETE sein (Run-Degradation-Downgrade,
-    # Requirement-Check) — die beiden Terminal-Events an Polling
-    # (``update_progress``) und Streaming (``progress_callback``) duerfen das
-    # nicht uebertoenen, sonst sieht jeder Consumer trotzdem "completed".
-    # Progress bleibt bei 100: anders als die fruehen ``missing``-/Persona-
-    # Floor-Returns (Progress 0, dort wurde nichts generiert) hat dieser Pfad
-    # bereits fertige Sections. Gleiches Muster wie der Normalpfad am
-    # eigentlichen Laufende (siehe unten, "terminal_stage").
-    if report.status == ReportStatus.INCOMPLETE:
-        terminal_stage = "incomplete"
-        terminal_message = (
-            f"Partial report incomplete ({len(completed_section_titles)} "
-            "sections completed before cancel)"
-        )
-    else:
-        terminal_stage = "completed"
-        terminal_message = (
-            f"Partial report generated ({len(completed_section_titles)} "
-            "sections completed before cancel)"
-        )
-    ReportManager.update_progress(
-        report_id,
-        terminal_stage,
-        100,
-        terminal_message,
-        completed_sections=completed_section_titles,
-    )
-    if progress_callback:
-        progress_callback(
-            terminal_stage,
-            100,
-            terminal_message,
-        )
-    if agent.report_logger:
-        # Bewusst unveraendert: ``log_report_complete`` ist ein interner
-        # Audit-Log-Eintrag (agent_log.jsonl), kein Consumer-Terminal-Event.
-        # Er meldet, dass die Generierungsphase abgeschlossen wurde — nicht,
-        # dass der Inhalt vollstaendig ist. Der Normalpfad ruft ihn ebenso
-        # unbedingt auf, bevor dort ueber INCOMPLETE/COMPLETED entschieden
-        # wird (Zeile ~1795 vor Zeile ~1927) — dieselbe Semantik gilt hier.
-        agent.report_logger.log_report_complete(
-            total_sections=len(completed_section_titles),
-            total_time_seconds=0.0,
-        )
-    if agent.console_logger:
-        agent.console_logger.close()
-        agent.console_logger = None
-    logger.info(
-        "generate_report: partial report finalised report_id=%s sections=%d",
-        report_id,
-        len(completed_section_titles),
-    )
-    return report
-
-
-def _apply_requirement_check(report: Report, agent: Any, report_id: str) -> None:
-    """Issue #1302: maschinelle Vollständigkeitprüfung vor dem Abschluss.
-
-    Der Reporter setzte ``completed``, ohne zu prüfen, ob die geforderten
-    Analyseaspekte (Widersprüche, Frühwarnindikatoren, Stop-/Expand-
-    Bedingungen, Positionswechsel, Koalitionen) im Bericht stehen. Fehlende
-    Aspekte hängen als ``requirement_checker``-Degradationen an
-    ``run_degradations`` und werden über dieselbe Mechanik abgestuft wie
-    #1006/#1299 — keine zweite Statuslogik.
-
-    Der Aufruf liegt NACH dem ReportV3-Build: der Contract-Export entscheidet
-    über den Status bis dahin noch mit COMPLETED — würde dieser Check früher
-    abstuften, würde ``build_report_v3`` übersprungen und das Artefakt
-    fehlte. Erst danach stuft dieser Check ab und ein einziger ``save_report``
-    persistiert Status + Fehlerliste zusammen.
-    """
-    if not Config.REPORT_REQUIREMENT_CHECKER_ENABLED:
-        return
-    requirement_intent = detect_report_intent(
-        getattr(agent, "simulation_requirement", "") or ""
-    )
-    missing_requirements = find_missing_requirements(
-        [report.markdown_content],
-        checklist=checklist_for_intent(requirement_intent),
-    )
-    if not missing_requirements:
-        return
-    report.run_degradations = list(report.run_degradations) + (
-        collect_requirement_degradations(missing_requirements)
-    )
-    report.status = apply_run_degradation_downgrade(
-        report.status,
-        [
-            entry
-            for entry in report.run_degradations
-            if entry.get("component") == "requirement_checker"
-        ],
-    )
-    logger.warning(
-        "generate_report: report=%s verfehlt %d Pflichtaspekt(e): %s",
-        report_id,
-        len(missing_requirements),
-        ", ".join(req.id for req in missing_requirements),
-    )
-    if not getattr(report, "error", None):
-        report.error = (
-            "Inhaltliche Vollständigkeit unzureichend — fehlende Aspekte: "
-            + ", ".join(req.id for req in missing_requirements)
-        )
-
-
-def _sections_with_persisted_evidence(agent: Any, report_id: str) -> List[Dict[str, Any]]:
-    """Persistierte Sektionen ohne verwaiste Markdown-Dateien.
-
-    Codex-Review PR #1475, Finding 2: Markdown ohne zugehörigen
-    Evidence-Eintrag ist eine Waise (siehe ``process_section``) — sie wird
-    gleich neu generiert. Ungefiltert flösse sie hier trotzdem in den
-    Prompt-Kontext (``previous_sections``) und die Fortschrittsmeldung
-    (``completed_section_titles``) ein und würde nach der Regeneration ein
-    zweites Mal angehängt.
-
-    Bewusst als eigene Funktion und nicht inline in ``generate_report``:
-    ``generate_report`` steht in ``backend/radon-allowlist.txt`` mit
-    ``cc<=55`` und wäre inline auf 59 gestiegen — das Komplexitäts-Gate
-    schlägt dann fehl.
-    """
-    persisted_evidence_section_indices = {
-        section.get("section_index")
-        for section in (agent.evidence_map or {}).get("sections") or []
-    }
-    return [
-        section_info
-        for section_info in ReportManager.get_generated_sections(report_id)
-        if section_info["section_index"] in persisted_evidence_section_indices
-    ]
-
-
-def _build_and_validate_report_v3(
-    report: Any,
-    agent: Any,
-    *,
-    report_mode: Optional[str],
-    report_id: str,
-) -> None:
-    """Baut ReportV3 vorab und stuft den Report bei Schema-Verstoessen ab.
-
-    Issue #1299 (Review-Finding Codex/CodeRabbit): ``ReportManager.save_report()``
-    baut ``report-v3.json`` nur wenn ``report.status == COMPLETED`` ist und faengt
-    einen ``ValidationError`` dabei INTERN ab (kein Artefakt, aber auch kein Signal
-    an den Aufrufer, siehe ``manager.py::save_report``). Ohne diesen Vorab-Check
-    erreicht ein frisch fehlgeschlagener ReportV3-Build den Downgrade-Block im
-    Red-Team-Abschnitt nie: ``get_report_v3()`` liefert ``None`` (kein Artefakt
-    geschrieben), die Truthiness-Pruefung dort ueberspringt den gesamten
-    Validierungsblock, und ``report.status`` bleibt faelschlich ``COMPLETED``.
-
-    Mutiert ``report`` in place (``status``, ``error``, ``run_degradations``) —
-    wie zuvor inline in :func:`generate_report`. ``ReportManager`` wird bewusst
-    ueber den Modul-Namensraum aufgeloest, damit die bestehenden
-    ``patch("...workflow.ReportManager")``-Ziele der Testsuite weiter greifen.
-    """
-    if not (report.status == ReportStatus.COMPLETED and agent.evidence_map):
-        return
-    try:
-        ReportManager.build_report_v3(report, agent.evidence_map, report_mode=report_mode)
-    except ValidationError as val_exc:
-        error_count = len(val_exc.errors())
-        logger.error(
-            "generate_report: build_report_v3 hat report=%s vor der ersten "
-            "Persistierung abgelehnt — %d Schema-Verletzung(en). Errors=%s",
-            report_id,
-            error_count,
-            val_exc.errors()[:5],
-        )
-        if not getattr(report, "error", None):
-            report.error = (
-                f"Report enthält {error_count} unvollständige Section(s) — "
-                "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
-                "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
-            )
-        report.status = apply_report_v3_validation_downgrade(
-            report.status, val_exc.errors()
-        )
-        # Die Bilanz wurde vom Aufrufer gezogen, bevor dieser Fehler auftrat.
-        # Ohne den Nachtrag stufte der Status zwar ab, aber ``run_degradations``
-        # bliebe leer — die API meldete einen unvollstaendigen Contract-Export
-        # ohne einen einzigen Grund, und die Red-Team-Invariante "degradiert,
-        # aber completed" liefe ins Leere.
-        report.run_degradations = list(report.run_degradations) + (
-            collect_run_degradations(contract_validation_errors=val_exc.errors())
-        )
+logger = get_logger("agora.report_agent")
 
 
 def generate_report(
@@ -2282,8 +187,6 @@ def generate_report(
         simulation_requirement=agent.simulation_requirement,
         status=ReportStatus.PENDING,
         created_at=datetime.now().isoformat(),
-        # Issue #1192: hier — und nicht am Ende — ist der Datenbestand
-        # festgehalten, den der Agent tatsaechlich sieht.
         simulation_snapshot=capture_simulation_snapshot(agent.simulation_id),
     )
 
@@ -2291,16 +194,6 @@ def generate_report(
 
     try:
         ReportManager._ensure_report_folder(report_id)
-        # Issue #1340 (Codex-Review PR #1349): ``build_report_v3`` uebernimmt
-        # Red-Team-Befunde und deren Modell-Zuordnung aus dem bestehenden
-        # Artefakt, weil ein spaeterer ``save_report()`` sie sonst mit dem
-        # Feld-Default ueberschreibt. Bei ``force_regenerate`` laeuft die
-        # Generierung aber erneut auf derselben ``report_id`` — dann gehoeren
-        # die alten Befunde zu einem anderen Claim-Set. Laeuft die
-        # Red-Team-Stage im neuen Lauf durch, ueberschreibt sie sie ohnehin;
-        # ueberspringt ``_red_team_required`` sie, blieben sie ohne diesen
-        # Schnitt als stille Altlast stehen. Der Lauf beginnt deshalb ohne
-        # fremden Review-Stand — das Erben gilt nur innerhalb eines Laufs.
         ReportManager.reset_review_state(report_id)
         legacy_evidence_map = migrate_v1_to_v2(
             ReportManager.get_evidence_map(report_id)
@@ -2312,8 +205,6 @@ def generate_report(
                 agent.evidence_map
             ).model_dump(mode="json")
 
-        # Issue #1778: Haltung je Beitrag einmal vor dem ersten Abschnitt
-        # bestimmen; das Ergebnis geht in die Degradationssumme des Laufs.
         agent.stance_analysis = _compute_stance_analysis(agent, report_id)
 
         _restore_work_trace_markers(agent, report_id)
@@ -2326,18 +217,6 @@ def generate_report(
         )
         agent.console_logger = agent.ReportConsoleLogger(report_id)
 
-        # Issue #1479 (Codex-Review Runde 4, Finding 1): dieser Read muss VOR
-        # dem folgenden ``save_report(report)`` stattfinden. Der frische
-        # ``Report`` von oben traegt eine leere ``run_degradations``-Liste;
-        # laese man ``existing_outline`` erst danach (wie zuvor), saehe man
-        # bereits die eigene, gerade geschriebene leere Liste statt des
-        # zuvor persistierten Stands — ein ``run_cancellation``-Eintrag aus
-        # einem Cancel nach Planung (Stage-Boundary 1) waere dann schon beim
-        # naechsten Resume verloren, bevor ``_merge_run_degradations`` (unten)
-        # ihn je zu Gesicht bekommt. Separates Persistieren des
-        # Cancel-Zustands (Alternativoption aus dem Finding) wuerde denselben
-        # Bug nur duplizieren: die Reihenfolge Save-vor-Read ist der Fehler,
-        # nicht das fehlende Feld.
         existing_outline = ReportManager.get_report(report_id)
 
         ReportManager.update_progress(report_id, "pending", 0, "Initializing report...", completed_sections=[])
@@ -2351,9 +230,6 @@ def generate_report(
 
         outline = _reusable_persisted_outline(existing_outline, report_id)
         if outline is None:
-            # Vor dem neuen Versuch den aus dem Vorlauf geerbten Marker
-            # loeschen: ein gelungener neuer Plan darf nicht den alten
-            # Fallback-Status erben.
             clear_fallback_outline_used(agent)
             outline = plan_outline_impl(
                 agent,
@@ -2369,7 +245,6 @@ def generate_report(
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, {len(outline.sections)} sections in total", completed_sections=[])
         ReportManager.save_report(report)
 
-        # Cancel-Check nach Outline (Stage-Boundary 1)
         if _is_cancel_requested(cancel_run_id):
             return _build_partial_report(
                 report,
@@ -2397,21 +272,11 @@ def generate_report(
             return report
 
         report.status = ReportStatus.GENERATING
-        # Den Wechsel sofort persistieren: sonst stand ``meta.json`` bis zum
-        # ersten fertigen Abschnitt auf ``planning``, und Fassungsliste und
-        # Bericht-Reiter zeigten waehrend der Abschnittserzeugung die falsche
-        # Phase (beobachtet an report_238ba4371858).
         ReportManager.save_report(report)
-        # #1738: der Kurzschluss nach einem nicht-transienten Provider-400
-        # gilt pro Generierungslauf, nicht über einen Resume hinweg.
         events_for(agent).persistent_provider_error = None
         total_sections = len(outline.sections)
         generated_sections = []
-        # P0-7: Abschnitte, deren Generierung fehlgeschlagen ist. Eine
-        # fehlgeschlagene Pflichtsection macht den Report INCOMPLETE.
         failed_section_indices: List[int] = []
-        # Issue #1299: Abschnitte, deren Zitatprüfung (inkl. Repair-Retry)
-        # erfolglos blieb — macht den Report ebenfalls höchstens INCOMPLETE.
         quote_validation_failed_section_indices: List[int] = sorted(
             ReportManager.load_quote_validation_failed_sections(report_id)
         )
@@ -2421,10 +286,6 @@ def generate_report(
             completed_section_titles.append(title)
             generated_sections.append(section_info["content"])
 
-        # Issue #1212: Der Abschnitts-Durchlauf steht in ``section_pipeline``.
-        # Die Seams werden hier aus den Modul-Globals dieses Moduls gebunden —
-        # damit bleibt patchbar, was bisher patchbar war, ohne dass die
-        # Pipeline ``workflow`` kennen muss.
         section_ctx = SectionContext(
             report_id=report_id,
             outline=outline,
@@ -2444,7 +305,6 @@ def generate_report(
         )
 
         for i, section in enumerate(outline.sections):
-            # Cancel-Check am Anfang jeder Section-Iteration (Stage-Boundary 2+)
             if _is_cancel_requested(cancel_run_id):
                 return _build_partial_report(
                     report,
@@ -2460,13 +320,6 @@ def generate_report(
             result: SectionResult = process_section(
                 agent, section, section_ctx, section_index=section_num
             )
-            # Issue #1479 (Codex-Review Runde 3, Finding 1): auch ein
-            # wiederhergestellter (restaurierter) Abschnitt kann laut
-            # persistierter Evidence ``generation_failed`` sein — dieser
-            # Zweig muss ihn in ``failed_section_indices`` aufnehmen, bevor
-            # der ``continue`` unten die restlichen Übernahmeschritte
-            # überspringt (die für einen bereits gezählten Abschnitt nicht
-            # nötig sind).
             if result.failed:
                 failed_section_indices.append(section_num)
             if result.restored:
@@ -2500,38 +353,21 @@ def generate_report(
             progress_callback("generating", 95, assembling_message)
         ReportManager.update_progress(report_id, "generating", 95, assembling_message, completed_sections=completed_section_titles)
         report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
-        # P0-7: Status folgt dem tatsächlichen Erfolg der Abschnitte. Ein
-        # Report mit fehlgeschlagener Pflichtsection ist INCOMPLETE — der Rest
-        # bleibt nutzbar, aber der Nutzer sieht, was fehlt.
         report.status = resolve_report_status(
             total_sections=total_sections,
             failed_section_indices=failed_section_indices,
             required_section_indices=list(range(1, total_sections + 1)),
         )
-        # Issue #1006: eine lokale Claim-Degradierung darf ein sonst
-        # vollständiges Ergebnis nicht als COMPLETED ausweisen.
         evidence_map = agent.evidence_map if isinstance(agent.evidence_map, dict) else {}
         report.status = apply_degradation_downgrade(
             report.status,
             evidence_map.get("degradation_log") or [],
         )
-        # Issue #1299: eine Section mit erfolglos gebliebener Zitatprüfung
-        # (Repair-Retry ausgeschöpft) darf den Report nicht als COMPLETED
-        # ausweisen — die Zitate darin sind nicht gegen die Evidenzbasis
-        # verifiziert.
         report.status = apply_quote_validation_downgrade(
             report.status,
             quote_validation_failed_section_indices,
         )
-        # Der Bericht muss über die Qualität seiner eigenen Grundlage Auskunft
-        # geben. Im Referenzlauf report_cc2ef45da5e9 stand "completed" über
-        # einer gescheiterten Simulation mit 45 von 48 Runden und null
-        # zustande gekommenen Interviews — jede Komponente tat, was sie sollte,
-        # nur zog niemand die Summe.
         persona_fallbacks, persona_total = _load_persona_fallback_stats(agent)
-        # Issue #1766: Status und Rundenzahl der Simulation sehen einen Lauf
-        # nicht, dessen LLM-Aufrufe massenhaft scheiterten (Rate-Limits);
-        # nur das Usage-Ledger des Simulations-Jobs kennt die Fehlerzahl.
         sim_llm_total, sim_llm_failed = load_simulation_llm_call_stats(
             report.simulation_id
         )
@@ -2539,18 +375,12 @@ def generate_report(
             simulation_snapshot=report.simulation_snapshot,
             simulation_llm_calls_total=sim_llm_total,
             simulation_llm_calls_failed=sim_llm_failed,
-            # Issue #1419: Ein Lauf, dessen Personas saemtlich Platzhalter
-            # waren, meldete sich bis hierher als vollstaendig. Die
-            # Vorbereitung erfasst den Ausfall bereits — nur zog ihn niemand
-            # in den Bericht, der am Ende weitergegeben wird.
             persona_fallback_count=persona_fallbacks,
             persona_total=persona_total,
             interviews_requested=breaker_for(agent).request_count("interview_agents"),
             interviews_succeeded=_count_interview_evidence(agent),
             interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
             failed_section_indices=failed_section_indices,
-            # Issue #1479: dieselbe Warnung gilt auch für einen Lauf, der
-            # trotz Fallback-Outline bis zum Ende durchlief.
             fallback_outline_used=events_for(agent).fallback_outline_used,
             forced_final_section_indices=events_for(agent).forced_final_sections,
             work_trace_removed_section_indices=events_for(
@@ -2579,22 +409,13 @@ def generate_report(
         if agent.report_logger:
             agent.report_logger.log_report_complete(total_sections=total_sections, total_time_seconds=total_time_seconds)
 
-        # Issue #1299: Vorab-Build, damit ein fehlgeschlagener ReportV3-Build den
-        # Status abstuft statt still auf COMPLETED zu bleiben. Begruendung im
-        # Docstring von ``_build_and_validate_report_v3``.
         _build_and_validate_report_v3(
             report, agent, report_mode=report_mode, report_id=report_id
         )
-        # Issue #1302: siehe _apply_requirement_check.
         _apply_requirement_check(report, agent, report_id)
         ReportManager.save_report(report)
         _persist_evidence_density(agent, report_id)
 
-        # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
-        # Track 3b: ValidationError separat fangen, damit ein durch LLM-Failures
-        # entstandenes ReportV3-Schema-Loch (sections.N.title missing usw.) eine
-        # klare user-facing Message produziert statt einen Pydantic-Stack-Trace
-        # ins Frontend zu schicken.
         try:
             report_v3_raw = ReportManager.get_report_v3(report_id)
             if report_v3_raw:
@@ -2608,7 +429,7 @@ def generate_report(
                         "fehlgeschlagenen LLM-Calls. Errors=%s",
                         report_id,
                         error_count,
-                        val_exc.errors()[:5],  # erste 5 für Logs, nicht den ganzen Trace
+                        val_exc.errors()[:5],
                     )
                     if report and not getattr(report, "error", None):
                         report.error = (
@@ -2616,26 +437,15 @@ def generate_report(
                             "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
                             "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
                         )
-                    # Issue #1299: ein ReportV3, das seinen eigenen Contract
-                    # nicht erfüllt, darf den Report nicht als COMPLETED
-                    # stehen lassen. Der ``save_report`` oben (Zeile ~1209)
-                    # hat bereits mit dem alten Status persistiert — bei einer
-                    # Abstufung hier muss deshalb erneut gespeichert werden,
-                    # sonst weichen persistierter Report und
-                    # terminal_stage/Progress-Message voneinander ab.
                     previous_status = report.status
                     report.status = apply_report_v3_validation_downgrade(
                         report.status, val_exc.errors()
                     )
                     if report.status != previous_status:
                         ReportManager.save_report(report)
-                    # Pipeline weiter ohne red_team_review — Report bleibt nutzbar
-                    # mit Fallback-Content in den betroffenen Sections.
                     report_v3_obj = None
                 if report_v3_obj is not None:
                     echo_index = _get_echo_index(agent)
-                    # Gleiche reine Funktion wie in plan_outline auf derselben
-                    # Eingabe — deterministisch identisch, kein zweiter Zustand.
                     intent = detect_report_intent(
                         getattr(agent, "simulation_requirement", "") or ""
                     )
@@ -2657,24 +467,12 @@ def generate_report(
                         echo_index,
                     )
         except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            # Issue #978: Dieser Handler umschliesst den _run_red_team_review-Aufruf.
-            # Ohne den Reraise waere der Fix INNERHALB von _run_red_team_review
-            # wirkungslos — der dort korrekt durchgereichte Budgetabbruch wuerde
-            # hier erneut verschluckt, die naechste Zeile setzte "completed", und
-            # report_generation.py::except BudgetExceededError -> mark_budget_abort
-            # wuerde nie erreicht. Genau das Symptom aus #978.
             from ..run_budget import BudgetExceededError
 
             if isinstance(exc, BudgetExceededError):
                 raise
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
-        # Issue #1277-2: Stage und Message folgen dem tatsächlichen Report-Status.
-        # ``resolve_report_status``/``apply_degradation_downgrade`` können den
-        # Report auf INCOMPLETE setzen (fehlgeschlagene Pflichtsection, lokale
-        # Claim-Degradierung). Ein unbedingtes „completed“ bei 100 % würde
-        # Consumern (WebSocket, Polling-Client, Streaming-UI) Erfolg vorgaukeln,
-        # den die Pipeline selbst nicht einlöst — genau die Fehldarstellung, die
-        # #1006 / P0-7 beseitigen sollte.
+
         if report.status == ReportStatus.INCOMPLETE:
             terminal_stage = "incomplete"
             terminal_message = report.error or "Report generation incomplete"
@@ -2690,15 +488,10 @@ def generate_report(
         return report
 
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        # Budgetabbruch (#764) ist kein technischer Fehler: durchreichen, damit
-        # report_generation den Run als "stopped" + termination_reason markiert.
         from ..run_budget import BudgetExceededError
 
         if isinstance(e, BudgetExceededError):
             raise
-        # Bewusst nicht dieselbe Variable wie die Fortschrittsmeldung unten: der
-        # Logger formatiert lazy über %, damit bei abgeschaltetem Level gar nichts
-        # zusammengebaut wird. Genau dafür wurde die Zeile umgestellt.
         logger.error("Report generation failed: %s", e)
         report.status = ReportStatus.FAILED
         report.error = str(e)
@@ -2742,7 +535,6 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
 
     tool_calls_made = []
     max_iterations = 2
-    # Casing-tolerant + Whitelist (symmetrisch zu generate_section_react).
     _raw_chat_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "native").strip().lower()
     _chat_toolcall_mode = (
         _raw_chat_toolcall_mode
@@ -2824,6 +616,7 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
 
 
 __all__ = [
+    "_section_expects_quotes",
     "chat",
     "generate_report",
     "generate_section_metadata",

@@ -1,0 +1,5 @@
+### Changed (Struktur-Modularisierung großer Backend-, Skript- und Frontend-Module — 2026-10-28)
+
+- **Report-Agent & Contracts (`app/services/report_agent/`, `app/contracts/`):** `workflow.py`, `manager.py`, `agent.py`, `evidence.py`, `section_pipeline.py`, `text_verification.py`, `run_degradation.py` und `report_contract.py` wurden in fokussierte Submodule mit kompatiblen Re-Export-Fassaden zerlegt.
+- **Core-Services, API & LLM-Client (`app/services/`, `app/api/`, `app/llm/`, `app/config.py`):** `evidence_entailment.py` (`app/services/entailment/`), `graph_build.py`, `prepare_service.py`, `prepare_entities.py`, `llm_routing_seed.py`, `api/runs.py`, `api/simulation_run.py`, `llm/client.py` und `config.py` wurden in wartbare Einzelmodule aufgeteilt.
+- **Simulations-Skripte & Frontend (`backend/scripts/`, `frontend/src/`):** `agent_tools.py`, `_sim_common.py` und `run_parallel_simulation.py` sowie `Dossier.vue`, `NewRunDialog.vue` und `HeroNewRun.vue` wurden in klar abgegrenzte Hilfsmodule und Vue-Subkomponenten zerlegt.

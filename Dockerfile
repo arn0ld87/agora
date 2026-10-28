@@ -166,9 +166,9 @@ RUN set -eux; \
 # Claude-Abo ueberhaupt aus dem Container heraus nutzen zu koennen.
 FROM base AS claude-cli
 
-ARG CLAUDE_CODE_VERSION=2.1.292
-ARG CLAUDE_CODE_SHA256_AMD64=a967e7b1d8b4e47ee421d5433027880347952b0c0857abf880e2c942a4ec93b3
-ARG CLAUDE_CODE_SHA256_ARM64=24caa9e6ff13bf227049a2626f1c816fc895023050f0ec3b12dbf14d897367e0
+ARG CLAUDE_CODE_VERSION=2.1.287
+ARG CLAUDE_CODE_SHA256_AMD64=3920489a5109cff5786a1a392c25277408ff22bc796d5edb9c16a60e5a1718f0
+ARG CLAUDE_CODE_SHA256_ARM64=e4daf793d1e74fb0d9874dd09e98690bbfd7be515f78a87fd05b9e2b4bb33b03
 # Vertrags-Check wie bei codex (#1861): jedes Flag, das
 # build_claude_cli_command() uebergibt, muss in ``claude --help`` stehen
 # (``-p`` ist dort als ``--print`` gefuehrt).

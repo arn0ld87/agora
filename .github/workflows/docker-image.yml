@@ -322,7 +322,7 @@ jobs:
           fi
 
       - name: SBOM fuer Container-Image erzeugen
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: agora-agora:ci-${{ github.sha }}
           format: spdx-json
@@ -804,7 +804,7 @@ jobs:
           push-to-registry: true
 
       - name: Generate GHCR SBOM
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ghcr.io/${{ github.repository_owner }}/agora@${{ steps.build_ghcr.outputs.digest }}
           format: spdx-json
@@ -862,7 +862,7 @@ jobs:
         # agora-proxy wird genauso oeffentlich publiziert wie agora; ohne
         # eigene SBOM waere das Freigabekriterium "Release-Artefakte,
         # Checksummen und SBOM vorhanden" nur fuer ein Image erfuellt (#1661).
-        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ghcr.io/${{ github.repository_owner }}/agora-proxy@${{ steps.build_proxy.outputs.digest }}
           format: spdx-json

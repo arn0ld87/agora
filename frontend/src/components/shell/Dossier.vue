@@ -304,19 +304,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import { useOperatorAccess } from '../../composables/useOperatorAccess'
 import { DossierTestId } from '../../contracts/testIds'
 import { SHELF_KIND_TAG, type ShelfObject } from '../../types/shelf'
-import { useCancelAction } from './useCancelAction'
-import { useObjectDetail } from '../../composables/useObjectDetail'
-import { useDeriveSimulation } from '../../composables/useDeriveSimulation'
-import { useStartFromPersona } from '../../composables/useStartFromPersona'
-import { useSystemStatus, statusErrorKey } from '../../composables/useSystemStatus'
-import { formatShelfDate, jobStatusMessage, type useShelf } from '../../composables/useShelf'
-import type { ConfidenceLabel } from '../../contracts/reportContract'
+import type { useShelf } from '../../composables/useShelf'
+import { useDossierHelpers } from './useDossierHelpers'
 
 /**
  * Dossier.vue — rechte Spalte (Block B3).
@@ -335,747 +326,127 @@ import type { ConfidenceLabel } from '../../contracts/reportContract'
 
 const props = defineProps<{ object: ShelfObject | null; shelf: ReturnType<typeof useShelf> }>()
 
-const { t, te, locale } = useI18n()
-const router = useRouter()
-// Einstellungen sind Betreiber-Zustand: für Supabase-Nutzer ausgeblendet (#1617).
-const operatorAccess = useOperatorAccess()
-const cancelAction = useCancelAction()
-
-// Details werden erst beim Auswaehlen geholt, nicht fuer jede Zeile.
-const { detail } = useObjectDetail(
-  computed(() => props.object),
+const {
   t,
-)
-
-const { busy: deriveBusy, derive } = useDeriveSimulation()
-const startFromPersona = useStartFromPersona()
-const startBusy = computed(() => startFromPersona.busy.value)
-const deriveError = ref('')
-
-// ── Uebersichtszustand (kein Objekt gewaehlt) ──────────────────────
-const attentionItems = computed(() => props.shelf.objects.value.filter((o) => o.nextAction?.kind === 'warn').slice(0, 5))
-const liveItems = computed(() => props.shelf.activeObjects.value)
-const recentItems = computed(() =>
-  props.shelf.objects.value.filter((o) => o.active === null && o.nextAction?.kind !== 'warn').slice(0, 3),
-)
-
-const overviewHeadingKey = computed(() => {
-  const live = liveItems.value.length
-  const attn = attentionItems.value.length
-  if (live > 0 && attn > 0) return 'views.shelf.overview.headingBoth'
-  if (live > 0) return 'views.shelf.overview.headingLive'
-  if (attn > 0) return 'views.shelf.overview.headingAttention'
-  return 'views.shelf.overview.headingIdle'
-})
-
-const systemStatus = useSystemStatus()
-onMounted(() => {
-  void systemStatus.refresh()
-})
-
-/** Kompakter Systemstatus — nur die Quellen, die es auch bei Reachable/Unreachable meint (Ollama idle = kein Fehler, wird ausgelassen). */
-const systemRows = computed(() => {
-  const s = systemStatus.status.value
-  if (!s) return []
-  const rows: { key: string; label: string; ok: boolean; hint: string }[] = [
-    { key: 'neo4j', label: t('dashboard.system.neo4j'), ok: s.neo4j.reachable, hint: s.neo4j.reachable ? '' : (s.neo4j.error ? t(statusErrorKey(s.neo4j.error)) : '') },
-  ]
-  if (s.ollama.reachable !== null) {
-    rows.push({ key: 'ollama', label: t('dashboard.system.ollama'), ok: s.ollama.reachable, hint: s.ollama.reachable ? '' : (s.ollama.error ? t(statusErrorKey(s.ollama.error)) : '') })
-  }
-  return rows
-})
-
-function goTo(to: NonNullable<ShelfObject['nextAction']>['to']): void {
-  void router.push(to)
-}
-
-function openObject(obj: ShelfObject): void {
-  void router.push({ name: 'ShelfObject', params: { kind: obj.kind, objectId: obj.id } })
-}
-
-function goToNewObject(): void {
-  void router.push({ name: 'NewRun' })
-}
-
-/** Ableiten gibt es nur beim Bericht, und nur wenn seine Simulation bekannt ist. */
-const canDerive = computed(
-  () => props.object?.kind === 'bericht' && Boolean(props.object.simulationId),
-)
-
-// ── Vertrauensverteilung (nur Bericht, Redesign PR 4) ──────────────
-const CONFIDENCE_ORDER: ConfidenceLabel[] = ['speculative', 'low', 'medium', 'high', 'verified']
-const confidenceEntries = computed(() => {
-  const dist = detail.value?.confidenceDistribution
-  if (!dist) return []
-  return CONFIDENCE_ORDER.filter((label) => (dist[label] ?? 0) > 0).map((label) => ({ label, count: dist[label] ?? 0 }))
-})
-
-async function onStartFromPersona(): Promise<void> {
-  const obj = props.object
-  if (!obj || obj.kind !== 'personasatz') return
-  deriveError.value = ''
-  const res = await startFromPersona.start(obj.id, t('shelf.dossier.startName', { title: obj.title }))
-  if (res) router.push({ name: 'StepEnvSetup', params: { projectId: res.simulationId } })
-  else deriveError.value = t('shelf.dossier.startFailed')
-}
-
-async function onDerive(): Promise<void> {
-  const obj = props.object
-  if (!obj?.simulationId) return
-  deriveError.value = ''
-  const res = await derive(obj.simulationId, t('shelf.dossier.deriveName', { title: obj.title }))
-  if (res) {
-    router.push({ name: 'StepEnvSetup', params: { projectId: res.simulationId } })
-  } else {
-    deriveError.value = t('shelf.dossier.deriveFailed')
-  }
-}
-
-function openFull(): void {
-  if (!props.object?.nextAction) return
-  void router.push(props.object.nextAction.to)
-}
-
-function togglePause(active: NonNullable<ShelfObject['active']>): void {
-  if (!active.simulationId) return
-  if (active.status === 'paused') void cancelAction.resume(active.simulationId)
-  else void cancelAction.pause(active.simulationId)
-}
-
-function formatUpdatedAt(iso: string): string {
-  return formatShelfDate(iso, locale.value, t)
-}
+  te,
+  operatorAccess,
+  cancelAction,
+  detail,
+  deriveBusy,
+  startBusy,
+  deriveError,
+  attentionItems,
+  liveItems,
+  recentItems,
+  overviewHeadingKey,
+  systemRows,
+  canDerive,
+  confidenceEntries,
+  goTo,
+  openObject,
+  goToNewObject,
+  onStartFromPersona,
+  onDerive,
+  openFull,
+  togglePause,
+  formatUpdatedAt,
+  jobStatusMessage,
+} = useDossierHelpers(props)
 </script>
 
 <style scoped>
-.dossier {
-  padding: var(--sp-6) var(--sp-7);
-  min-width: 0;
-  overflow-y: auto;
-  height: 100%;
-}
-
-.dossier__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-5);
-}
-
-.dossier__head-main {
-  min-width: 0;
-}
-
-.dossier__kicker {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  margin-bottom: 6px;
-}
-
-.dossier__title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-title-1);
-  font-weight: 600;
-  letter-spacing: var(--tr-title-1);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dossier__summary {
-  margin: 6px 0 0;
-  font-family: var(--font-serif);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--text-secondary);
-  max-width: 76ch;
-}
-
-.dossier__head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.dossier__btn {
-  height: 32px;
-  padding: 0 14px;
-  border-radius: var(--r-3);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.dossier__btn--ghost {
-  background: transparent;
-  border: 1px solid var(--hairline);
-  color: var(--text-secondary);
-}
-
-.dossier__btn--ghost:hover {
-  color: var(--text-primary);
-  border-color: var(--hairline-strong);
-}
-
-.dossier__btn--primary {
-  background: transparent;
-  border: 1px solid var(--hairline-strong);
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.dossier__btn--primary:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.dossier__btn:disabled {
-  opacity: var(--v4-state-disabled-opacity, 0.45);
-  cursor: default;
-}
-
-.dossier__btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.dossier__kpis {
-  display: flex;
-  flex-wrap: wrap;
-  margin: var(--sp-5) 0 0;
-  border-top: 1px solid var(--hairline);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.dossier__kpi {
-  /* dt (Label) steht im Markup vor dd (Wert) — semantisch korrekt fuer
-     dl, aber die Vorlage zeigt den Wert oben. column-reverse dreht nur
-     die Darstellung, nicht die DOM-/Vorlesereihenfolge. */
-  display: flex;
-  flex-direction: column-reverse;
-  flex: 1;
-  min-width: 96px;
-  padding: 12px 16px;
-  border-left: 1px solid var(--hairline);
-}
-
-.dossier__kpi:first-child {
-  border-left: 0;
-  padding-left: 0;
-}
-
-.dossier__kpi > dt,
-.dossier__kpi > dd {
-  margin: 0;
-}
-
-.dossier__kpi-value {
-  font-family: var(--font-mono);
-  font-size: var(--fs-title-3);
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dossier__kpi-value--text {
-  font-family: var(--font-sans);
-  font-size: var(--fs-callout);
-}
-
-.dossier__kpi-value--mono {
-  font-size: var(--fs-footnote);
-}
-
-.dossier__kpi-label {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  margin-bottom: 3px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dossier__btn {
-    transition: none;
-  }
-}
-
-.dossier__parts {
-  margin-top: var(--sp-6);
-  border-top: 1px solid var(--hairline);
-  padding-top: var(--sp-5);
-}
-
-.dossier__detail-summary {
-  font-family: var(--font-serif);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--text-secondary);
-  margin: 0 0 var(--sp-4);
-}
-
-.dossier__part-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.dossier__part {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-.dossier__part-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.dossier__part-title {
-  font-size: var(--fs-subhead);
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.dossier__part-desc {
-  font-size: var(--fs-footnote);
-  line-height: var(--lh-footnote);
-  color: var(--text-tertiary);
-}
-
-.dossier__part-count {
-  font-family: var(--font-mono);
-  font-size: var(--fs-title-3);
-  color: var(--text-primary);
-  flex-shrink: 0;
-}
-
-.dossier__section-title {
-  margin: 0 0 var(--sp-3);
-  font-family: var(--font-sans);
-  font-size: var(--fs-subhead);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.dossier__timeline,
-.dossier__confidence,
-.dossier__redteam {
-  margin-top: var(--sp-6);
-  border-top: 1px solid var(--hairline);
-  padding-top: var(--sp-5);
-}
-
-.dossier__evidence-omitted {
-  margin-top: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--color-danger, #b3261e);
-  border-radius: var(--radius-2, 6px);
-  color: var(--color-danger, #b3261e);
-  font-size: var(--fs-footnote);
-}
-
-.dossier__timeline-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.dossier__timeline-item {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 140px) minmax(0, 1fr);
-  gap: var(--sp-3);
-  padding: var(--sp-2) 0;
-  border-top: 1px solid var(--hairline);
-  font-size: var(--fs-footnote);
-}
-
-.dossier__timeline-list > .dossier__timeline-item:first-child {
-  border-top: 0;
-}
-
-.dossier__timeline-time {
-  font-family: var(--font-mono);
-  color: var(--text-tertiary);
-}
-
-.dossier__timeline-type {
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-}
-
-.dossier__timeline-status {
-  color: var(--text-secondary);
-}
-
-.dossier__confidence-list {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.dossier__confidence-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: var(--fs-footnote);
-}
-
-.dossier__confidence-row dt {
-  margin: 0;
-  color: var(--text-secondary);
-}
-
-.dossier__confidence-row dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-}
-
-.dossier__redteam-list {
-  margin: 0;
-  padding-left: 1.1em;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  font-size: var(--fs-footnote);
-  color: var(--text-secondary);
-}
-
-.dossier__error {
-  margin: var(--sp-3) 0 0;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-3);
-  background: var(--status-red-bg);
-  color: var(--status-red);
-  font-size: var(--fs-footnote);
-}
-
+.dossier { padding: var(--sp-6) var(--sp-7); min-width: 0; overflow-y: auto; height: 100%; }
+.dossier__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-5); }
+.dossier__head-main { min-width: 0; }
+.dossier__kicker { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 6px; }
+.dossier__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-title-1); font-weight: 600; letter-spacing: var(--tr-title-1); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dossier__summary { margin: 6px 0 0; font-family: var(--font-serif); font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-secondary); max-width: 76ch; }
+.dossier__head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.dossier__btn { height: 32px; padding: 0 14px; border-radius: var(--r-3); font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.dossier__btn--ghost { background: transparent; border: 1px solid var(--hairline); color: var(--text-secondary); }
+.dossier__btn--ghost:hover { color: var(--text-primary); border-color: var(--hairline-strong); }
+.dossier__btn--primary { background: transparent; border: 1px solid var(--hairline-strong); color: var(--text-primary); font-weight: 600; }
+.dossier__btn--primary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.dossier__btn:disabled { opacity: var(--v4-state-disabled-opacity, 0.45); cursor: default; }
+.dossier__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dossier__kpis { display: flex; flex-wrap: wrap; margin: var(--sp-5) 0 0; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+/* dt (Label) steht im Markup vor dd (Wert) — semantisch korrekt fuer
+   dl, aber die Vorlage zeigt den Wert oben. column-reverse dreht nur
+   die Darstellung, nicht die DOM-/Vorlesereihenfolge. */
+.dossier__kpi { display: flex; flex-direction: column-reverse; flex: 1; min-width: 96px; padding: 12px 16px; border-left: 1px solid var(--hairline); }
+.dossier__kpi:first-child { border-left: 0; padding-left: 0; }
+.dossier__kpi > dt, .dossier__kpi > dd { margin: 0; }
+.dossier__kpi-value { font-family: var(--font-mono); font-size: var(--fs-title-3); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dossier__kpi-value--text { font-family: var(--font-sans); font-size: var(--fs-callout); }
+.dossier__kpi-value--mono { font-size: var(--fs-footnote); }
+.dossier__kpi-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 3px; }
+@media (prefers-reduced-motion: reduce) { .dossier__btn { transition: none; } }
+.dossier__parts { margin-top: var(--sp-6); border-top: 1px solid var(--hairline); padding-top: var(--sp-5); }
+.dossier__detail-summary { font-family: var(--font-serif); font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-secondary); margin: 0 0 var(--sp-4); }
+.dossier__part-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.dossier__part { display: flex; align-items: center; gap: var(--sp-3); }
+.dossier__part-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.dossier__part-title { font-size: var(--fs-subhead); color: var(--text-primary); font-weight: 600; }
+.dossier__part-desc { font-size: var(--fs-footnote); line-height: var(--lh-footnote); color: var(--text-tertiary); }
+.dossier__part-count { font-family: var(--font-mono); font-size: var(--fs-title-3); color: var(--text-primary); flex-shrink: 0; }
+.dossier__section-title { margin: 0 0 var(--sp-3); font-family: var(--font-sans); font-size: var(--fs-subhead); font-weight: 600; color: var(--text-primary); }
+.dossier__timeline, .dossier__confidence, .dossier__redteam { margin-top: var(--sp-6); border-top: 1px solid var(--hairline); padding-top: var(--sp-5); }
+.dossier__evidence-omitted { margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--color-danger, #b3261e); border-radius: var(--radius-2, 6px); color: var(--color-danger, #b3261e); font-size: var(--fs-footnote); }
+.dossier__timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dossier__timeline-item { display: grid; grid-template-columns: 80px minmax(0, 140px) minmax(0, 1fr); gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--hairline); font-size: var(--fs-footnote); }
+.dossier__timeline-list > .dossier__timeline-item:first-child { border-top: 0; }
+.dossier__timeline-time { font-family: var(--font-mono); color: var(--text-tertiary); }
+.dossier__timeline-type { font-family: var(--font-mono); color: var(--text-secondary); }
+.dossier__timeline-status { color: var(--text-secondary); }
+.dossier__confidence-list { margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.dossier__confidence-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); font-size: var(--fs-footnote); }
+.dossier__confidence-row dt { margin: 0; color: var(--text-secondary); }
+.dossier__confidence-row dd { margin: 0; font-family: var(--font-mono); color: var(--text-primary); }
+.dossier__redteam-list { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: var(--sp-2); font-size: var(--fs-footnote); color: var(--text-secondary); }
+.dossier__error { margin: var(--sp-3) 0 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-3); background: var(--status-red-bg); color: var(--status-red); font-size: var(--fs-footnote); }
 /* ── Uebersichtszustand (Redesign PR 3) ──────────────────────────── */
-
-.dossier__ov-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-6);
-}
-
-.dossier__ov-head-main {
-  min-width: 0;
-}
-
-.dossier__ov-title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-title-1);
-  font-weight: 600;
-  letter-spacing: var(--tr-title-1);
-  color: var(--text-primary);
-  text-wrap: balance;
-}
-
-.dossier__ov-subtitle {
-  margin: var(--sp-2) 0 0;
-  font-size: var(--fs-callout);
-  color: var(--text-secondary);
-  max-width: 62ch;
-}
-
-.dossier__ov-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--sp-7);
-  margin-top: var(--sp-6);
-}
-
-.dossier__ov-col {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-7);
-}
-
-.dossier__ov-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-
-.dossier__ov-heading {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-title-3);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.dossier__ov-count {
-  font-size: var(--fs-caption-1);
-  color: var(--text-tertiary);
-}
-
-.dossier__ov-count--live {
-  color: var(--status-teal);
-}
-
-.dossier__ov-empty {
-  margin: var(--sp-3) 0 0;
-  font-size: var(--fs-callout);
-  color: var(--text-tertiary);
-}
-
-.dossier__ov-attn-list {
-  list-style: none;
-  margin: var(--sp-3) 0 0;
-  padding: 0;
-}
-
-.dossier__ov-attn {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) 0;
-  border-top: 1px solid var(--hairline);
-}
-
-.dossier__ov-attn:last-child {
-  border-bottom: 1px solid var(--hairline);
-}
-
-.dossier__ov-attn-sig {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  background: var(--status-orange-bg);
-  color: var(--status-orange);
-}
-
-.dossier__ov-attn-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.dossier__ov-attn-title {
-  display: block;
-  min-width: 0;
-  font-size: var(--fs-callout);
-  color: var(--text-primary);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dossier__ov-attn-status {
-  font-size: var(--fs-caption-1);
-  color: var(--text-secondary);
-}
-
-.dossier__ov-list {
-  list-style: none;
-  margin: var(--sp-3) 0 0;
-  padding: 0;
-}
-
-.dossier__ov-list-row {
-  width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: var(--sp-3);
-  row-gap: 2px;
-  align-items: baseline;
-  padding: var(--sp-2) 0;
-  border-top: 1px solid var(--hairline);
-  background: transparent;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
-  text-align: left;
-  cursor: pointer;
-  font-family: var(--font-sans);
-}
-
-.dossier__ov-list-title {
-  min-width: 0;
-  font-size: var(--fs-callout);
-  color: var(--text-primary);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dossier__ov-list-status {
-  grid-column: 1;
-  font-size: var(--fs-caption-1);
-  color: var(--text-secondary);
-}
-
-.dossier__ov-list-time {
-  grid-row: 1 / span 2;
-  align-self: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-footnote);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.dossier__ov-list-row:hover {
-  background: var(--surface-hover);
-}
-
-.dossier__ov-list-row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.dossier__ov-live-list {
-  margin-top: var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.dossier__ov-live-card {
-  border: 1px solid var(--status-teal-bg);
-  border-radius: var(--r-5);
-  padding: var(--sp-4);
-  background: var(--status-teal-bg);
-}
-
-.dossier__ov-live-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-
-.dossier__ov-live-title {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-callout);
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dossier__ov-live-status {
-  margin: var(--sp-1) 0 0;
-  font-size: var(--fs-caption-1);
-  color: var(--text-secondary);
-}
-
-.dossier__ov-bar {
-  margin-top: var(--sp-3);
-  height: 4px;
-  border-radius: var(--r-pill);
-  background: var(--hairline);
-  overflow: hidden;
-}
-
-.dossier__ov-bar i {
-  display: block;
-  height: 100%;
-  background: var(--status-teal);
-}
-
-.dossier__ov-live-actions {
-  display: flex;
-  gap: var(--sp-2);
-  margin-top: var(--sp-3);
-}
-
-.dossier__ov-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--status-teal);
-}
-
-.dossier__ov-dot--live {
-  background: var(--status-teal);
-}
-
-.dossier__ov-dot--ok {
-  background: var(--status-green);
-}
-
-.dossier__ov-dot--err {
-  background: var(--status-red);
-}
-
-.dossier__ov-system-list {
-  list-style: none;
-  margin: var(--sp-3) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.dossier__ov-system-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  font-size: var(--fs-caption-1);
-}
-
-.dossier__ov-system-label {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.dossier__ov-system-hint {
-  color: var(--text-tertiary);
-}
-
-.dossier__ov-link {
-  display: inline-block;
-  margin-top: var(--sp-3);
-  font-size: var(--fs-caption-1);
-  color: var(--text-secondary);
-}
-
-.dossier__ov-link:hover {
-  color: var(--text-primary);
-}
-
-@media (max-width: 1279px) {
-  .dossier__ov-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
+.dossier__ov-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-6); }
+.dossier__ov-head-main { min-width: 0; }
+.dossier__ov-title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-title-1); font-weight: 600; letter-spacing: var(--tr-title-1); color: var(--text-primary); text-wrap: balance; }
+.dossier__ov-subtitle { margin: var(--sp-2) 0 0; font-size: var(--fs-callout); color: var(--text-secondary); max-width: 62ch; }
+.dossier__ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-7); margin-top: var(--sp-6); }
+.dossier__ov-col { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-7); }
+.dossier__ov-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.dossier__ov-heading { margin: 0; font-family: var(--font-sans); font-size: var(--fs-title-3); font-weight: 600; color: var(--text-primary); }
+.dossier__ov-count { font-size: var(--fs-caption-1); color: var(--text-tertiary); }
+.dossier__ov-count--live { color: var(--status-teal); }
+.dossier__ov-empty { margin: var(--sp-3) 0 0; font-size: var(--fs-callout); color: var(--text-tertiary); }
+.dossier__ov-attn-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; }
+.dossier__ov-attn { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; border-top: 1px solid var(--hairline); }
+.dossier__ov-attn:last-child { border-bottom: 1px solid var(--hairline); }
+.dossier__ov-attn-sig { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10.5px; background: var(--status-orange-bg); color: var(--status-orange); }
+.dossier__ov-attn-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dossier__ov-attn-title { display: block; min-width: 0; font-size: var(--fs-callout); color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dossier__ov-attn-status { font-size: var(--fs-caption-1); color: var(--text-secondary); }
+.dossier__ov-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; }
+.dossier__ov-list-row { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-3); row-gap: 2px; align-items: baseline; padding: var(--sp-2) 0; border-top: 1px solid var(--hairline); background: transparent; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; cursor: pointer; font-family: var(--font-sans); }
+.dossier__ov-list-title { min-width: 0; font-size: var(--fs-callout); color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dossier__ov-list-status { grid-column: 1; font-size: var(--fs-caption-1); color: var(--text-secondary); }
+.dossier__ov-list-time { grid-row: 1 / span 2; align-self: center; font-family: var(--font-mono); font-size: var(--fs-footnote); color: var(--text-tertiary); white-space: nowrap; }
+.dossier__ov-list-row:hover { background: var(--surface-hover); }
+.dossier__ov-list-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dossier__ov-live-list { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-3); }
+.dossier__ov-live-card { border: 1px solid var(--status-teal-bg); border-radius: var(--r-5); padding: var(--sp-4); background: var(--status-teal-bg); }
+.dossier__ov-live-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.dossier__ov-live-title { flex: 1; min-width: 0; font-size: var(--fs-callout); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dossier__ov-live-status { margin: var(--sp-1) 0 0; font-size: var(--fs-caption-1); color: var(--text-secondary); }
+.dossier__ov-bar { margin-top: var(--sp-3); height: 4px; border-radius: var(--r-pill); background: var(--hairline); overflow: hidden; }
+.dossier__ov-bar i { display: block; height: 100%; background: var(--status-teal); }
+.dossier__ov-live-actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); }
+.dossier__ov-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--status-teal); }
+.dossier__ov-dot--live { background: var(--status-teal); }
+.dossier__ov-dot--ok { background: var(--status-green); }
+.dossier__ov-dot--err { background: var(--status-red); }
+.dossier__ov-system-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.dossier__ov-system-row { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-caption-1); }
+.dossier__ov-system-label { color: var(--text-primary); font-weight: 500; }
+.dossier__ov-system-hint { color: var(--text-tertiary); }
+.dossier__ov-link { display: inline-block; margin-top: var(--sp-3); font-size: var(--fs-caption-1); color: var(--text-secondary); }
+.dossier__ov-link:hover { color: var(--text-primary); }
+@media (max-width: 1279px) { .dossier__ov-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

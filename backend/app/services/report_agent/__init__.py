@@ -41,6 +41,12 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    try:
+        module = import_module(f".{name}", __name__)
+        globals()[name] = module
+        return module
+    except ImportError:
+        pass
     for module_name in (".agent", ".manager", ".prompts", ".tools"):
         module = import_module(module_name, __name__)
         if hasattr(module, name):
