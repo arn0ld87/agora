@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Sequence
 
+from ...contracts.report_contract import counts_for_confidence
 from ...contracts.report_v3 import Threshold
 from ..evidence_entailment import coverage_ratio, extract_numeric_facts
 
@@ -231,12 +232,23 @@ def threshold_measure_key(threshold: Threshold) -> tuple[Any, ...] | None:
 VERIFYING_SOURCE_KINDS = frozenset({"seed_corpus", "agent_quote", "graph_relation"})
 
 
+def _is_verifying_record(record: Any) -> bool:
+    """Nur echte, nicht-manuelle Beleggattungen dürfen einen Schwellenwert stützen (ADR-0022 §4)."""
+    if not isinstance(record, dict):
+        return False
+    if str(record.get("source_kind") or "") not in VERIFYING_SOURCE_KINDS:
+        return False
+    if not counts_for_confidence(record):
+        return False
+    if record.get("supports_claim") is False:
+        return False
+    return True
+
+
 def _evidence_texts(evidence_pool: Sequence[Dict[str, Any]]) -> List[tuple[str, str]]:
     out: List[tuple[str, str]] = []
     for record in evidence_pool:
-        if not isinstance(record, dict):
-            continue
-        if str(record.get("source_kind") or "") not in VERIFYING_SOURCE_KINDS:
+        if not _is_verifying_record(record):
             continue
         evidence_id = str(record.get("evidence_id") or "").strip()
         if not evidence_id:
@@ -262,21 +274,41 @@ def bind_threshold_provenance(
     nichts an ihr — eine unbelegte Zahl als belegt auszuweisen wäre der
     schlimmere Fehler.
 
-    Bereits belegte Thresholds bleiben unangetastet; ihre Referenzen kommen
-    aus dem Modell und sind nicht schlechter als diese hier.
+    Bereits belegte Thresholds behalten gültige Referenzen; zeigt eine
+    mitgelieferte Referenz im Pool auf einen unzulässigen Record (``inferred``,
+    ``web_source``, ``graph_origin in ('manual', 'edited')``) oder blieb nach
+    dem Index-Filter in ``build_report_v3`` ein ``verified``-Threshold ohne
+    ``evidence_refs`` zurück, wird die Referenz bereinigt und der Status ohne
+    Texttreffer auf ``heuristic`` zurückgesetzt.
     """
     texts = _evidence_texts(evidence_pool)
-    if not texts:
-        return list(thresholds)
+    pool_by_id: Dict[str, Dict[str, Any]] = {
+        str(record.get("evidence_id") or "").strip(): record
+        for record in evidence_pool
+        if isinstance(record, dict) and str(record.get("evidence_id") or "").strip()
+    }
 
     bound: List[Threshold] = []
     for threshold in thresholds:
+        if threshold.evidence_refs:
+            cleaned_refs = [
+                ref
+                for ref in threshold.evidence_refs
+                if ref not in pool_by_id or _is_verifying_record(pool_by_id[ref])
+            ]
+            if cleaned_refs != list(threshold.evidence_refs):
+                threshold = threshold.model_copy(update={"evidence_refs": cleaned_refs})
         # Issue #1343: Datumsangaben nehmen an der numerischen Fact-Suche
         # nicht teil — sie vergleicht float-Werte und würde an einem ISO-
         # String crashen. Ein Datum zu belegen bräuchte Datumserkennung im
         # Quelltext; bis dahin bleibt es ehrlich heuristic, außer das Modell
         # nennt selbst Belege.
-        if threshold.evidence_refs or threshold.kind == "date":
+        if threshold.evidence_refs:
+            bound.append(threshold)
+            continue
+        if threshold.kind == "date":
+            if threshold.evidence_status == "verified":
+                threshold = threshold.model_copy(update={"evidence_status": "heuristic"})
             bound.append(threshold)
             continue
 
@@ -288,6 +320,8 @@ def bind_threshold_provenance(
             and coverage_ratio(threshold.label, text) >= LABEL_MATCH_THRESHOLD
         ]
         if not refs:
+            if threshold.evidence_status == "verified":
+                threshold = threshold.model_copy(update={"evidence_status": "heuristic"})
             bound.append(threshold)
             continue
 

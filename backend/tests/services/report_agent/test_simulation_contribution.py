@@ -192,3 +192,137 @@ def test_renderer_bleibt_ehrlich_ohne_messung():
         simulation_contribution = None
 
     assert "unbekannt" in render_simulation_contribution(_Report())
+
+
+def test_manual_and_edited_graph_records_do_not_count_in_simulation_contribution():
+    """Manuelle/editierte Graph-Records zählen weder als validiert noch als Beleg."""
+    evidence_map = _map(
+        [
+            _claim("claim_manual", "ev_manual"),
+            _claim("claim_edited", "ev_edited"),
+            _claim("claim_mixed", "ev_action", "ev_manual"),
+            _claim("claim_doc", "ev_doc"),
+        ],
+        {
+            "ev_manual": {"evidence_id": "ev_manual", "source_kind": "agent_action", "graph_origin": "manual"},
+            "ev_edited": {"evidence_id": "ev_edited", "source_kind": "seed_corpus", "graph_origin": "edited"},
+            "ev_action": {"evidence_id": "ev_action", "source_kind": "agent_action"},
+            "ev_doc": {"evidence_id": "ev_doc", "source_kind": "seed_corpus"},
+        },
+    )
+
+    result = compute_simulation_contribution(evidence_map)
+
+    assert result["validated_claims"] == 2
+    assert result["claims_with_simulation_evidence"] == 1
+    assert result["claims_with_action_evidence"] == 1
+    assert result["claims_requiring_action_evidence"] == 1
+    assert result["action_necessary_share"] == 0.5
+
+
+def test_compute_simulation_contribution_with_exported_claims_respects_dedup():
+    """exported_claims zählt exakt die deduplizierten/gefilterten ReportV3Claim-Einträge."""
+    from app.contracts.report_v3 import Claim as ReportV3Claim
+
+    evidence_map = _map(
+        [
+            _claim("claim_01", "ev_action"),
+            _claim("claim_02", "ev_action"),  # Rohform: 2 Claims
+        ],
+        {
+            "ev_action": {"evidence_id": "ev_action", "source_kind": "agent_action"},
+        },
+    )
+
+    # 1 deduplizierter Claim
+    exported = [
+        ReportV3Claim(
+            id="C1_01",
+            statement="Eine Aussage.",
+            evidence_refs=["ev_action"],
+            confidence="low",
+            claim_type="empirical",
+            aggregation_basis="persona",
+            confidence_scope="simulation_consensus",
+        )
+    ]
+
+    result = compute_simulation_contribution(evidence_map, exported_claims=exported)
+
+    assert result["validated_claims"] == 1
+    assert result["claims_with_action_evidence"] == 1
+    assert result["claims_requiring_action_evidence"] == 1
+
+
+def test_extract_claims_for_section_voice_key_downgrade_and_structural_exception():
+    """Single-Source-Downgrade beachtet Persona-Stimmen und Structural-Ausnahme."""
+    from app.services.report_agent.manager import _extract_claims_for_section
+
+    evidence_index = {
+        "ev_quote_1": {
+            "evidence_id": "ev_quote_1",
+            "source_kind": "agent_quote",
+            "agent_name": "Anna",
+        },
+        "ev_quote_2": {
+            "evidence_id": "ev_quote_2",
+            "source_kind": "agent_quote",
+            "agent_name": "Anna",
+        },
+        "ev_seed": {
+            "evidence_id": "ev_seed",
+            "source_kind": "seed_corpus",
+        },
+        "ev_manual": {
+            "evidence_id": "ev_manual",
+            "source_kind": "seed_corpus",
+            "graph_origin": "manual",
+        },
+    }
+
+    # Fall 1: Zwei Zitate derselben Persona ("Anna") -> Downgrade von medium auf low
+    claim_same_voice = {
+        "claim_text": "Zwei Zitate von Anna zu einer Aussage.",
+        "confidence_label": "medium",
+        "claim_type": "empirical",
+        "evidence": [
+            {"evidence_id": "ev_quote_1", "supports_claim": True},
+            {"evidence_id": "ev_quote_2", "supports_claim": True},
+        ],
+    }
+
+    # Fall 2: structural Claim mit confidence=medium und 1 Seed-Quelle -> bleibt medium!
+    claim_structural = {
+        "claim_text": "Struktureller Zusammenhang im System.",
+        "confidence_label": "medium",
+        "claim_type": "structural",
+        "evidence": [
+            {"evidence_id": "ev_seed", "supports_claim": True},
+        ],
+    }
+
+    # Fall 3: Claim nur mit manueller Evidence -> wird verworfen (keine validen evidence_refs)
+    claim_manual = {
+        "claim_text": "Aussage nur aus manueller Graph-Handarbeit.",
+        "confidence_label": "medium",
+        "claim_type": "empirical",
+        "evidence": [
+            {"evidence_id": "ev_manual", "supports_claim": True},
+        ],
+    }
+
+    claims = _extract_claims_for_section(
+        [claim_same_voice, claim_structural, claim_manual],
+        section_index=1,
+        evidence_index=evidence_index,
+        report_mode="balanced",
+    )
+
+    assert len(claims) == 2
+    # Fall 1: auf low herabgestuft
+    assert claims[0].confidence == "low"
+    assert claims[0].text_confidence == "medium"
+    # Fall 2: structural bleibt medium
+    assert claims[1].confidence == "medium"
+    assert claims[1].text_confidence is None
+

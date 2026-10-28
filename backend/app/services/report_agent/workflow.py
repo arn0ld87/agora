@@ -1841,6 +1841,10 @@ def _restore_work_trace_markers(agent: Any, report_id: str) -> None:
     Artefakt wie die Work-Trace-Marker."""
     for index in sorted(ReportManager.load_work_trace_removed_sections(report_id)):
         mark_work_traces_removed(agent, index)
+    for index in sorted(ReportManager.load_forced_final_sections(report_id)):
+        mark_forced_final(agent, index)
+    for index in sorted(ReportManager.load_metadata_failed_sections(report_id)):
+        mark_metadata_failure(agent, index)
     # ``is True`` statt Truthy-Check: ein in Tests unkonfigurierter
     # ``ReportManager``-MagicMock liefert für einen beliebigen Methodenaufruf
     # ein truthy MagicMock-Objekt zurück, das den Marker sonst überall dort
@@ -1859,6 +1863,12 @@ def _persist_work_trace_markers(agent: Any, report_id: str) -> None:
     markers = events_for(agent).work_trace_removed_sections
     if markers:
         ReportManager.save_work_trace_removed_sections(report_id, markers)
+    forced = events_for(agent).forced_final_sections
+    if forced:
+        ReportManager.save_forced_final_sections(report_id, forced)
+    meta_failed = events_for(agent).metadata_failed_sections
+    if meta_failed:
+        ReportManager.save_metadata_failed_sections(report_id, meta_failed)
 
 
 def _persist_fallback_outline_marker(agent: Any, report_id: str) -> None:
@@ -1971,14 +1981,20 @@ def _build_partial_report(
 
     cancelled_at = datetime.now().isoformat()
     report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
-    report.status = ReportStatus.COMPLETED
-    # Issue #1299 (Review-Finding Codex): eine bereits vor dem Cancel
-    # erfolglos gebliebene Zitatpruefung (Repair-Retry ausgeschoepft) darf
-    # den Teil-Report nicht unbemerkt als COMPLETED ausweisen — sonst
-    # verschwindet das Signal beim naechsten Cancel genauso wie es der
-    # Normalpfad ohne diesen Aufruf vermeidet.
+    total_sections = len(outline.sections)
+    report.status = resolve_report_status(
+        total_sections=total_sections,
+        failed_section_indices=failed_section_indices or [],
+        required_section_indices=list(range(1, total_sections + 1)),
+    )
+    evidence_map = agent.evidence_map if isinstance(agent.evidence_map, dict) else {}
+    report.status = apply_degradation_downgrade(
+        report.status,
+        evidence_map.get("degradation_log") or [],
+    )
     report.status = apply_quote_validation_downgrade(
-        report.status, quote_validation_failed_section_indices or []
+        report.status,
+        quote_validation_failed_section_indices or [],
     )
     report.completed_at = cancelled_at
 
@@ -2007,19 +2023,26 @@ def _build_partial_report(
     sim_llm_total, sim_llm_failed = load_simulation_llm_call_stats(
         report.simulation_id
     )
-    report.run_degradations = collect_run_degradations(
+    fresh_degradations = collect_run_degradations(
+        simulation_snapshot=report.simulation_snapshot,
+        simulation_llm_calls_total=sim_llm_total,
+        simulation_llm_calls_failed=sim_llm_failed,
         persona_fallback_count=persona_fallbacks,
         persona_total=persona_total,
+        interviews_requested=breaker_for(agent).request_count("interview_agents"),
+        interviews_succeeded=_count_interview_evidence(agent),
+        interview_disabled_reason=breaker_for(agent).reason_for("interview_agents"),
         failed_section_indices=failed_section_indices or [],
         fallback_outline_used=events_for(agent).fallback_outline_used,
         cancelled_missing_section_count=missing_section_count,
-        simulation_llm_calls_total=sim_llm_total,
-        simulation_llm_calls_failed=sim_llm_failed,
+        forced_final_section_indices=events_for(agent).forced_final_sections,
         work_trace_removed_section_indices=sorted(
             events_for(agent).work_trace_removed_sections
         ),
+        metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
         stance_analysis=_stance_analysis_of(agent),
     )
+    report.run_degradations = _merge_run_degradations(report, fresh_degradations)
     report.status = apply_run_degradation_downgrade(
         report.status, report.run_degradations
     )
@@ -2374,6 +2397,11 @@ def generate_report(
             return report
 
         report.status = ReportStatus.GENERATING
+        # Den Wechsel sofort persistieren: sonst stand ``meta.json`` bis zum
+        # ersten fertigen Abschnitt auf ``planning``, und Fassungsliste und
+        # Bericht-Reiter zeigten waehrend der Abschnittserzeugung die falsche
+        # Phase (beobachtet an report_238ba4371858).
+        ReportManager.save_report(report)
         # #1738: der Kurzschluss nach einem nicht-transienten Provider-400
         # gilt pro Generierungslauf, nicht über einen Resume hinweg.
         events_for(agent).persistent_provider_error = None
@@ -2384,7 +2412,9 @@ def generate_report(
         failed_section_indices: List[int] = []
         # Issue #1299: Abschnitte, deren Zitatprüfung (inkl. Repair-Retry)
         # erfolglos blieb — macht den Report ebenfalls höchstens INCOMPLETE.
-        quote_validation_failed_section_indices: List[int] = []
+        quote_validation_failed_section_indices: List[int] = sorted(
+            ReportManager.load_quote_validation_failed_sections(report_id)
+        )
         existing_sections = {item["section_index"]: item["content"] for item in ReportManager.get_generated_sections(report_id)}
         for section_info in _sections_with_persisted_evidence(agent, report_id):
             title = outline.sections[section_info["section_index"] - 1].title if outline.sections and section_info["section_index"] <= len(outline.sections) else ""
@@ -2442,7 +2472,11 @@ def generate_report(
             if result.restored:
                 continue
             if result.quote_validation_failed:
-                quote_validation_failed_section_indices.append(section_num)
+                if section_num not in quote_validation_failed_section_indices:
+                    quote_validation_failed_section_indices.append(section_num)
+                ReportManager.save_quote_validation_failed_sections(
+                    report_id, quote_validation_failed_section_indices
+                )
             generated_sections.append(result.markdown)
             completed_section_titles.append(result.title)
             _persist_work_trace_markers(agent, report_id)
@@ -2476,9 +2510,10 @@ def generate_report(
         )
         # Issue #1006: eine lokale Claim-Degradierung darf ein sonst
         # vollständiges Ergebnis nicht als COMPLETED ausweisen.
+        evidence_map = agent.evidence_map if isinstance(agent.evidence_map, dict) else {}
         report.status = apply_degradation_downgrade(
             report.status,
-            (agent.evidence_map or {}).get("degradation_log") or [],
+            evidence_map.get("degradation_log") or [],
         )
         # Issue #1299: eine Section mit erfolglos gebliebener Zitatprüfung
         # (Repair-Retry ausgeschöpft) darf den Report nicht als COMPLETED
@@ -2500,7 +2535,7 @@ def generate_report(
         sim_llm_total, sim_llm_failed = load_simulation_llm_call_stats(
             report.simulation_id
         )
-        report.run_degradations = collect_run_degradations(
+        fresh_degradations = collect_run_degradations(
             simulation_snapshot=report.simulation_snapshot,
             simulation_llm_calls_total=sim_llm_total,
             simulation_llm_calls_failed=sim_llm_failed,
@@ -2524,6 +2559,7 @@ def generate_report(
             metadata_failed_section_indices=events_for(agent).metadata_failed_sections,
             stance_analysis=_stance_analysis_of(agent),
         )
+        report.run_degradations = _merge_run_degradations(report, fresh_degradations)
         report.status = apply_run_degradation_downgrade(
             report.status, report.run_degradations
         )

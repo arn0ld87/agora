@@ -1,7 +1,7 @@
 # Runbook: Upgrade zwischen Release-Linien
 
 Zugehöriges Issue: [#1673](https://github.com/arn0ld87/agora/issues/1673) (Release-Gate vor `0.10.0-rc.1`, siehe [`../../ROADMAP.md`](../../ROADMAP.md)).
-**Stand:** 30.09.2026, Produktversion `0.9.6` ([`VERSION`](../../VERSION)). `0.10.0-rc.1` ist noch nicht geschnitten.
+**Stand:** 13.10.2026, Produktversion `0.9.8` ([`VERSION`](../../VERSION)). `0.10.0-rc.1` ist noch nicht geschnitten.
 
 ## Warum dieses Runbook existiert
 
@@ -9,6 +9,8 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 | Sprung | Stand | Abschnitt |
 |---|---|---|
+| `0.9.7` → `0.9.8` | beschrieben | [unten](#097--098) |
+| `0.9.6` → `0.9.7` | beschrieben | [unten](#096--097) |
 | `0.9.x` → `0.10` | beschrieben | [unten](#09x--010) |
 | `0.10` → `1.0` | Platzhalter, wird im Freeze gefüllt | [unten](#010--10) |
 
@@ -20,6 +22,21 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 ---
 
 ## Persistenz-Änderungen außerhalb des Versionssprungs
+
+**`run_events.json` bei Berichts-Resumes (PR #1884).** `uploads/reports/<report_id>/run_events.json` speichert zusätzlich die drei optionalen Listenfelder `forced_final_sections`, `metadata_failed_sections` und `quote_validation_failed_sections` (jeweils `list[int]`), damit ein unterbrochener und per Resume fortgesetzter Berichtslauf die Qualitäts-Signale bereits abgeschlossener Abschnitte bei der finalen `status`-/`status_reason`-Ableitung nicht verliert.
+
+- **Upgrade:** Keine Migration nötig. Bestehende Läufe ohne diese Schlüssel werden beim Resume über Default-Listen (`[]`) eingelesen.
+- **Rollback-Implikation:** Ein älterer Code-Stand liest `run_events.json` selektiv über bekannte Schlüssel und ignoriert die zusätzlichen Felder ohne Fehler.
+
+**`twitter_profiles.csv` bei Läufen aus Personas (PR #1875).** `POST /api/simulation/create-from-personas` schreibt die Datei jetzt im OASIS-Format (`user_id`, `name`, `username`, `user_char`, `description`, `schema_version`, `voice_register`, `source_user_id`, bei einem Lauf aus einem Personasatz zusätzlich `persona_set_origin`). Vorher trug sie die Schlüssel des Reddit-Profils, und der Simulationsstart auf Twitter brach mit `KeyError: 'user_char'` ab. `reddit_profiles.json` und Simulationen aus dem normalen Prepare-Pfad sind nicht betroffen.
+
+- **Upgrade:** Keine Migration. Betroffen sind nur Simulationen, die vor diesem Stand über `create-from-personas` angelegt wurden und auf Twitter laufen sollen; erkennbar daran, dass der Kopfzeile von `uploads/simulations/<sim_id>/twitter_profiles.csv` die Spalte `user_char` fehlt. Ihre Datei wird nicht nachträglich umgeschrieben. Solche Simulationen aus derselben Personaliste bzw. demselben Personasatz neu anlegen. Läufe nur auf Reddit funktionieren unverändert weiter.
+- **Rollback-Implikation:** Ein älterer Stand liest die neue Datei ohne Fehler (Zugriff über Spaltennamen), schreibt für neu angelegte Simulationen aber wieder das alte Format, mit dem der Twitter-Start scheitert. In der neuen Datei ist `user_id` die Zeilenposition ab 0; die Nummer aus `reddit_profiles.json` steht in `source_user_id`.
+
+**`agent_configs` bei Läufen aus Personas (PR #1876).** `POST /api/simulation/create-from-personas` schreibt in `simulation_config.json` je Persona einen `agent_configs`-Eintrag (`agent_id` = `user_id` des Profils, `config_source="persona_default"`). Vorher blieb die Liste leer: kein Agent wurde aktiviert, der Lauf endete auf jeder Plattform mit 0 Aktionen als `completed`. Simulationen aus dem normalen Prepare-Pfad sind nicht betroffen.
+
+- **Upgrade:** Keine Migration. Betroffen sind Simulationen, die vor diesem Stand über `create-from-personas` angelegt wurden, auch solche nur auf Reddit; erkennbar an `"agent_configs": []` in `uploads/simulations/<sim_id>/simulation_config.json`. Die Datei wird nicht nachträglich umgeschrieben. Solche Simulationen aus derselben Personaliste bzw. demselben Personasatz neu anlegen.
+- **Rollback-Implikation:** Ein älterer Stand liest die neue Konfiguration ohne Fehler; der Wert `persona_default` wird dort nicht ausgewertet. Neu angelegte Simulationen aus Personas bekommen unter dem älteren Stand wieder eine leere Liste.
 
 **Modellgeplante Berichts-Gliederung (#1832).** Neue Standardberichte erhalten eine freie, strukturell validierte Outline statt eines festen Titelpresets. Vorhandene valide Outlines bleiben beim Resume verwendbar; als `fallback_outline_used` markierte Ersatzgliederungen werden neu geplant. Historische Reports werden nicht migriert oder umgeschrieben. Scheitert die neue Planung, ist der Bericht `failed` mit der ursprünglichen Ursache statt eines leeren Ersatzschemas. Vor Wiederaufnahme muss deshalb die Stage-Route betriebsfähig sein. Inhalts-/Evidence-Gates bleiben unverändert; freie Titel garantieren keinen vollständigen Bericht.
 
@@ -133,6 +150,26 @@ Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0
 **Agentengedächtnis der Simulation ([#1772](https://github.com/arn0ld87/agora/issues/1772)): `AGORA_SIM_MEMORY_PRUNE_FEEDS`, `AGORA_SIM_MEMORY_KEEP_FEEDS`, `AGORA_SIM_MEMORY_TOKEN_CAP`.** Defaults `true`, `4`, `32000`; **das ändert das Verhalten neuer Läufe ohne jede Einstellung.** Bisher wuchs das CAMEL-Gedächtnis jedes Agenten über den Lauf bis zum Modell-Kontextlimit (`LLM_CONTEXT_LIMIT`, Default 262.144), weil jeder Feed für immer im Verlauf blieb. Jetzt ersetzt Agora nach jeder Runde die Feeds älterer Aktivierungen durch einen Platzhalter (behalten werden die letzten `AGORA_SIM_MEMORY_KEEP_FEEDS`, Minimum 1) und begrenzt das Gedächtnis-Token-Limit auf `AGORA_SIM_MEMORY_TOKEN_CAP` (`0` = keine Obergrenze, Werte unter 8.192 werden auf 8.192 angehoben). Der Schalter `AGORA_SIM_MEMORY_PRUNE_FEEDS=false` plus `AGORA_SIM_MEMORY_TOKEN_CAP=0` stellt den alten Zustand her. Folgen: weniger Eingabe-Tokens und Kosten je Lauf; Agenten kennen ältere Feeds nicht mehr, nur ihre eigenen früheren Aktionen. Läufe mit unterschiedlicher Einstellung sind nicht vergleichbar. Die Variablen stehen in `SAFE_ENV_KEYS` und erreichen den Simulations-Subprozess über die Umgebung des Backends (Compose-`environment:` oder `.env`). Kein Datenbestand betroffen, kein Migrationsschritt; ein Rollback auf eine ältere Version ignoriert die Variablen.
 
 **`AGORA_SIM_FEED_MAX_COMMENTS`** (ebenfalls [#1772](https://github.com/arn0ld87/agora/issues/1772)). Default `5`, `0` = aus; **ändert das Verhalten neuer Läufe ohne Einstellung:** Im Feed jedes Agenten stehen je Post höchstens die neuesten fünf Kommentare, die Zahl der weggelassenen steht als `omitted_comments` am Post, und das Feed-JSON ist kompakt statt eingerückt. Mit `0` bleibt der Feed byte-identisch zu OASIS. Die Variable steht in `SAFE_ENV_KEYS`; kein Datenbestand betroffen, kein Migrationsschritt. Läufe mit unterschiedlichem Wert sind nicht vergleichbar (der Agent sieht andere Diskussionsstände).
+
+---
+
+## 0.9.7 → 0.9.8
+
+Kein Pflichtschritt: keine Migrationen, keine neuen Env-Variablen, keine Compose-Änderungen am Laufzeitstack. Image `v0.9.8` einspielen und neu starten. Zu `v0.9.7` gibt es keine GHCR-Images. Wer von `0.9.6` kommt, springt deshalb direkt auf `v0.9.8` und folgt dem Abschnitt `0.9.6 → 0.9.7` unten. **Rollback:** Image `v0.9.6` (siehe dort), da `v0.9.7` kein Image hat.
+
+---
+
+## 0.9.6 → 0.9.7
+
+`0.9.7` ist ein Zwischenrelease ohne eigenen Migrationspfad. Alle betriebsrelevanten Änderungen seit `v0.9.6` stehen oben unter „Persistenz-Änderungen außerhalb des Versionssprungs“ und „Env-Default-Änderungen außerhalb des Versionssprungs“. Dieser Abschnitt nennt nur die Reihenfolge.
+
+1. **Backup** wie in Schritt 1 von `0.9.x → 0.10` unten.
+2. **Ziel-Stand einspielen** (Image `v0.9.8`, denn zu `v0.9.7` gibt es keine Images, oder Commit des Tags). Bei reinem Dateibetrieb, also wenn alle `AGORA_*_BACKEND` auf ihrem Legacy-Default stehen, ist **kein weiterer Pflichtschritt** nötig.
+3. **Nur wenn ein `AGORA_*_BACKEND` auf `postgres` steht:** vor dem Start `cd backend && uv run alembic -c migrations/alembic.ini upgrade head`. Seit `v0.9.6` kamen acht Revisionen hinzu, der einzige Head ist `3b7f9d21a8c4` (`persona_sets`). Das Head-Startup-Gate (#1582) verweigert den Start bei abweichendem Schema.
+4. **Linux-Hosts mit bestehendem Klon:** den HuggingFace-Cache wie oben unter „HuggingFace-Cache-Verzeichnis im Repository“ beschrieben räumen oder umschreiben, sonst scheitert der `git pull` bzw. der Simulationsstart.
+5. **Verhaltenswechsel ohne Zutun prüfen:** mehrere Simulations-Defaults ändern sich (`AGORA_SIM_MAX_CONCURRENCY`, `AGORA_SIM_INPUT_TOKENS_PER_MINUTE`, Agentengedächtnis, Feed-Kommentare, Aktivitätsmodell, Standardbudgets). Die Rückweg-Werte stehen jeweils oben. Läufe vor und nach dem Upgrade sind deshalb nicht direkt vergleichbar.
+
+**Rollback:** vorherigen Image-Tag `v0.9.6` setzen. Bei Dateibetrieb genügt das. Bei Postgres-Betrieb vorher mit `alembic downgrade` auf den alten Head `7a3c1e84f209` zurück, sonst bricht der alte Stand am Head-Startup-Gate ab. Revisionen und Reihenfolge stehen in [`metadata-postgres-cutover.md`](metadata-postgres-cutover.md).
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Stand:** 02.10.2026
 **Geprüfte Basis:** `main@4cbf0eb849502472e4107fdd947559d417842b90`
-**Produktversion:** `0.9.6` Stability Beta; nächster Schnitt `0.10.0-rc.1`.
+**Produktversion:** `0.9.8` Stability Beta; nächster Schnitt `0.10.0-rc.1`.
 
 Diese Übergabe ersetzt den [Stand vom 24.09.2026](https://github.com/arn0ld87/agora/blob/4cbf0eb849502472e4107fdd947559d417842b90/HANDOFF.md). Dessen offene PRs und pauschale Aussage „alle verbleibenden Slices blockiert“ sind keine aktuelle Arbeitsgrundlage.
 

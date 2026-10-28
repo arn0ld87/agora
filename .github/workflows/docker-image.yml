@@ -322,7 +322,7 @@ jobs:
           fi
 
       - name: SBOM fuer Container-Image erzeugen
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: agora-agora:ci-${{ github.sha }}
           format: spdx-json
@@ -437,12 +437,16 @@ jobs:
       - name: Bind-Mount-Verzeichnisse fuer Container-UID vorbereiten
         # GitHub-Runner-Workspace gehoert uid 1001, der Prod-Container laeuft als
         # uid 1000 (`USER agora`). Bei Bind-Mounts bleiben die Host-Rechte
-        # erhalten, daher braucht der Smoke-Test hier eine explizit beschreibbare
-        # uploads-Registry auf dem Runner.
+        # erhalten, daher braucht der Smoke-Test hier explizit beschreibbare
+        # Verzeichnisse fuer jeden schreibenden Bind-Mount aus docker-compose.yml:
+        # uploads (Run-Registry), instance (UI-Einstellungen) und data
+        # (Provider-Secrets, #450 P1.3). Ohne data scheiterte verify-deploy.sh
+        # beim Tag v0.9.7 an „backend/data im Container schreibbar“ und
+        # blockierte Publish und Release-Assets.
         run: |
-          mkdir -p backend/uploads/run_registry
+          mkdir -p backend/uploads/run_registry backend/instance backend/data
           command -v setfacl >/dev/null 2>&1 || { echo "::error::setfacl fehlt auf dem Runner"; exit 1; }
-          setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
+          setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry backend/instance backend/data
 
       - name: Compose-Stack starten
         # --no-build: Beide Images kommen aus build-only (docker load oben).
@@ -800,7 +804,7 @@ jobs:
           push-to-registry: true
 
       - name: Generate GHCR SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ghcr.io/${{ github.repository_owner }}/agora@${{ steps.build_ghcr.outputs.digest }}
           format: spdx-json
@@ -858,7 +862,7 @@ jobs:
         # agora-proxy wird genauso oeffentlich publiziert wie agora; ohne
         # eigene SBOM waere das Freigabekriterium "Release-Artefakte,
         # Checksummen und SBOM vorhanden" nur fuer ein Image erfuellt (#1661).
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ghcr.io/${{ github.repository_owner }}/agora-proxy@${{ steps.build_proxy.outputs.digest }}
           format: spdx-json

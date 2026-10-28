@@ -17,7 +17,6 @@ dieselbe Feldliste/-logik noch einmal nachgebildet statt importiert.
 
 from __future__ import annotations
 
-import csv
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, get_args
@@ -25,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, get_args
 from ..config import Config
 from ..contracts.persona_contract import PERSONA_SCHEMA_VERSION
 from ..contracts.persona_set_contract import PersonaOrigin
+from ..contracts.simulation_activity_contract import ActorClass, AgentConfigSource
 from ..contracts.pipeline_degradation_contract import (
     DegradationKind,
     DegradationSeverity,
@@ -35,7 +35,13 @@ from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .llm_routing_seed import workspace_credential_metadata
 from .run_registry import RunRegistry
+from .simulation_activity_policy import (
+    enforce_active_hours_floor,
+    enforce_activity_level_floor,
+    enforce_agents_per_hour_floor,
+)
 from .simulation_config_generator import (
+    AgentActivityConfig,
     EventConfig,
     PlatformConfig,
     SimulationParameters,
@@ -59,6 +65,10 @@ _ALWAYS_PRESENT_DEFAULTS = {
     "profession": "",
     "interested_topics": [],
 }
+
+# Standardwerte der Datenklasse ``AgentActivityConfig`` (vor den Untergrenzen).
+_DEFAULT_ACTIVITY_LEVEL = 0.5
+_DEFAULT_ACTIVE_HOURS = range(8, 23)
 
 #: Gültige Werte von ``persona_set_origin`` (Quelle: ``PersonaOrigin``).
 _PERSONA_SET_ORIGINS = frozenset(get_args(PersonaOrigin))
@@ -117,7 +127,7 @@ def prepare_from_personas(
     manager._store.write_json(simulation_id, "reddit_profiles", profiles)
     _write_twitter_csv(manager._get_simulation_dir(simulation_id), profiles)
 
-    config = _build_config(state, len(profiles))
+    config = _build_config(state, profiles)
     manager._store.write_json(simulation_id, "simulation_config", config)
 
     state.entities_count = len(profiles)
@@ -247,9 +257,8 @@ def _translate_persona(
         "source_entity_type": persona.get("source_entity_type") or "persona_library",
         "persona_kind": persona.get("persona_kind") or "individual",
         "is_manual": bool(persona.get("is_manual", False)),
-        # Immer gesetzt (nie nur bei Fallback): ``_write_twitter_csv`` leitet die
-        # Spalten aus dem ersten Profil ab, ein spaeteres Profil mit
-        # zusaetzlichem Schluessel brachte den CSV-Writer zum Absturz.
+        # Immer gesetzt (nie nur bei Fallback), damit alle Profile dieselben
+        # Schluessel tragen.
         "generation_source": (
             "rule_based" if persona.get("generation_source") == "rule_based" else "llm"
         ),
@@ -277,15 +286,60 @@ def _coerce_karma(karma_raw: Any) -> int:
 
 
 def _write_twitter_csv(sim_dir: str, profiles: List[Dict[str, Any]]) -> None:
-    path = os.path.join(sim_dir, "twitter_profiles.csv")
-    fieldnames = list(profiles[0].keys())
-    with open(path, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(profiles)
+    """Schreibt die Twitter-CSV über den kanonischen OASIS-Schreiber.
+
+    Die Profile tragen das Reddit-Format; OASIS verlangt für Twitter aber
+    ``user_char``/``description`` und brach ohne sie beim Laden der Agenten mit
+    ``KeyError: 'user_char'`` ab. ``persona_set_origin`` bleibt als
+    Zusatzspalte erhalten, wenn der Lauf aus einem Personasatz stammt (#1807).
+    """
+    from .oasis_profile_persistence import write_twitter_csv  # avoid import cycle
+
+    extra_columns = ["persona_set_origin"] if "persona_set_origin" in profiles[0] else []
+    write_twitter_csv(
+        os.path.join(sim_dir, "twitter_profiles.csv"), profiles, extra_columns
+    )
 
 
-def _build_config(state: "SimulationState", profile_count: int) -> Dict[str, Any]:
+def _build_agent_configs(profiles: List[Dict[str, Any]]) -> List[AgentActivityConfig]:
+    """Je übernommener Persona ein ``agent_configs``-Eintrag, ohne LLM.
+
+    Ohne Einträge aktivierte kein Runner je einen Agenten: die Rundenauswahl
+    (``simulation_activity_model.select_round_agent_ids``) zieht ihre Kandidaten
+    ausschließlich aus ``agent_configs``. Ein Lauf endete dann mit 0 Aktionen
+    als ``completed``.
+
+    ``agent_id`` ist die ``user_id`` des Profils; der Runner schreibt sie über
+    ``simulation_agent_identity.align_config_to_profiles`` auf die
+    OASIS-Position um. Aktivität und aktive Stunden sind die Standardwerte der
+    Datenklasse, angehoben auf dieselben Untergrenzen wie im generierten Pfad.
+    Haltung bleibt ``neutral``: diese Regel erfindet keine. ``config_source``
+    weist die Werte als Standard dieses Pfads aus, nicht als Modellantwort.
+    """
+    configs: List[AgentActivityConfig] = []
+    for profile in profiles:
+        user_id = profile["user_id"]
+        actor_class = (
+            ActorClass.ORGANISATION
+            if profile["persona_kind"] == "collective"
+            else ActorClass.INDIVIDUAL
+        )
+        configs.append(
+            AgentActivityConfig(
+                agent_id=user_id,
+                entity_uuid=profile.get("source_entity_uuid") or f"persona-{user_id}",
+                entity_name=profile["name"],
+                entity_type=profile["source_entity_type"],
+                activity_level=enforce_activity_level_floor(_DEFAULT_ACTIVITY_LEVEL),
+                active_hours=enforce_active_hours_floor(_DEFAULT_ACTIVE_HOURS),
+                actor_class=actor_class.value,
+                config_source=AgentConfigSource.PERSONA_DEFAULT.value,
+            )
+        )
+    return configs
+
+
+def _build_config(state: "SimulationState", profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Baut eine schema-kompatible ``simulation_config.json`` ohne LLM/Graph.
 
     Nutzt bewusst nur die Datenklassen aus ``simulation_config_generator``
@@ -321,13 +375,24 @@ def _build_config(state: "SimulationState", profile_count: int) -> Dict[str, Any
         else None
     )
 
+    profile_count = len(profiles)
+    defaults = TimeSimulationConfig()
+    # Wie im generierten Pfad (simulation_config_time): die Zielzahl je Stunde
+    # nie über der Zahl der Agenten.
+    agents_per_hour_min, agents_per_hour_max = enforce_agents_per_hour_floor(
+        defaults.agents_per_hour_min, defaults.agents_per_hour_max, profile_count
+    )
+
     params = SimulationParameters(
         simulation_id=state.simulation_id,
         project_id=state.project_id,
         graph_id=state.graph_id,
         simulation_requirement="Vorbereitung aus gespeicherten Personas (kein Dokument).",
-        time_config=TimeSimulationConfig(),
-        agent_configs=[],
+        time_config=TimeSimulationConfig(
+            agents_per_hour_min=agents_per_hour_min,
+            agents_per_hour_max=agents_per_hour_max,
+        ),
+        agent_configs=_build_agent_configs(profiles),
         event_config=EventConfig(),
         twitter_config=twitter_config,
         reddit_config=reddit_config,

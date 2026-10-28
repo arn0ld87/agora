@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from ..contracts.simulation_activity_contract import AgentConfigSource
+
 # Issue #1772: Standard-Laufgroesse -- 1 Tag, 60 Minuten je Runde = 24 Runden.
 # Der Tokenverbrauch waechst mit der Rundenzahl (gemessener Standardlauf
 # ``sim_cc6067a70603``: 24 Runden, 52 Agenten, 35,7 Mio. Eingabe-Tokens); die
@@ -59,11 +61,21 @@ class AgentActivityConfig:
 
     # Herkunft des Eintrags (#1779): ``llm`` (Antwort des Konfigurationsmodells),
     # ``rule_fallback`` (Regel-Defaults, weil die Modellantwort für diesen Agenten
-    # fehlte oder der Batch ausfiel) oder ``synthetic_skeptic`` (Quotenregel). Die
+    # fehlte oder der Batch ausfiel), ``synthetic_skeptic`` (Quotenregel) oder
+    # ``persona_default`` (Lauf direkt aus Personas, Standardwerte ohne Modell). Die
     # Regel erfindet keine Haltung; das Feld macht den Rückfall im Artefakt
     # sichtbar, statt ihn als normalen Eintrag durchgehen zu lassen. Konfigurationen
     # vor diesem Feld lesen sich als ``llm``.
-    config_source: str = "llm"
+    # Wertemenge: ``AgentConfigSource`` (Vertrag), geprüft in ``__post_init__``.
+    config_source: str = AgentConfigSource.LLM.value
+
+    def __post_init__(self) -> None:
+        """Lässt nur Werte aus ``AgentConfigSource`` ins Artefakt.
+
+        Die Datenklasse prüft Annotationen nicht; ein Tippfehler stünde sonst
+        unbemerkt in ``simulation_config.json``.
+        """
+        self.config_source = AgentConfigSource(self.config_source).value
 
 
 @dataclass

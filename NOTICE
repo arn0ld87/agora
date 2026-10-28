@@ -8,23 +8,47 @@ später lizenziert. Der vollständige Lizenztext liegt in der Datei LICENSE.
 Herkunft
 --------------------------------------------------------------------------
 
-Agora ist aus einem Fork von MiroFish hervorgegangen:
+Agora ist aus einem Fork von MiroFish hervorgegangen, und zwar über den
+Zwischenschritt MiroFish-Offline:
 
     MiroFish — A Simple and Universal Swarm Intelligence Engine
     Copyright (C) 2026 666ghj and the MiroFish contributors
     https://github.com/666ghj/MiroFish
     Lizenz: GNU Affero General Public License v3.0
 
-Der Fork wurde am 15. März 2026 angelegt und zunächst unter dem Namen
-"MiroFish Offline" weiterentwickelt. Am 21. April 2026 wurde das Projekt
-unter dem Namen Agora fortgeführt.
+    MiroFish-Offline — englischsprachiger Fork von MiroFish mit
+    Neo4j- und Ollama-Stack
+    Änderungen von Nik (GitHub: nikmcfly) und weiteren Mitwirkenden
+    https://github.com/nikmcfly/MiroFish-Offline
+    Lizenz: GNU Affero General Public License v3.0
+
+MiroFish-Offline entstand im März 2026 (Änderungen vom 15. bis 24. März
+2026) als Fork von MiroFish und wurde von Nik unter dem Namen
+"MiroFish Offline" entwickelt. Die Git-Historie von Agora beginnt mit der
+ersten Revision von MiroFish-Offline (Commit db8139ac vom 15. März 2026) und
+enthält dessen Commits bis zum 24. März 2026; MiroFish selbst ist darin als
+Code-Stand enthalten, nicht als eigene Commit-Historie.
+
+Am 21. April 2026 hat Alexander Schneider das Projekt unter dem Namen Agora
+übernommen und führt es seitdem eigenständig weiter (erster Commit:
+"chore: rebrand project as Agora").
 
 Gegenüber dem Ursprungswerk wurde die Software erheblich verändert. Zu den
 wesentlichen Änderungen gehören:
 
-  - Ersetzung der ursprünglichen Persistenz- und Modellanbindung durch einen
-    lokal betreibbaren Stack aus Neo4j, Redis und OpenAI-kompatiblen bzw.
-    lokalen Providern
+  Änderungen in MiroFish-Offline (Nik, März 2026):
+
+  - Ersetzung von Zep Cloud durch Neo4j (Community Edition) als Wissensgraph
+    und Umstellung der Modellanbindung auf lokal betriebene Modelle über
+    Ollama
+  - Übersetzung von Frontend, Prompts, Kommentaren und Logs ins Englische
+  - Umbenennung in "MiroFish Offline"
+
+  Änderungen in Agora (Alexander Schneider, ab April 2026):
+
+  - Ausbau des lokal betreibbaren Stacks um Redis (Events und Live-Status)
+    und eine Provider-Registry für OpenAI-kompatible, lokale und
+    CLI-basierte Provider
   - vollständige Neuentwicklung der Report-Erzeugung mit Evidence-Gating:
     Klassifikation von Aussagen nach Evidenzgrad, Rückführung auf Quellen,
     Graphobjekte und Simulationsereignisse, Trennung belegter Aussagen von

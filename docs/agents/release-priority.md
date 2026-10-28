@@ -2,7 +2,7 @@
 
 > Verbindliche Reihenfolge und Freigabekriterien: [ROADMAP](../../ROADMAP.md). Verifizierter Istzustand: [STATUS](../STATUS.md).
 
-**Stand:** 10.10.2026, GitHub-Abgleich gegen `main@328d2b8d`. `v0.9.6` ist getaggt; nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
+**Stand:** 13.10.2026, GitHub-Abgleich gegen `main@d8ed7370`. `v0.9.6` ist getaggt, `0.9.7` und der Korrektur-Patch `0.9.8` sind als weitere Zwischenreleases geschnitten; nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
 
 ## Nächste Arbeit
 

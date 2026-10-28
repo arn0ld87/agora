@@ -5,6 +5,9 @@ aus vier verschiedenen Quellen, je nachdem, welche IDs der Aufrufer kennt und
 was davon noch existiert. Die Quellen sind nach Verlässlichkeit geordnet und
 werden der Reihe nach befragt:
 
+−1. **Laufender Run der Simulation** — kennt der Aufrufer nur die
+   ``simulation_id``, liefert ein aktiver ``report_generate``-Run die
+   ``report_id`` für Stufe 0 nach.
 0. **Run-Registry** — der persistierte Lauf, sofern sein Status terminal ist.
 1. **Persistierter Report** — abgeschlossen oder gescheitert.
 2. **Lebender Task** — der laufende Generierungs-Task.
@@ -70,6 +73,46 @@ class _StatusQuery:
     task_id: Optional[str] = None
     simulation_id: Optional[str] = None
     report_id: Optional[str] = None
+
+
+def _adopt_active_run_for_simulation(query: _StatusQuery) -> None:
+    """Stufe −1 — nur ``simulation_id`` bekannt: den laufenden Report übernehmen.
+
+    Ein zweiter Start-Klick endet in ``report_generate_in_progress`` (409),
+    ohne dass der Aufrufer die ``report_id`` des laufenden Laufs kennt. Fragt
+    er danach mit reiner ``simulation_id``, griff bisher keine Stufe: Stufe 0
+    braucht die ``report_id``, Stufe 3 sucht nur fertige Reports, und Stufe 4
+    antwortete „Task handle unknown“ mit ``progress=0`` und ohne
+    ``report_id``. Der Bericht-Reiter blieb so bei „Noch keine Fassung“
+    stehen, obwohl der Bericht lief.
+
+    Die Run-Registry ist dieselbe Quelle, an der der Start den 409 festmacht
+    (``ReportGenerationService._reject_if_report_generate_active``). Ihre
+    ``report_id`` geht an Stufe 0, die den laufenden Status samt Fortschritt
+    liefert. Ein Lesefehler der Registry wird geloggt und lässt die Kette
+    unverändert weiterlaufen.
+    """
+    if query.report_id or query.task_id or not query.simulation_id:
+        return
+    try:
+        active_runs = run_registry.list_runs(
+            simulation_id=query.simulation_id,
+            run_type="report_generate",
+            statuses=["pending", "processing"],
+            limit=1,
+        )
+    except Exception as lookup_exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+        logger.warning(
+            "active report run lookup failed for simulation_id=%s: %s",
+            query.simulation_id,
+            lookup_exc,
+        )
+        return
+    if not active_runs:
+        return
+    report_id = (active_runs[0].get("linked_ids") or {}).get("report_id")
+    if report_id:
+        query.report_id = report_id
 
 
 def _status_from_run_registry(query: _StatusQuery) -> Optional[dict[str, Any]]:
@@ -294,6 +337,7 @@ class ReportStatusService:
         )
         task_manager = TaskManager()
 
+        _adopt_active_run_for_simulation(query)
         result = _status_from_run_registry(query)
         if result is not None:
             return result

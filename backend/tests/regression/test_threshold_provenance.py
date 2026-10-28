@@ -218,3 +218,74 @@ def test_a_web_source_cannot_verify_a_threshold():
     }
 
     assert bind_threshold_provenance([_threshold()], [web])[0].evidence_refs == []
+
+
+def test_manual_or_edited_graph_record_cannot_verify_a_threshold():
+    """ADR-0022 §4: Handeingaben und nachträglich editierte Kanten dürfen keinen
+    operativen Schwellenwert auf ``verified`` heben."""
+    manual_seed = dict(SEED, evidence_id="ev_manual", graph_origin="manual")
+    edited_rel = {
+        "evidence_id": "ev_edited",
+        "source_kind": "graph_relation",
+        "graph_origin": "edited",
+        "snippet": SEED["snippet"],
+    }
+
+    result = bind_threshold_provenance([_threshold()], [manual_seed, edited_rel])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_prebound_disqualifying_pool_ref_is_stripped_and_status_downgraded():
+    """Nennt das Modell selbst eine ``inferred``- oder ``manual``-Referenz aus
+    dem Pool für einen ``verified``-Threshold, wird die unzulässige Referenz
+    entfernt und der Status ohne echten Texttreffer auf ``heuristic`` gesenkt."""
+    inferred = {
+        "evidence_id": "ev_inferred",
+        "source_kind": "inferred",
+        "snippet": "Vermutlich sind mindestens 80 Prozent Schulungsquote nötig.",
+    }
+    prebound = _threshold(evidence_refs=["ev_inferred"], evidence_status="verified")
+
+    result = bind_threshold_provenance([prebound], [inferred])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_verified_threshold_whose_refs_were_stripped_by_model_copy_downgrades():
+    """Entfernt der Index-Filter in ``build_report_v3`` unbekannte ``evidence_refs``
+    per ``model_copy``, darf kein ``verified``-Threshold mit ``evidence_refs=[]``
+    zurückbleiben."""
+    stripped = _threshold(
+        label="Systemverfügbarkeit",
+        value=99.9,
+        evidence_refs=["ev_ghost"],
+        evidence_status="verified",
+    ).model_copy(update={"evidence_refs": []})
+
+    result = bind_threshold_provenance([stripped], [SEED])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_report_v3_rejects_threshold_with_unknown_evidence_ref():
+    """Contract-Invariante: ``ReportV3.validate_evidence_cross_references``
+    prüft auch ``thresholds`` gegen ``evidence_index``."""
+    from datetime import datetime, timezone
+    import pytest
+    from pydantic import ValidationError
+    from app.contracts.report_v3 import ReportV3
+
+    with pytest.raises(ValidationError, match="unbekannte Evidence"):
+        ReportV3(
+            report_id="report_th_xref",
+            generated_at=datetime(2026, 10, 28, tzinfo=timezone.utc),
+            evidence_index={},
+            thresholds=[
+                _threshold(evidence_refs=["ev_unknown_01"], evidence_status="verified")
+            ],
+        )
+

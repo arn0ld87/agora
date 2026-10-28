@@ -12,7 +12,7 @@
 
 **Dokumente → Knowledge Graph → Personas → Simulation → nachvollziehbarer Bericht**
 
-[![Version](https://img.shields.io/badge/version-0.9.6-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.8-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -31,6 +31,74 @@
 
 ## Demo
 
+Die Screenshots und Clips unten stammen vom 12. und 13.10.2026 und wurden gegen `main@d8ed7370` aufgenommen, den Codestand von `0.9.7`. Sie zeigen einen echten Lauf in der aktuellen Oberfläche. Das Szenario ist vollständig erfunden: ein sechsmonatiger Pilotversuch mit kostenlosen Samstagsbussen in der fiktiven Stadt „Lindenhafen“. Als Eingabe diente eine einseitige Quelle ([`source-lindenhafen.md`](./media/tour/source-lindenhafen.md)). Daraus hat Agora einen Graphen mit 28 Entitäten und 30 Beziehungen extrahiert und 20 Personas erzeugt. Die Simulation lief zwölf Runden auf beiden Plattformen und erzeugte 84 Aktionen (46 Twitter, 38 Reddit). Persönliche Profile und Zugangseinstellungen sind nicht zu sehen. Wartezeiten sind aus den Clips herausgeschnitten.
+
+### 1. Lauf anlegen und Graph aufbauen
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/01-new-run.jpg" alt="Dialog „Neuer Lauf“ mit Modell, Sprache, Rundenzahl, Aktivitätsmodus der Agenten und optionalen Budgets für Tokens, Kosten, Zeit und Aufrufe"></td>
+    <td width="50%"><img src="./media/tour/02-knowledge-graph.jpg" alt="Graph Build: Wissensgraph des Lindenhafen-Szenarios mit Entitätstypen, Beziehungslabels und Export als GraphML, SVG, PNG, PDF und HTML"></td>
+  </tr>
+  <tr>
+    <td><sub>Der Dialog „Neuer Lauf“. Er legt Modell, Sprache, Runden und Agentenaktivität fest, dazu optionale harte oder weiche Budgets.</sub></td>
+    <td><sub>Der extrahierte Wissensgraph mit Entitätstypen, Beziehungslabels und Exportformaten.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="./media/tour/graph-build.mp4"><img src="./media/tour/graph-build-poster.jpg" alt="Clip: Lauf starten und Graph Build" width="70%"></a><br>
+  <sub><a href="./media/tour/graph-build.mp4">▶ Clip: vom Startdialog in den Graph Build (14 s)</a></sub>
+</p>
+
+### 2. Personas prüfen
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/03-persona-setup.jpg" alt="Persona-Konfiguration: Modell, Agentensprache, optionale Streitfrage, Aktivitätsmodus und Obergrenze der Agenten"></td>
+    <td width="50%"><img src="./media/tour/04-persona-detail.jpg" alt="Detailansicht einer synthetischen Persona mit Prompt-Hinweis, Merkmalen, Interessen und Biografie sowie den Aktionen Bearbeiten, Ablehnen, Neu generieren und Freigeben"></td>
+  </tr>
+  <tr>
+    <td><sub>Die Persona-Konfiguration. Sie nimmt eine optionale Streitfrage, einen Aktivitätsmodus und eine Obergrenze für die Agenten auf.</sub></td>
+    <td><sub>Jede synthetische Persona lässt sich vor der Simulation bearbeiten, ablehnen, neu generieren oder freigeben.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <a href="./media/tour/persona-detail.mp4"><img src="./media/tour/persona-detail-poster.jpg" alt="Clip: Persona-Profil lesen" width="70%"></a><br>
+  <sub><a href="./media/tour/persona-detail.mp4">▶ Clip: Persona-Detail (13 s)</a></sub>
+</p>
+
+### 3. Simulation verfolgen
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/05-simulation-feed.jpg" alt="Simulationsfeed: synthetische Twitter-Beiträge mit SIM-Kennzeichnung, Filtern für Runde, Persona und Text sowie einem Rückblick-Regler"></td>
+    <td width="50%"><img src="./media/tour/06-rounds.jpg" alt="Rundenübersicht der Simulation mit Beiträgen, Kommentaren und Likes je Runde und Plattform"></td>
+  </tr>
+  <tr>
+    <td><sub>Der Live-Feed. Jeder Beitrag trägt eine sichtbare <code>SIM</code>-Kennzeichnung für synthetische Inhalte. Ein Regler spielt den Feed Runde für Runde zurück.</sub></td>
+    <td><sub>Die Rundenübersicht zeigt die Aktivität je Plattform und Runde.</sub></td>
+  </tr>
+</table>
+
+### 4. Einstellungen
+
+<table>
+  <tr>
+    <td width="50%"><img src="./media/tour/settings-pipeline.jpg" alt="Pipeline-Einstellungen: Ontologie-Parameter mit Quelle und Wert je Feld"></td>
+    <td width="50%"><img src="./media/tour/settings-budgets.jpg" alt="Standardbudgets für Tokens, Kosten, Laufzeit und Modellaufrufe mit harter oder weicher Durchsetzung"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./media/tour/settings-profiles.jpg" alt="Modell-Profile und Standardmodell je Stufe"></td>
+    <td width="50%"><img src="./media/tour/settings-appearance.jpg" alt="Aussehen: Farbschema, Dichte und Schriftgröße"></td>
+  </tr>
+</table>
+
+Der Bericht zu diesem Lauf war bei der Aufnahme noch in Erzeugung und fehlt deshalb hier.
+
+### End-to-End-Aufnahme mit Bericht (frühere Oberfläche)
+
 <p align="center">
   <a href="./media/agora-demo.mp4">
     <img src="./media/agora-demo-poster.jpg" alt="Agora-Vorzeigelauf: Graph Build, Simulation, Live-Feed und evidenzorientierter Bericht" width="100%">
@@ -39,7 +107,7 @@
 
 <p align="center">
   <strong><a href="./media/agora-demo.mp4">▶ Vorzeigelauf-Demo öffnen</a></strong><br>
-  <sub>Ein realer Agora-Lauf zum fiktiven Szenario „Geburtshilfe Hollerau“. Browser- und Betriebssystem-Chrome werden in den veröffentlichten Medien ausgeblendet.</sub>
+  <sub><a href="./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.de.md">Referenzlauf 8</a>, aufgenommen am 25.09.2026 zum fiktiven Szenario „Geburtshilfe Hollerau“. Er deckt die ganze Strecke vom Graph Build bis zum Bericht ab. Die Aufnahme ist älter als der Frontend-Umbau (#1790), deshalb sieht die Oberfläche anders aus als auf den Screenshots oben.</sub>
 </p>
 
 ## Was Agora macht
@@ -230,15 +298,23 @@ cd frontend && bun run typecheck  # Vue/TypeScript
 
 ## Aktueller Stand
 
-**Aktuelle Produktversion:** `0.9.6` Stability Beta.
+**Aktuelle Produktversion:** `0.9.8` Stability Beta, veröffentlicht am 13.10.2026. Es ist ein Korrektur-Patch auf `0.9.7` und **kein** `0.10.0`. Zum Tag `v0.9.7` gibt es keine Container-Images und keine Release-Artefakte, weil die Release-Pipeline an einem reinen CI-Fehler gescheitert ist. `0.9.8` liefert sie nach und behebt außerdem den Bericht-Reiter nach einem zweiten Start. Die Änderungen stehen in den Release Notes zu [`0.9.8`](./docs/2026-10-13-v0.9.8-release-notes.md) und [`0.9.7`](./docs/2026-10-13-v0.9.7-release-notes.md) sowie in [`CHANGELOG.md`](./CHANGELOG.md). Der nächste geplante Schnitt bleibt `0.10.0-rc.1`.
 
 Der exakt verifizierte Stand, aktuelle Testnachweise, bekannte Grenzen und die geprüfte Baseline werden in [`docs/STATUS.md`](./docs/STATUS.md) gepflegt. Release-Prioritäten und die Gates für 0.10/1.0 stehen in [`ROADMAP.md`](./ROADMAP.md). Diese README enthält bewusst keine schnell alternden Testzähler.
 
-Release-Abgleich vom **02.10.2026**, gegen `main@4cbf0eb8`: Recovery für Prepare-/Report-/Graph-Jobs, Embedding-Runtime-SSoT, Alias-/Entitätsbehandlung, Role-Leakage-Markierung, Twitter-Recommender, Quantor-Gates und Manifest-/Replay-Fixes sind abgeschlossen. Verbleibende Grenzen stehen in `docs/STATUS.md`; geschlossene Tickets sind kein empirischer Produktnachweis. Stand **05.10.2026** (`main@444b2680`) sind außerdem der Python-Dependency-Audit ([PR #1748](https://github.com/arn0ld87/agora/pull/1748), [PR #1751](https://github.com/arn0ld87/agora/pull/1751)), die Dateiartefakt-Versionierung ([#1663](https://github.com/arn0ld87/agora/issues/1663)), die Kompatibilitätsregeln ([#1664](https://github.com/arn0ld87/agora/issues/1664)), die Release-Checksummen ([#1661](https://github.com/arn0ld87/agora/issues/1661)), die Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)) und der Backend-Coverage-Ratchet ([#1671](https://github.com/arn0ld87/agora/issues/1671)) abgeschlossen.
+Seit `0.9.6` sind diese Punkte abgeschlossen:
+
+- Recovery für Prepare-, Report- und Graph-Jobs ([#1472](https://github.com/arn0ld87/agora/issues/1472)),
+- Embedding-Runtime-SSoT, Alias-/Entitätsbehandlung, Role-Leakage-Markierung, Quantor-Gates und Manifest-/Replay-Fixes,
+- die Dateiartefakt-Versionierung ([#1663](https://github.com/arn0ld87/agora/issues/1663)) und die Kompatibilitätsregeln ([#1664](https://github.com/arn0ld87/agora/issues/1664)),
+- die Release-Checksummen ([#1661](https://github.com/arn0ld87/agora/issues/1661)) und die Test-Isolation ([#1632](https://github.com/arn0ld87/agora/issues/1632)),
+- die Coverage-Ratchets für Backend und Frontend ([#1671](https://github.com/arn0ld87/agora/issues/1671), [#1672](https://github.com/arn0ld87/agora/issues/1672)).
+
+Alle acht Etappen des Frontend-Umbaus ([#1790](https://github.com/arn0ld87/agora/issues/1790)) liegen auf `main`. Der operative Rest des Epics ist noch offen. Geschlossene Tickets sind kein empirischer Produktnachweis; ihre verbleibenden Grenzen stehen in `docs/STATUS.md`.
 
 Die verbleibende Release-Arbeit konzentriert sich auf:
 
-- Supabase-Image-Scan/Ausnahmeregister und das Frontend-Coverage-Gate ([#1670](https://github.com/arn0ld87/agora/issues/1670), [#1672](https://github.com/arn0ld87/agora/issues/1672)),
+- das Ausnahmeregister zum Supabase-Image-Scan ([#1670](https://github.com/arn0ld87/agora/issues/1670)),
 - saubere Evaluation-Fixtures und einen dokumentierten Gegenlauf ([#1240](https://github.com/arn0ld87/agora/issues/1240)),
 - formale Cutover- und Fresh-Host-Install-/Restore-Nachweise ([#1592](https://github.com/arn0ld87/agora/issues/1592), [#766](https://github.com/arn0ld87/agora/issues/766)),
 - den AURORA-Vergleich gegen Single-Prompt- und statische Persona-Baseline sowie sichtbare Produktgrenzen ([#1662](https://github.com/arn0ld87/agora/issues/1662), [#1674](https://github.com/arn0ld87/agora/issues/1674)). Die volle Kalibrierungssuite [#765](https://github.com/arn0ld87/agora/issues/765) folgt nach 1.0.
@@ -249,7 +325,7 @@ Die verbleibende Release-Arbeit konzentriert sich auf:
 
 ## Referenzlauf
 
-Der aktuelle **visuelle End-to-End-Vorzeigelauf** ist [Referenzlauf 8: Geburtshilfe Hollerau](./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.de.md). Er zeigt die aktuelle Strecke Graph Build → Simulation/Live-Feed → Bericht an einem fiktiven kommunalen Szenario.
+Der jüngste dokumentierte **visuelle End-to-End-Vorzeigelauf mit Bericht** ist [Referenzlauf 8: Geburtshilfe Hollerau](./docs/reference-runs/2026-09-25-geburtshilfe-hollerau/README.de.md). Er führt ein fiktives kommunales Szenario durch Graph Build, Simulation mit Live-Feed und Bericht. Er wurde vor dem Frontend-Umbau aufgenommen. Die aktuelle Oberfläche zeigt die [Demo](#demo) oben.
 
 Für Regressionen der Report-/Trust-Pipeline bleibt [Referenzlauf 7: AURORA mit Red-Team-Review](./docs/reference-runs/2026-08-17-aurora-red-team/README.de.md) die technische Referenz. Lauf 8 versteckt seine Degradationen bewusst nicht: Der exportierte ReportV3 enthält 2 validierte Claims, 31 Hypothesen, 6 Data Gaps und fünf wegen LLM-Fehlern nicht erzeugte Abschnitte.
 
@@ -281,6 +357,6 @@ Siehe [`SECURITY.md`](./SECURITY.md), [`docs/auth.md`](./docs/auth.md), [`docs/s
 
 ## Lizenz und Herkunft
 
-Agora ist Open Source unter der **AGPL-3.0-Lizenz**. Das Projekt entstand im März 2026 als Fork von [MiroFish](https://github.com/666ghj/MiroFish) und wird seit April 2026 eigenständig weiterentwickelt. Details zur Attribution stehen in [`NOTICE`](./NOTICE).
+Agora ist Open Source unter der **AGPL-3.0-Lizenz**. Das Projekt geht auf [MiroFish](https://github.com/666ghj/MiroFish) zurück, und zwar über [MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline) von Nik (GitHub: nikmcfly), das im März 2026 Zep Cloud durch Neo4j und Ollama ersetzt hat, und wird seit April 2026 unter dem Namen Agora eigenständig weiterentwickelt. Details zur Attribution stehen in [`NOTICE`](./NOTICE).
 
 Teile der Simulationslaufzeit verwenden das CAMEL-AI-/OASIS-Ökosystem.

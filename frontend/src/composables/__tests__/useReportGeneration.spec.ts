@@ -430,6 +430,79 @@ describe('useReportGeneration — start() und regenerate()', () => {
   })
 })
 
+// Regression gns3 (sim_6430ab3849f1 / report_238ba4371858): ein zweiter Start
+// endete in 409 `report_generate_in_progress`; der Fehler landete nur im
+// Hinweis, `onStarted` lief nie, und der Bericht-Reiter blieb bei
+// „Noch keine Fassung“, obwohl der Bericht lief.
+describe('useReportGeneration — Start trifft auf laufenden Bericht (409)', () => {
+  const inProgress = Object.assign(new Error('Report-Generierung läuft bereits'), {
+    code: 'report_generate_in_progress',
+    status: 409,
+  })
+
+  it('haengt sich an den laufenden Bericht, statt einen Fehler zu melden', async () => {
+    const h = setup({ reportId: () => undefined })
+    h.api.generateReport.mockRejectedValue(inProgress)
+    h.api.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'processing', report_id: 'report_laeuft', simulation_id: 'sim_1' },
+    })
+
+    await h.generation.start()
+
+    expect(h.api.getReportStatus).toHaveBeenCalledWith({ simulationId: 'sim_1' })
+    expect(h.onStarted).toHaveBeenCalledWith('report_laeuft')
+    expect(h.onLifecycleChange).toHaveBeenCalledWith('processing')
+    expect(h.addLog).toHaveBeenCalledWith('step4.status.alreadyRunning')
+    expect(h.addLog).not.toHaveBeenCalledWith('Report-Generierung läuft bereits')
+    expect(h.generation.status.pending.value).toBe(false)
+    expect(h.generation.status.phase.value).toBe(1)
+    expect(h.logStream.polling.start).toHaveBeenCalled()
+  })
+
+  it('erkennt den 409 auch als Fehler-Envelope', async () => {
+    const h = setup({ reportId: () => undefined })
+    h.api.generateReport.mockResolvedValue({ success: false, code: 'report_generate_in_progress', error: 'läuft' })
+    h.api.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'generating', report_id: 'report_laeuft' },
+    })
+
+    await h.generation.start()
+
+    expect(h.onStarted).toHaveBeenCalledWith('report_laeuft')
+  })
+
+  it('bleibt beim Fehlerpfad, wenn kein laufender Bericht ermittelbar ist', async () => {
+    const h = setup({ reportId: () => undefined })
+    h.api.generateReport.mockRejectedValue(inProgress)
+    h.api.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'generating', message_key: 'report.awaiting_task' },
+    })
+
+    await h.generation.start()
+
+    expect(h.onStarted).not.toHaveBeenCalled()
+    expect(h.addLog).toHaveBeenCalledWith('Report-Generierung läuft bereits')
+    expect(h.generation.status.pending.value).toBe(true)
+  })
+
+  it('haengt sich nicht an einen inzwischen abgeschlossenen Bericht', async () => {
+    const h = setup({ reportId: () => undefined })
+    h.api.generateReport.mockRejectedValue(inProgress)
+    h.api.getReportStatus.mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_fertig' },
+    })
+
+    await h.generation.start()
+
+    expect(h.onStarted).not.toHaveBeenCalled()
+    expect(h.generation.status.pending.value).toBe(true)
+  })
+})
+
 describe('useReportGeneration — stop()', () => {
   it('haelt die Begleit-Polls mit an', async () => {
     const h = setup()

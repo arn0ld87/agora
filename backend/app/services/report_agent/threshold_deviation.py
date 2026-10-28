@@ -118,22 +118,83 @@ def prior_threshold_lines(sections: Any, section_index: int) -> List[str]:
     return lines[:PRIOR_THRESHOLDS_PROMPT_LIMIT]
 
 
+def _extract_word_set(raw: Any) -> set[str]:
+    if isinstance(raw, str):
+        return set(raw.split())
+    return {str(w) for w in raw}
+
+
+def _words_share_stem(wa: str, wb: str) -> bool:
+    if (len(wa) >= 4 and wa in wb) or (len(wb) >= 4 and wb in wa):
+        return True
+    if len(wa) >= 5 and len(wb) >= 5:
+        return any(wa[i : i + 5] in wb for i in range(len(wa) - 4))
+    return False
+
+
+def _word_sets_compatible(words_a: set[str], words_b: set[str]) -> bool:
+    if not words_a or not words_b or (words_a & words_b):
+        return True
+    return any(_words_share_stem(wa, wb) for wa in words_a for wb in words_b)
+
+
+def _is_incompatible_deviation_target(
+    source_key: tuple[Any, str, str] | None,
+    target_key: tuple[Any, str, str] | None,
+) -> bool:
+    """Prüft, ob ein explizites ``deviates_from``-Ziel fachlich inkompatibel ist.
+
+    Im Unterschied zu ``threshold_measure_key`` (für die automatische Suche nach
+    ungemeldeten Abweichungen) darf ein explizit gesetzter ``deviates_from``-Verweis
+    auch leicht umformulierte Labels verbinden (z. B. ``"Pilotdauer"`` vs.
+    ``"Dauer des Pilotbetriebs"``), solange normierte Einheit, ``purpose`` und
+    Wortstamm zusammenpassen.
+    """
+    if source_key is None or target_key is None:
+        return False
+    words_a_raw, unit_a, purpose_a = source_key
+    words_b_raw, unit_b, purpose_b = target_key
+    if unit_a != unit_b or purpose_a != purpose_b:
+        return True
+    return not _word_sets_compatible(
+        _extract_word_set(words_a_raw),
+        _extract_word_set(words_b_raw),
+    )
+
+
 def drop_unresolvable_deviations(thresholds: Sequence[Threshold]) -> List[Threshold]:
-    """Entfernt Verweise auf Schwellenwerte, die es im Bericht nicht gibt.
+    """Entfernt Verweise auf Schwellenwerte, die es im Bericht nicht gibt oder
+    die fachlich eine andere Größe betreffen.
 
     Das Ziel kann an der Validierung gescheitert oder eine Modellerfindung
     sein. Der Verweis fällt weg, der Wert bleibt — und steht er im
     Widerspruch zu einem anderen, meldet ihn die Erkennung.
     """
-    known = {threshold.id for threshold in thresholds}
-    return [
-        threshold
-        if threshold.deviates_from is None or threshold.deviates_from in known
-        else threshold.model_copy(
-            update={"deviates_from": None, "deviation_rationale": None}
-        )
-        for threshold in thresholds
-    ]
+    by_id = {threshold.id: threshold for threshold in thresholds}
+    cleaned: List[Threshold] = []
+    for threshold in thresholds:
+        target_id = threshold.deviates_from
+        if target_id is None:
+            cleaned.append(threshold)
+            continue
+        target = by_id.get(target_id)
+        source_key = threshold_measure_key(threshold)
+        target_key = threshold_measure_key(target) if target is not None else None
+        mismatch = _is_incompatible_deviation_target(source_key, target_key)
+        if (
+            target is None
+            or target_id == threshold.id
+            or not (threshold.deviation_rationale or "").strip()
+            or mismatch
+        ):
+            cleaned.append(
+                threshold.model_copy(
+                    update={"deviates_from": None, "deviation_rationale": None}
+                )
+            )
+        else:
+            cleaned.append(threshold)
+    return cleaned
 
 
 def _find(parent: Dict[str, str], node: str) -> str:
@@ -144,14 +205,17 @@ def _find(parent: Dict[str, str], node: str) -> str:
 
 
 def _is_linked(group: Sequence[Threshold]) -> bool:
-    """Hängen alle Werte der Gruppe über Verweise zusammen?
+    """Hängen alle Werte der Gruppe über begründete Verweise zusammen?
 
     Gleiche Werte gelten als verbunden — sie widersprechen einander nicht.
     """
     parent = {threshold.id: threshold.id for threshold in group}
     by_value: Dict[Any, str] = {}
     for threshold in group:
-        if threshold.deviates_from in parent:
+        if (
+            threshold.deviates_from in parent
+            and (threshold.deviation_rationale or "").strip()
+        ):
             parent[_find(parent, threshold.id)] = _find(parent, threshold.deviates_from)
         twin = by_value.setdefault(threshold.value, threshold.id)
         parent[_find(parent, threshold.id)] = _find(parent, twin)
