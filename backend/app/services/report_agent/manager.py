@@ -222,6 +222,40 @@ def _count_independent_sources(
     return len(unique_keys)
 
 
+def _qualifying_claim_evidence_refs(
+    raw_evidence: Any,
+    evidence_index: Dict[str, Any],
+) -> List[str]:
+    """Filtert Claim-Evidence auf qualifizierende, stützende Referenzen."""
+    refs: List[str] = []
+    for item in raw_evidence or []:
+        if not isinstance(item, dict):
+            continue
+        eid = item.get("evidence_id")
+        if not eid or item.get("supports_claim") is not True or not counts_for_confidence(item):
+            continue
+        eid_str = str(eid)
+        record = evidence_index.get(eid_str)
+        if isinstance(record, (dict, Mapping)) and not counts_for_confidence(record):
+            continue
+        if eid_str not in refs:
+            refs.append(eid_str)
+    return refs
+
+
+def _should_downgrade_single_source(
+    independent_sources: int,
+    confidence: str,
+    claim_type: str | None,
+) -> bool:
+    """Prüft, ob ein Claim wegen Einzelquellen-Belegung herabgestuft werden muss."""
+    if independent_sources > 1:
+        return False
+    if confidence in {"high", "verified"}:
+        return True
+    return confidence == "medium" and claim_type not in ("structural", "recommendation")
+
+
 def _extract_claims_for_section(
     raw_claims: Any,
     *,
@@ -245,21 +279,11 @@ def _extract_claims_for_section(
     """
     claims: List[ReportV3Claim] = []
     claim_slot = 0
+    _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
     for claim in raw_claims or []:
         if not isinstance(claim, dict):
             continue
-        evidence_refs = list(dict.fromkeys(
-            str(item.get("evidence_id"))
-            for item in claim.get("evidence") or []
-            if isinstance(item, dict)
-            and item.get("evidence_id")
-            and item.get("supports_claim") is True
-            and counts_for_confidence(item)
-            and not (
-                isinstance(evidence_index.get(str(item.get("evidence_id"))), (dict, Mapping))
-                and not counts_for_confidence(evidence_index[str(item.get("evidence_id"))])
-            )
-        ))
+        evidence_refs = _qualifying_claim_evidence_refs(claim.get("evidence"), evidence_index)
         # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
         # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
         if not evidence_refs:
@@ -268,17 +292,9 @@ def _extract_claims_for_section(
         if len(statement) < 8:
             continue
         label = str(claim.get("confidence_label") or "speculative")
-        _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
-        confidence: Literal["speculative", "low", "medium", "high", "verified"]
-        # Bekannte Labels werden uebernommen, alles Unbekannte faellt auf
-        # "speculative". Hier standen frueher drei zusaetzliche elif-Zweige
-        # ("high"/"verified" -> "high", "medium" -> "medium", "low" -> "low"),
-        # die unerreichbar waren: ihre Labels liegen samt und sonders in
-        # _valid_confidence und wurden bereits vom ersten Zweig abgefangen.
-        if label in _valid_confidence:
-            confidence = label  # type: ignore[assignment]
-        else:
-            confidence = "speculative"
+        confidence: Literal["speculative", "low", "medium", "high", "verified"] = (
+            label if label in _valid_confidence else "speculative"  # type: ignore[assignment]
+        )
         single_source_text_confidence: Literal[
             "speculative", "low", "medium", "high", "verified"
         ] | None = None
@@ -286,14 +302,7 @@ def _extract_claims_for_section(
         independent_sources = _count_independent_sources(
             evidence_refs, claim.get("evidence"), evidence_index
         )
-        should_downgrade = False
-        if independent_sources <= 1:
-            if confidence in {"high", "verified"}:
-                should_downgrade = True
-            elif confidence == "medium" and claim_type not in ("structural", "recommendation"):
-                should_downgrade = True
-
-        if should_downgrade:
+        if _should_downgrade_single_source(independent_sources, confidence, claim_type):
             single_source_text_confidence = _wording_confidence(claim_type, confidence)
             confidence = "low"
         # strict: speculative/low-confidence Claims werden gedroppt

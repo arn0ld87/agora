@@ -26,7 +26,7 @@ allein unterschätzt ihn — deshalb stehen beide im Ergebnis.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, Dict, Mapping
 
 from ...contracts.report_contract import EvidenceSourceKind, counts_for_confidence
 
@@ -74,6 +74,52 @@ def _supporting_kinds(
     return kinds
 
 
+def _supporting_kinds_for_exported_claim(
+    claim_obj: Any,
+    evidence_index: Mapping[str, Any],
+) -> list[str]:
+    """Löst ``evidence_refs`` eines exportierten Claims gegen ``evidence_index`` auf."""
+    refs = getattr(claim_obj, "evidence_refs", None)
+    if refs is None and isinstance(claim_obj, Mapping):
+        refs = claim_obj.get("evidence_refs")
+    if not refs:
+        return []
+    kinds: list[str] = []
+    for eid in refs:
+        record = evidence_index.get(str(eid))
+        if isinstance(record, Mapping):
+            if not counts_for_confidence(record):
+                continue
+            kinds.append(str(record.get("source_kind") or ""))
+        else:
+            kinds.append("")
+    return kinds
+
+
+def _collect_claim_supporting_kinds(
+    sections: Any,
+    evidence_index: Mapping[str, Any],
+    exported_claims: Any,
+) -> list[list[str]]:
+    """Sammelt je validiertem Claim die stützenden Quellengattungen."""
+    if exported_claims is not None:
+        return [
+            kinds
+            for c in exported_claims
+            if (kinds := _supporting_kinds_for_exported_claim(c, evidence_index))
+        ]
+    collected: list[list[str]] = []
+    for section in sections:
+        if not isinstance(section, Mapping):
+            continue
+        for claim in section.get("claims") or []:
+            if isinstance(claim, Mapping):
+                kinds = _supporting_kinds(claim, evidence_index)
+                if kinds:
+                    collected.append(kinds)
+    return collected
+
+
 def compute_simulation_contribution(
     evidence_map: Mapping[str, Any] | None,
     *,
@@ -103,49 +149,14 @@ def compute_simulation_contribution(
     with_action = 0
     action_necessary = 0
 
-    if exported_claims is not None:
-        for c in exported_claims:
-            refs = getattr(c, "evidence_refs", None)
-            if refs is None and isinstance(c, Mapping):
-                refs = c.get("evidence_refs")
-            if not refs:
-                continue
-            kinds: list[str] = []
-            for eid in refs:
-                eid_str = str(eid)
-                record = evidence_index.get(eid_str)
-                if isinstance(record, Mapping):
-                    if not counts_for_confidence(record):
-                        continue
-                    kinds.append(str(record.get("source_kind") or ""))
-                else:
-                    kinds.append("")
-            if not kinds:
-                continue
-            validated += 1
-            if any(kind in _SIMULATION_KINDS for kind in kinds):
-                with_simulation += 1
-            if _ACTION_KIND in kinds:
-                with_action += 1
-                if all(kind == _ACTION_KIND for kind in kinds):
-                    action_necessary += 1
-    else:
-        for section in sections:
-            if not isinstance(section, Mapping):
-                continue
-            for claim in section.get("claims") or []:
-                if not isinstance(claim, Mapping):
-                    continue
-                kinds = _supporting_kinds(claim, evidence_index)
-                if not kinds:
-                    continue
-                validated += 1
-                if any(kind in _SIMULATION_KINDS for kind in kinds):
-                    with_simulation += 1
-                if _ACTION_KIND in kinds:
-                    with_action += 1
-                    if all(kind == _ACTION_KIND for kind in kinds):
-                        action_necessary += 1
+    for kinds in _collect_claim_supporting_kinds(sections, evidence_index, exported_claims):
+        validated += 1
+        if any(kind in _SIMULATION_KINDS for kind in kinds):
+            with_simulation += 1
+        if _ACTION_KIND in kinds:
+            with_action += 1
+            if all(kind == _ACTION_KIND for kind in kinds):
+                action_necessary += 1
 
     def _share(count: int) -> float | None:
         return round(count / validated, 4) if validated else None
