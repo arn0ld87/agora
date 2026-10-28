@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional
 
 from pydantic import ValidationError
 
@@ -13,6 +13,7 @@ from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
+from ...contracts.report_contract import counts_for_confidence
 from ...contracts.report_record_contract import ReportRecord
 from .claim_dedup import dedup_claims, duplicate_report
 from .metadata_merge import merge_section_metadata
@@ -55,6 +56,7 @@ from .claim_provenance import (
     # bleibt als Alias erhalten — er ist der Einstiegspunkt der bestehenden
     # Vertragstests.
     derive_confidence_scope as _derive_confidence_scope,
+    resolve_voice_key,
 )
 from .markdown_renderer import render_report_v3
 from .sections import (
@@ -189,6 +191,71 @@ def _wording_confidence(
     return confidence if claim_type in (None, "empirical") else None
 
 
+def _count_independent_sources(
+    evidence_refs: Iterable[str],
+    raw_evidence: Any,
+    evidence_index: Mapping[str, Any],
+) -> int:
+    """Zaehlt unabhaengige Stuetzquellen unter den gueltigen Evidence-Refs.
+
+    Zwei Items mit demselben voice_key (z. B. zwei Zitate derselben Persona)
+    zaehlen als nur eine Stimme (ADR-0002, Issue #1766).
+    """
+    items_by_eid: Dict[str, Dict[str, Any]] = {}
+    if isinstance(raw_evidence, list):
+        for item in raw_evidence:
+            if isinstance(item, dict) and item.get("evidence_id"):
+                eid = str(item.get("evidence_id"))
+                if eid not in items_by_eid and item.get("supports_claim") is True:
+                    items_by_eid[eid] = item
+
+    unique_keys: set[Any] = set()
+    for eid in evidence_refs:
+        item = items_by_eid.get(eid) or {"evidence_id": eid}
+        record = evidence_index.get(eid) if isinstance(evidence_index, Mapping) else None
+        record_map = record if isinstance(record, Mapping) else None
+        vk = resolve_voice_key(item, record_map)
+        if vk:
+            unique_keys.add(("voice", vk))
+        else:
+            unique_keys.add(("ref", eid))
+    return len(unique_keys)
+
+
+def _qualifying_claim_evidence_refs(
+    raw_evidence: Any,
+    evidence_index: Dict[str, Any],
+) -> List[str]:
+    """Filtert Claim-Evidence auf qualifizierende, stützende Referenzen."""
+    refs: List[str] = []
+    for item in raw_evidence or []:
+        if not isinstance(item, dict):
+            continue
+        eid = item.get("evidence_id")
+        if not eid or item.get("supports_claim") is not True or not counts_for_confidence(item):
+            continue
+        eid_str = str(eid)
+        record = evidence_index.get(eid_str)
+        if isinstance(record, (dict, Mapping)) and not counts_for_confidence(record):
+            continue
+        if eid_str not in refs:
+            refs.append(eid_str)
+    return refs
+
+
+def _should_downgrade_single_source(
+    independent_sources: int,
+    confidence: str,
+    claim_type: str | None,
+) -> bool:
+    """Prüft, ob ein Claim wegen Einzelquellen-Belegung herabgestuft werden muss."""
+    if independent_sources > 1:
+        return False
+    if confidence in {"high", "verified"}:
+        return True
+    return confidence == "medium" and claim_type not in ("structural", "recommendation")
+
+
 def _extract_claims_for_section(
     raw_claims: Any,
     *,
@@ -212,16 +279,11 @@ def _extract_claims_for_section(
     """
     claims: List[ReportV3Claim] = []
     claim_slot = 0
+    _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
     for claim in raw_claims or []:
         if not isinstance(claim, dict):
             continue
-        evidence_refs = list(dict.fromkeys(
-            str(item.get("evidence_id"))
-            for item in claim.get("evidence") or []
-            if isinstance(item, dict)
-            and item.get("evidence_id")
-            and item.get("supports_claim") is True
-        ))
+        evidence_refs = _qualifying_claim_evidence_refs(claim.get("evidence"), evidence_index)
         # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
         # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
         if not evidence_refs:
@@ -230,22 +292,17 @@ def _extract_claims_for_section(
         if len(statement) < 8:
             continue
         label = str(claim.get("confidence_label") or "speculative")
-        _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
-        confidence: Literal["speculative", "low", "medium", "high", "verified"]
-        # Bekannte Labels werden uebernommen, alles Unbekannte faellt auf
-        # "speculative". Hier standen frueher drei zusaetzliche elif-Zweige
-        # ("high"/"verified" -> "high", "medium" -> "medium", "low" -> "low"),
-        # die unerreichbar waren: ihre Labels liegen samt und sonders in
-        # _valid_confidence und wurden bereits vom ersten Zweig abgefangen.
-        if label in _valid_confidence:
-            confidence = label  # type: ignore[assignment]
-        else:
-            confidence = "speculative"
+        confidence: Literal["speculative", "low", "medium", "high", "verified"] = (
+            label if label in _valid_confidence else "speculative"  # type: ignore[assignment]
+        )
         single_source_text_confidence: Literal[
             "speculative", "low", "medium", "high", "verified"
         ] | None = None
         claim_type = _claim_type_of(claim)
-        if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
+        independent_sources = _count_independent_sources(
+            evidence_refs, claim.get("evidence"), evidence_index
+        )
+        if _should_downgrade_single_source(independent_sources, confidence, claim_type):
             single_source_text_confidence = _wording_confidence(claim_type, confidence)
             confidence = "low"
         # strict: speculative/low-confidence Claims werden gedroppt
@@ -740,7 +797,7 @@ class ReportManager:
             # Issue #1304 (S3): aus derselben Evidenzkarte gezaehlt, aus der die
             # Claims oben entstehen — kein zweiter Datenpfad, der driften kann.
             simulation_contribution=SimulationContribution.model_validate(
-                compute_simulation_contribution(evidence_map)
+                compute_simulation_contribution(evidence_map, exported_claims=claims)
             ),
             **metadata_kwargs,
         )
@@ -863,8 +920,8 @@ class ReportManager:
         status: str, 
         progress: int, 
         message: str,
-        current_section: str = None,
-        completed_sections: List[str] = None
+        current_section: Optional[str] = None,
+        completed_sections: Optional[List[str]] = None
     ) -> None:
         """
         UpdateReportgenerateProgress
@@ -919,6 +976,66 @@ class ReportManager:
         return {
             int(index)
             for index in (data.get("work_trace_removed_sections") or [])
+        }
+
+    @classmethod
+    def save_forced_final_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert Abschnitte, die per mark_forced_final forciert wurden."""
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["forced_final_sections"] = sorted(
+            {int(index) for index in section_indices}
+        )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_forced_final_sections(cls, report_id: str) -> set:
+        """Liest persistierte forced_final_sections; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("forced_final_sections") or [])
+        }
+
+    @classmethod
+    def save_metadata_failed_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert Abschnitte mit fehlgeschlagener Metadaten-Generierung."""
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["metadata_failed_sections"] = sorted(
+            {int(index) for index in section_indices}
+        )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_metadata_failed_sections(cls, report_id: str) -> set:
+        """Liest persistierte metadata_failed_sections; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("metadata_failed_sections") or [])
+        }
+
+    @classmethod
+    def save_quote_validation_failed_sections(
+        cls, report_id: str, section_indices: Iterable[int]
+    ) -> None:
+        """Persistiert Abschnitte mit fehlgeschlagener Zitatvalidierung."""
+        existing = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        existing["quote_validation_failed_sections"] = sorted(
+            {int(index) for index in section_indices}
+        )
+        cls._write_json_atomic(cls._get_run_events_path(report_id), existing)
+
+    @classmethod
+    def load_quote_validation_failed_sections(cls, report_id: str) -> set:
+        """Liest persistierte quote_validation_failed_sections; leer wenn nicht vorhanden."""
+        data = cls._read_json_safe(cls._get_run_events_path(report_id)) or {}
+        return {
+            int(index)
+            for index in (data.get("quote_validation_failed_sections") or [])
         }
 
     @classmethod
@@ -1043,7 +1160,7 @@ class ReportManager:
         import re
         
         lines = content.split('\n')
-        processed_lines = []
+        processed_lines: List[str] = []
         prev_was_heading = False
         
         # collectoutlineinallSection Title

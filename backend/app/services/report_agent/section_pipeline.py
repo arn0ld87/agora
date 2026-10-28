@@ -51,6 +51,7 @@ from .attribution_guard import (
     attribution_findings,
     correct_attribution,
     profile_from_evidence_index,
+    resolve_section_evidence_records,
 )
 from .text_verification import verify_prose
 
@@ -444,8 +445,27 @@ def _correct_attribution(
     der auch ausgeliefert wird, und seine Satzgrenzen stimmen mit denen des
     Endergebnisses überein.
     """
-    index = (getattr(agent, "evidence_map", None) or {}).get("evidence_index") or {}
-    profile = profile_from_evidence_index(index)
+    evidence_map = getattr(agent, "evidence_map", None) or {}
+    index = evidence_map.get("evidence_index") or {}
+    active_sec_ev = getattr(agent, "_active_section_evidence", None)
+    if isinstance(active_sec_ev, (list, dict)):
+        combined_sec_ev: List[Any] = (
+            list(active_sec_ev.values())
+            if isinstance(active_sec_ev, dict)
+            else list(active_sec_ev)
+        )
+        for global_refs in (
+            evidence_map.get("global_evidence_refs"),
+            getattr(agent, "global_evidence_refs", None),
+        ):
+            if isinstance(global_refs, (list, tuple, set)):
+                combined_sec_ev.extend(global_refs)
+            elif isinstance(global_refs, dict):
+                combined_sec_ev.extend(global_refs.values())
+        evidence_source = resolve_section_evidence_records(combined_sec_ev, index)
+    else:
+        evidence_source = index
+    profile = profile_from_evidence_index(evidence_source)
     findings = attribution_findings(content, profile)
     if not findings:
         return content

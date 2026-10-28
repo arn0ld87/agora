@@ -16,9 +16,11 @@ from pydantic import ValidationError
 
 from app.contracts.report_v3 import Claim
 from app.services.report_agent.claim_provenance import (
+    count_supporting_voices,
     derive_aggregation_basis,
     derive_confidence_scope,
 )
+from app.services.report_agent.takeaway_confidence import cap_takeaway_confidence
 
 
 def _bound(evidence_id: str, *, supports: bool = True, **extra: Any) -> Dict[str, Any]:
@@ -290,3 +292,77 @@ def test_persona_carried_claims_may_still_be_source_bound():
     assert Claim.model_validate(
         _claim(aggregation_basis="persona", confidence_scope="evidence")
     ).confidence_scope == "evidence"
+
+
+def test_manual_or_edited_graph_evidence_does_not_count_for_provenance_or_takeaways():
+    """ADR-0022 §4: Handeingaben und nachtraeglich editierte Kanten duerfen
+    weder ``confidence_scope='evidence'`` noch ``aggregation_basis='seed'``
+    oder Takeaway-Confidence stuetzen."""
+    index = {
+        "ev_manual_seed": {
+            "evidence_id": "ev_manual_seed",
+            "source_kind": "seed_corpus",
+            "graph_origin": "manual",
+        },
+        "ev_edited_fact": {
+            "evidence_id": "ev_edited_fact",
+            "source_kind": "graph_edge",
+            "graph_origin": "edited",
+        },
+        "ev_q1": {
+            "evidence_id": "ev_q1",
+            "source_kind": "agent_quote",
+            "agent_name": "Anna",
+        },
+    }
+    bindings = [
+        {"evidence_id": "ev_manual_seed", "supports_claim": True},
+        {"evidence_id": "ev_edited_fact", "supports_claim": True},
+        {"evidence_id": "ev_q1", "supports_claim": True},
+    ]
+
+    assert derive_confidence_scope(bindings, index) == "simulation_single_voice"
+    assert derive_aggregation_basis(bindings, index) == "persona"
+    assert count_supporting_voices(bindings, index) == 1
+
+    takeaways = cap_takeaway_confidence(
+        [
+            {
+                "text": "Befund nur mit manuellem Seed und Einzelzitat.",
+                "confidence": "high",
+                "confidence_scope": "evidence",
+            }
+        ],
+        [{"confidence_label": "low", "evidence": bindings}],
+        evidence_index=index,
+    )
+    assert takeaways[0]["confidence"] == "low"
+    assert takeaways[0]["confidence_scope"] == "simulation_consensus"
+
+
+def test_voice_key_and_agent_id_count_distinct_simulation_voices():
+    """Simulationsstimmen mit ``voice_key`` oder ``agent_id`` (ohne ``agent_name``)
+    innerhalb derselben Stakeholder-Gruppe zaehlen als getrennte Stimmen."""
+    index = {
+        "ev_act_1": {
+            "evidence_id": "ev_act_1",
+            "source_kind": "agent_action",
+            "voice_key": "agent:101",
+            "persona_stakeholder_group": "Pflege",
+        },
+        "ev_act_2": {
+            "evidence_id": "ev_act_2",
+            "source_kind": "agent_action",
+            "voice_key": "agent:102",
+            "persona_stakeholder_group": "Pflege",
+        },
+    }
+    bindings = [
+        {"evidence_id": "ev_act_1", "supports_claim": True},
+        {"evidence_id": "ev_act_2", "supports_claim": True},
+    ]
+
+    assert count_supporting_voices(bindings, index) == 2
+    assert derive_confidence_scope(bindings, index) == "simulation_consensus"
+    assert derive_aggregation_basis(bindings, index) == "aggregat"
+

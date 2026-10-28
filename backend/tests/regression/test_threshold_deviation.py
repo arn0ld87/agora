@@ -252,6 +252,50 @@ def test_drei_werte_an_einem_bezugswert_sind_verbunden() -> None:
     assert find_threshold_conflicts(thresholds) == []
 
 
+def test_verweis_auf_fremde_kennzahl_oder_ohne_begruendung_verbindet_nicht() -> None:
+    """Ein Verweis auf eine fachlich andere Größe oder ohne ``deviation_rationale``
+    darf keinen Widerspruch unterdrücken."""
+    unexplained = [
+        _threshold("T1_01", 4.0),
+        _threshold("T7_01", 8.0).model_copy(
+            update={"deviates_from": "T1_01", "deviation_rationale": "   "}
+        ),
+    ]
+    assert len(find_threshold_conflicts(unexplained)) == 1
+
+    cross_metric = drop_unresolvable_deviations([
+        _threshold("T1_01", 99.5, label="Systemverfügbarkeit", unit="percent"),
+        _threshold(
+            "T7_01",
+            8.0,
+            label="Pilotdauer",
+            unit="weeks",
+            deviates_from="T1_01",
+            deviation_rationale="Andere Kennzahl.",
+        ),
+    ])
+    assert cross_metric[1].deviates_from is None
+    assert cross_metric[1].deviation_rationale is None
+
+    paraphrased_same_metric = drop_unresolvable_deviations([
+        _threshold("T1_01", 4.0, label="Pilotdauer", unit="weeks"),
+        _threshold(
+            "T7_01",
+            8.0,
+            label="Dauer des Pilotbetriebs",
+            unit="weeks",
+            deviates_from="T1_01",
+            deviation_rationale="Nach Testausfall verlängert.",
+        ),
+    ])
+    assert paraphrased_same_metric[1].deviates_from == "T1_01"
+    assert (
+        paraphrased_same_metric[1].deviation_rationale
+        == "Nach Testausfall verlängert."
+    )
+
+
+
 def test_viele_widersprueche_verdraengen_die_modellbefunde_nicht() -> None:
     thresholds = [
         threshold
