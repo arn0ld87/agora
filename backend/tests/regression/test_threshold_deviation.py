@@ -277,6 +277,23 @@ def test_verweis_auf_fremde_kennzahl_oder_ohne_begruendung_verbindet_nicht() -> 
     assert cross_metric[1].deviates_from is None
     assert cross_metric[1].deviation_rationale is None
 
+    paraphrased_same_metric = drop_unresolvable_deviations([
+        _threshold("T1_01", 4.0, label="Pilotdauer", unit="weeks"),
+        _threshold(
+            "T7_01",
+            8.0,
+            label="Dauer des Pilotbetriebs",
+            unit="weeks",
+            deviates_from="T1_01",
+            deviation_rationale="Nach Testausfall verlängert.",
+        ),
+    ])
+    assert paraphrased_same_metric[1].deviates_from == "T1_01"
+    assert (
+        paraphrased_same_metric[1].deviation_rationale
+        == "Nach Testausfall verlängert."
+    )
+
 
 
 def test_viele_widersprueche_verdraengen_die_modellbefunde_nicht() -> None:

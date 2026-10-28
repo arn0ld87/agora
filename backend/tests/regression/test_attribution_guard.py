@@ -524,3 +524,26 @@ def test_correct_attribution_falls_back_when_active_evidence_is_none():
     corrected = _correct_attribution(agent, section, content, section_index=0)
     assert corrected == content
 
+
+def test_correct_attribution_includes_preloaded_global_evidence_refs_when_active_section_empty():
+    """Vorab geladene global_evidence_refs tragen Simulationszuschreibungen auch ohne neuen Abschnitts-Toolcall."""
+    agent = types.SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "ev_sim": {
+                    "evidence_id": "ev_sim",
+                    "source_kind": "agent_quote",
+                    "type": "agent_post",
+                }
+            },
+            "global_evidence_refs": ["ev_sim"],
+        },
+        _active_section_evidence=[],
+    )
+    section = types.SimpleNamespace(title="Synthese")
+    content = "Die Simulation zeigt eine deutliche Skepsis."
+
+    corrected = _correct_attribution(agent, section, content, section_index=1)
+    assert corrected == content
+
+

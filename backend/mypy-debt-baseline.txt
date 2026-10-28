@@ -21,7 +21,7 @@ app.utils.*
 
 [errors-per-file]
 4 app/container.py
-3 app/llm/client.py
+2 app/llm/_client_transport.py
 1 app/llm/providers/base.py
 4 app/llm/providers/openai.py
 1 app/llm/tool_calls.py
@@ -34,21 +34,26 @@ app.utils.*
 1 app/services/graph_tools.py
 11 app/services/llm_provider_registry.py
 1 app/services/network_analytics.py
-4 app/services/oasis_profile_batch.py
+2 app/services/oasis_profile_batch.py
 1 app/services/oasis_profile_core.py
 1 app/services/oasis_profile_generator.py
 1 app/services/oasis_profile_llm.py
 1 app/services/prepare_llm.py
-30 app/services/report_agent/agent.py
+1 app/services/prepare_service_helpers.py
+5 app/services/report_agent/agent.py
+15 app/services/report_agent/agent_section_saving.py
+4 app/services/report_agent/agent_tools.py
 2 app/services/report_agent/attribution_guard.py
 7 app/services/report_agent/csv_export.py
 1 app/services/report_agent/evidence.py
-17 app/services/report_agent/manager.py
+5 app/services/report_agent/manager.py
+1 app/services/report_agent/manager_v3_builder.py
 3 app/services/report_agent/markdown_renderer.py
 1 app/services/report_agent/schemas.py
-1 app/services/report_agent/text_verification.py
+1 app/services/report_agent/text_verification_renumbering.py
 2 app/services/report_agent/threshold_provenance.py
-7 app/services/report_agent/workflow.py
+3 app/services/report_agent/workflow.py
+2 app/services/report_agent/workflow_finalization.py
 1 app/services/report_export.py
 1 app/services/run_budget.py
 6 app/services/run_budget_preflight.py
@@ -76,4 +81,4 @@ app.utils.*
 1 app/utils/proxy.py
 1 app/utils/signed_ticket.py
 
-# Summe: 264 Fehler in 55 Dateien.
+# Summe: 243 Fehler in 60 Dateien.

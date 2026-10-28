@@ -19,12 +19,18 @@ Profil ist ein Kollektiv ("Gegenstimme"), keine Einzelperson.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, List, Optional
+import os
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..config import Config
+from ..contracts.pipeline_degradation_contract import DegradationKind, DegradationSeverity
 from ..utils.logger import get_logger
+from .degradation_collector import DegradationCollector
 from .oasis_profile_models import OasisAgentProfile
 from .simulation_stance_graph import SYNTHETIC_SKEPTIC_PREFIX
+
+if TYPE_CHECKING:
+    from .simulation_manager import SimulationState
 
 logger = get_logger("agora.prepare")
 
@@ -141,4 +147,76 @@ def build_skeptic_profiles(
     return profiles
 
 
-__all__ = ["build_skeptic_profiles", "is_synthetic_skeptic"]
+def _phase_profile_synthetic_skeptics(
+    state: "SimulationState",
+    sim_dir: str,
+    profiles: List[Any],
+    config: Dict[str, Any],
+    *,
+    language: Optional[str],
+    degradations: Optional[DegradationCollector] = None,
+) -> List[Any]:
+    """Phase 3b (#1779): Profile für die synthetischen Skeptiker der Quotenregel.
+
+    ``_ensure_skeptic_quota`` ergänzt die Konfiguration erst NACH der
+    Persona-Phase um Agenten wie ``synthetic-skeptic-50``. Ohne Profil
+    existierten sie in OASIS nicht und schrieben nie. Dieser Schritt baut aus
+    der gerade persistierten Konfiguration die fehlenden Profile
+    (``user_id`` = ``agent_id`` der Konfiguration, damit
+    ``simulation_agent_identity`` sie auflöst) und schreibt beide Profildateien
+    neu. Er läuft innerhalb der Konfigurationsphase und damit hinter dem
+    Persona-Checkpoint (#1472c), der am Ende von Phase 2 gelöscht wird: ein
+    Resume erzeugt die Persona-Profile über den regulären Pfad, die
+    Skeptiker-Profile danach erneut.
+
+    Idempotent (ein Agent mit vorhandenem Profil bekommt kein zweites).
+    Rückgabe: die um die Skeptiker erweiterte Profilliste.
+    """
+    from . import prepare_service as _ps
+
+    skeptics = _ps._prepare_skeptic_profiles.build_skeptic_profiles(
+        config, profiles, language=language
+    )
+    if not skeptics:
+        return profiles
+
+    all_profiles = [*profiles, *skeptics]
+    # Nur die Persistenzmethoden des Generators werden genutzt; der Platzhalter-
+    # Schlüssel löst keinen Aufruf aus.
+    writer = _ps.OasisProfileGenerator(api_key="persistence-only")
+    if state.enable_reddit:
+        writer.save_profiles(
+            profiles=all_profiles,
+            file_path=os.path.join(sim_dir, "reddit_profiles.json"),
+            platform="reddit",
+        )
+    if state.enable_twitter:
+        writer.save_profiles(
+            profiles=all_profiles,
+            file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
+            platform="twitter",
+        )
+    state.profiles_count = len(all_profiles)
+
+    if degradations is not None:
+        degradations.record(
+            kind=DegradationKind.PERSONA_RULE_BASED_FALLBACK,
+            severity=DegradationSeverity.WARNING,
+            detail=(
+                f"{len(skeptics)} synthetische Skeptiker-Personas (Quotenregel) sind "
+                "regelbasierte Platzhalter ohne Modellbeteiligung. Ihre Beiträge sind "
+                "synthetische Gegenstimmen, keine aus dem Graph belegten Positionen."
+            ),
+            context={
+                "fallback_personas": len(skeptics),
+                "total_personas": len(all_profiles),
+            },
+        )
+    return all_profiles
+
+
+__all__ = [
+    "build_skeptic_profiles",
+    "is_synthetic_skeptic",
+    "_phase_profile_synthetic_skeptics",
+]

@@ -84,17 +84,18 @@ app/utils/file_parser.py::FileParser._extract_from_pdf  # cc<=23
 # llm_client.py wurde nach app/llm/ gesplittet (#582) — Hotspots unveraendert,
 # nur Pfad neu. Refactoring der Funktionen selbst: #590.
 app/llm/client.py::LLMClient.__init__  # cc<=34
-app/llm/client.py::LLMClient.chat  # cc<=24
-app/llm/client.py::LLMClient.chat_json  # cc<=32
+app/llm/_client_chat.py::LLMClientChatMixin  # cc<=25
+app/llm/_client_chat.py::LLMClientChatMixin.chat  # cc<=24
+app/llm/_client_json.py::LLMClientJsonMixin.chat_json  # cc<=32
 
 # --- API ---
 app/api/simulation_profiles.py::add_simulation_profile  # cc<=26
-app/api/runs.py::_build_run_detail  # cc<=21
+app/api/runs_replay.py::_build_run_detail  # cc<=21
 app/api/graph_build.py::generate_ontology  # cc<=27
 app/api/graph_build.py::build_graph  # cc<=23
 
 # --- Services: Graph und Ontologie ---
-app/services/graph_build.py::GraphBuildService.build_graph  # cc<=25
+app/services/graph_build_helpers.py::build_graph  # cc<=25
 app/services/graph_tools.py::GraphToolsService.interview_agents  # cc<=29
 app/services/ontology_generator.py::OntologyGenerator._validate_and_process  # cc<=24
 app/services/graph/insight_forge_tool.py::insight_forge  # cc<=23
@@ -126,26 +127,29 @@ app/services/oasis_profile_context.py::_build_entity_context  # cc<=26
 # Simulation -> Acknowledge) und misst jetzt 7, die Klasse 8. Hoechster Wert
 # im Modul ist _status_from_run_registry mit 15 — unter der D-Schwelle, also
 # ohne Allowlist-Eintrag.
-app/services/report_agent/agent.py::ReportAgent._record_tool_evidence  # cc<=57
-app/services/report_agent/agent.py::ReportAgent._build_claims_for_section  # cc<=37
-app/services/report_agent/agent.py::ReportAgent._finalize_section_claims  # cc<=24
-app/services/report_agent/agent.py::ReportAgent._save_evidence_section  # cc<=52
+app/services/report_agent/agent_tools.py::ReportAgentToolsMixin._record_tool_evidence  # cc<=57
+app/services/report_agent/agent_claims.py::ReportAgentClaimsMixin  # cc<=37
+app/services/report_agent/agent_claims.py::ReportAgentClaimsMixin._build_claims_for_section  # cc<=36
+app/services/report_agent/agent_hypotheses.py::ReportAgentHypothesesMixin._finalize_section_claims  # cc<=23
+app/services/report_agent/agent_section_saving.py::ReportAgentSectionSavingMixin  # cc<=28
+app/services/report_agent/agent_section_saving.py::ReportAgentSectionSavingMixin._save_evidence_section  # cc<=50
+app/services/report_agent/section_pipeline_runner.py::process_section  # cc<=23
 app/services/report_agent/workflow.py::generate_report  # cc<=50
-app/services/report_agent/workflow.py::generate_section_react  # cc<=41
+app/services/report_agent/workflow_react.py::generate_section_react  # cc<=41
 app/services/report_agent/workflow.py::chat  # cc<=25
 app/services/report_agent/manager.py::ReportManager.build_report_v3  # cc<=47
 app/services/report_agent/manager.py::ReportManager._post_process_report  # cc<=27
 app/services/report_agent/planning.py::plan_outline  # cc<=24
-app/services/report_agent/evidence.py::degrade_sections_for_violations  # cc<=50
-app/services/report_agent/text_verification.py::verify_prose  # cc<=24
+app/services/report_agent/evidence_degradation.py::degrade_sections_for_violations  # cc<=50
+app/services/report_agent/text_verification_engine.py::verify_prose  # cc<=24
 app/services/report_agent/storage.py::_upgrade_report_v3_payload  # cc<=21
 
 # --- Evidence: Migration, Entailment, Contract ---
 # Kanonische Evidence-Identitaet (#1147) und seed_corpus-Evidence (#1166) hatten
 # fuenf D-Hotspots in den Bestand gebracht, deren Allowlist-Nachzug ausgeblieben
 # war; contract-gates lief auf main deshalb ueber acht Laeufe rot (#1213).
-app/services/evidence_entailment.py::classify_evidence  # cc<=38
+app/services/entailment/classifier.py::classify_evidence  # cc<=38
 app/services/evidence_migrations.py::migrate_evidence_map_v2_to_v3  # cc<=25
 app/services/evidence_migrations.py::demote_unanchored_seed_corpus_records  # cc<=27
-app/contracts/report_contract.py::EvidenceMapModel  # cc<=25
-app/contracts/report_contract.py::EvidenceMapModel.validate_evidence_cross_references  # cc<=24
+app/contracts/report_map_contract.py::EvidenceMapModel  # cc<=25
+app/contracts/report_map_contract.py::EvidenceMapModel.validate_evidence_cross_references  # cc<=24

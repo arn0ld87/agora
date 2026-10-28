@@ -176,10 +176,24 @@ def resolve_section_evidence_records(
         )
         index_map = evidence_index if isinstance(evidence_index, dict) else {}
         resolved: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
         for item in raw_items:
+            if isinstance(item, str):
+                eid = item.strip()
+                if not eid or eid in seen_ids:
+                    continue
+                indexed = index_map.get(eid)
+                if isinstance(indexed, dict):
+                    seen_ids.add(eid)
+                    resolved.append(dict(indexed))
+                continue
             if not isinstance(item, dict):
                 continue
             eid = str(item.get("evidence_id") or item.get("id") or "").strip()
+            if eid:
+                if eid in seen_ids:
+                    continue
+                seen_ids.add(eid)
             indexed = index_map.get(eid) if eid else None
             if isinstance(indexed, dict):
                 merged = {**indexed, **item}
