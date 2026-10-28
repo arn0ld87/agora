@@ -51,6 +51,7 @@ from .attribution_guard import (
     attribution_findings,
     correct_attribution,
     profile_from_evidence_index,
+    resolve_section_evidence_records,
 )
 from .text_verification import verify_prose
 
@@ -445,7 +446,12 @@ def _correct_attribution(
     Endergebnisses überein.
     """
     index = (getattr(agent, "evidence_map", None) or {}).get("evidence_index") or {}
-    profile = profile_from_evidence_index(index)
+    active_sec_ev = getattr(agent, "_active_section_evidence", None)
+    if isinstance(active_sec_ev, (list, dict)):
+        evidence_source = resolve_section_evidence_records(active_sec_ev, index)
+    else:
+        evidence_source = index
+    profile = profile_from_evidence_index(evidence_source)
     findings = attribution_findings(content, profile)
     if not findings:
         return content

@@ -27,8 +27,29 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Sequence
 
+from ...contracts.report_contract import counts_for_confidence
+
 #: Quellengattungen, die eine Simulationsaussage tragen können.
 SIMULATION_SOURCE_KINDS = frozenset({"agent_quote", "agent_action"})
+
+_FALLBACK_TYPE_TO_SOURCE_KIND: Mapping[str, str] = {
+    "seed_document": "seed_corpus",
+    "seed_corpus": "seed_corpus",
+    "agent_post": "agent_quote",
+    "agent_quote": "agent_quote",
+    "agent_interview": "agent_quote",
+    "agent_behavior": "agent_action",
+    "agent_action": "agent_action",
+    "inferred": "inferred",
+}
+
+_DISQUALIFYING_PROVENANCE_CLASSES = frozenset({
+    "derived_calculation",
+    "inferred",
+    "speculative",
+    "unverified",
+    "unsupported",
+})
 
 #: Evidence-*Typ* einer Interviewaussage.
 #:
@@ -113,6 +134,67 @@ class EvidenceProfile:
     def supports_consensus(self) -> bool:
         return self.simulation_evidence >= CONSENSUS_MIN_EVIDENCE
 
+    @classmethod
+    def from_evidence_index(
+        cls,
+        evidence_index: Mapping[str, Any] | Sequence[Any],
+    ) -> "EvidenceProfile":
+        return profile_from_evidence_index(evidence_index)
+
+
+def _is_qualifying_evidence_record(record: Mapping[str, Any]) -> bool:
+    """Prüft, ob ein Evidence-Record für das Zuschreibungsprofil qualifiziert."""
+    if not counts_for_confidence(record):
+        return False
+    if record.get("supports_claim") is False:
+        return False
+    prov_class = str(record.get("provenance_class") or "").strip().lower()
+    if prov_class in _DISQUALIFYING_PROVENANCE_CLASSES:
+        return False
+    if str(record.get("source_kind") or "").strip().lower() == "inferred":
+        return False
+    return True
+
+
+def resolve_section_evidence_records(
+    section_evidence: Any,
+    evidence_index: Any,
+) -> List[Dict[str, Any]] | Dict[str, Any]:
+    """Löst abschnittsbezogene Evidence-Einträge gegen den globalen Index auf.
+
+    Ist ``section_evidence`` eine echte ``list`` oder ein ``dict``, werden nur
+    die in diesem Abschnitt abgerufenen Records herangezogen und bei bekannter
+    ``evidence_id`` mit Metadaten aus ``evidence_index`` angereichert. Ohne
+    abschnittsbezogene Liste (``None`` oder Mock-Default) fällt die Prüfung
+    auf den globalen ``evidence_index`` zurück.
+    """
+    if isinstance(section_evidence, (list, dict)):
+        raw_items = (
+            list(section_evidence.values())
+            if isinstance(section_evidence, dict)
+            else list(section_evidence)
+        )
+        index_map = evidence_index if isinstance(evidence_index, dict) else {}
+        resolved: List[Dict[str, Any]] = []
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            eid = str(item.get("evidence_id") or item.get("id") or "").strip()
+            indexed = index_map.get(eid) if eid else None
+            if isinstance(indexed, dict):
+                merged = {**indexed, **item}
+                if not counts_for_confidence(indexed) and counts_for_confidence(merged):
+                    merged["graph_origin"] = indexed.get("graph_origin")
+                if indexed.get("supports_claim") is False:
+                    merged["supports_claim"] = False
+                resolved.append(merged)
+            else:
+                resolved.append(dict(item))
+        return resolved
+    if isinstance(evidence_index, (list, dict)):
+        return evidence_index
+    return {}
+
 
 def profile_from_evidence_index(
     evidence_index: Mapping[str, Any] | Sequence[Any],
@@ -127,8 +209,14 @@ def profile_from_evidence_index(
     for record in records:
         if not isinstance(record, dict):
             continue
-        kind = str(record.get("source_kind") or "")
-        is_interview = str(record.get("type") or "") in INTERVIEW_EVIDENCE_TYPES
+        if not _is_qualifying_evidence_record(record):
+            continue
+        raw_type = str(record.get("type") or record.get("source_type") or "")
+        kind = str(
+            record.get("source_kind")
+            or _FALLBACK_TYPE_TO_SOURCE_KIND.get(raw_type, "")
+        )
+        is_interview = raw_type in INTERVIEW_EVIDENCE_TYPES
         if is_interview:
             interview += 1
         elif kind in SIMULATION_SOURCE_KINDS:
@@ -246,4 +334,5 @@ __all__ = [
     "attribution_findings",
     "correct_attribution",
     "profile_from_evidence_index",
+    "resolve_section_evidence_records",
 ]
