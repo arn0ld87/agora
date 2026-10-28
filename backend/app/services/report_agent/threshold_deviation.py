@@ -118,6 +118,26 @@ def prior_threshold_lines(sections: Any, section_index: int) -> List[str]:
     return lines[:PRIOR_THRESHOLDS_PROMPT_LIMIT]
 
 
+def _extract_word_set(raw: Any) -> set[str]:
+    if isinstance(raw, str):
+        return set(raw.split())
+    return {str(w) for w in raw}
+
+
+def _words_share_stem(wa: str, wb: str) -> bool:
+    if (len(wa) >= 4 and wa in wb) or (len(wb) >= 4 and wb in wa):
+        return True
+    if len(wa) >= 5 and len(wb) >= 5:
+        return any(wa[i : i + 5] in wb for i in range(len(wa) - 4))
+    return False
+
+
+def _word_sets_compatible(words_a: set[str], words_b: set[str]) -> bool:
+    if not words_a or not words_b or (words_a & words_b):
+        return True
+    return any(_words_share_stem(wa, wb) for wa in words_a for wb in words_b)
+
+
 def _is_incompatible_deviation_target(
     source_key: tuple[Any, str, str] | None,
     target_key: tuple[Any, str, str] | None,
@@ -136,26 +156,10 @@ def _is_incompatible_deviation_target(
     words_b_raw, unit_b, purpose_b = target_key
     if unit_a != unit_b or purpose_a != purpose_b:
         return True
-    words_a = (
-        set(words_a_raw.split())
-        if isinstance(words_a_raw, str)
-        else {str(w) for w in words_a_raw}
+    return not _word_sets_compatible(
+        _extract_word_set(words_a_raw),
+        _extract_word_set(words_b_raw),
     )
-    words_b = (
-        set(words_b_raw.split())
-        if isinstance(words_b_raw, str)
-        else {str(w) for w in words_b_raw}
-    )
-    if not words_a or not words_b or (words_a & words_b):
-        return False
-    for wa in words_a:
-        for wb in words_b:
-            if (len(wa) >= 4 and wa in wb) or (len(wb) >= 4 and wb in wa):
-                return False
-            if len(wa) >= 5 and len(wb) >= 5:
-                if any(wa[i : i + 5] in wb for i in range(len(wa) - 4)):
-                    return False
-    return True
 
 
 def drop_unresolvable_deviations(thresholds: Sequence[Threshold]) -> List[Threshold]:
