@@ -15,7 +15,7 @@ from .claim_dedup import dedup_claims, duplicate_report
 from .claim_provenance import (
     derive_aggregation_basis,
     derive_confidence_scope as _derive_confidence_scope,
-    resolve_voice_key,
+    resolve_canonical_voice_keys,
 )
 from .evidence import text_confidence_label_of
 from .metadata_merge import merge_section_metadata
@@ -131,12 +131,18 @@ def _count_independent_sources(
                 if eid not in items_by_eid and item.get("supports_claim") is True:
                     items_by_eid[eid] = item
 
-    unique_keys: set[Any] = set()
+    pairs: list[tuple[str, Dict[str, Any], Optional[Mapping[str, Any]]]] = []
     for eid in evidence_refs:
         item = items_by_eid.get(eid) or {"evidence_id": eid}
         record = evidence_index.get(eid) if isinstance(evidence_index, Mapping) else None
         record_map = record if isinstance(record, Mapping) else None
-        vk = resolve_voice_key(item, record_map)
+        pairs.append((eid, item, record_map))
+
+    voice_keys = resolve_canonical_voice_keys(
+        [(item, record_map) for _, item, record_map in pairs]
+    )
+    unique_keys: set[Any] = set()
+    for (eid, _, _), vk in zip(pairs, voice_keys):
         if vk:
             unique_keys.add(("voice", vk))
         else:

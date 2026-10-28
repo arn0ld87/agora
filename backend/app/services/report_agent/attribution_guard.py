@@ -156,6 +156,60 @@ def _is_qualifying_evidence_record(record: Mapping[str, Any]) -> bool:
     return True
 
 
+_AUTHORITATIVE_INDEX_FIELDS: tuple[str, ...] = (
+    "source_kind",
+    "provenance_class",
+    "type",
+    "source_type",
+    "source_tier",
+    "epistemic_status",
+    "graph_origin",
+    "voice_key",
+    "agent_id",
+    "agent_name",
+)
+
+
+def _merge_indexed_and_section_item(
+    indexed: Mapping[str, Any],
+    item: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Vereinigt Index-Record und Abschnitts-Eintrag ohne Herkunft-Spoofing.
+
+    Autoritative Klassifikations- und Herkunftsfelder aus ``indexed`` duerfen
+    durch widerspruechliche Werte in ``item`` nicht ueberschrieben werden;
+    Disqualifikationen (``supports_claim=False``, manuelle/editierte
+    ``graph_origin``, disqualifizierende ``provenance_class``, ``inferred``)
+    bleiben von beiden Seiten erhalten.
+    """
+    merged: Dict[str, Any] = {**indexed, **item}
+    for field in _AUTHORITATIVE_INDEX_FIELDS:
+        val = indexed.get(field)
+        if val not in (None, ""):
+            merged[field] = val
+
+    if not counts_for_confidence(indexed):
+        merged["graph_origin"] = indexed.get("graph_origin")
+    elif not counts_for_confidence(item):
+        merged["graph_origin"] = item.get("graph_origin")
+
+    if indexed.get("supports_claim") is False or item.get("supports_claim") is False:
+        merged["supports_claim"] = False
+
+    for source in (indexed, item):
+        prov_class = str(source.get("provenance_class") or "").strip().lower()
+        if prov_class in _DISQUALIFYING_PROVENANCE_CLASSES:
+            merged["provenance_class"] = source.get("provenance_class")
+            break
+
+    for source in (indexed, item):
+        if str(source.get("source_kind") or "").strip().lower() == "inferred":
+            merged["source_kind"] = "inferred"
+            break
+
+    return merged
+
+
 def resolve_section_evidence_records(
     section_evidence: Any,
     evidence_index: Any,
@@ -196,12 +250,7 @@ def resolve_section_evidence_records(
                 seen_ids.add(eid)
             indexed = index_map.get(eid) if eid else None
             if isinstance(indexed, dict):
-                merged = {**indexed, **item}
-                if not counts_for_confidence(indexed) and counts_for_confidence(merged):
-                    merged["graph_origin"] = indexed.get("graph_origin")
-                if indexed.get("supports_claim") is False:
-                    merged["supports_claim"] = False
-                resolved.append(merged)
+                resolved.append(_merge_indexed_and_section_item(indexed, item))
             else:
                 resolved.append(dict(item))
         return resolved

@@ -366,3 +366,89 @@ def test_voice_key_and_agent_id_count_distinct_simulation_voices():
     assert derive_confidence_scope(bindings, index) == "simulation_consensus"
     assert derive_aggregation_basis(bindings, index) == "aggregat"
 
+
+def test_mixed_persona_representations_with_same_agent_id_count_as_single_voice():
+    """Ein Datensatz derselben Persona mit ``agent_name`` + ``agent_id`` und ein
+    weiterer nur mit ``agent_id`` oder ``voice_key`` duerfen den Ein-Stimmen-Deckel
+    nicht umgehen."""
+    index = {
+        "ev_interview": {
+            "evidence_id": "ev_interview",
+            "source_kind": "agent_quote",
+            "voice_key": "agent:101",
+            "raw": {"agent_name": "Anna Meier", "agent_id": 101},
+        },
+        "ev_action_id_only": {
+            "evidence_id": "ev_action_id_only",
+            "source_kind": "agent_action",
+            "agent_id": 101,
+        },
+        "ev_action_vk_only": {
+            "evidence_id": "ev_action_vk_only",
+            "source_kind": "agent_action",
+            "voice_key": "agent_id:101",
+        },
+        "ev_quote_name_only": {
+            "evidence_id": "ev_quote_name_only",
+            "source_kind": "agent_quote",
+            "agent_name": "Anna  Meier",
+        },
+    }
+    bindings = [
+        {"evidence_id": "ev_interview", "supports_claim": True},
+        {"evidence_id": "ev_action_id_only", "supports_claim": True},
+        {"evidence_id": "ev_action_vk_only", "supports_claim": True},
+        {"evidence_id": "ev_quote_name_only", "supports_claim": True},
+    ]
+
+    assert count_supporting_voices(bindings, index) == 1
+    assert derive_confidence_scope(bindings, index) == "simulation_single_voice"
+
+
+def test_mixed_persona_formats_trigger_single_source_downgrade_in_manager():
+    """Auch der Single-Source-Downgrade im ReportManager erkennt gemischte
+    Repräsentationen derselben Persona als nur eine unabhängige Quelle."""
+    from app.services.report_agent.manager import _extract_claims_for_section
+
+    evidence_index = {
+        "ev_1": {
+            "evidence_id": "ev_1",
+            "source_kind": "agent_quote",
+            "agent_name": "Dr. Anna Meier",
+            "agent_id": 42,
+        },
+        "ev_2": {
+            "evidence_id": "ev_2",
+            "source_kind": "agent_action",
+            "voice_key": "agent:42",
+        },
+        "ev_3": {
+            "evidence_id": "ev_3",
+            "source_kind": "agent_quote",
+            "agent_name": "dr. anna meier",
+        },
+    }
+    raw_claims = [
+        {
+            "claim_text": "Die Übergangsfrist ist operativ nicht haltbar.",
+            "confidence_label": "high",
+            "claim_type": "empirical",
+            "evidence": [
+                {"evidence_id": "ev_1", "supports_claim": True},
+                {"evidence_id": "ev_2", "supports_claim": True},
+                {"evidence_id": "ev_3", "supports_claim": True},
+            ],
+        }
+    ]
+
+    claims = _extract_claims_for_section(
+        raw_claims,
+        section_index=1,
+        evidence_index=evidence_index,
+        report_mode="balanced",
+    )
+    assert len(claims) == 1
+    assert claims[0].confidence == "low"
+    assert claims[0].confidence_scope == "simulation_single_voice"
+
+

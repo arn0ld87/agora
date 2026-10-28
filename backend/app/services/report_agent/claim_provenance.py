@@ -39,7 +39,7 @@ keine Gattung. Sie koennen eine Mehrheit also nur verhindern, nie begruenden.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ...contracts.report_contract import counts_for_confidence
 
@@ -114,46 +114,145 @@ def _normalised(value: Any) -> str:
     return " ".join(str(value or "").split()).casefold()
 
 
+def _looks_like_technical_id(token: str) -> bool:
+    """Prueft, ob ein normalisierter Suffix eine technische Agenten-ID ist."""
+    if not token:
+        return False
+    if token.isdigit():
+        return True
+    for prefix in ("agent_", "id_", "persona_"):
+        if token.startswith(prefix) and token[len(prefix) :].isdigit():
+            return True
+    return False
+
+
+def _first_source_field(
+    sources: Sequence[Mapping[str, Any]],
+    field: str,
+    *,
+    allow_raw: bool = False,
+) -> str:
+    """Liest den ersten nicht-leeren normalisierten Feldwert aus ``sources``."""
+    for source in sources:
+        val = _normalised(source.get(field))
+        if not val and allow_raw:
+            raw = source.get("raw")
+            val = _normalised(raw.get(field)) if isinstance(raw, Mapping) else ""
+        if val:
+            return val
+    return ""
+
+
+def _parse_voice_key_token(
+    vk: str,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Klassifiziert einen normalisierten ``voice_key`` als ``(id_key, name_key, other_vk)``."""
+    if ":" not in vk:
+        if _looks_like_technical_id(vk):
+            return f"agent:{vk}", None, None
+        return None, None, f"voice:{vk}"
+    prefix, rest = vk.split(":", 1)
+    rest = rest.strip()
+    if not rest:
+        return None, None, None
+    if prefix in ("agent_id", "id") or (
+        prefix == "agent" and _looks_like_technical_id(rest)
+    ):
+        return f"agent:{rest}", None, None
+    if prefix in ("name", "agent_name", "agent"):
+        return None, f"agent:{rest}", None
+    return None, None, f"{prefix}:{rest}"
+
+
+def _extract_voice_identity_parts(
+    item: Mapping[str, Any],
+    record: Optional[Mapping[str, Any]],
+) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Zerlegt die Persona-Hinweise aus ``record`` und ``item`` in kanonische Tokens.
+
+    Rueckgabe: ``(id_key, name_key, other_voice_key, group_key)``.
+    Technische Agenten-IDs (``agent_id``, ``raw.agent_id`` sowie ``voice_key``
+    der Form ``agent:<id>`` / ``agent_id:<id>`` / ``id:<id>``) werden auf das
+    kanonische Format ``agent:<id>`` normiert, damit identische Personas ueber
+    unterschiedliche Felder denselben Schluessel erhalten.
+    """
+    sources = [s for s in (record, item) if isinstance(s, Mapping)]
+    aid = _first_source_field(sources, "agent_id", allow_raw=True)
+    id_key: Optional[str] = f"agent:{aid}" if aid else None
+    name_key: Optional[str] = None
+    other_vk: Optional[str] = None
+
+    for source in sources:
+        vk = _normalised(source.get("voice_key"))
+        if not vk:
+            continue
+        vk_id, vk_name, vk_other = _parse_voice_key_token(vk)
+        id_key = id_key or vk_id
+        name_key = name_key or vk_name
+        other_vk = other_vk or vk_other
+
+    name = _first_source_field(sources, "agent_name", allow_raw=True)
+    if name and name_key is None:
+        name_key = f"agent:{name}"
+
+    group = _first_source_field(sources, "persona_stakeholder_group")
+    group_key: Optional[str] = f"group:{group}" if group else None
+
+    return id_key, name_key, other_vk, group_key
+
+
 def _voice_key(item: Mapping[str, Any], record: Optional[Mapping[str, Any]]) -> Optional[str]:
     """Identitaet der Stimme hinter einem stuetzenden Item, oder ``None``.
 
     Eine Stimme ist eine Persona, nicht ein Evidence-Item: Zwei Fragen an
     dieselbe Persona erzeugen zwei ``evidence_id`` und bleiben eine Stimme.
-    Reihenfolge:
-    1. ``agent_name`` / ``raw.agent_name`` -> ``agent:<name>``
-    2. ``voice_key`` (z. B. ``agent:101`` oder ``name:anna``) -> normalisiert
-    3. ``agent_id`` / ``raw.agent_id`` -> ``agent_id:<id>``
+    Reihenfolge (ADR-0002 / Issue #1778):
+    1. Technische Agenten-ID (``agent_id``, ``raw.agent_id`` oder numerischer
+       ``voice_key``) -> ``agent:<id>``
+    2. Expliziter sonstiger ``voice_key`` -> normalisiert
+    3. ``agent_name`` / ``raw.agent_name`` (oder Namens-``voice_key``) -> ``agent:<name>``
     4. ``persona_stakeholder_group`` -> ``group:<gruppe>``
 
     ``None`` heisst: nicht ermittelbar. Der Aufrufer zaehlt das konservativ.
     """
-    sources = [s for s in (item, record) if isinstance(s, Mapping)]
-    for source in sources:
-        name = _normalised(source.get("agent_name"))
-        if not name:
-            raw = source.get("raw")
-            name = _normalised(raw.get("agent_name")) if isinstance(raw, Mapping) else ""
-        if name:
-            return f"agent:{name}"
-    for source in sources:
-        vk = _normalised(source.get("voice_key"))
-        if vk:
-            return vk if ":" in vk else f"voice:{vk}"
-    for source in sources:
-        aid = _normalised(source.get("agent_id"))
-        if not aid:
-            raw = source.get("raw")
-            aid = _normalised(raw.get("agent_id")) if isinstance(raw, Mapping) else ""
-        if aid:
-            return f"agent_id:{aid}"
-    for source in sources:
-        group = _normalised(source.get("persona_stakeholder_group"))
-        if group:
-            return f"group:{group}"
-    return None
+    id_key, name_key, other_vk, group_key = _extract_voice_identity_parts(item, record)
+    return id_key or other_vk or name_key or group_key
 
 
 resolve_voice_key = _voice_key
+
+
+def resolve_canonical_voice_keys(
+    pairs: Sequence[tuple[Mapping[str, Any], Optional[Mapping[str, Any]]]],
+) -> list[Optional[str]]:
+    """Loest Stimmen-Schluessel ueber eine Folge von ``(item, record)``-Paaren auf.
+
+    Verbindet Mischformate derselben Persona innerhalb eines Claims: Traegt ein
+    Beleg sowohl ``agent_id`` (bzw. ``voice_key="agent:<id>"``) als auch
+    ``agent_name``, und ein weiterer Beleg derselben Persona nur ``agent_name``
+    (ohne eigene ``agent_id``), wird der Namens-Schluessel eindeutig auf den
+    kanonischen ``agent:<id>``-Schluessel abgebildet.
+    """
+    parts_list = [_extract_voice_identity_parts(item, record) for item, record in pairs]
+    name_to_ids: dict[str, set[str]] = {}
+    for id_key, name_key, _, _ in parts_list:
+        if id_key and name_key:
+            name_to_ids.setdefault(name_key, set()).add(id_key)
+
+    resolved_keys: list[Optional[str]] = []
+    for id_key, name_key, other_vk, group_key in parts_list:
+        primary = id_key or other_vk or name_key or group_key
+        if (
+            primary is not None
+            and id_key is None
+            and other_vk is None
+            and primary == name_key
+        ):
+            linked_ids = name_to_ids.get(name_key)
+            if linked_ids and len(linked_ids) == 1:
+                primary = next(iter(linked_ids))
+        resolved_keys.append(primary)
+    return resolved_keys
 
 
 def count_supporting_voices(
@@ -170,8 +269,7 @@ def count_supporting_voices(
     if not isinstance(evidence, list):
         return 0
     index = evidence_index or {}
-    resolved: set[str] = set()
-    unresolved = False
+    qualifying_pairs: list[tuple[Mapping[str, Any], Optional[Mapping[str, Any]]]] = []
     for item in evidence:
         if not isinstance(item, dict):
             continue
@@ -179,7 +277,11 @@ def count_supporting_voices(
         record_map = record if isinstance(record, Mapping) else None
         if not _is_qualifying_support(item, record_map):
             continue
-        key = _voice_key(item, record_map)
+        qualifying_pairs.append((item, record_map))
+
+    resolved: set[str] = set()
+    unresolved = False
+    for key in resolve_canonical_voice_keys(qualifying_pairs):
         if key is None:
             unresolved = True
         else:
@@ -240,6 +342,7 @@ __all__ = [
     "count_supporting_voices",
     "derive_aggregation_basis",
     "derive_confidence_scope",
+    "resolve_canonical_voice_keys",
     "resolve_voice_key",
     "supporting_source_kinds",
 ]
