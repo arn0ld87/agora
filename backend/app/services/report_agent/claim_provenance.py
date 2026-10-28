@@ -41,6 +41,8 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Literal, Mapping, Optional
 
+from ...contracts.report_contract import counts_for_confidence
+
 AggregationBasis = Literal["seed", "persona", "aggregat", "datenluecke"]
 ConfidenceScope = Literal[
     "simulation_consensus", "simulation_single_voice", "evidence", "empirical"
@@ -50,7 +52,12 @@ ConfidenceScope = Literal[
 #: ``agent_quote`` und ``agent_action`` fehlen hier bewusst: beides sind
 #: Aeusserungen bzw. Handlungen simulierter Agenten. Ein Claim, den nur sie
 #: stuetzen, ist Simulationskonsens — unabhaengig von seinem Label.
-EVIDENCE_BOUND_SOURCE_KINDS = frozenset({"seed_corpus", "graph_relation", "web_source"})
+EVIDENCE_BOUND_SOURCE_KINDS = frozenset({
+    "seed_corpus",
+    "graph_edge",
+    "graph_relation",
+    "web_source",
+})
 
 #: Nur diese beiden Gattungen tragen eine eigene Herkunftsangabe. Alles
 #: andere — Graph-Relation, Web-Treffer, Agentenhandlung, Inferenz — ist im
@@ -59,6 +66,20 @@ _BASIS_FOR_DOMINANT_KIND: Mapping[str, AggregationBasis] = {
     "seed_corpus": "seed",
     "agent_quote": "persona",
 }
+
+
+def _is_qualifying_support(
+    item: Any,
+    record: Optional[Mapping[str, Any]],
+) -> bool:
+    """Ein Beleg stuetzt nur mit ``supports_claim=True`` und ohne manuelle Graph-Herkunft (ADR-0022 §4)."""
+    if not isinstance(item, dict) or item.get("supports_claim") is not True:
+        return False
+    if not counts_for_confidence(item):
+        return False
+    if isinstance(record, Mapping) and not counts_for_confidence(record):
+        return False
+    return True
 
 
 def supporting_source_kinds(
@@ -75,13 +96,15 @@ def supporting_source_kinds(
     index = evidence_index or {}
     kinds: list[str] = []
     for item in evidence:
-        if not isinstance(item, dict) or item.get("supports_claim") is not True:
+        if not isinstance(item, dict):
+            continue
+        record = index.get(str(item.get("evidence_id") or ""))
+        record_map = record if isinstance(record, Mapping) else None
+        if not _is_qualifying_support(item, record_map):
             continue
         kind = str(item.get("source_kind") or "").strip()
-        if not kind:
-            record = index.get(str(item.get("evidence_id") or ""))
-            if isinstance(record, Mapping):
-                kind = str(record.get("source_kind") or "").strip()
+        if not kind and record_map is not None:
+            kind = str(record_map.get("source_kind") or "").strip()
         kinds.append(kind)
     return kinds
 
@@ -96,10 +119,11 @@ def _voice_key(item: Mapping[str, Any], record: Optional[Mapping[str, Any]]) -> 
 
     Eine Stimme ist eine Persona, nicht ein Evidence-Item: Zwei Fragen an
     dieselbe Persona erzeugen zwei ``evidence_id`` und bleiben eine Stimme.
-    Stabil ist der ``agent_name`` — er steht im ``raw``-Teil des Index-Records
-    (``AgentInterview.to_dict()``), bei Items direkt am Item. Aeltere Records
-    ohne Namen fallen auf ``persona_stakeholder_group`` zurueck; das ist die
-    Rolle der Persona und damit nie feiner als die Persona selbst.
+    Reihenfolge:
+    1. ``agent_name`` / ``raw.agent_name`` -> ``agent:<name>``
+    2. ``voice_key`` (z. B. ``agent:101`` oder ``name:anna``) -> normalisiert
+    3. ``agent_id`` / ``raw.agent_id`` -> ``agent_id:<id>``
+    4. ``persona_stakeholder_group`` -> ``group:<gruppe>``
 
     ``None`` heisst: nicht ermittelbar. Der Aufrufer zaehlt das konservativ.
     """
@@ -112,10 +136,24 @@ def _voice_key(item: Mapping[str, Any], record: Optional[Mapping[str, Any]]) -> 
         if name:
             return f"agent:{name}"
     for source in sources:
+        vk = _normalised(source.get("voice_key"))
+        if vk:
+            return vk if ":" in vk else f"voice:{vk}"
+    for source in sources:
+        aid = _normalised(source.get("agent_id"))
+        if not aid:
+            raw = source.get("raw")
+            aid = _normalised(raw.get("agent_id")) if isinstance(raw, Mapping) else ""
+        if aid:
+            return f"agent_id:{aid}"
+    for source in sources:
         group = _normalised(source.get("persona_stakeholder_group"))
         if group:
             return f"group:{group}"
     return None
+
+
+resolve_voice_key = _voice_key
 
 
 def count_supporting_voices(
@@ -135,10 +173,13 @@ def count_supporting_voices(
     resolved: set[str] = set()
     unresolved = False
     for item in evidence:
-        if not isinstance(item, dict) or item.get("supports_claim") is not True:
+        if not isinstance(item, dict):
             continue
         record = index.get(str(item.get("evidence_id") or ""))
-        key = _voice_key(item, record if isinstance(record, Mapping) else None)
+        record_map = record if isinstance(record, Mapping) else None
+        if not _is_qualifying_support(item, record_map):
+            continue
+        key = _voice_key(item, record_map)
         if key is None:
             unresolved = True
         else:
@@ -199,5 +240,6 @@ __all__ = [
     "count_supporting_voices",
     "derive_aggregation_basis",
     "derive_confidence_scope",
+    "resolve_voice_key",
     "supporting_source_kinds",
 ]
