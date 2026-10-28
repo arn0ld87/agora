@@ -336,14 +336,13 @@ packages = ["app"]
 # Security-Fixes, die juenger sind, werden in exclude-newer-package einzeln
 # freigegeben und koennen nach Ablauf der 7 Tage wieder entfernt werden.
 exclude-newer = "7 days"
-exclude-newer-package = { oauthlib = false, virtualenv = false, pypdf = false, certifi = false, filelock = false, mcp = false, opentelemetry-api = false, opentelemetry-sdk = false, opentelemetry-exporter-otlp-proto-grpc = false, opentelemetry-exporter-otlp-proto-common = false, opentelemetry-proto = false, opentelemetry-semantic-conventions = false, setuptools = false }
+exclude-newer-package = { oauthlib = false, virtualenv = false }
 # Unblock Python 3.14 (Issue #199): Multiple dependencies are pinned to old versions
 # without cp314 wheels, and their source builds fail on Python 3.14.
 # Overriding them to newer versions that provide native cp314 wheels.
 override-dependencies = [
     "tiktoken>=0.12.0",
     "pillow>=12.3.0",
-    "filelock>=4.2.1",
     "pandas>=3.0.3",
     "numpy>=2.4.4",
     # GHSA-Override: unstructured < 0.18.18 hat Path Traversal via MSG-
