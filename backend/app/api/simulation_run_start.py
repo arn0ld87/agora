@@ -17,7 +17,7 @@ from .simulation_common import (
     simulation_run_artifacts as _simulation_run_artifacts,
 )
 
-if TYPE_CHECKING:  # pragma: no cover — nur für Typprüfung
+if TYPE_CHECKING:
     from ..contracts.ai_provider_contract import AiModelRef
     from ..contracts.llm_routing_contract import ResolvedRoute
     from ..contracts.run_budget_contract import RunBudgetConfig

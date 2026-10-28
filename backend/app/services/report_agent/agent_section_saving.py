@@ -7,9 +7,54 @@ from pydantic import ValidationError
 
 from .agent_hypotheses import ReportAgentHypothesesMixin
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .section_evidence_outcome import SectionEvidenceOutcome
     from .postprocess_timing import PostprocessPhaseTracker
+
+
+def _drop_unrepairable_section_entries(
+    sections: List[Dict[str, Any]], second_error: ValidationError
+) -> List[Dict[str, Any]]:
+    """Entfernt nach fehlgeschlagener Erst-Reparatur verbleibende fehlerhafte Einträge."""
+    indices_to_remove: Dict[Any, set] = {}
+    removed_entries: List[Dict[str, Any]] = []
+    for err in second_error.errors():
+        loc = err.get("loc") or ()
+        if len(loc) < 4 or loc[0] != "sections":
+            continue
+        si, kind, idx = loc[1], loc[2], loc[3]
+        if kind not in ("claims", "hypotheses", "hypotheses_appendix"):
+            continue
+        if not isinstance(si, int) or not (0 <= si < len(sections)):
+            continue
+        entries = sections[si].get(kind) or []
+        if not isinstance(idx, int) or not (0 <= idx < len(entries)):
+            continue
+        key = (si, kind)
+        if idx in indices_to_remove.get(key, set()):
+            continue
+        indices_to_remove.setdefault(key, set()).add(idx)
+        entry = entries[idx]
+        entry_id = (
+            str(entry.get("claim_id") or entry.get("hypothesis_id") or "")
+            if isinstance(entry, dict)
+            else ""
+        )
+        removed_entries.append(
+            {
+                "section_index": sections[si].get("section_index", 0),
+                "claim_id": entry_id,
+                "violation": str(err.get("type") or "unknown"),
+                "action": "dropped",
+                "detail": str(err.get("msg") or "")[:500],
+            }
+        )
+    for (si, kind), indices in indices_to_remove.items():
+        entries = sections[si].get(kind)
+        if isinstance(entries, list):
+            for i in sorted(indices, reverse=True):
+                del entries[i]
+    return removed_entries
 
 
 class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
@@ -168,44 +213,9 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
                     self.evidence_map
                 ).model_dump(mode="json")
             except ValidationError as second_error:
-                sections = self.evidence_map["sections"]
-                indices_to_remove: Dict[Any, set] = {}
-                removed_entries: List[Dict[str, Any]] = []
-                for err in second_error.errors():
-                    loc = err.get("loc") or ()
-                    if len(loc) < 4 or loc[0] != "sections":
-                        continue
-                    si, kind, idx = loc[1], loc[2], loc[3]
-                    if kind not in ("claims", "hypotheses", "hypotheses_appendix"):
-                        continue
-                    if not isinstance(si, int) or not (0 <= si < len(sections)):
-                        continue
-                    entries = sections[si].get(kind) or []
-                    if not isinstance(idx, int) or not (0 <= idx < len(entries)):
-                        continue
-                    key = (si, kind)
-                    if idx in indices_to_remove.get(key, set()):
-                        continue
-                    indices_to_remove.setdefault(key, set()).add(idx)
-                    entry = entries[idx]
-                    entry_id = ""
-                    if isinstance(entry, dict):
-                        entry_id = str(entry.get("claim_id") or entry.get("hypothesis_id") or "")
-                    removed_entries.append(
-                        {
-                            "section_index": sections[si].get("section_index", 0),
-                            "claim_id": entry_id,
-                            "violation": str(err.get("type") or "unknown"),
-                            "action": "dropped",
-                            "detail": str(err.get("msg") or "")[:500],
-                        }
-                    )
-                for (si, kind), indices in indices_to_remove.items():
-                    entries = sections[si].get(kind)
-                    if not isinstance(entries, list):
-                        continue
-                    for i in sorted(indices, reverse=True):
-                        del entries[i]
+                removed_entries = _drop_unrepairable_section_entries(
+                    self.evidence_map["sections"], second_error
+                )
                 self.evidence_map["degradation_log"] = (
                     list(self.evidence_map.get("degradation_log") or []) + removed_entries
                 )

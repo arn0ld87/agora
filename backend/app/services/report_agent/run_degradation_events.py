@@ -43,7 +43,7 @@ def events_for(agent: Any) -> RunEventLog:
     events = RunEventLog()
     try:
         agent._run_event_log = events
-    except AttributeError:  # pragma: no cover — __slots__-Objekte
+    except AttributeError:
         pass
     return events
 

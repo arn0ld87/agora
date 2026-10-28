@@ -28,7 +28,7 @@ from .simulation_common import (
     simulation_run_artifacts as _default_simulation_run_artifacts,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from ..services.sim.run_state_store import AgentAction
 
 

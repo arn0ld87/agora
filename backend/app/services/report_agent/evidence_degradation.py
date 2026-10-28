@@ -4,7 +4,7 @@ import copy
 import re
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from pydantic import ValidationError
 
 from .evidence_claims import _record_text_confidence_downgrade
