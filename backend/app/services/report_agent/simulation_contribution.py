@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Mapping
 
-from ...contracts.report_contract import EvidenceSourceKind
+from ...contracts.report_contract import EvidenceSourceKind, counts_for_confidence
 
 #: Quellengattung einer beobachteten Handlung aus Phase 3.
 _ACTION_KIND = EvidenceSourceKind.agent_action.value
@@ -40,46 +40,54 @@ _SIMULATION_KINDS = frozenset({
 })
 
 
-def _supporting_evidence_ids(claim: Mapping[str, Any]) -> list[str]:
-    """Belege, die den Claim *stützen* — nicht die bloß thematisch verwandten.
-
-    Dieselbe Bedingung wie in ``build_report_v3``: ohne ``supports_claim=True``
-    trägt ein Beleg die Aussage nicht, egal wie ähnlich er ist.
-    """
-    return list(dict.fromkeys(
-        str(item.get("evidence_id"))
-        for item in claim.get("evidence") or []
-        if isinstance(item, dict)
-        and item.get("evidence_id")
-        and item.get("supports_claim") is True
-    ))
-
-
-def _kinds_for(
-    evidence_ids: Iterable[str],
+def _supporting_kinds(
+    claim: Mapping[str, Any],
     evidence_index: Mapping[str, Any],
 ) -> list[str]:
+    """Belege, die den Claim *stützen* — gefiltert nach ADR-0022 §4.
+
+    Weder das Binding-Item noch der Record im Index dürfen aus manueller
+    Graph-Handarbeit stammen (``graph_origin in ("manual", "edited")``).
+    """
     kinds: list[str] = []
-    for evidence_id in evidence_ids:
-        record = evidence_index.get(evidence_id)
-        if not isinstance(record, Mapping):
-            # Unauflösbare Referenz: als unbekannte Gattung führen statt sie
-            # stillschweigend als Nicht-Simulation zu zählen. Sie verhindert
-            # damit ein "necessary", behauptet aber auch keinen Beitrag.
-            kinds.append("")
+    seen_eids: set[str] = set()
+    for entry in claim.get("evidence") or []:
+        if not isinstance(entry, Mapping):
             continue
-        kinds.append(str(record.get("source_kind") or ""))
+        if entry.get("supports_claim") is not True:
+            continue
+        if not counts_for_confidence(entry):
+            continue
+        eid = str(entry.get("evidence_id") or "")
+        if not eid or eid in seen_eids:
+            continue
+        seen_eids.add(eid)
+        record = evidence_index.get(eid)
+        if isinstance(record, Mapping):
+            if not counts_for_confidence(record):
+                continue
+            kinds.append(str(record.get("source_kind") or ""))
+        else:
+            # Unauflösbare Referenz: als unbekannte Gattung führen statt sie
+            # stillschweigend als Nicht-Simulation zu zählen.
+            kinds.append("")
     return kinds
 
 
 def compute_simulation_contribution(
     evidence_map: Mapping[str, Any] | None,
+    *,
+    exported_claims: Any = None,
 ) -> Dict[str, Any]:
     """Zählt, wie viele validierte Aussagen die Simulation tatsächlich tragen.
 
     Gezählt werden nur Aussagen, die als Claim persistiert wurden — Hypothesen
     und Datenlücken sind per Definition unbelegt und würden die Quote
     beschönigen.
+
+    Wird ``exported_claims`` übergeben (z. B. die finale, deduplizierte
+    Claims-Liste in ``ReportManager.build_report_v3``), zählt die Metrik
+    exakt über diese Menge statt über die ungefilterten Roh-Abschnitte.
 
     Liefert ein dict in der Feldform von
     ``contracts.report_v3.SimulationContribution``. Bei fehlender oder leerer
@@ -95,25 +103,49 @@ def compute_simulation_contribution(
     with_action = 0
     action_necessary = 0
 
-    for section in sections:
-        if not isinstance(section, Mapping):
-            continue
-        for claim in section.get("claims") or []:
-            if not isinstance(claim, Mapping):
+    if exported_claims is not None:
+        for c in exported_claims:
+            refs = getattr(c, "evidence_refs", None)
+            if refs is None and isinstance(c, Mapping):
+                refs = c.get("evidence_refs")
+            if not refs:
                 continue
-            supporting = _supporting_evidence_ids(claim)
-            if not supporting:
-                # Ohne stützenden Beleg ist die Aussage kein validierter Claim —
-                # ``build_report_v3`` überspringt sie ebenfalls.
+            kinds: list[str] = []
+            for eid in refs:
+                eid_str = str(eid)
+                record = evidence_index.get(eid_str)
+                if isinstance(record, Mapping):
+                    if not counts_for_confidence(record):
+                        continue
+                    kinds.append(str(record.get("source_kind") or ""))
+                else:
+                    kinds.append("")
+            if not kinds:
                 continue
             validated += 1
-            kinds = _kinds_for(supporting, evidence_index)
             if any(kind in _SIMULATION_KINDS for kind in kinds):
                 with_simulation += 1
             if _ACTION_KIND in kinds:
                 with_action += 1
                 if all(kind == _ACTION_KIND for kind in kinds):
                     action_necessary += 1
+    else:
+        for section in sections:
+            if not isinstance(section, Mapping):
+                continue
+            for claim in section.get("claims") or []:
+                if not isinstance(claim, Mapping):
+                    continue
+                kinds = _supporting_kinds(claim, evidence_index)
+                if not kinds:
+                    continue
+                validated += 1
+                if any(kind in _SIMULATION_KINDS for kind in kinds):
+                    with_simulation += 1
+                if _ACTION_KIND in kinds:
+                    with_action += 1
+                    if all(kind == _ACTION_KIND for kind in kinds):
+                        action_necessary += 1
 
     def _share(count: int) -> float | None:
         return round(count / validated, 4) if validated else None

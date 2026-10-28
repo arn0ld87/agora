@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional
 
 from pydantic import ValidationError
 
@@ -13,6 +13,7 @@ from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...contracts.report_v3 import RED_TEAM_FINDINGS_LIMIT, ModelAttribution
 from ...contracts.report_v3 import SimulationContribution
+from ...contracts.report_contract import counts_for_confidence
 from ...contracts.report_record_contract import ReportRecord
 from .claim_dedup import dedup_claims, duplicate_report
 from .metadata_merge import merge_section_metadata
@@ -55,6 +56,7 @@ from .claim_provenance import (
     # bleibt als Alias erhalten — er ist der Einstiegspunkt der bestehenden
     # Vertragstests.
     derive_confidence_scope as _derive_confidence_scope,
+    resolve_voice_key,
 )
 from .markdown_renderer import render_report_v3
 from .sections import (
@@ -189,6 +191,37 @@ def _wording_confidence(
     return confidence if claim_type in (None, "empirical") else None
 
 
+def _count_independent_sources(
+    evidence_refs: Iterable[str],
+    raw_evidence: Any,
+    evidence_index: Mapping[str, Any],
+) -> int:
+    """Zaehlt unabhaengige Stuetzquellen unter den gueltigen Evidence-Refs.
+
+    Zwei Items mit demselben voice_key (z. B. zwei Zitate derselben Persona)
+    zaehlen als nur eine Stimme (ADR-0002, Issue #1766).
+    """
+    items_by_eid: Dict[str, Dict[str, Any]] = {}
+    if isinstance(raw_evidence, list):
+        for item in raw_evidence:
+            if isinstance(item, dict) and item.get("evidence_id"):
+                eid = str(item.get("evidence_id"))
+                if eid not in items_by_eid and item.get("supports_claim") is True:
+                    items_by_eid[eid] = item
+
+    unique_keys: set[Any] = set()
+    for eid in evidence_refs:
+        item = items_by_eid.get(eid) or {"evidence_id": eid}
+        record = evidence_index.get(eid) if isinstance(evidence_index, Mapping) else None
+        record_map = record if isinstance(record, Mapping) else None
+        vk = resolve_voice_key(item, record_map)
+        if vk:
+            unique_keys.add(("voice", vk))
+        else:
+            unique_keys.add(("ref", eid))
+    return len(unique_keys)
+
+
 def _extract_claims_for_section(
     raw_claims: Any,
     *,
@@ -221,6 +254,11 @@ def _extract_claims_for_section(
             if isinstance(item, dict)
             and item.get("evidence_id")
             and item.get("supports_claim") is True
+            and counts_for_confidence(item)
+            and not (
+                isinstance(evidence_index.get(str(item.get("evidence_id"))), (dict, Mapping))
+                and not counts_for_confidence(evidence_index[str(item.get("evidence_id"))])
+            )
         ))
         # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
         # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
@@ -245,7 +283,17 @@ def _extract_claims_for_section(
             "speculative", "low", "medium", "high", "verified"
         ] | None = None
         claim_type = _claim_type_of(claim)
-        if len(evidence_refs) == 1 and confidence in {"medium", "high", "verified"}:
+        independent_sources = _count_independent_sources(
+            evidence_refs, claim.get("evidence"), evidence_index
+        )
+        should_downgrade = False
+        if independent_sources <= 1:
+            if confidence in {"high", "verified"}:
+                should_downgrade = True
+            elif confidence == "medium" and claim_type not in ("structural", "recommendation"):
+                should_downgrade = True
+
+        if should_downgrade:
             single_source_text_confidence = _wording_confidence(claim_type, confidence)
             confidence = "low"
         # strict: speculative/low-confidence Claims werden gedroppt
@@ -740,7 +788,7 @@ class ReportManager:
             # Issue #1304 (S3): aus derselben Evidenzkarte gezaehlt, aus der die
             # Claims oben entstehen — kein zweiter Datenpfad, der driften kann.
             simulation_contribution=SimulationContribution.model_validate(
-                compute_simulation_contribution(evidence_map)
+                compute_simulation_contribution(evidence_map, exported_claims=claims)
             ),
             **metadata_kwargs,
         )

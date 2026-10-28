@@ -134,11 +134,18 @@ def drop_unresolvable_deviations(thresholds: Sequence[Threshold]) -> List[Thresh
             cleaned.append(threshold)
             continue
         target = by_id.get(target_id)
+        source_key = threshold_measure_key(threshold)
+        target_key = threshold_measure_key(target) if target is not None else None
+        mismatch = (
+            source_key is not None
+            and target_key is not None
+            and source_key != target_key
+        )
         if (
             target is None
             or target_id == threshold.id
             or not (threshold.deviation_rationale or "").strip()
-            or threshold_measure_key(threshold) != threshold_measure_key(target)
+            or mismatch
         ):
             cleaned.append(
                 threshold.model_copy(
