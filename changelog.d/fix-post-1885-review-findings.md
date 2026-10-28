@@ -1,0 +1,6 @@
+### Fixed
+
+- Versehentliche Versions-Downgrades aus dem Merge-Konfliktaufloesungsschritt von `#1885` (`Dockerfile` `CLAUDE_CODE_VERSION=2.1.292`, `.github/workflows/actionlint.yml` `reviewdog/action-actionlint@v1.79.1`, `.github/workflows/docker-image.yml` `anchore/sbom-action@v0.24.3` sowie `changelog.d/1861-bump-claude-cli.md`) wiederhergestellt und das doppelte Changelog-Fragment `changelog.d/report-agent-modularization.md` bereinigt.
+- Kanonische Persona-Stimmenzaehlung in `backend/app/services/report_agent/claim_provenance.py` und `backend/app/services/report_agent/manager_claims.py` ueber gemischte Evidence-Repräsentationen (`agent_id`, `voice_key`, `agent_name`) vereinheitlicht, sodass derselbe Agent bei gemischten Belegformaten nicht mehrfach gezaehlt wird.
+- Abschnitts-Evidence-Aufloesung in `backend/app/services/report_agent/attribution_guard.py` (`resolve_section_evidence_records`) gegen das Ueberschreiben autoritativer Index-Metadaten (`source_kind`, `provenance_class`, `type`, `source_type`, `source_tier`, `epistemic_status`, `graph_origin`) durch widerspruechliche Abschnittseintraege gehaertet.
+- `docs/STATUS.md` und `docs/agents/release-priority.md` auf den Stand vom 28.10.2026 (`main@2c264f4f`) einschliesslich klarer Abgrenzung zwischen verifizierter PR-CI und offenen operativen/inhaltlichen RC-/1.0-Nachweisen aktualisiert.

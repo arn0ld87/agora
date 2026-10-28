@@ -2,14 +2,15 @@
 
 > Verbindliche Reihenfolge und Freigabekriterien: [ROADMAP](../../ROADMAP.md). Verifizierter Istzustand: [STATUS](../STATUS.md).
 
-**Stand:** 13.10.2026, GitHub-Abgleich gegen `main@d8ed7370`. `v0.9.6` ist getaggt, `0.9.7` und der Korrektur-Patch `0.9.8` sind als weitere Zwischenreleases geschnitten; nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)).
+**Stand:** 28.10.2026, GitHub-Abgleich gegen `main@2c264f4f`. `v0.9.6` ist getaggt, `0.9.7` und der Korrektur-Patch `0.9.8` sind als weitere Zwischenreleases geschnitten; seitdem sind u. a. `#1875`, `#1876`, `#1881`, `#1884`, `#1885` und `#1887` sowie die Nachhärtung für gemischte Persona-Stimmenzählung und autoritative Index-Provenienz im Attribution-Guard auf `main` gelandet. Nächster Schnitt ist `0.10.0-rc.1` (Feature-Freeze), danach `0.10.0` stabil, `1.0.0-rc.1`, sieben Tage Soak und `1.0.0` ([#1658](https://github.com/arn0ld87/agora/issues/1658)). Grüne PR-CI ersetzt weder operative RC-Nachweise noch den empirischen Baseline-/Qualitätsnachweis realer Läufe.
 
 ## Nächste Arbeit
 
 1. **Frontend-Coverage (#1672):** gelandet. Baseline 83,57 % Line / 73,32 % Branch in `frontend/coverage-baseline.json`, Scope-, Skip- und Ratchet-Wächter auf jedem PR. Kein Vor-Freeze-Gate mit Implementierungsbedarf mehr offen.
-2. **Ausnahmeregister (#1670):** Implementierung ist gelandet (#1817); ausstehend ist nur noch der operative Nachweis — der erste tatsächliche Stichtag-Scan vor `0.10.0-rc.1` mit Rohberichten als CI-Artefakten (Runbook: `docs/security-hardening.md`).
+2. **Ausnahmeregister (#1670):** Implementierung ist gelandet (#1817); ausstehend ist nur noch der operative Nachweis — der erste tatsächliche Stichtag-Scan vor `0.10.0-rc.1` mit Rohberichten als CI-Artefakten gegen die konkrete `main`-Revision (Runbook: `docs/security-hardening.md`).
 3. **Frontend-Umbau #1790, operativer Rest:** Docker-e2e für die Satz-Bibliothek (Etappe 7), Verifikation der Graph-Schreibpfade gegen eine echte Neo4j (Etappe 8), Bauplan-Punkt 11f (Reiter „Personas" am Lauf).
 4. **Operative Abnahme #1592:** produktiver Metadaten-Cutover ist dokumentiert; formale Beobachtungs-/Drill-Nachweise und echter Embedding-Modellwechsel bleiben offen. Hostzugriff ist nötig.
+5. **Berichts- und Simulationsqualität (#1766, #1778, #1831, #1835):** Teilfixes (#1875, #1876, #1884) sind gelandet; der Nachweis von Persona-Identität/Rollentreue, Diskussionstiefe, Simulationsbeitrag und Positionswechseln an realen Läufen bleibt offen.
 
 Ein neuer P0 stoppt den RC-Schnitt. Historische Blockerlisten dürfen geschlossene Issues nicht erneut zur Arbeit erklären.
 

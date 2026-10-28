@@ -1,8 +1,8 @@
 # Agora — Status
 
-**Stand:** 13.10.2026
+**Stand:** 28.10.2026
 
-**Geprüfte Main-Baseline:** `d8ed737068aa7c11cca16ee8f7caa8ae5511fe4b` (GitHub-Issue-/CI-Abgleich vom 13.10.2026; keine neue lokale Vollsuite)
+**Geprüfte Main-Baseline:** `2c264f4f107f6f76ec2f88ed65c85d8bbe48cc3a` (GitHub-Issue-/PR-/CI-Abgleich vom 28.10.2026; keine neue lokale Vollsuite)
 
 **Produktversion:** `0.9.8` (Release-Schnitt, Stability Beta)
 
@@ -49,6 +49,7 @@ Die Testzähler in diesem Markerblock werden **nur durch `scripts/sync-status.sh
 
 Zusätzliche aktuelle Nachweise:
 
+- **28.10.2026, Nacharbeit & technische Neubewertung (`main@2c264f4f`):** Auf `main` gelandet sind die OASIS-/Prepare-Fixes `#1875` (vereinheitlichtes Twitter-CSV-Format gegen `KeyError: user_char`) und `#1876` (`create-from-personas` erzeugt `agent_configs` gegen Null-Agenten-Läufe), die Herkunftsdokumentation `#1881` (MiroFish → MiroFish-Offline → Agora), die Berichtsintegritäts- und Evidence-Härtung `#1884` (Evidence-Qualifikation, Thresholds, V3-Claim-Projektion, Abschnittsattribution, Cancel-/Resume-Degradation), das strukturelle Refactoring großer Contracts-, Entailment-, LLM-, API-, Report- und UI-Module `#1885` (alle neun PR-Workflows grün: CI, Docker, E2E, Contracts, CodeQL, Actionlint) sowie `#1887` (`nbconvert 7.17.2`). In der anschließenden Nacharbeit wurden die beim Merge von `#1885` versehentlich zurückgesetzten Versionsstände (`Dockerfile` `CLAUDE_CODE_VERSION=2.1.292`, `reviewdog/action-actionlint@v1.79.1`, `anchore/sbom-action@v0.24.3`), die kanonische Persona-Stimmenzählung über gemischte Repräsentationen (`agent_id` / `voice_key` / `agent_name`) in `claim_provenance.py`/`manager_claims.py` sowie der Schutz autoritativer Index-Metadaten (`source_kind`, `provenance_class`, `type`) in `attribution_guard.py::resolve_section_evidence_records` korrigiert. **Grenze dieses Nachweises:** Grüne PR-/Main-CI-Checks belegen Vertrags-, Lint-, Typ- und Regressionskonsistenz, sind aber kein Live-UAT auf `armserver`/`gns3` und kein Nachweis inhaltlich belastbarer Simulationsläufe gegenüber Baselines (#1670, #1592, #1240, #766, #1662, #1766, #1778, #1831, #1835 bleiben offen).
 - **13.10.2026, Bericht-Reiter nach 409:** Ein zweiter Start bei laufender Erzeugung (409 `report_generate_in_progress`) ließ den Bericht-Reiter bei „Noch keine Fassung“ stehen (gns3, `sim_6430ab3849f1` / `report_238ba4371858`). Behoben in drei Teilen: `ReportStatusService.get_status` übernimmt bei reiner `simulation_id` die `report_id` des aktiven `report_generate`-Runs aus der Run-Registry; `useReportGeneration.launch` hängt sich bei 409 über diese Statusabfrage an den laufenden Bericht; `generate_report` persistiert `generating` sofort statt erst nach dem ersten Abschnitt. Regressionstests: `test_report_status_resolution_paths.py`, `test_report_generating_status_persisted.py`, `useReportGeneration.spec.ts`. Der Live-UAT auf gns3 steht aus.
 - **13.10.2026, Tag `v0.9.7`:** Der Tag-Lauf von `docker-image.yml` ([Run 38320813298](https://github.com/arn0ld87/agora/actions/runs/38320813298)) scheiterte im Prod-Proxy-Smoke an „backend/data im Container schreibbar“. Ursache war die CI: Der Smoke gab nur `backend/uploads` per ACL für uid 1000 frei. Korrigiert mit #1873, nachgeholt mit `v0.9.8`. Für `v0.9.7` gibt es noch keine GHCR-Images und keine Release-Assets (`SHA256SUMS`, Digests, SBOMs). Das GitHub-Release selbst ist veröffentlicht.
 

@@ -547,3 +547,61 @@ def test_correct_attribution_includes_preloaded_global_evidence_refs_when_active
     assert corrected == content
 
 
+def test_resolve_section_evidence_records_prevents_provenance_and_source_kind_spoofing():
+    """Widersprüchliche Abschnitts-Einträge dürfen autoritative Index-Metadaten
+    (source_kind, type, provenance_class) nicht überschreiben."""
+    index = {
+        "E-SEED-ONLY": {
+            "evidence_id": "E-SEED-ONLY",
+            "source_kind": "seed_corpus",
+            "type": "seed_document",
+            "source_type": "seed_document",
+            "provenance_class": "source_grounded",
+        },
+        "E-DERIVED-SIM": {
+            "evidence_id": "E-DERIVED-SIM",
+            "source_kind": "agent_quote",
+            "type": "agent_post",
+            "provenance_class": "derived_calculation",
+        },
+        "E-INFERRED-INTERVIEW": {
+            "evidence_id": "E-INFERRED-INTERVIEW",
+            "source_kind": "inferred",
+            "type": "agent_interview",
+            "provenance_class": "source_grounded",
+        },
+    }
+    # Abschnitts-Einträge versuchen, ein Seed-Dokument als Simulations-Post/Interview
+    # auszugeben bzw. disqualifizierte Provenienz zu überschreiben.
+    section_ev = [
+        {
+            "evidence_id": "E-SEED-ONLY",
+            "source_kind": "agent_quote",
+            "type": "agent_interview",
+            "source_type": "agent_interview",
+        },
+        {
+            "evidence_id": "E-DERIVED-SIM",
+            "source_kind": "agent_quote",
+            "type": "agent_post",
+            "provenance_class": "source_grounded",
+        },
+        {
+            "evidence_id": "E-INFERRED-INTERVIEW",
+            "source_kind": "agent_quote",
+            "type": "agent_interview",
+            "provenance_class": "source_grounded",
+        },
+    ]
+
+    resolved = resolve_section_evidence_records(section_ev, index)
+    profile = profile_from_evidence_index(resolved)
+
+    assert profile.seed_evidence == 1
+    assert profile.simulation_evidence == 0
+    assert profile.interview_evidence == 0
+    assert not profile.has_simulation
+    assert not profile.has_interviews
+
+
+
