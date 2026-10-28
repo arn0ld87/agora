@@ -593,3 +593,17 @@ class TestDowngradeIgnoresHandMadeEvidence:
         decision = downgrade_medium_without_agent_grounded(claim)
         assert claim["confidence_label"] == "low"
         assert decision is not None and decision["action"] == "downgraded_to_low"
+
+    def test_manual_binding_with_clean_index_record_does_not_count_as_grounded(self) -> None:
+        """Wenn die Handmarkierung am Binding-Eintrag klebt und der Index-Record
+        selbst neutral ist, darf das trotzdem nicht fuer ``medium`` zaehlen."""
+        index = {
+            "ev_q": _quote("A") | {"evidence_id": "ev_q"},
+            "ev_s": _seed() | {"evidence_id": "ev_s"},
+        }
+        bindings = [
+            {"evidence_id": "ev_q", "supports_claim": True},
+            {"evidence_id": "ev_s", "supports_claim": True, "graph_origin": "manual"},
+        ]
+        assert has_agent_grounded_evidence(bindings, evidence_index=index) is False
+

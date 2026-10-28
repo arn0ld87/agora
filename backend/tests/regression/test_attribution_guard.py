@@ -12,7 +12,10 @@ Leser etwas anderes, als er zu lesen meint.
 
 from __future__ import annotations
 
+import types
 from typing import Any, Dict
+
+from types import SimpleNamespace
 
 from app.services.report_agent.attribution_guard import (
     CONSENSUS_MIN_EVIDENCE,
@@ -20,7 +23,9 @@ from app.services.report_agent.attribution_guard import (
     attribution_findings,
     correct_attribution,
     profile_from_evidence_index,
+    resolve_section_evidence_records,
 )
+from app.services.report_agent.section_pipeline import _correct_attribution
 
 #: Die Evidenzlage des Referenzlaufs: viel Seed, keine Simulation, keine
 #: Interviews.
@@ -241,3 +246,304 @@ def test_the_rest_of_the_text_is_untouched():
 
     assert "Die Schulungsquote liegt bei 31 Prozent." in corrected
     assert "Der Projektplan fordert 80 Prozent." in corrected
+
+
+# --- Slice 4: Qualifikationsfilter & Section-Scoped Attribution Guard -------
+
+
+def test_profile_from_evidence_index_ignores_non_qualifying_records():
+    """Records mit supports_claim=False, unzulässiger Provenienz oder graph_origin zählen nicht."""
+    index = {
+        "E-REFUTED-SIM": {
+            "evidence_id": "E-REFUTED-SIM",
+            "source_kind": "agent_quote",
+            "type": "agent_post",
+            "supports_claim": False,
+        },
+        "E-DERIVED-SIM": {
+            "evidence_id": "E-DERIVED-SIM",
+            "source_kind": "agent_quote",
+            "type": "agent_post",
+            "provenance_class": "derived_Calculation",
+        },
+        "E-MANUAL-INTERVIEW": {
+            "evidence_id": "E-MANUAL-INTERVIEW",
+            "source_kind": "agent_quote",
+            "type": "agent_interview",
+            "graph_origin": "manual",
+        },
+        "E-VALID-SEED": {
+            "evidence_id": "E-VALID-SEED",
+            "source_kind": "seed_corpus",
+            "type": "seed_document",
+            "supports_claim": True,
+        },
+    }
+
+    profile = profile_from_evidence_index(index)
+
+    assert profile == EvidenceProfile(
+        simulation_evidence=0,
+        interview_evidence=0,
+        seed_evidence=1,
+    )
+    assert not profile.has_simulation
+    assert not profile.has_interviews
+
+
+def test_correct_attribution_scopes_to_active_section_evidence_when_only_seed_present():
+    """Simulations-Evidenz aus Section 1 im globalen Index schaltet Section 2 (nur Seed) nicht frei."""
+    agent = SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "E-SIM-1": {
+                    "evidence_id": "E-SIM-1",
+                    "source_kind": "agent_quote",
+                    "type": "agent_post",
+                },
+                "E-SEED-1": {
+                    "evidence_id": "E-SEED-1",
+                    "source_kind": "seed_corpus",
+                    "type": "seed_document",
+                },
+            }
+        },
+        _active_section_evidence=[
+            {
+                "evidence_id": "E-SEED-1",
+                "source_type": "seed_document",
+                "provenance_class": "source_grounded",
+            }
+        ],
+    )
+    section = SimpleNamespace(title="Ausgangslage")
+
+    corrected = _correct_attribution(
+        agent,
+        section,
+        "Die Simulation zeigt, dass die Übergangsfrist knapp bemessen ist.",
+        section_index=2,
+    )
+
+    assert "Die Simulation zeigt" not in corrected
+    assert corrected == "Die Quellenlage zeigt, dass die Übergangsfrist knapp bemessen ist."
+
+
+def test_correct_attribution_keeps_simulation_formula_when_active_section_has_simulation_evidence():
+    """Hat die aktuelle Section eigene qualifizierte Simulations-Evidenz, bleibt die Formel erhalten."""
+    agent = SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "E-SIM-1": {
+                    "evidence_id": "E-SIM-1",
+                    "source_kind": "agent_quote",
+                    "type": "agent_post",
+                },
+            }
+        },
+        _active_section_evidence=[
+            {
+                "evidence_id": "E-SIM-1",
+                "type": "agent_post",
+                "source_kind": "agent_quote",
+            }
+        ],
+    )
+    section = SimpleNamespace(title="Simulationsreaktionen")
+    text = "Die Simulation zeigt eine deutliche Skepsis der Pflege."
+
+    corrected = _correct_attribution(
+        agent,
+        section,
+        text,
+        section_index=1,
+    )
+
+    assert corrected == text
+
+
+def test_resolve_section_evidence_records_preserves_index_disqualification():
+    """Hat der globale Index supports_claim=False oder graph_origin gesetzt, bleibt die Disqualifikation erhalten."""
+    index = {
+        "E-SIM-1": {
+            "evidence_id": "E-SIM-1",
+            "source_kind": "agent_quote",
+            "type": "agent_post",
+            "supports_claim": False,
+        }
+    }
+    section_ev = [{"evidence_id": "E-SIM-1", "type": "agent_post"}]
+
+    resolved = resolve_section_evidence_records(section_ev, index)
+    profile = profile_from_evidence_index(resolved)
+
+    assert not profile.has_simulation
+
+
+# --- Section-Scoped Attribution & Graph-Origin Filter (Slice 4) -------------
+
+
+def test_evidence_profile_ignores_manual_and_edited_graph_origin():
+    """Graph-Kanten aus Handarbeit oder Editierung dürfen keine Zuschreibungen tragen."""
+    records = {
+        "ev_manual": {
+            "evidence_id": "ev_manual",
+            "source_kind": "agent_action",
+            "type": "agent_action",
+            "graph_origin": "manual",
+        },
+        "ev_edited": {
+            "evidence_id": "ev_edited",
+            "source_kind": "seed_corpus",
+            "type": "seed_document",
+            "graph_origin": "edited",
+        },
+        "ev_valid_sim": {
+            "evidence_id": "ev_valid_sim",
+            "source_kind": "agent_action",
+            "type": "agent_action",
+            "graph_origin": None,
+        },
+    }
+
+    profile = EvidenceProfile.from_evidence_index(records)
+    assert profile.simulation_evidence == 1
+    assert profile.seed_evidence == 0
+
+
+def test_evidence_profile_ignores_refuted_bindings_supports_claim_false():
+    """Widerlegte Bindings (supports_claim=False) speisen keine Evidenz ein."""
+    records = [
+        {
+            "evidence_id": "ev_refuted_sim",
+            "source_kind": "agent_action",
+            "type": "agent_action",
+            "supports_claim": False,
+        },
+        {
+            "evidence_id": "ev_refuted_interview",
+            "source_kind": "agent_quote",
+            "type": "agent_interview",
+            "supports_claim": False,
+        },
+        {
+            "evidence_id": "ev_valid_sim",
+            "source_kind": "agent_action",
+            "type": "agent_action",
+            "supports_claim": True,
+        },
+    ]
+
+    profile = EvidenceProfile.from_evidence_index(records)
+    assert profile.simulation_evidence == 1
+    assert profile.interview_evidence == 0
+
+
+def test_correct_attribution_scoped_to_active_section_evidence():
+    """_correct_attribution nutzt _active_section_evidence statt blind den globalen Index."""
+    agent = types.SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "ev_sim": {
+                    "evidence_id": "ev_sim",
+                    "source_kind": "agent_action",
+                    "type": "agent_action",
+                }
+            }
+        },
+        _active_section_evidence=[],
+    )
+    section = types.SimpleNamespace(title="Wirtschaftlichkeit")
+    content = "Die Simulation zeigt eine deutliche Skepsis."
+
+    # Abschnitt hat keine eigene Simulations-Evidenz -> muss korrigiert werden
+    corrected = _correct_attribution(agent, section, content, section_index=1)
+    assert corrected == "Die Quellenlage zeigt eine deutliche Skepsis."
+
+
+def test_correct_attribution_resolves_bindings_in_active_section():
+    """Bindings in _active_section_evidence werden gegen evidence_index aufgelöst."""
+    agent = types.SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "ev_sim": {
+                    "evidence_id": "ev_sim",
+                    "source_kind": "agent_action",
+                    "type": "agent_action",
+                }
+            }
+        },
+        _active_section_evidence=[{"evidence_id": "ev_sim"}],
+    )
+    section = types.SimpleNamespace(title="Simulationsbefunde")
+    content = "Die Simulation zeigt eine deutliche Skepsis."
+
+    # Beleg vorhanden und auflösbar -> bleibt erhalten
+    corrected = _correct_attribution(agent, section, content, section_index=2)
+    assert corrected == content
+
+
+def test_correct_attribution_filters_refuted_binding_in_active_section():
+    """Ein widerlegtes Binding im Abschnitt trägt die Simulation nicht."""
+    agent = types.SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "ev_sim": {
+                    "evidence_id": "ev_sim",
+                    "source_kind": "agent_action",
+                    "type": "agent_action",
+                }
+            }
+        },
+        _active_section_evidence=[{"evidence_id": "ev_sim", "supports_claim": False}],
+    )
+    section = types.SimpleNamespace(title="Simulationsbefunde")
+    content = "Die Simulation zeigt eine deutliche Skepsis."
+
+    corrected = _correct_attribution(agent, section, content, section_index=2)
+    assert corrected == "Die Quellenlage zeigt eine deutliche Skepsis."
+
+
+def test_correct_attribution_falls_back_when_active_evidence_is_none():
+    """Wenn _active_section_evidence None ist (z. B. isolierter Test), greift der globale Index."""
+    agent = types.SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "ev_sim": {
+                    "evidence_id": "ev_sim",
+                    "source_kind": "agent_action",
+                    "type": "agent_action",
+                }
+            }
+        },
+        _active_section_evidence=None,
+    )
+    section = types.SimpleNamespace(title="Legacy Fallback")
+    content = "Die Simulation zeigt eine deutliche Skepsis."
+
+    corrected = _correct_attribution(agent, section, content, section_index=0)
+    assert corrected == content
+
+
+def test_correct_attribution_includes_preloaded_global_evidence_refs_when_active_section_empty():
+    """Vorab geladene global_evidence_refs tragen Simulationszuschreibungen auch ohne neuen Abschnitts-Toolcall."""
+    agent = types.SimpleNamespace(
+        evidence_map={
+            "evidence_index": {
+                "ev_sim": {
+                    "evidence_id": "ev_sim",
+                    "source_kind": "agent_quote",
+                    "type": "agent_post",
+                }
+            },
+            "global_evidence_refs": ["ev_sim"],
+        },
+        _active_section_evidence=[],
+    )
+    section = types.SimpleNamespace(title="Synthese")
+    content = "Die Simulation zeigt eine deutliche Skepsis."
+
+    corrected = _correct_attribution(agent, section, content, section_index=1)
+    assert corrected == content
+
+

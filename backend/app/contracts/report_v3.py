@@ -865,6 +865,7 @@ class ReportV3(BaseModel):
         collections = (
             self.personas,
             self.claims,
+            self.thresholds,
             self.multipliers,
             self.friction_points,
             self.trust_signals,

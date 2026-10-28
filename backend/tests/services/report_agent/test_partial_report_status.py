@@ -309,3 +309,85 @@ def test_incomplete_partial_report_does_not_report_completed_to_consumers(tmp_pa
         f"progress_callback meldete '{streaming_stage}' statt 'incomplete' "
         "fuer einen abgestuften Teil-Report."
     )
+
+
+def test_partial_report_passes_all_degradation_parameters(tmp_path):
+    """Prüft, dass _build_partial_report alle Parameter an collect_run_degradations
+    übermittelt (inkl. simulation_snapshot, interviews, forced_final, metadata_failed)."""
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    report = _make_report(report_id)
+    report.simulation_snapshot = {"simulation_status": "failed"}
+    outline = _make_outline(2)
+    agent = _make_agent()
+    events_for(agent).forced_final_sections = {1}
+    events_for(agent).metadata_failed_sections = {2}
+
+    with (
+        patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+        patch("app.services.report_agent.workflow.breaker_for") as mock_breaker,
+        patch("app.services.report_agent.workflow._count_interview_evidence", return_value=1),
+    ):
+        mock_breaker.return_value.request_count.return_value = 3
+        mock_breaker.return_value.reason_for.return_value = "budget_exhausted"
+
+        report_folder = str(tmp_path / report_id)
+        os.makedirs(report_folder, exist_ok=True)
+        mock_rm.assemble_full_report.return_value = "## Section 1"
+        mock_rm._ensure_report_folder.return_value = report_folder
+        mock_rm._write_json_atomic.side_effect = lambda path, data: None
+
+        result = _build_partial_report(
+            report,
+            report_id=report_id,
+            completed_section_titles=["Section 1", "Section 2"],
+            outline=outline,
+            agent=agent,
+            progress_callback=None,
+        )
+
+    degradations = result.run_degradations
+    reasons = [d["reason"] for d in degradations]
+    assert "simulation_failed" in reasons
+    assert "1_sections_forced_final" in reasons
+    assert "1_sections_without_metadata" in reasons
+    assert result.status == ReportStatus.INCOMPLETE
+
+
+def test_partial_report_merges_existing_run_degradations(tmp_path):
+    """Bestehende persistierte run_degradations werden in _build_partial_report
+    beibehalten und nicht überschrieben."""
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    report = _make_report(report_id)
+    report.run_degradations = [
+        {
+            "component": "outline_planning",
+            "reason": "custom_planning_degradation",
+            "severity": "warning",
+            "detail": "detail",
+        }
+    ]
+    outline = _make_outline(2)
+    agent = _make_agent()
+
+    with (
+        patch("app.services.report_agent.workflow.ReportManager") as mock_rm,
+        patch("app.config.Config.REPORT_REQUIREMENT_CHECKER_ENABLED", False),
+    ):
+        report_folder = str(tmp_path / report_id)
+        os.makedirs(report_folder, exist_ok=True)
+        mock_rm.assemble_full_report.return_value = "## Section 1"
+        mock_rm._ensure_report_folder.return_value = report_folder
+        mock_rm._write_json_atomic.side_effect = lambda path, data: None
+
+        result = _build_partial_report(
+            report,
+            report_id=report_id,
+            completed_section_titles=["Section 1", "Section 2"],
+            outline=outline,
+            agent=agent,
+            progress_callback=None,
+        )
+
+    reasons = [d["reason"] for d in result.run_degradations]
+    assert "custom_planning_degradation" in reasons
