@@ -241,6 +241,164 @@ def test_resume_paused_checks_process_alive(app_env, monkeypatch):
     assert result["status"] == "running"
 
 
+def test_resume_graph_memory_update_prioritizes_explicit_false_over_true(app_env, monkeypatch):
+    registry = app_env["registry"]
+    sim_id = "sim_lifecycle_parity_false_memory"
+
+    monkeypatch.setattr(SimulationRunner, "get_run_state", staticmethod(lambda sid: None))
+
+    # state has enable_graph_memory_update = False, config has enable_graph_memory_update = True
+    fake_state = SimpleNamespace(
+        project_id="proj_fm",
+        graph_id="graph_fm",
+        branch_name="branch_fm",
+        status=SimulationStatus.READY,
+        enable_graph_memory_update=False,
+    )
+    fake_config = {
+        "platform": "parallel",
+        "max_rounds": 5,
+        "enable_graph_memory_update": True,
+    }
+    monkeypatch.setattr(SimulationManager, "get_simulation", lambda self, sid: fake_state)
+    monkeypatch.setattr(SimulationManager, "get_simulation_config", lambda self, sid: fake_config)
+    monkeypatch.setattr(SimulationManager, "_save_simulation_state", lambda self, state: None)
+
+    resolved_route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+    monkeypatch.setattr(runs_module.StageModelRouter, "resolve", lambda self, stage: resolved_route)
+    monkeypatch.setattr(runs_module, "resolve_route_api_key", lambda route, runtime, run_id=None: "key-123")
+    monkeypatch.setattr(runs_module, "build_route_subprocess_env", lambda route, key, rid: {})
+
+    captured_start = {}
+    monkeypatch.setattr(
+        SimulationRunner,
+        "start_simulation",
+        lambda **kwargs: captured_start.update(kwargs) or SimulationRunState(
+            simulation_id=kwargs["simulation_id"], runner_status=RunnerStatus.RUNNING
+        ),
+    )
+
+    draft_captured = {}
+    from app.services.manifest_capture import ManifestCapture
+    monkeypatch.setattr(ManifestCapture, "capture_draft_best_effort", lambda **kwargs: draft_captured.update(kwargs))
+
+    # Case 1: Run metadata explicitly specifies enable_graph_memory_update=False
+    original_run = registry.create_run(
+        run_type="simulation_run",
+        entity_id=sim_id,
+        status="failed",
+        linked_ids={"simulation_id": sim_id, "project_id": "proj_fm"},
+        metadata={"enable_graph_memory_update": False},
+    )
+
+    result = runs_resume_module._resume_or_restart_simulation_run(original_run)
+    assert result["status"] == "running"
+    # Even though fake_config has enable_graph_memory_update = True, metadata False MUST win
+    assert captured_start["enable_graph_memory_update"] is False
+    assert captured_start["graph_id"] is None
+    assert draft_captured.get("enable_graph_memory_update") is False
+    assert draft_captured.get("memory_update_graph_id") is None
+
+    # Direct helper verification:
+    # 1. metadata False beats config True
+    assert runs_resume_module._resolve_enable_graph_memory_update(
+        {"metadata": {"enable_graph_memory_update": False}},
+        {"enable_graph_memory_update": True},
+        SimpleNamespace(enable_graph_memory_update=True),
+    ) is False
+
+    # 2. config False beats state True
+    assert runs_resume_module._resolve_enable_graph_memory_update(
+        {"metadata": {}},
+        {"enable_graph_memory_update": False},
+        SimpleNamespace(enable_graph_memory_update=True),
+    ) is False
+
+    # 3. state False beats absent
+    assert runs_resume_module._resolve_enable_graph_memory_update(
+        {"metadata": {}},
+        {},
+        SimpleNamespace(enable_graph_memory_update=False),
+    ) is False
+
+
+def test_resume_persists_inherited_stage_snapshot_for_replacement_run(app_env, monkeypatch):
+    from app.contracts.ai_provider_contract import AiRoute
+    from app.services.runtime_run_config import RuntimeRunConfig
+
+    registry = app_env["registry"]
+    sim_id = "sim_lifecycle_inherited_snapshot"
+
+    monkeypatch.setattr(SimulationRunner, "get_run_state", staticmethod(lambda sid: None))
+
+    fake_state = SimpleNamespace(
+        project_id="proj_snap",
+        graph_id="graph_snap",
+        branch_name="snap_branch",
+        status=SimulationStatus.READY,
+    )
+    monkeypatch.setattr(SimulationManager, "get_simulation", lambda self, sid: fake_state)
+    monkeypatch.setattr(SimulationManager, "get_simulation_config", lambda self, sid: {})
+    monkeypatch.setattr(SimulationManager, "_save_simulation_state", lambda self, state: None)
+
+    resolved_route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+    monkeypatch.setattr(runs_module.StageModelRouter, "resolve", lambda self, stage: resolved_route)
+    monkeypatch.setattr(runs_module, "resolve_route_api_key", lambda route, runtime, run_id=None: "key-123")
+    monkeypatch.setattr(runs_module, "build_route_subprocess_env", lambda route, key, rid: {})
+    monkeypatch.setattr(
+        SimulationRunner,
+        "start_simulation",
+        lambda **kwargs: SimulationRunState(simulation_id=kwargs["simulation_id"], runner_status=RunnerStatus.RUNNING),
+    )
+
+    draft_captured = {}
+    from app.services.manifest_capture import ManifestCapture
+    monkeypatch.setattr(ManifestCapture, "capture_draft_best_effort", lambda **kwargs: draft_captured.update(kwargs))
+
+    # Create original run and persist a canonical AiRoute snapshot on it
+    original_run = registry.create_run(
+        run_type="simulation_run",
+        entity_id=sim_id,
+        status="failed",
+        linked_ids={"simulation_id": sim_id, "project_id": "proj_snap"},
+    )
+    orig_route = AiRoute(
+        stage="simulation_rounds",
+        provider_connection_id="openai",
+        model_id="gpt-4o",
+        source="run_override",
+    )
+    RuntimeRunConfig(original_run["run_id"]).save_ai_route_snapshot("simulation_rounds", orig_route)
+
+    result = runs_resume_module._resume_or_restart_simulation_run(original_run)
+    new_run_id = result["run_id"]
+
+    # Verify replacement run has the inherited canonical snapshot persisted
+    new_snapshot = RuntimeRunConfig(new_run_id).load_ai_route_snapshot("simulation_rounds")
+    assert new_snapshot is not None
+    assert new_snapshot.model_id == "gpt-4o"
+    assert new_snapshot.provider_connection_id == "openai"
+
+    # Verify that draft_captured got the canonical snapshot and did not omit it
+    assert draft_captured.get("run_id") == new_run_id
+    routing_snapshot = draft_captured["routing"]["simulation_rounds"]["ai_route_snapshot"]
+    assert routing_snapshot is not None
+    assert routing_snapshot["model_id"] == "gpt-4o"
+    assert routing_snapshot["provider_connection_id"] == "openai"
+
+
 # ---------------------------------------------------------------------------
 # Finding 4.2 Tests
 # ---------------------------------------------------------------------------

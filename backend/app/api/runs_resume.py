@@ -8,6 +8,7 @@ import threading
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from ..contracts.llm_routing_contract import StageId
     from ..utils.llm_client import LLMClient
 
 
@@ -116,6 +117,7 @@ def _capture_resume_manifest_draft(
     max_rounds: int | None,
     enable_graph_memory_update: bool,
     memory_update_graph_id: str | None,
+    original_run_id: str | None = None,
 ) -> None:
     """Draft-Manifest für einen Simulation-Resume/Restart schreiben (Finding 4.1)."""
     _runs_mod = _runs_module()
@@ -133,6 +135,8 @@ def _capture_resume_manifest_draft(
         )
 
         canonical_route = RuntimeRunConfig(run_id).load_ai_route_snapshot("simulation_rounds")
+        if canonical_route is None and original_run_id:
+            canonical_route = RuntimeRunConfig(original_run_id).load_ai_route_snapshot("simulation_rounds")
         ai_route_snapshot = (
             ai_route_snapshot_from_ai_route(canonical_route).model_dump(mode="json")
             if canonical_route is not None
@@ -191,36 +195,99 @@ def _try_soft_resume_paused_process(_runs_mod, simulation_id: str, run_id: str) 
     return None
 
 
+def _resolve_configured_max_rounds(run: dict, config: dict, state) -> int | None:
+    run_meta = run.get("metadata") or {}
+    val = run_meta.get("max_rounds")
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    val = config.get("max_rounds")
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    val = getattr(state, "max_rounds", None)
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
 def _resolve_resume_limits_and_budget(_runs_mod, run: dict, config: dict, state):
     from ..services.run_budget import get_run_budget_config as _get_run_budget_config
 
     original_is_workspace_scoped = _runs_mod._original_run_is_workspace_scoped(run)
     original_budget_config = _get_run_budget_config(run["run_id"])
-    configured_max_rounds = (
-        (run.get("metadata") or {}).get("max_rounds")
-        or config.get("max_rounds")
-        or getattr(state, "max_rounds", None)
-    )
+    configured_max_rounds = _resolve_configured_max_rounds(run, config, state)
     return _runs_mod.apply_demo_run_limits(
         configured_max_rounds, original_budget_config, demo_scoped=original_is_workspace_scoped
     )
 
 
+def _resolve_enable_graph_memory_update(run: dict, config: dict, state) -> bool:
+    run_meta = run.get("metadata") or {}
+    val = run_meta.get("enable_graph_memory_update")
+    if val is not None:
+        return bool(val)
+    val = config.get("enable_graph_memory_update")
+    if val is not None:
+        return bool(val)
+    val = getattr(state, "enable_graph_memory_update", None)
+    if val is not None:
+        return bool(val)
+    return False
+
+
 def _resolve_graph_memory_settings(_runs_mod, run: dict, config: dict, state) -> tuple[bool, str | None]:
-    enable_graph_memory_update = bool(
-        (run.get("metadata") or {}).get("enable_graph_memory_update")
-        or config.get("enable_graph_memory_update")
-        or getattr(state, "enable_graph_memory_update", False)
-    )
-    memory_update_graph_id = (
-        (run.get("metadata") or {}).get("memory_update_graph_id")
-        or state.graph_id
-    )
-    if not memory_update_graph_id and state.project_id:
+    enable_graph_memory_update = _resolve_enable_graph_memory_update(run, config, state)
+    run_meta = run.get("metadata") or {}
+    val = run_meta.get("memory_update_graph_id")
+    if val is not None:
+        memory_update_graph_id = str(val) if val else None
+    else:
+        cfg_val = config.get("memory_update_graph_id")
+        if cfg_val is not None:
+            memory_update_graph_id = str(cfg_val) if cfg_val else None
+        else:
+            memory_update_graph_id = getattr(state, "graph_id", None)
+    if not memory_update_graph_id and getattr(state, "project_id", None):
         project = _runs_mod.ProjectManager.get_project(state.project_id)
         if project:
-            memory_update_graph_id = project.graph_id
+            memory_update_graph_id = getattr(project, "graph_id", None)
     return enable_graph_memory_update, memory_update_graph_id
+
+
+def _persist_inherited_stage_snapshot(
+    original_run_id: str,
+    new_run_id: str,
+    resolved_route,
+    stage_id: StageId = "simulation_rounds",
+) -> None:
+    """Kopiert bzw. persistiert den kanonischen Stage-Snapshot auf den neuen Run (PR #1895)."""
+    from ..services.runtime_run_config import RuntimeRunConfig
+
+    _runs_mod = _runs_module()
+    orig_cfg = RuntimeRunConfig(original_run_id)
+    new_cfg = RuntimeRunConfig(new_run_id)
+
+    orig_canonical = orig_cfg.load_ai_route_snapshot(stage_id)
+    if orig_canonical is not None:
+        new_cfg.save_ai_route_snapshot(stage_id, orig_canonical)
+
+    orig_stage = orig_cfg.load_stage_snapshot(stage_id)
+    if orig_stage is not None:
+        new_cfg.save_stage_snapshot(stage_id, orig_stage)
+    elif resolved_route is not None:
+        new_cfg.save_stage_snapshot(stage_id, resolved_route.model_dump(mode="json"))
+
+    if orig_canonical is None and resolved_route is not None:
+        router = _runs_mod.StageModelRouter(new_run_id)
+        router.lock_stage(stage_id, resolved_route)
 
 
 def _resume_or_restart_simulation_run(run: dict):
@@ -308,8 +375,16 @@ def _resume_or_restart_simulation_run(run: dict):
             simulation_id, new_run["run_id"], budget_config, _set_run_budget_config
         )
 
+        _persist_inherited_stage_snapshot(
+            original_run_id=run["run_id"],
+            new_run_id=new_run["run_id"],
+            resolved_route=resolved_route,
+            stage_id="simulation_rounds",
+        )
+
         _capture_resume_manifest_draft(
             run_id=new_run["run_id"],
+            original_run_id=run["run_id"],
             simulation_id=simulation_id,
             state=state,
             resolved_route=resolved_route,
