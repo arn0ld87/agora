@@ -138,7 +138,7 @@ def test_resolve_run_usage_distinguishes_detail_and_endpoint_fallback(monkeypatc
     assert resolve_run_usage(run, require_events_for_fallback=True) is None
     empty_summary = resolve_run_usage(run, require_events_for_fallback=False)
     assert empty_summary is not None
-    assert empty_summary.calls == 0
+    assert empty_summary.totals.llm_calls == 0
 
 
 def test_run_metrics_timing_and_action_aggregation() -> None:
