@@ -22,6 +22,7 @@ import {
   type ClaimEvidenceView,
 } from '@/composables/run/report/reportClaims'
 import { useReportArtifacts, type ReportArtifactsApi } from '@/composables/run/report/useReportArtifacts'
+import { isReportTerminalWithEvidence } from '@/composables/run/report/reportViewState'
 import ReportChecks from './ReportChecks.vue'
 import ReportClaimList from './ReportClaimList.vue'
 import ReportEvidenceList from './ReportEvidenceList.vue'
@@ -31,8 +32,7 @@ const props = defineProps<{ artifactsApi?: Partial<ReportArtifactsApi> }>()
 defineSlots<{ jump?: (p: { item: ClaimEvidenceView }) => unknown }>()
 const ctx = useRunReportContext()
 
-const TERMINAL = new Set(['completed', 'incomplete'])
-const finished = computed(() => ctx.report.value.status === 'ok' && TERMINAL.has(ctx.report.value.report.status))
+const finished = computed(() => ctx.report.value.status === 'ok' && isReportTerminalWithEvidence(ctx.report.value.report.status))
 
 const artifacts = useReportArtifacts({
   reportId: () => (finished.value ? ctx.selectedReportId.value : null),

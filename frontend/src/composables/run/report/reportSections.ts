@@ -14,6 +14,7 @@
 import type { ReportOutline, ReportSection } from '@/contracts/reportContract'
 import { buildReportReaderView } from '@/composables/useReportReaderView'
 import { renderMarkdown } from '@/utils/markdown'
+import { isReportTerminalWithEvidence } from './reportViewState'
 
 export type SectionState = 'ready' | 'missing' | 'failed' | 'pending'
 
@@ -57,7 +58,7 @@ export function deriveOutline(input: OutlineInput): OutlineEntry[] {
     ? input.outline.sections.map((s) => s.title)
     : input.evidenceSections.map((s) => s.section_title)
   const missing = input.missingSections.map(norm)
-  const terminal = input.reportStatus === 'completed' || input.reportStatus === 'incomplete'
+  const terminal = isReportTerminalWithEvidence(input.reportStatus)
   const matchedMissing = new Set<number>()
 
   const entries: OutlineEntry[] = titles.map((title, i) => {
