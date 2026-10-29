@@ -7,6 +7,10 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ..contracts.ai_provider_contract import AiModelRef
+from ..services.run_read_model import (
+    build_run_detail as _build_run_detail_model,
+    parse_status_param as _parse_status_param_model,
+)
 from ..services.simulation_manager import SimulationManager
 
 
@@ -18,97 +22,16 @@ def _runs_module():
 
 def _parse_status_param(args) -> list | None:
     """Parse ?status= query param: supports multi-value and comma-separated."""
-    raw_values = args.getlist("status")
-    if not raw_values:
-        return None
-    # Flatten comma-separated entries: ?status=processing,pending
-    statuses: list[str] = []
-    for v in raw_values:
-        for part in v.split(","):
-            stripped = part.strip()
-            if stripped:
-                statuses.append(stripped)
-    return statuses if statuses else None
+    return _parse_status_param_model(args)
 
 
 def _build_run_detail(run: dict) -> dict:
-    """Attach live metrics to a run manifest before serialisation.
-
-    eta_seconds: taken from run metadata if present (populated by the runner).
-    log_tail: last up-to-20 event messages — no extra I/O needed.
-    metrics: subset of manifest fields as typed scalars.
-    """
+    """Attach live metrics to a run manifest before serialisation."""
     _runs_mod = _runs_module()
-    enriched = _runs_mod._attach_summary(run, {}, {})
-
-    # eta_seconds from metadata (runners may store it there).
-    metadata = run.get("metadata") or {}
-    eta_seconds: int | None = metadata.get("eta_seconds")
-
-    # log_tail: last 20 event messages from the embedded event log.
-    events: list[dict] = run.get("events") or []
-    log_tail: list[str] | None = None
-    if events:
-        log_tail = [
-            e.get("message") or ""
-            for e in events[-20:]
-            if e.get("message")
-        ] or None
-
-    # metrics: phase, round counter, last_event_at from the manifest/events.
-    metrics: dict | None = None
-    phase = metadata.get("phase") or metadata.get("stage")
-    round_num = metadata.get("round_num") or metadata.get("round")
-    last_event_ts = events[-1].get("timestamp") if events else None
-    if any(v is not None for v in (phase, round_num, last_event_ts)):
-        metrics = {}
-        if phase is not None:
-            metrics["phase"] = str(phase)
-        if round_num is not None:
-            metrics["round_num"] = int(round_num)
-        if last_event_ts is not None:
-            metrics["last_event_at"] = str(last_event_ts)
-
-    enriched["eta_seconds"] = eta_seconds
-    enriched["log_tail"] = log_tail
-    enriched["metrics"] = metrics
-
-    # Budget & Verbrauch (Issue #764): Budget-Status nur wenn ein Budget
-    # gesetzt ist; Verbrauch live aggregiert (Abschluss-Snapshot bevorzugt).
-    # Beides bleibt bei Alt-Runs ohne Daten ehrlich None (= unknown im UI).
-    try:
-        from ..services.run_budget import get_run_budget_status
-        from ..services.run_usage_ledger import (
-            aggregate_usage,
-            load_call_events_cached,
-            load_usage_summary,
-        )
-
-        budget_status = get_run_budget_status(run["run_id"])
-        if budget_status is not None:
-            enriched["budget"] = budget_status.model_dump(mode="json")
-
-        usage = load_usage_summary(run["run_id"])
-        if usage is None:
-            events = load_call_events_cached(run["run_id"])
-            if events:
-                usage = aggregate_usage(
-                    run["run_id"],
-                    events=events,
-                    started_at=run.get("started_at"),
-                    ended_at=run.get("completed_at"),
-                )
-                # Snapshot-Persist läuft nicht hier: RunRegistry.update_run
-                # triggert persist_usage_summary am Lifecycle-Übergang
-                # nicht-terminal → terminal (Issue #764 / Codex P2). Ein
-                # zweiter Persist hier würde doppelt schreiben und den
-                # idempotenten Snapshot-Pfad in run_usage_ledger unnötig
-                # aufheizen.
-        if usage is not None:
-            enriched["usage"] = usage.model_dump(mode="json")
-    except Exception:  # noqa: BLE001 — Anreicherung darf den Read nicht brechen
-        _runs_mod.logger.warning("budget/usage enrichment failed for run %s", run.get("run_id"), exc_info=True)
-    return enriched
+    return _build_run_detail_model(
+        run,
+        attach_summary_fn=_runs_mod._attach_summary,
+    )
 
 
 def _ai_model_ref_from_manifest_route(stage_route) -> Optional[AiModelRef]:
@@ -447,7 +370,11 @@ def _capture_replay_manifest_draft(
             original_provider = original_stage_route.provider
             if original_model != resolved_route.model:
                 deviations.append(
-                    {"field": "model_id", "original": original_model, "replay": resolved_route.model}
+                    {
+                        "field": "model_id",
+                        "original": original_model,
+                        "replay": resolved_route.model,
+                    }
                 )
             if original_provider != resolved_route.provider_id:
                 deviations.append(
@@ -490,9 +417,7 @@ def _capture_replay_manifest_draft(
             # (possibly demo-capped) here, not the original manifest's value
             # — otherwise the replay's own manifest would claim a round
             # count it never ran with.
-            max_rounds=(
-                max_rounds if max_rounds is not None else manifest.simulation.max_rounds
-            ),
+            max_rounds=(max_rounds if max_rounds is not None else manifest.simulation.max_rounds),
             enable_graph_memory_update=manifest.simulation.enable_graph_memory_update,
             memory_update_graph_id=manifest.simulation.memory_update_graph_id,
             replayed_from_run_id=original_run_id,

@@ -196,7 +196,7 @@ class ReportAgentHypothesesMixin:
         List[Dict[str, Any]],
     ]:
         from . import agent as _agent_mod
-        from .agent_claims import _counts_for_claim
+        from .claim_qualification import valid_evidence_refs_for_claim
 
         finalized_claims: List[Dict[str, Any]] = []
         hypotheses: List[Dict[str, Any]] = []
@@ -215,14 +215,7 @@ class ReportAgentHypothesesMixin:
                 for item in evidence
                 if isinstance(item, dict) and item.get("evidence_id")
             }
-            supporting_ids = {
-                str(item["evidence_id"])
-                for item in evidence
-                if isinstance(item, dict)
-                and item.get("evidence_id")
-                and item.get("supports_claim") is True
-                and _counts_for_claim(item, evidence_index)
-            }
+            supporting_ids = set(valid_evidence_refs_for_claim(claim, evidence_index))
             unkeyed_related = sum(
                 1 for item in evidence if not isinstance(item, dict) or not item.get("evidence_id")
             )

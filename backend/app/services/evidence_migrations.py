@@ -569,6 +569,19 @@ _BINDING_FIELDS = frozenset({
 })
 
 
+def _build_legacy_binding(item: dict[str, Any], evidence_id: str) -> dict[str, Any]:
+    binding = {key: item[key] for key in _BINDING_FIELDS if key in item}
+    if (
+        "supports_claim" not in binding
+        and not binding.get("contradicts_claim")
+        and binding.get("entailment")
+        not in ("CONTRADICTED", "INSUFFICIENT", "RELATED_ONLY")
+    ):
+        binding["supports_claim"] = True
+    binding["evidence_id"] = evidence_id
+    return binding
+
+
 def _legacy_item_to_record_and_binding(
     item: dict[str, Any],
     *,
@@ -602,9 +615,7 @@ def _legacy_item_to_record_and_binding(
         "producer_key": producer_key,
         "source_kind": source_kind,
     })
-    binding = {key: item[key] for key in _BINDING_FIELDS if key in item}
-    binding["evidence_id"] = evidence_id
-    return record, binding
+    return record, _build_legacy_binding(item, evidence_id)
 
 
 def _next_legacy_hypothesis_id(section: dict[str, Any]) -> str:

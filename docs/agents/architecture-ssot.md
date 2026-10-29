@@ -13,8 +13,8 @@
 | Provider mit `transport="cli"` (Codex, ChatGPT-Abo) | `backend/app/llm/providers/codex_cli.py` (kein HTTP, Session-Auth via `codex login`, #1405) |
 | Provider mit `transport="cli"` (Claude Code, Claude-Abo) | `backend/app/llm/providers/claude_cli.py` (kein HTTP, `CLAUDE_CODE_OAUTH_TOKEN` im Fernet-Secret-Store, isoliertes `HOME`/`cwd` je Aufruf, #1531) |
 | Amazon Bedrock (OpenAI-kompatibler mantle-Pfad) | `OpenAIAdapter` + Bearer-Token, Host-Erkennung `registry.py::_is_bedrock_host` (`bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com`, #1282) |
-| Request-Shaping (kwargs-Bau, Provider-Quirks) | `backend/app/llm/request_plan.py::build_request` + `RequestOptions` |
-| Request-Fehlerbehandlung/Retry | `backend/app/llm/request_plan.py::execute` |
+| Request-Shaping (kwargs-Bau, Provider-Quirks, Thinking-Body, Stream-Policy) | `backend/app/llm/request_plan.py` (`build_request`, `RequestOptions`, `thinking_extra_body` via `providers.ollama.build_ollama_extra_body`, `should_force_stream`) |
+| Request-Fehlerbehandlung, Retry & Response-Auslesung | `backend/app/llm/request_plan.py` (`execute`, `execute_with_retry`, `DEFAULT_CHAT_QUIRKS`, `VISION_QUIRKS`, `reassemble_chat_stream`, `extract_non_stream_chat_choice`, `extract_int_token_usage`, `strip_thinking_tags`) |
 | Modellfähigkeiten (modellnamenbasiert: Token-Key, `temperature`, `reasoning_effort`) | `backend/app/llm/model_capabilities.py` (reine Funktionen, von `LLMClient` über `providers/openai.py` und vom Simulations-Subprozess über `scripts/_sim_common.py` gelesen, #1766); die Provider-Frage bleibt bei `detect_provider` |
 | Strukturierte LLM-Calls | `backend/app/llm/client.py::LLMClient.chat_json` (Pydantic-Schema, strict-mode, Repair) |
 | Modellauswahl-UI | `frontend/src/components/v4/forms/AiModelPicker.vue` |
@@ -24,9 +24,12 @@
 | Embedding-Config (Persistenz) | `backend/app/services/embedding_configuration_store.py` |
 | Embedding-Verarbeitung/Migration | `embedding_service.py` + `embedding_migration.py` |
 | Evidence-Gating | ADR-0002 Hartanker (siehe `CLAUDE.md`) |
+| Claim-Qualifikation, Stimme/Dokumentanker & Belegdichte | `backend/app/services/report_agent/claim_qualification.py` (`QualifiedClaimEvidence`, `qualify_claim_evidence`, `evaluate_claim_mode_gate`, `compute_evidence_density`) |
+| Abschnitts-Pipeline & atomare Evidence-/Markdown-Persistenz | `backend/app/services/report_agent/section_pipeline.py` (`SectionGenerationPipeline`, `SectionExecutionState`, `_persist_section_atomically`, `filter_structured_metadata_against_verified_section`, `drop_unrepairable_section_entries`, #1475) |
 | Run-/Jobstatus | RunRegistry / Run-Contracts |
-| Run-Read-Model (Listen-/Detail-Anreicherung) | `backend/app/services/run_read_model.py` (aus `api/runs.py` extrahiert, #1496) |
-| Simulations-Read-Metriken (Timeline/Agent-Stats) | `backend/app/services/sim/run_metrics.py` (aus `sim/monitor.py` extrahiert, #1496) |
+| Run-Read-Model (Listen-/Detail-/Usage-Anreicherung, Filter-Parsing) | `backend/app/services/run_read_model.py` (`build_run_summary`, `attach_summary`, `build_run_detail`, `build_runs_list_response`, `resolve_run_usage`, `parse_status_param`, #1496) |
+| Simulations-Read-Metriken & Laufzeit-Timings (Timeline/Agent-Stats/UTC-Dauer) | `backend/app/services/sim/run_metrics.py` (`get_timeline`, `get_agent_stats`, `as_aware_utc`, `compute_elapsed_seconds`, `resolve_manifest_timing`, #1496) |
+| OASIS-Simulations-Laufzeit (Modell-Factory, Graph-Policies, Round-0-Seeding, Redis-Emission) | `backend/scripts/sim_runtime/runtime_execution.py` (`create_simulation_llm_model`, `configure_platform_agent_graph`, `execute_initial_posts_round`, `emit_round_actions_to_redis`, genutzt von `platform_runner.py` und `run_parallel_simulation.py`) |
 | Report-Artefakte | `backend/uploads/reports/<report_id>/` |
 | Report-Vollständigkeitsprüfung vor Abschluss | `backend/app/services/report_agent/requirement_checker.py` (`RequirementChecker`, #1302) |
 | Interview-Panel-Rotation | `backend/app/services/interview_panel.py` (`InterviewPanelTracker`, #1303) |

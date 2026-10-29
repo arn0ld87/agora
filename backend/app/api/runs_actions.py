@@ -16,13 +16,14 @@ from pydantic import ValidationError
 
 from ..contracts.job_lease_contract import JobLease
 from ..contracts.runs_contract import (
-    RunDetail,
-    RunsAggregation,
     RunsFilterQuery,
-    RunsListResponse,
 )
 from ..services.run_export import select_run_export_files
-from ..services.run_read_model import attach_summary as _attach_summary
+from ..services.run_read_model import (
+    attach_summary as _attach_summary,
+    build_runs_list_response,
+    resolve_run_usage,
+)
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
@@ -49,17 +50,21 @@ logger = get_logger("agora.api.runs")
 
 def _runs_mod():
     import sys
+
     mod = sys.modules.get("app.api.runs")
     if mod is not None:
         return mod
     from . import runs
+
     return runs
 
 
 def _simulation_artifacts(simulation_id: str):
-    return ArtifactLocator.existing_paths({
-        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
-    })
+    return ArtifactLocator.existing_paths(
+        {
+            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+        }
+    )
 
 
 def _get_run_or_404(run_id: str):
@@ -101,9 +106,7 @@ def _get_run_by_run_or_simulation_id(identifier: str):
             "simulation_id", identifier, run_type="simulation_run"
         )
         if not run:
-            return None, json_error(
-                f"Run does not exist for simulation: {identifier}", status=404
-            )
+            return None, json_error(f"Run does not exist for simulation: {identifier}", status=404)
         return run, None
     return _get_run_or_404(identifier)
 
@@ -156,23 +159,19 @@ def execute_list_runs():
         offset=fq.offset,
     )
 
-    sim_cache: dict = {}
-    project_cache: dict = {}
-    enriched = [_attach_summary(run, sim_cache, project_cache) for run in runs]
-
-    aggregation = None
+    counts = None
     if fq.aggregate == "status":
         counts = mod.run_registry.aggregate_by_status(
             project_id=request.args.get("project"),
             run_type=request.args.get("run_type"),
             simulation_id=fq.simulation_id,
         )
-        aggregation = RunsAggregation(counts=counts, total=sum(counts.values()))
 
-    response = RunsListResponse(
-        runs=[RunDetail.model_validate(r) for r in enriched],
-        total=len(enriched),
-        aggregation=aggregation,
+    attach_fn = getattr(mod, "_attach_summary", _attach_summary)
+    response = build_runs_list_response(
+        runs,
+        status_counts=counts,
+        attach_summary_fn=attach_fn,
     )
     return json_success(
         response.model_dump(mode="json"),
@@ -181,24 +180,11 @@ def execute_list_runs():
 
 
 def execute_get_run_usage(run_id: str):
-    from ..services.run_usage_ledger import (
-        aggregate_usage,
-        load_call_events_cached,
-        load_usage_summary,
-    )
-
     run, error = _get_run_or_404(run_id)
     if error:
         return error
 
-    usage = load_usage_summary(run_id)
-    if usage is None:
-        usage = aggregate_usage(
-            run_id,
-            events=load_call_events_cached(run_id),
-            started_at=run.get("started_at"),
-            ended_at=run.get("completed_at"),
-        )
+    usage = resolve_run_usage(run, require_events_for_fallback=False)
     return json_success(usage.model_dump(mode="json"))
 
 
@@ -263,9 +249,7 @@ def execute_cancel_run(run_id: str):
             message_key="run.cancelled_before_start",
         )
         return make_response(
-            jsonify(
-                {"success": True, "status": "cancelled", "run_id": resolved_run_id}
-            ),
+            jsonify({"success": True, "status": "cancelled", "run_id": resolved_run_id}),
             200,
         )
 
@@ -297,9 +281,7 @@ def execute_cancel_run(run_id: str):
         run.get("run_type"),
         simulation_id,
     )
-    body = jsonify(
-        {"success": True, "status": "cancel_requested", "run_id": resolved_run_id}
-    )
+    body = jsonify({"success": True, "status": "cancel_requested", "run_id": resolved_run_id})
     return make_response(body, 202)
 
 
@@ -333,6 +315,7 @@ def execute_replay_run(run_id: str):
     if request.is_json and request.get_json(silent=True):
         body = request.get_json(silent=True) or {}
         from ..contracts.run_manifest_contract import ReplayRequest
+
         try:
             overrides = ReplayRequest.model_validate(body).overrides if body else None
         except ValidationError as exc:

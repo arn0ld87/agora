@@ -7,11 +7,67 @@ process, cancellation or manifest-finalisation side effects.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 from .run_state_store import AgentAction
 
 GetActions = Callable[..., list[AgentAction]]
+
+
+def as_aware_utc(dt: datetime) -> datetime:
+    """Ensure a ``datetime`` is timezone-aware (assuming UTC for naive values)."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def compute_elapsed_seconds(
+    started_at: str | None,
+    *,
+    now: datetime | None = None,
+) -> float:
+    """Compute non-negative elapsed seconds since ISO-8601 ``started_at``."""
+    if not started_at:
+        return 0.0
+    try:
+        start_dt = datetime.fromisoformat(started_at)
+        ref_now = now or (
+            datetime.now(start_dt.tzinfo) if start_dt.tzinfo is not None else datetime.now()
+        )
+        elapsed = (ref_now - start_dt).total_seconds()
+        return max(0.0, elapsed)
+    except ValueError, OverflowError, TypeError:
+        return 0.0
+
+
+def resolve_manifest_timing(
+    started_at_iso: str | None,
+    completed_at_iso: str | None,
+) -> tuple[datetime, datetime | None, int | None]:
+    """Derive ``(started_at, completed_at, duration_seconds)`` as UTC-aware datetimes."""
+    started_at = (
+        as_aware_utc(datetime.fromisoformat(started_at_iso))
+        if started_at_iso
+        else datetime.now(timezone.utc)
+    )
+    completed_at = (
+        as_aware_utc(datetime.fromisoformat(completed_at_iso)) if completed_at_iso else None
+    )
+    duration_seconds = (
+        int((completed_at - started_at).total_seconds()) if completed_at is not None else None
+    )
+    return started_at, completed_at, duration_seconds
+
+
+def _accumulate_action_bucket(bucket: dict[str, Any], action: AgentAction) -> None:
+    """Update platform counters, action_type histogram, and last_action_time in-place."""
+    if action.platform == "twitter":
+        bucket["twitter_actions"] += 1
+    else:
+        bucket["reddit_actions"] += 1
+    bucket["action_types"][action.action_type] = (
+        bucket["action_types"].get(action.action_type, 0) + 1
+    )
+    bucket["last_action_time"] = action.timestamp
 
 
 def get_timeline(
@@ -45,15 +101,8 @@ def get_timeline(
             }
 
         summary = rounds[round_num]
-        if action.platform == "twitter":
-            summary["twitter_actions"] += 1
-        else:
-            summary["reddit_actions"] += 1
+        _accumulate_action_bucket(summary, action)
         summary["active_agents"].add(action.agent_id)
-        summary["action_types"][action.action_type] = (
-            summary["action_types"].get(action.action_type, 0) + 1
-        )
-        summary["last_action_time"] = action.timestamp
 
     result: list[dict[str, Any]] = []
     for round_num in sorted(rounds):
@@ -100,14 +149,7 @@ def get_agent_stats(
 
         stats = agent_stats[agent_id]
         stats["total_actions"] += 1
-        if action.platform == "twitter":
-            stats["twitter_actions"] += 1
-        else:
-            stats["reddit_actions"] += 1
-        stats["action_types"][action.action_type] = (
-            stats["action_types"].get(action.action_type, 0) + 1
-        )
-        stats["last_action_time"] = action.timestamp
+        _accumulate_action_bucket(stats, action)
 
     return sorted(
         agent_stats.values(),

@@ -1,0 +1,2 @@
+### Changed
+- **SimulationRuntime (`backend/scripts/sim_runtime/runtime_execution.py`)**: Consolidated LLM model creation (`create_simulation_llm_model`), agent-graph policy attachment (`configure_platform_agent_graph`), Round-0 initial post execution (`execute_initial_posts_round`), and per-round Redis `PostCreatedEvent` emission (`emit_round_actions_to_redis`) across `SinglePlatformRunner` (`platform_runner.py`) and `run_parallel_simulation.py` (`_run_parallel_platform_simulation`).
