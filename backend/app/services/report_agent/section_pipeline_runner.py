@@ -21,7 +21,7 @@ from .section_pipeline_steps import (
     _verify_prose_facts,
 )
 
-logger = get_logger('agora.report_agent')
+logger = get_logger("agora.report_agent")
 
 
 def _cleanup_pending_state(agent: Any, section_index: int) -> None:
@@ -43,7 +43,7 @@ def _cleanup_pending_state(agent: Any, section_index: int) -> None:
                 val.pop(section_index, None)
             elif val is not None and not callable(val):
                 setattr(agent, attr, None)
-        except (AttributeError, KeyError, TypeError):
+        except AttributeError, KeyError, TypeError:
             pass
 
 
@@ -78,8 +78,7 @@ def _try_restore_persisted_section(
             persisted_entry=persisted_entry,
         )
     logger.warning(
-        "section %d (%r): Markdown auf Platte, aber Evidence fehlt — "
-        "Sektion wird neu generiert",
+        "section %d (%r): Markdown auf Platte, aber Evidence fehlt — Sektion wird neu generiert",
         section_index,
         section.title,
     )
@@ -109,7 +108,11 @@ def _resolve_final_section_result(
 
     final_unbound_refs = list(unbound_refs or [])
     pending_unbound_dict = getattr(agent, "_pending_unbound_evidence_refs", None)
-    if not final_unbound_refs and isinstance(pending_unbound_dict, dict) and section_index in pending_unbound_dict:
+    if (
+        not final_unbound_refs
+        and isinstance(pending_unbound_dict, dict)
+        and section_index in pending_unbound_dict
+    ):
         final_unbound_refs = list(pending_unbound_dict[section_index] or [])
 
     return SectionResult(
@@ -119,7 +122,8 @@ def _resolve_final_section_result(
         failed=section_failed,
         quote_validation_failed=quote_validation_failed,
         metadata=filtered_meta or {},
-        evidence=evidence if isinstance(evidence, SectionEvidenceOutcome)
+        evidence=evidence
+        if isinstance(evidence, SectionEvidenceOutcome)
         else SectionEvidenceOutcome(generation_failed=section_failed),
         unbound_evidence_refs=final_unbound_refs,
     )
@@ -149,13 +153,35 @@ def process_section(
     Cancel-Prüfung, Akkumulation und Statusableitung des Gesamtreports.
     """
     pipe_mod = sys.modules.get("app.services.report_agent.section_pipeline")
-    restore_fn = getattr(pipe_mod, "_restore_persisted_section", _restore_persisted_section) if pipe_mod else _restore_persisted_section
-    remove_orphan_fn = getattr(pipe_mod, "_remove_orphan_markdown", _remove_orphan_markdown) if pipe_mod else _remove_orphan_markdown
-    gen_content_fn = getattr(pipe_mod, "_generate_content", _generate_content) if pipe_mod else _generate_content
-    val_quotes_fn = getattr(pipe_mod, "_validate_quotes_with_repair", _validate_quotes_with_repair) if pipe_mod else _validate_quotes_with_repair
-    verify_prose_fn = getattr(pipe_mod, "_verify_prose_facts", _verify_prose_facts) if pipe_mod else _verify_prose_facts
-    extract_meta_fn = getattr(pipe_mod, "_extract_metadata", _extract_metadata) if pipe_mod else _extract_metadata
-    apply_meta_fn = getattr(pipe_mod, "_apply_metadata", _apply_metadata) if pipe_mod else _apply_metadata
+    restore_fn = (
+        getattr(pipe_mod, "_restore_persisted_section", _restore_persisted_section)
+        if pipe_mod
+        else _restore_persisted_section
+    )
+    remove_orphan_fn = (
+        getattr(pipe_mod, "_remove_orphan_markdown", _remove_orphan_markdown)
+        if pipe_mod
+        else _remove_orphan_markdown
+    )
+    gen_content_fn = (
+        getattr(pipe_mod, "_generate_content", _generate_content) if pipe_mod else _generate_content
+    )
+    val_quotes_fn = (
+        getattr(pipe_mod, "_validate_quotes_with_repair", _validate_quotes_with_repair)
+        if pipe_mod
+        else _validate_quotes_with_repair
+    )
+    verify_prose_fn = (
+        getattr(pipe_mod, "_verify_prose_facts", _verify_prose_facts)
+        if pipe_mod
+        else _verify_prose_facts
+    )
+    extract_meta_fn = (
+        getattr(pipe_mod, "_extract_metadata", _extract_metadata) if pipe_mod else _extract_metadata
+    )
+    apply_meta_fn = (
+        getattr(pipe_mod, "_apply_metadata", _apply_metadata) if pipe_mod else _apply_metadata
+    )
 
     restored = _try_restore_persisted_section(
         agent,
@@ -180,6 +206,11 @@ def process_section(
             if not hasattr(section, "metadata") or section.metadata is None:
                 section.metadata = {}
             section.metadata["quote_validation_failed"] = True
+        pending_quotes = getattr(agent, "_pending_quote_validation_failed", None)
+        if pending_quotes is None:
+            pending_quotes = {}
+            agent._pending_quote_validation_failed = pending_quotes
+        pending_quotes[section_index] = bool(quote_validation_failed)
         # Issue #1324: an den Agenten durchreichen — ``_save_evidence_section``
         # baut das Section-Dict und ist die einzige Stelle, die in die
         # Evidenzkarte schreibt. Derselbe Weg wie ``_pending_section_metadata``.
@@ -189,9 +220,7 @@ def process_section(
                 pending = {}
                 agent._pending_unbound_evidence_refs = pending
             pending[section_index] = unbound_refs
-        content = verify_prose_fn(
-            agent, section, ctx, content, section_index=section_index
-        )
+        content = verify_prose_fn(agent, section, ctx, content, section_index=section_index)
 
         # Fehlgeschlagene Sections liefern Fehlertext, keinen Inhalt: keine
         # Metadaten-Extraktion, keine Claims, keine Evidence daraus.

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
+from unittest.mock import patch
 import pytest
 
 from app.models.report import ReportOutline, ReportSection
@@ -489,3 +490,168 @@ def test_workflow_logic_records_quote_validation_failure_even_if_restored() -> N
         pass  # continue im echten Loop
 
     assert quote_validation_failures == ["Restaurierte Sektion mit Quote-Fehler"]
+
+
+def test_quote_validation_failed_end_to_end_save_and_resume(tmp_path: Path) -> None:
+    """E2E-Test: quote_validation_failed bleibt über den _save_evidence_section -> Resume-Zyklus erhalten."""
+    from app.services.report_agent.agent_section_saving import ReportAgentSectionSavingMixin
+    from app.services.report_agent.section_pipeline_runner import _try_restore_persisted_section
+    from app.services.report_agent.section_pipeline_steps import _restore_persisted_section
+
+    class RealSavingAgent(ReportAgentSectionSavingMixin):
+        def __init__(self) -> None:
+            self.evidence_map: Dict[str, Any] = {
+                "schema_version": 3,
+                "report_id": "rep-resume-test",
+                "simulation_id": "sim-resume-test",
+                "evidence_index": {},
+                "global_evidence_refs": [],
+                "sections": [],
+            }
+            self.report_logger = None
+            self._pending_quote_validation_failed = {1: True}
+
+        def _truncate(self, text: str, max_len: int) -> str:
+            return text[:max_len]
+
+        def _build_claims_for_section(
+            self, content: str, heartbeat: Any = None
+        ) -> List[Dict[str, Any]]:
+            return []
+
+        def _finalize_section_claims(self, claims: Any) -> tuple:
+            return ([], [], [], [])
+
+        def _remap_active_evidence_ids(self, remap: Any) -> None:
+            pass
+
+        def _section_dedup_check(self, **kw: Any) -> Any:
+            return None
+
+    agent = RealSavingAgent()
+    section_content = "Ein verifizierter Abschnitt mit Zitat-Inhalt."
+
+    # 1. Speichern via _save_evidence_section
+    with patch("app.services.report_agent.manager.ReportManager.save_evidence_map"):
+        outcome = agent._save_evidence_section(
+            "rep-resume-test", 1, "Zitat-Sektion", section_content
+        )
+
+    # Outcome spiegelt das Flag
+    assert outcome.quote_validation_failed is True
+
+    # Persistierte Evidence-Map enthält das Flag
+    sections = agent.evidence_map.get("sections") or []
+    assert len(sections) == 1
+    assert sections[0]["quote_validation_failed"] is True
+
+    # 2. Resume-Zyklus: _try_restore_persisted_section stellt das Flag wieder her
+    outline = ReportOutline(
+        title="Outline",
+        summary="Summary",
+        sections=[ReportSection(title="Zitat-Sektion", content="", description="")],
+    )
+    section = outline.sections[0]
+    ctx = _make_test_ctx(
+        outline,
+        cast(Any, agent),
+        persisted_contents={1: section_content},
+    )
+
+    restored_result = _try_restore_persisted_section(
+        agent,
+        section,
+        ctx,
+        section_index=1,
+        restore_fn=_restore_persisted_section,
+        remove_orphan_fn=lambda *a, **kw: None,
+    )
+
+    assert restored_result is not None
+    assert restored_result.restored is True
+    assert restored_result.quote_validation_failed is True
+    assert section.metadata["quote_validation_failed"] is True
+
+
+def test_filter_structured_metadata_foreign_claim_evidence_rejected() -> None:
+    """Befund 2: Empfehlungen dürfen keine Evidence-IDs fremder Claims nutzen."""
+    verified_claims = [
+        {"claim_id": "c1", "statement": "Claim A", "evidence_refs": ["ev_a1", "ev_a2"]},
+        {"claim_id": "c2", "statement": "Claim B", "evidence_refs": ["ev_b1"]},
+    ]
+    content = "Ausführlicher Inhalt des Berichts zur Verifikation."
+
+    metadata = {
+        "recommendations": [
+            # Unerlaubt: Claim A angegeben, aber nur Evidence von Claim B
+            {
+                "id": "rec_invalid_b_for_a",
+                "claim_id": "c1",
+                "evidence_refs": ["ev_b1"],
+                "text": "Empfehlung A mit Fremd-Evidence B",
+            },
+            # Unerlaubt: Claim A angegeben mit eigener Evidence + fremder Evidence von Claim B
+            {
+                "id": "rec_invalid_mixed_foreign",
+                "claim_id": "c1",
+                "evidence_refs": ["ev_a1", "ev_b1"],
+                "text": "Empfehlung A mit beigemischter Fremd-Evidence B",
+            },
+            # Erlaubt: Claim A angegeben mit passender Evidence von Claim A
+            {
+                "id": "rec_valid_a",
+                "claim_id": "c1",
+                "evidence_refs": ["ev_a1"],
+                "text": "Empfehlung A mit eigener Evidence",
+            },
+            # Erlaubt: Claim A angegeben ohne separate Evidence-Refs
+            {
+                "id": "rec_valid_claim_only",
+                "claim_id": "c1",
+                "text": "Empfehlung A ohne separate Refs",
+            },
+            # Erlaubt: Kein Claim angegeben, aber Evidence gehört zur Sektion
+            {
+                "id": "rec_valid_ref_only",
+                "evidence_refs": ["ev_b1"],
+                "text": "Empfehlung gestützt durch ev_b1",
+            },
+            # Unerlaubt: Kein Claim angegeben, Evidence von Claim A, aber Text gehört zu Claim B
+            {
+                "id": "rec_invalid_ref_only_foreign_text",
+                "evidence_refs": ["ev_a1"],
+                "text": "Empfehlung zu Claim B mit Evidence von Claim A",
+            },
+            # Unerlaubt: Kein Claim angegeben, aber Evidence-Mix aus zwei verschiedenen Claims A + B
+            {
+                "id": "rec_invalid_ref_only_cross_claim",
+                "evidence_refs": ["ev_a1", "ev_b1"],
+                "text": "Empfehlung mit gemischten Evidence-IDs verschiedener Claims",
+            },
+            # Unerlaubt: Unbekannter Claim referenziert
+            {
+                "id": "rec_invalid_unknown_claim",
+                "claim_id": "c_unknown",
+                "evidence_refs": ["ev_a1"],
+                "text": "Empfehlung mit ungültigem Claim",
+            },
+        ]
+    }
+
+    filtered = _filter_structured_metadata_against_verified_section(
+        metadata,
+        verified_claims=verified_claims,
+        persisted_content=content,
+    )
+
+    recs = filtered["recommendations"]
+    rec_ids = [r["id"] for r in recs]
+    assert "rec_invalid_b_for_a" not in rec_ids
+    assert "rec_invalid_mixed_foreign" not in rec_ids
+    assert "rec_invalid_ref_only_foreign_text" not in rec_ids
+    assert "rec_invalid_ref_only_cross_claim" not in rec_ids
+    assert "rec_invalid_unknown_claim" not in rec_ids
+    assert "rec_valid_a" in rec_ids
+    assert "rec_valid_claim_only" in rec_ids
+    assert "rec_valid_ref_only" in rec_ids
+    assert len(recs) == 3
