@@ -40,6 +40,13 @@ import type { ReportMode } from '../contracts/reportV3Contract'
 import type { ReportMessageKey } from '../contracts/reportStatusContract'
 import { usePolling, type UsePollingReturn } from './usePolling'
 import { resolveStatusMessage } from '../i18n/statusMessage'
+import {
+  extractAttachableRunningReportId,
+  isGenerateInProgressError,
+  REPORT_GENERATE_IN_PROGRESS_CODE,
+} from './run/report/reportViewState'
+
+export { REPORT_GENERATE_IN_PROGRESS_CODE }
 
 /** Poll-Intervall der Report-Statusabfrage. Die Log-Polls des Aufrufers
  *  takten bewusst im selben Raster (Sub-Slice J.3). */
@@ -97,21 +104,6 @@ interface ApiResult {
   error?: string
   /** Fehlercode des Envelopes, z. B. `report_generate_in_progress`. */
   code?: string
-}
-
-/** Backend-Code fuer „fuer diese Simulation laeuft bereits ein Report“ (HTTP 409). */
-export const REPORT_GENERATE_IN_PROGRESS_CODE = 'report_generate_in_progress'
-
-/**
- * Erkennt die 409-Antwort eines zweiten Starts. Der API-Client wirft sie als
- * `ApiError` (`code`); ein Fake in Tests kann sie auch als Envelope liefern.
- */
-function isGenerateInProgress(value: unknown): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { code?: unknown }).code === REPORT_GENERATE_IN_PROGRESS_CODE
-  )
 }
 
 interface StatusApiResult {
@@ -418,10 +410,9 @@ export function useReportGeneration(
    */
   async function attachToRunningReport(simId: string): Promise<boolean> {
     try {
-      const res = (await api.getReportStatus({ simulationId: simId })) as StatusApiResult
-      const runningId = res?.success ? res.data?.report_id : undefined
-      const runningStatus = res?.data?.status ?? ''
-      if (!runningId || ['completed', 'incomplete', 'failed'].includes(runningStatus)) {
+      const res = await api.getReportStatus({ simulationId: simId })
+      const runningId = extractAttachableRunningReportId(res)
+      if (!runningId) {
         return false
       }
       resetProgress()
@@ -473,14 +464,14 @@ export function useReportGeneration(
         options.onLifecycleChange('processing')
         options.onStarted(res.data.report_id as string)
         startPolling()
-      } else if (isGenerateInProgress(res) && (await attachToRunningReport(simId))) {
+      } else if (isGenerateInProgressError(res) && (await attachToRunningReport(simId))) {
         return
       } else {
         options.addLog(`Fehler: ${res?.error || 'unbekannt'}`)
         if (opts.restorePendingOnFailure) pending.value = true
       }
     } catch (err) {
-      if (isGenerateInProgress(err) && (await attachToRunningReport(simId))) return
+      if (isGenerateInProgressError(err) && (await attachToRunningReport(simId))) return
       options.addLog((err as Error).message)
       if (opts.restorePendingOnFailure) pending.value = true
     } finally {

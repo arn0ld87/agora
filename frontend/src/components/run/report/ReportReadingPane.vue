@@ -19,17 +19,16 @@ import { useI18n } from 'vue-i18n'
 import ReportLiveLogPane from '@/components/step4/ReportLiveLogPane.vue'
 import { useRunReportContext } from '@/composables/run/report/useRunReport'
 import type { ReadingSection } from '@/composables/run/report/reportSections'
+import { isReportRunningStatus } from '@/composables/run/report/reportViewState'
 
 const props = defineProps<{ activeSection: number | null }>()
 const { t } = useI18n()
 const ctx = useRunReportContext()
 
-const RUNNING = new Set(['pending', 'planning', 'generating'])
-
 const reportData = computed(() => (ctx.report.value.status === 'ok' ? ctx.report.value.report : null))
 const gen = ctx.generation
 const running = computed(
-  () => (reportData.value ? RUNNING.has(reportData.value.status) : false) || gen.status.phase.value === 1,
+  () => (reportData.value ? isReportRunningStatus(reportData.value.status) : false) || gen.status.phase.value === 1,
 )
 const startOffered = computed(
   () => ctx.report.value.status === 'idle' && gen.status.pending.value && !gen.status.isComplete.value,

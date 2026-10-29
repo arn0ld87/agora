@@ -45,7 +45,6 @@ import {
   type Ref,
 } from 'vue'
 import { z } from 'zod'
-import { ApiError } from '@/api/envelope'
 import {
   getReport as defaultGetReport,
   getReportEvidence as defaultGetReportEvidence,
@@ -55,8 +54,6 @@ import {
 } from '@/api/report'
 import {
   ReportSchema,
-  type EvidenceMap,
-  type EvidenceOmission,
   type Report,
 } from '@/contracts/reportContract'
 import { PENDING_REPORT_ID } from '@/utils/reportRoute'
@@ -67,6 +64,22 @@ import {
   type RunReportGenerationOptions,
 } from './useRunReportGeneration'
 import { deriveOutline, deriveReading, type OutlineEntry, type ReadingView } from './reportSections'
+import {
+  classifyEvidenceEnvelope,
+  classifyEvidenceError,
+  classifyReportEnvelope,
+  classifyReportLoadError,
+  describeReportError,
+  formatSchemaIssues,
+  isActiveRegistryRunForReport,
+  isReportRunningStatus,
+  isReportTerminalWithEvidence,
+  type EvidenceState,
+  type LoadFailure,
+  type ReportState,
+} from './reportViewState'
+
+export type { EvidenceState, LoadFailure, ReportState }
 
 export interface ReportVersionItem {
   reportId: string
@@ -81,26 +94,10 @@ export interface ReportVersionItem {
   providerId: string | null
 }
 
-export type LoadFailure = { kind: 'notFound' | 'contract' | 'transport'; reason: string }
-
 export type VersionsState =
   | { status: 'loading' }
   | { status: 'ok'; items: ReportVersionItem[]; invalid: number }
   | { status: 'failed'; reason: string }
-
-export type ReportState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'ok'; report: Report }
-  | ({ status: 'failed' } & LoadFailure)
-
-export type EvidenceState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'ok'; map: EvidenceMap }
-  | { status: 'omitted'; omission: EvidenceOmission }
-  | { status: 'unsaved' }
-  | ({ status: 'failed' } & LoadFailure)
 
 export interface RunReportApi {
   listReports: (params: { simulation_id?: string; limit?: number }) => Promise<unknown>
@@ -137,24 +134,6 @@ export interface RunReportContext {
 }
 
 export const RUN_REPORT_KEY: InjectionKey<RunReportContext> = Symbol('run-report')
-
-const RUNNING_STATUSES = new Set(['pending', 'planning', 'generating'])
-/** Zustände, in denen die Run-Registry einen Berichts-Job vor seinem Ende führt. */
-const ACTIVE_RUN_STATUSES = new Set(['pending', 'processing'])
-const TERMINAL_WITH_EVIDENCE = new Set(['completed', 'incomplete'])
-
-function describe(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message
-  return String(err)
-}
-
-function failure(err: unknown, fallbackKind: LoadFailure['kind'] = 'transport'): LoadFailure {
-  if (err instanceof ApiError) {
-    if (err.status === 404) return { kind: 'notFound', reason: err.message }
-    if (err.code === 'schema_mismatch') return { kind: 'contract', reason: err.message }
-  }
-  return { kind: fallbackKind, reason: describe(err) }
-}
 
 const ListEnvelopeSchema = z.object({
   success: z.boolean(),
@@ -269,13 +248,7 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
   })
 
   function recordSchemaError(where: string, error: unknown): void {
-    const issues =
-      error && typeof error === 'object' && Array.isArray((error as { issues?: unknown }).issues)
-        ? (error as { issues: Array<{ path: unknown[]; message: string }> }).issues.map(
-            (i) => `${i.path.length ? i.path.join('.') : '<root>'}: ${i.message}`,
-          )
-        : [describe(error)]
-    schemaError.value = { where, issues }
+    schemaError.value = { where, issues: formatSchemaIssues(error) }
   }
 
   const generation = useRunReportGeneration({
@@ -305,50 +278,25 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
       const res = await api.listReports({ simulation_id: options.simulationId(), limit: 50 })
       versions.value = parseVersions(res)
     } catch (err) {
-      versions.value = { status: 'failed', reason: describe(err) }
+      versions.value = { status: 'failed', reason: describeReportError(err) }
     }
   }
 
   async function loadReport(id: string): Promise<ReportState> {
     try {
-      const res = (await api.getReport(id)) as { success?: boolean; data?: unknown; error?: string; code?: string }
-      if (!res?.success) {
-        return {
-          status: 'failed',
-          kind: res?.code === 'not_found' ? 'notFound' : 'transport',
-          reason: res?.error || 'getReport',
-        }
-      }
-      const parsed = ReportSchema.safeParse(res.data)
-      if (!parsed.success) {
-        return {
-          status: 'failed',
-          kind: 'contract',
-          reason: `Vertragsbruch GET /api/report/${id}: ${parsed.error.message}`,
-        }
-      }
-      return { status: 'ok', report: parsed.data }
+      const res = await api.getReport(id)
+      return classifyReportEnvelope(id, res)
     } catch (err) {
-      return { status: 'failed', ...failure(err) }
+      return { status: 'failed', ...classifyReportLoadError(err) }
     }
   }
 
   async function loadEvidence(id: string): Promise<EvidenceState> {
     try {
       const res = await api.getReportEvidence(id)
-      if (res.success !== true) {
-        const err = res as { error?: string; code?: string }
-        // Der Bericht-404 ist hier eindeutig "nicht gespeichert": die Fassung selbst wurde geladen.
-        // Das gilt auch für `completed`; dort ist es nur vertretbar, weil der Hinweis sichtbar bleibt.
-        if (err.code === 'not_found') return { status: 'unsaved' }
-        return { status: 'failed', kind: 'transport', reason: err.error || 'getReportEvidence' }
-      }
-      if ('evidence_omitted' in res) return { status: 'omitted', omission: res.evidence_omitted }
-      return { status: 'ok', map: res.data }
+      return classifyEvidenceEnvelope(res)
     } catch (err) {
-      // Siehe oben: 404 → `unsaved` gilt auch für `completed`, der Hinweis bleibt sichtbar.
-      if (err instanceof ApiError && err.status === 404) return { status: 'unsaved' }
-      return { status: 'failed', ...failure(err) }
+      return classifyEvidenceError(err)
     }
   }
 
@@ -361,19 +309,8 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
    */
   async function generationRegisteredFor(id: string): Promise<boolean> {
     try {
-      const res = (await getStatus({ simulationId: options.simulationId(), reportId: id })) as {
-        success?: boolean
-        data?: { report_id?: unknown; run_id?: unknown; status?: unknown }
-      } | null
-      const data = res?.success ? res.data : null
-      return (
-        !!data &&
-        data.report_id === id &&
-        typeof data.run_id === 'string' &&
-        data.run_id !== '' &&
-        typeof data.status === 'string' &&
-        ACTIVE_RUN_STATUSES.has(data.status)
-      )
+      const res = await getStatus({ simulationId: options.simulationId(), reportId: id })
+      return isActiveRegistryRunForReport(res, id)
     } catch {
       return false
     }
@@ -415,14 +352,14 @@ export function useRunReport(options: UseRunReportOptions): RunReportContext {
       }
     }
     report.value = loaded
-    if (loaded.status === 'ok' && TERMINAL_WITH_EVIDENCE.has(loaded.report.status)) {
+    if (loaded.status === 'ok' && isReportTerminalWithEvidence(loaded.report.status)) {
       const ev = await loadEvidence(id)
       if (mine !== seq) return
       evidence.value = ev
     } else {
       evidence.value = { status: 'idle' }
     }
-    const running = loaded.status === 'ok' && RUNNING_STATUSES.has(loaded.report.status)
+    const running = loaded.status === 'ok' && isReportRunningStatus(loaded.report.status)
     if (running && generationFor !== id) {
       generation.stop()
       generationFor = id
