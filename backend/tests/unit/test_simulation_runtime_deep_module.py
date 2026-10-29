@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import pytest
 from camel.types import ModelPlatformType
 
-from scripts.sim_runtime.runtime_execution import (
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from sim_runtime.runtime_execution import (  # noqa: E402
     allowed_emit_action_types,
     configure_platform_agent_graph,
     create_simulation_llm_model,
