@@ -24,7 +24,7 @@ import re
 from typing import Any, Dict, List, Sequence
 
 from ...contracts.report_contract import counts_for_confidence
-from ...contracts.report_v3 import Threshold
+from ...contracts.report_v3 import Threshold, parse_date_value
 from ..evidence_entailment import coverage_ratio, extract_numeric_facts
 
 #: Einheiten-Schreibweisen, die dieselbe Einheit meinen. Das Modell schreibt
@@ -254,26 +254,71 @@ def _record_text(record: Any) -> str:
     ).strip()
 
 
+_MONTH_NAME_PATTERNS = {
+    1: r"januar|january|jan\.?",
+    2: r"februar|february|feb\.?",
+    3: r"märz|maerz|march|mrz\.?|mar\.?",
+    4: r"april|apr\.?",
+    5: r"mai|may",
+    6: r"juni|june|jun\.?",
+    7: r"juli|july|jul\.?",
+    8: r"august|aug\.?",
+    9: r"september|sept?\.?",
+    10: r"oktober|october|okt\.?|oct\.?",
+    11: r"november|nov\.?",
+    12: r"dezember|december|dez\.?|dec\.?",
+}
+
+
+def _text_carries_date_threshold(text: str, threshold: Threshold) -> bool:
+    """Nennt der Quelltext dieses Datum in ISO-, Punkt- oder Prosa-Schreibweise?"""
+    if not text:
+        return False
+    raw = str(threshold.value or "").strip()
+    iso = parse_date_value(raw)
+    if not iso:
+        return False
+    year = int(iso[:4])
+    month = int(iso[5:7])
+    day = int(iso[8:10])
+
+    m_pat = _MONTH_NAME_PATTERNS.get(month)
+    if not m_pat:
+        return False
+
+    patterns = (
+        rf"\b{year:04d}-0?{month:02d}-0?{day:02d}\b",
+        rf"\b0?{day}\.\s*0?{month}\.\s*{year:04d}\b",
+        rf"\b0?{day}(?:st|nd|rd|th)?\.?\s+(?:of\s+)?(?:{m_pat})\s+{year:04d}\b",
+        rf"\b(?:{m_pat})\s+0?{day}(?:st|nd|rd|th)?,?\s+{year:04d}\b",
+    )
+    return any(re.search(pat, text, re.IGNORECASE) for pat in patterns)
+
+
 def _record_carries_threshold(
     record: Any,
     threshold: Threshold,
     label_tokens: set[str] | frozenset[str] | None = None,
 ) -> bool:
-    """Prüft, ob ein Beleg den Schwellenwert stützen darf UND dessen Zahl + Label trägt."""
+    """Prüft, ob ein Beleg den Schwellenwert stützen darf UND dessen Zahl/Datum + Label trägt."""
     if not _is_verifying_record(record):
-        return False
-    if threshold.kind == "date":
-        return False
-    try:
-        val = float(threshold.value)
-    except (ValueError, TypeError):
         return False
     text = _record_text(record)
     if not text:
         return False
-    unit = normalize_unit(threshold.unit or "")
-    if not _text_carries_threshold(text, val, unit):
-        return False
+
+    if threshold.kind == "date":
+        if not _text_carries_date_threshold(text, threshold):
+            return False
+    else:
+        try:
+            val = float(threshold.value)
+        except (ValueError, TypeError):
+            return False
+        unit = normalize_unit(threshold.unit or "")
+        if not _text_carries_threshold(text, val, unit):
+            return False
+
     if label_tokens is not None:
         if not label_tokens:
             return False
@@ -283,6 +328,71 @@ def _record_carries_threshold(
     elif coverage_ratio(threshold.label, text) < LABEL_MATCH_THRESHOLD:
         return False
     return True
+
+
+def _record_supports_derived_threshold(record: Any, threshold: Threshold) -> bool:
+    """Prüft, ob ein Beleg einen abgeleiteten Schwellenwert legitim stützen kann.
+
+    Bei evidence_status='derived' stammen die Referenzen aus den
+    Eingabewerten der Berechnung (z. B. Teilquoten, Zwischensummen) und nennen
+    nicht zwingend den berechneten Zielwert selbst.
+    """
+    if not _is_verifying_record(record):
+        return False
+    text = _record_text(record)
+    if not text:
+        return False
+    if coverage_ratio(threshold.label, text) >= LABEL_MATCH_THRESHOLD:
+        return True
+    return bool(extract_numeric_facts(text))
+
+
+def _clean_threshold_refs(
+    threshold: Threshold,
+    pool_by_id: Dict[str, Dict[str, Any]],
+) -> List[str]:
+    """Bereinigt bestehende Referenzen gegen den Belegpool.
+
+    Für 'derived' Schwellenwerte müssen Records im Pool zulässige Quellen sein
+    und entweder Label-Overlap oder mindestens einen Zahlenwert tragen. Für alle
+    anderen müssen sie den Schwellenwert inhaltlich (Zahl/Datum + Label)
+    belegen.
+    """
+    if not threshold.evidence_refs:
+        return []
+
+    cleaned: List[str] = []
+    is_derived = threshold.evidence_status == "derived"
+    for ref in threshold.evidence_refs:
+        if ref in pool_by_id:
+            record = pool_by_id[ref]
+            if is_derived:
+                if _record_supports_derived_threshold(record, threshold):
+                    cleaned.append(ref)
+            else:
+                if _record_carries_threshold(record, threshold):
+                    cleaned.append(ref)
+        elif threshold.evidence_status != "verified":
+            cleaned.append(ref)
+    return cleaned
+
+
+def _find_matching_evidence_refs(
+    threshold: Threshold,
+    texts: Sequence[tuple[str, str]],
+) -> List[str]:
+    """Sucht im Belegpool nach Nachweisen für den numerischen Schwellenwert."""
+    unit = normalize_unit(threshold.unit or "")
+    try:
+        val = float(threshold.value)
+    except (ValueError, TypeError):
+        return []
+    return [
+        evidence_id
+        for evidence_id, text in texts
+        if _text_carries_threshold(text, val, unit)
+        and coverage_ratio(threshold.label, text) >= LABEL_MATCH_THRESHOLD
+    ]
 
 
 def _evidence_texts(evidence_pool: Sequence[Dict[str, Any]]) -> List[tuple[str, str]]:
@@ -314,10 +424,11 @@ def bind_threshold_provenance(
     Bereits belegte Thresholds behalten gültige Referenzen; zeigt eine
     mitgelieferte Referenz im Pool auf einen unzulässigen Record (``inferred``,
     ``web_source``, ``graph_origin in ('manual', 'edited')``) oder belegt der
-    referenzierte Record Zahl und Label des Thresholds nicht im Text, wird die
-    Referenz bereinigt. Bleibt nach der Bereinigung kein Beleg übrig, sucht die
-    Bindung im Pool nach echten Texttreffern; findet sich keiner, sinkt der
-    Status auf ``heuristic``.
+    referenzierte Record Zahl/Datum und Label des Thresholds nicht im Text,
+    wird die Referenz bereinigt. Für ``derived``-Thresholds werden valide
+    Eingabereferenzen (Zahlenwerte oder Labelbezug) geschützt. Bleibt nach der
+    Bereinigung kein Beleg übrig, sucht die Bindung im Pool nach echten
+    Texttreffern; findet sich keiner, sinkt der Status auf ``heuristic``.
     """
     texts = _evidence_texts(evidence_pool)
     pool_by_id: Dict[str, Dict[str, Any]] = {
@@ -329,17 +440,10 @@ def bind_threshold_provenance(
     bound: List[Threshold] = []
     for threshold in thresholds:
         if threshold.evidence_refs:
-            cleaned_refs = [
-                ref
-                for ref in threshold.evidence_refs
-                if (
-                    _record_carries_threshold(pool_by_id[ref], threshold)
-                    if ref in pool_by_id
-                    else (threshold.evidence_status != "verified")
-                )
-            ]
+            cleaned_refs = _clean_threshold_refs(threshold, pool_by_id)
             if cleaned_refs != list(threshold.evidence_refs):
                 threshold = threshold.model_copy(update={"evidence_refs": cleaned_refs})
+
         # Issue #1343: Datumsangaben nehmen an der numerischen Fact-Suche
         # nicht teil — sie vergleicht float-Werte und würde an einem ISO-
         # String crashen. Ein Datum zu belegen bräuchte Datumserkennung im
@@ -354,13 +458,7 @@ def bind_threshold_provenance(
             bound.append(threshold)
             continue
 
-        unit = normalize_unit(threshold.unit)
-        refs = [
-            evidence_id
-            for evidence_id, text in texts
-            if _text_carries_threshold(text, threshold.value, unit)
-            and coverage_ratio(threshold.label, text) >= LABEL_MATCH_THRESHOLD
-        ]
+        refs = _find_matching_evidence_refs(threshold, texts)
         if not refs:
             if threshold.evidence_status == "verified":
                 threshold = threshold.model_copy(update={"evidence_status": "heuristic"})
