@@ -106,6 +106,8 @@ class SectionResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
     #: Claim-Extraktion und Evidence-Binding.
     evidence: SectionEvidenceOutcome = field(default_factory=SectionEvidenceOutcome)
+    #: Ungebundene Evidence-Referenzen der Sektion (Issue #1324 / Befund 3.2).
+    unbound_evidence_refs: List[str] = field(default_factory=list)
 
     @property
     def bound_claims(self) -> List[Dict[str, Any]]:

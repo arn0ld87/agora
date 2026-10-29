@@ -57,6 +57,152 @@ def _drop_unrepairable_section_entries(
     return removed_entries
 
 
+def _extract_verified_claims_and_evidence_ids(
+    verified_claims: Optional[List[Dict[str, Any]]],
+) -> tuple[set[str], set[str]]:
+    """Extrahiert verifizierte Claim-IDs und Evidence-IDs/Refs."""
+    claim_ids: set[str] = set()
+    evidence_ids: set[str] = set()
+    if not verified_claims:
+        return claim_ids, evidence_ids
+
+    for c in verified_claims:
+        if not isinstance(c, dict):
+            continue
+        cid = c.get("claim_id")
+        if cid is not None and str(cid).strip():
+            claim_ids.add(str(cid).strip())
+
+        for ev in (c.get("evidence") or []):
+            if isinstance(ev, dict) and ev.get("evidence_id"):
+                evidence_ids.add(str(ev["evidence_id"]).strip())
+            elif isinstance(ev, str) and ev.strip():
+                evidence_ids.add(ev.strip())
+        for ref in (c.get("evidence_refs") or []):
+            if ref and str(ref).strip():
+                evidence_ids.add(str(ref).strip())
+        for ref in (c.get("supporting_evidence_ids") or []):
+            if ref and str(ref).strip():
+                evidence_ids.add(str(ref).strip())
+
+    return claim_ids, evidence_ids
+
+
+_METADATA_TEXT_KEYS = (
+    "text",
+    "description",
+    "title",
+    "content",
+    "recommendation",
+    "risk",
+    "action",
+    "step",
+    "milestone",
+    "item",
+)
+
+
+def _find_metadata_entry_text(entry: Dict[str, Any]) -> str:
+    """Sucht den ersten nicht-leeren Textwert aus bekannten Metadatenfeldern."""
+    for key in _METADATA_TEXT_KEYS:
+        val = entry.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
+def _extract_metadata_entry_refs(entry: Dict[str, Any]) -> List[str]:
+    """Extrahiert alle Evidence-Referenzstrings aus einem Metadateneintrag."""
+    raw = list(entry.get("evidence_refs") or []) + list(entry.get("supporting_evidence_ids") or [])
+    return [str(r).strip() for r in raw if r and str(r).strip()]
+
+
+def _is_metadata_entry_grounded(
+    entry: Dict[str, Any],
+    *,
+    verified_claim_ids: set[str],
+    verified_evidence_ids: set[str],
+    persisted_content_lower: str,
+    has_claims: bool,
+    has_content: bool,
+) -> bool:
+    """Prüft, ob ein einzelner strukturierter Metadateneintrag ausreichend gestützt ist."""
+    claim_id = entry.get("claim_id")
+    has_claim_id = claim_id is not None and str(claim_id).strip() != ""
+
+    entry_refs = _extract_metadata_entry_refs(entry)
+    has_evidence_refs = bool(entry_refs)
+
+    if has_claim_id and str(claim_id).strip() not in verified_claim_ids:
+        return False
+
+    if has_evidence_refs and not any(r in verified_evidence_ids for r in entry_refs):
+        return False
+
+    if not has_claims or not has_content:
+        return False
+
+    if not has_claim_id and not has_evidence_refs:
+        entry_text = _find_metadata_entry_text(entry)
+        if not entry_text:
+            return False
+        if entry_text[:60].lower() not in persisted_content_lower:
+            return False
+
+    return True
+
+
+def _filter_structured_metadata_against_verified_section(
+    structured_metadata: Optional[Dict[str, Any]],
+    *,
+    verified_claims: Optional[List[Dict[str, Any]]],
+    persisted_content: Optional[str],
+) -> Dict[str, Any]:
+    """Filtert Metadaten-Listen gegen die verifizierten Claims und den Sektionsinhalt.
+
+    Issue #1885 / Befund 3.1:
+    - recommendations, change_recommendations, risks, timeline, next_steps konsistent filtern:
+      - Wenn Eintrag claim_id besitzt: muss str(entry["claim_id"]) in verified_claim_ids sein.
+      - Wenn Eintrag evidence_refs / supporting_evidence_ids besitzt: mindestens eine Referenz muss
+        in den verifizierten Evidence-IDs der Sektion liegen.
+      - Wenn verified_claims leer ist oder persisted_content leer ist: keine ungeerdeten Metadaten-Einträge
+        dürfen überleben.
+      - Wenn weder claim_id noch evidence_refs: Eintrag muss im persisted_content auffindbar sein.
+    """
+    if not structured_metadata or not isinstance(structured_metadata, dict):
+        return {} if structured_metadata is not None else {}
+
+    verified_claims_list = verified_claims or []
+    persisted_content_str = persisted_content or ""
+    persisted_content_lower = persisted_content_str.lower()
+    has_claims = bool(verified_claims_list)
+    has_content = bool(persisted_content_str.strip())
+
+    claim_ids, evidence_ids = _extract_verified_claims_and_evidence_ids(verified_claims_list)
+
+    target_keys = ("recommendations", "change_recommendations", "risks", "timeline", "next_steps")
+    filtered: Dict[str, Any] = dict(structured_metadata)
+
+    for key in target_keys:
+        items = filtered.get(key)
+        if not items or not isinstance(items, list):
+            continue
+
+        filtered[key] = [
+            entry for entry in items
+            if isinstance(entry, dict) and _is_metadata_entry_grounded(
+                entry,
+                verified_claim_ids=claim_ids,
+                verified_evidence_ids=evidence_ids,
+                persisted_content_lower=persisted_content_lower,
+                has_claims=has_claims,
+                has_content=has_content,
+            )
+        ]
+
+    return filtered
+
+
 class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
     """Section persistence and validation repair for ReportAgent."""
 
@@ -148,6 +294,18 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
 
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)
+
+        raw_metadata = (getattr(self, "_pending_section_metadata", {}) or {}).get(
+            section_index, {}
+        )
+        filtered_metadata = _filter_structured_metadata_against_verified_section(
+            raw_metadata,
+            verified_claims=claims,
+            persisted_content=content,
+        )
+        if hasattr(self, "_pending_section_metadata") and isinstance(self._pending_section_metadata, dict):
+            self._pending_section_metadata[section_index] = filtered_metadata
+
         section_entry = {
             "section_index": section_index,
             "section_title": section_title,
@@ -156,9 +314,7 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
             "hypotheses": hypotheses_visible,
             "hypotheses_appendix": hypotheses_appendix,
             "data_gaps": data_gaps,
-            "structured_metadata": (getattr(self, "_pending_section_metadata", {}) or {}).get(
-                section_index, {}
-            ),
+            "structured_metadata": filtered_metadata,
             "generation_failed": generation_failed,
             "unbound_evidence_refs": (
                 getattr(self, "_pending_unbound_evidence_refs", {}) or {}
@@ -248,4 +404,8 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
         self._pending_section_metadata[section_index] = metadata
 
 
-__all__ = ["ReportAgentSectionSavingMixin", "ReportAgentHypothesesMixin"]
+__all__ = [
+    "ReportAgentSectionSavingMixin",
+    "ReportAgentHypothesesMixin",
+    "_filter_structured_metadata_against_verified_section",
+]
