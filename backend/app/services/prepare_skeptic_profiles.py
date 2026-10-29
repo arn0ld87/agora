@@ -27,6 +27,7 @@ from ..contracts.pipeline_degradation_contract import DegradationKind, Degradati
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .oasis_profile_models import OasisAgentProfile
+from .persona_identity_binding import resolve_identity_binding
 from .simulation_stance_graph import SYNTHETIC_SKEPTIC_PREFIX
 
 if TYPE_CHECKING:
@@ -122,6 +123,16 @@ def build_skeptic_profiles(
             continue
         taken.add(agent_id)
         entity_name = str(agent_config.get("entity_name") or f"Skeptiker {agent_id}")
+        entity_uuid = str(agent_config.get("entity_uuid"))
+        entity_type = str(agent_config.get("entity_type") or "Person")
+        binding = resolve_identity_binding(
+            entity_uuid=entity_uuid,
+            entity_name=entity_name,
+            entity_type=entity_type,
+            attributes={"identity_origin": "synthetic_supplement"},
+            summary=texts["persona"].format(subject=subject),
+            is_collective_type=True,
+        ).model_dump(mode="json")
         profiles.append(
             OasisAgentProfile(
                 user_id=agent_id,
@@ -131,11 +142,12 @@ def build_skeptic_profiles(
                 persona=texts["persona"].format(subject=subject),
                 country="DE",
                 interested_topics=[],
-                source_entity_uuid=str(agent_config.get("entity_uuid")),
-                source_entity_type=str(agent_config.get("entity_type") or "Person"),
+                source_entity_uuid=entity_uuid,
+                source_entity_type=entity_type,
                 persona_kind="collective",
                 voice_register="skeptisch-de",
                 generation_source="rule_based",
+                identity_binding=binding,
             )
         )
     if profiles:
@@ -196,6 +208,8 @@ def _phase_profile_synthetic_skeptics(
             file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
             platform="twitter",
         )
+    # Issue #1833 / Befund 5.3: Identity-Bindings nach Ergänzung synthetischer Skeptiker aktualisieren
+    _ps._persist_identity_bindings(state, sim_dir, all_profiles)
     state.profiles_count = len(all_profiles)
 
     if degradations is not None:

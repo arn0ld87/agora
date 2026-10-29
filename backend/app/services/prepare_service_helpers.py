@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..contracts import PersonaQuotaPlan
 from ..contracts.llm_routing_contract import ResolvedRoute
@@ -180,7 +180,7 @@ def _build_profile_checkpoint_hooks(
 
 
 def _persist_identity_bindings(
-    state: SimulationState, sim_dir: str, profiles: List[OasisAgentProfile]
+    state: SimulationState, sim_dir: str, profiles: Sequence[Any]
 ) -> None:
     """Schreibt das Laufartefakt ``persona_identity_bindings.json`` (Issue #1833).
 
@@ -203,6 +203,22 @@ def _persist_identity_bindings(
         sum(1 for entry in manifest.entries if not entry.binding.is_verifiable),
         sum(1 for entry in manifest.entries if entry.binding.role_deviation),
     )
+
+
+def _clear_checkpoint_if_not_cancelled(state: SimulationState, run_id: Optional[str]) -> None:
+    """Löscht Checkpoint nur, wenn kein Abbruch angefordert wurde (Befund 5.1).
+
+    Issue #1472c / Befund 5.1: Wenn während der Generierung ein kooperativer Cancel
+    angefordert wurde (über run_id oder simulation_id), darf der Checkpoint keinesfalls
+    gelöscht werden — der Lauf geht auf CANCELLED_PARTIAL und ein Folge-Run
+    (Resume) ist auf die bereits generierten Profile im Checkpoint angewiesen.
+    """
+    cleanup_id = getattr(state, "simulation_id", None)
+    if not isinstance(cleanup_id, str) or not cleanup_id:
+        return
+    if (run_id and _ps.is_cancel_requested(run_id)) or _ps.is_cancel_requested(cleanup_id):
+        return
+    _ps._prepare_checkpoint.clear_checkpoint(cleanup_id)
 
 
 def _phase_generate_profiles(
@@ -385,20 +401,7 @@ def _phase_generate_profiles(
 
     state.profiles_count = len(profiles)
 
-    # Issue #1472c: Phase 2 ist regulär beendet (erfolgreich oder
-    # kooperativ abgebrochen, siehe ``PrepareCancelledError`` — beide Fälle
-    # erreichen diese Zeile normal, nur ein SIGTERM/Absturz MITTEN in der
-    # Generierung tut das nicht). Der Checkpoint hat seinen Zweck erfüllt;
-    # ein Retry nach Cancel/Erfolg startet Phase 2 wie bisher komplett neu.
-    # ``getattr`` wie in ``_build_profile_checkpoint_hooks``: Test-Doubles
-    # tragen nicht zwingend eine ``simulation_id``, und ohne sie gibt es auch
-    # keinen Checkpoint, der aufzuraeumen waere.
-    # ``isinstance``, nicht blosse Truthiness: ein ``MagicMock`` aus einem
-    # Test-Double ist truthy und kaeme bis in den Artefakt-Store, der ihn
-    # zu Recht als ungueltige ``simulation_id`` zurueckweist.
-    _cleanup_simulation_id = getattr(state, "simulation_id", None)
-    if isinstance(_cleanup_simulation_id, str) and _cleanup_simulation_id:
-        _ps._prepare_checkpoint.clear_checkpoint(_cleanup_simulation_id)
+    _clear_checkpoint_if_not_cancelled(state, run_id)
 
     # Save Profile files (Note: Twitter uses CSV format, Reddit uses JSON format)
     # Reddit has been saved in real-time during generation, save once more here to ensure completeness

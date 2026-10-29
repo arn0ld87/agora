@@ -9,14 +9,35 @@ from contextvars import copy_context
 from typing import Any
 
 from . import oasis_profile_generator as _legacy
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 from .entity_reader import EntityNode
 from .oasis_profile_models import (
     OasisAgentProfile,
     PersonaIneligible,
     register_taken_display_name,
 )
+from .persona_identity_binding import resolve_identity_binding
 from .run_budget import BudgetExceededError
+
+
+def _entity_binding(generator: Any, entity: Any) -> Dict[str, Any]:
+    """Bindung der Entitaet als JSON-Dump (#1833), fuer Resume und Notprofile."""
+    get_type = getattr(entity, "get_entity_type", None)
+    entity_type = (get_type() if callable(get_type) else getattr(entity, "entity_type", None)) or "Entity"
+    is_group = (
+        generator._is_group_entity(entity_type)
+        if hasattr(generator, "_is_group_entity")
+        else False
+    )
+    return resolve_identity_binding(
+        entity_uuid=getattr(entity, "uuid", None),
+        entity_name=getattr(entity, "name", ""),
+        entity_type=entity_type,
+        attributes=getattr(entity, "attributes", None),
+        summary=getattr(entity, "summary", None),
+        is_collective_type=is_group,
+    ).model_dump(mode="json")
+
 
 def _backfill_rejected_slots (
 self: Any ,
@@ -29,6 +50,7 @@ rejected :List ["PersonaIneligible"],
 coherence_check :Optional [
 Callable [[OasisAgentProfile ,EntityNode ],Optional [PersonaIneligible ]]
 ]=None ,
+on_profile_saved: Optional[Callable[[int, OasisAgentProfile], None]] = None,
 )->None :
     """Besetzt abgelehnte Persona-Slots aus dem Reservepool nach (#1247).
 
@@ -135,6 +157,15 @@ Callable [[OasisAgentProfile ,EntityNode ],Optional [PersonaIneligible ]]
             register_taken_display_name (self ,new_profile )
             if slot_idx <len (entities ):
                 entities [slot_idx ]=candidate
+            if on_profile_saved is not None:
+                try:
+                    on_profile_saved(slot_idx, new_profile)
+                except Exception as cb_exc:  # noqa: BLE001
+                    _legacy.logger.warning(
+                        "on_profile_saved checkpoint callback failed for backfill slot %d: %s",
+                        slot_idx,
+                        cb_exc,
+                    )
             filled +=1
             break
 
@@ -223,7 +254,8 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
 
         for future in concurrent .futures .as_completed (future_to_entity ):
             idx ,entity =future_to_entity [future ]
-            entity_type =entity .get_entity_type ()or "Entity"
+            get_type = getattr(entity, "get_entity_type", None)
+            entity_type = (get_type() if callable(get_type) else getattr(entity, "entity_type", None)) or "Entity"
             try :
                 result_idx ,profile ,error =future .result ()
             except BudgetExceededError :
@@ -237,6 +269,7 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
                 raise
             except Exception as e :# noqa: BLE001
                 _legacy .logger .error (f"Thread execution failed unexpectedly for entity {entity .name }: {str (e )}")
+                fallback_segment = getattr(entity, "segment", None) or getattr(entity, "_quota_segment", None) or (entity_type if entity_type != "Entity" else None)
                 profile =OasisAgentProfile (
                 user_id =idx ,
                 user_name =self ._generate_username (entity .name ),
@@ -246,6 +279,10 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
                 source_entity_uuid =entity .uuid ,
                 source_entity_type =entity_type ,
                 affiliation =entity .affiliation ,
+                segment =fallback_segment ,
+                generation_source ="rule_based",
+                generation_error =str (e )[:160 ],
+                identity_binding =_entity_binding (self ,entity ),
                 )
                 result_idx ,error =idx ,str (e )
             process_result (result_idx ,profile ,error )
