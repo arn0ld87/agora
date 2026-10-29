@@ -32,6 +32,15 @@ import sys
 # dagegen ``setdefault``, damit der Betreiber die Entscheidung überschreiben kann.
 os.environ["NLTK_DISABLE_IMPORT_SECURITY"] = "1"
 
+# ``oasis/social_platform/platform.py`` legt beim Import ``./log`` per
+# ``if not os.path.exists(...): os.makedirs(...)`` an, ohne ``exist_ok``. Unter
+# ``pytest-xdist`` (#1898) importieren mehrere Worker OASIS gleichzeitig während
+# der Collection (#1897: ``tests/unit/test_platform_runner_parity.py``), und der
+# langsamere Worker scheitert mit ``FileExistsError: './log'``. Der Controller
+# lädt diese Conftest vor dem Start der Worker, also legen wir das Verzeichnis
+# hier einmal race-frei an.
+os.makedirs("log", exist_ok=True)
+
 # Hermetik: ``LLM_API_KEY`` darf nicht aus der lokalen ``.env`` kommen.
 #
 # ``Config.validate()`` erzwingt einen nicht-leeren Wert, und ``create_app()``
