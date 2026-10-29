@@ -1,3 +1,0 @@
-### Fixed
-
-- **Evidence-Route lieferte `evidence_omitted` für Medium-Claims ohne bestätigtes `supports_claim` (29.10.2026).** Seit #1894 verlangt der medium-Vertrag (`_require_quote_and_seed`) ausdrücklich stützende Zitat- und Seed-Belege (`supports_claim is True`). `has_agent_grounded_evidence`, das beim Laden über die Herabstufung entscheidet, schloss nur widerlegende Belege (`supports_claim is False`) aus. Ein Claim ohne bestätigte Stützung blieb deshalb `medium`, scheiterte danach am Vertrag, und die Route gab die ganze Evidence-Map als `evidence_omitted` aus. Beide Prüfungen wenden jetzt dieselbe Regel an; der Claim wird sichtbar auf `low` gesenkt. Regressionstest: `test_medium_claim_without_confirmed_support_falls_to_low`.

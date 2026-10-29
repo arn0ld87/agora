@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.services.report_agent.claim_qualification import (
     compute_evidence_density,
     evaluate_claim_mode_gate,
+    has_agent_grounded_evidence,
     qualify_claim_evidence,
     resolve_claim_evidence_item,
     resolve_document_anchor,
@@ -249,3 +250,28 @@ def test_compute_evidence_density_counts_distinct_voices_and_groups() -> None:
         ("voice", "agent:1"),
         ("voice", "agent:2"),
     ]
+
+
+def test_has_agent_grounded_evidence_requires_confirmed_support_for_indexed_bindings() -> None:
+    index = {
+        "ev_q": {
+            "evidence_id": "ev_q",
+            "source_kind": "agent_quote",
+            "quote": "Wörtliches Zitat.",
+        },
+        "ev_s": {
+            "evidence_id": "ev_s",
+            "source_kind": "seed_corpus",
+        },
+    }
+    unconfirmed_bindings = [
+        {"evidence_id": "ev_q", "supports_claim": None},
+        {"evidence_id": "ev_s", "supports_claim": True},
+    ]
+    confirmed_bindings = [
+        {"evidence_id": "ev_q", "supports_claim": True},
+        {"evidence_id": "ev_s", "supports_claim": True},
+    ]
+    assert has_agent_grounded_evidence(unconfirmed_bindings, evidence_index=index) is False
+    assert has_agent_grounded_evidence(confirmed_bindings, evidence_index=index) is True
+

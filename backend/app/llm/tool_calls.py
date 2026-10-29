@@ -10,18 +10,17 @@ itself (no circular import).
 
 import json
 import os
-import re
 from typing import Any, Dict, List, Literal, TypedDict
 
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
 from .request_plan import (
-    REASONING_EFFORT_QUIRK,
-    TEMPERATURE_QUIRK,
-    TOKEN_KEY_QUIRK,
+    DEFAULT_CHAT_QUIRKS,
     DEFAULT_REQUEST_OPTIONS,
     build_request,
-    execute,
+    execute_with_retry,
+    should_force_stream,
+    strip_thinking_tags,
     thinking_extra_body,
 )
 
@@ -141,9 +140,7 @@ def _accumulate_streaming_tool_calls(
                 args_str[:200],
             )
             arguments = {}
-        tool_calls.append(
-            ToolCallItem(id=entry["id"], name=entry["name"], arguments=arguments)
-        )
+        tool_calls.append(ToolCallItem(id=entry["id"], name=entry["name"], arguments=arguments))
 
     return content, tool_calls, finish_reason, usage
 
@@ -166,11 +163,11 @@ def _chat_with_tools(
 ) -> ToolCallResponse:
     """
     Send a chat request with native tool-calling support.
-    
+
     Falls back to a regular chat response when the provider cannot be identified.
     The returned response includes generated content, normalized tool calls, the
     completion finish reason, and the raw provider response when available.
-    
+
     Parameters:
         messages (List[Dict[str, Any]]): Messages to send to the model.
         tools (List[Dict[str, Any]]): Tool definitions available to the model.
@@ -178,7 +175,7 @@ def _chat_with_tools(
         temperature (float): Sampling temperature.
         max_tokens (int): Maximum number of completion tokens.
         context (Literal[...]): Invocation context used for activity tracking.
-    
+
     Returns:
         ToolCallResponse: The generated content, tool calls, finish reason, and
         raw response.
@@ -189,6 +186,7 @@ def _chat_with_tools(
     # E2E-Stub-Pfad
     if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
         from app.utils.llm_e2e_stub import e2e_stub_chat_with_tools_response
+
         logger.info(
             "LLMClient.chat_with_tools: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
             context,
@@ -225,12 +223,15 @@ def _chat_with_tools(
             self.model,
             self.base_url,
         )
-        fallback_content = self.chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            context=context,
-        ) or ""
+        fallback_content = (
+            self.chat(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                context=context,
+            )
+            or ""
+        )
         return ToolCallResponse(
             content=fallback_content,
             tool_calls=[],
@@ -239,12 +240,10 @@ def _chat_with_tools(
         )
 
     import time as _time
+
     _t0 = _time.monotonic()
 
-    force_stream = (
-        self._is_ollama()
-        and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
-    )
+    force_stream = should_force_stream(is_ollama=self._is_ollama())
     plan = build_request(
         model=self.model,
         messages=messages,
@@ -265,35 +264,6 @@ def _chat_with_tools(
         options=DEFAULT_REQUEST_OPTIONS,
     )
 
-    def _create(call_kwargs: Dict[str, Any]) -> Any:
-        """Ein physischer Providerattempt mit transient-retry.
-
-        Issue #1478 (Codex P1, Runde 3): Budget-Check, Failure-Telemetrie und
-        -Record laufen INNERHALB von ``_provider_attempt`` — analog zu
-        ``LLMClient.chat``/``describe_image``. Vorher lag der Guard um die
-        gesamte ``execute()``-Operation, sodass ein transienter Retry oder
-        eine Quirk-Korrektur (``TOKEN_KEY_QUIRK``/``TEMPERATURE_QUIRK``) nur
-        EINEN Budget-Check/Event/Record erzeugte, obwohl mehrere physische
-        Requests abgesetzt wurden — ``max_llm_calls=1`` erlaubte damit
-        mehrere abgerechnete Requests, und nur das Endergebnis landete im
-        Ledger. Jeder Retried-Attempt bekommt jetzt sein eigenes
-        Check/Event/Record-Triplet.
-        """
-        return llm_call_with_retry(
-            lambda: self._provider_attempt(call_kwargs, context),
-            max_retries=self._max_retries,
-            initial_delay=self._retry_initial_delay,
-            max_delay=self._retry_max_delay,
-        )
-
-    def _create_with_fallback() -> Any:
-        return execute(
-            plan,
-            _create,
-            quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK, REASONING_EFFORT_QUIRK),
-            label="tools",
-        )
-
     content: str = ""
     tool_calls: List[ToolCallItem] = []
     finish_reason: str = "stop"
@@ -305,13 +275,20 @@ def _chat_with_tools(
     # transienter Retry, Quirk-Korrektur) bereits Check + Failure-Telemetrie
     # + ``_budget_record`` erledigt — hier nur sauber durchreichen, kein
     # zweites Event fuer denselben Fehlschlag.
-    _response, _latency_ms = _create_with_fallback()
+    _response, _latency_ms = execute_with_retry(
+        plan,
+        provider_attempt=lambda call_kwargs: self._provider_attempt(call_kwargs, context),
+        retry_runner=llm_call_with_retry,
+        max_retries=self._max_retries,
+        initial_delay=self._retry_initial_delay,
+        max_delay=self._retry_max_delay,
+        quirks=DEFAULT_CHAT_QUIRKS,
+        label="tools",
+    )
 
     try:
         if force_stream:
-            content, tool_calls, finish_reason, usage = _accumulate_streaming_tool_calls(
-                _response
-            )
+            content, tool_calls, finish_reason, usage = _accumulate_streaming_tool_calls(_response)
         else:
             raw_response = _response
             choice = raw_response.choices[0]
@@ -321,13 +298,6 @@ def _chat_with_tools(
             tool_calls = _extract_tool_calls_from_message(message)
             usage = getattr(raw_response, "usage", None)
     except Exception as exc:  # noqa: BLE001
-        # Lokale Nachverarbeitung eines HTTP-erfolgreichen Providerattempts
-        # (Stream-Konsum, malformed ``choices``) ist ein eigener
-        # Fehlschlag-Fall: ``_provider_attempt`` hat den physischen Request
-        # bereits als Erfolg verbucht, es fehlt noch dessen
-        # Abschluss-Telemetrie — Event + Record duerfen deshalb nicht
-        # ausbleiben, sonst unterlaeuft der Call das weiche
-        # ``max_llm_calls``-Limit.
         self._log_invocation_event(
             stage=context,
             latency_ms=_latency_ms,
@@ -346,16 +316,9 @@ def _chat_with_tools(
         elapsed,
         force_stream,
     )
-    # Issue #1478 (Codex P1, Runde 3): Usage VOR der Budget-Auswertung ins
-    # Invocation-Event aufnehmen — ``_record_provider_success`` leitet
-    # prompt_tokens/completion_tokens aus ``usage`` ab (Streaming: letztes
-    # Chunk mit Usage; sonst ``response.usage``). Ohne das markierte das
-    # Ledger jeden nativen Tool-Call als "token-unknown" und liess Tokens
-    # und Kosten aus den beobachteten Summen heraus.
     self._record_provider_success(_response, _latency_ms, context, usage=usage)
 
-    # <think>...</think> aus Textinhalt entfernen (analog zu chat())
-    content = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.IGNORECASE).strip()
+    content = strip_thinking_tags(content)
 
     return ToolCallResponse(
         content=content,

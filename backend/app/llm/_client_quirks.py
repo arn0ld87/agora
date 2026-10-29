@@ -1,6 +1,7 @@
 """Quirks, tokens, and provider detection mixin for LLMClient."""
 
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional
+from .request_plan import thinking_extra_body
 from .tokens import resolve_max_tokens, resolve_num_ctx_for_output
 from .providers import base as _provider_base
 from .providers import openai as _provider_openai
@@ -8,6 +9,7 @@ from .providers import openai as _provider_openai
 
 class LLMClientQuirksMixin:
     if TYPE_CHECKING:
+
         def __getattr__(self, name: str) -> Any: ...
         def __setattr__(self, name: str, value: Any) -> None: ...
 
@@ -26,9 +28,7 @@ class LLMClientQuirksMixin:
             return False
         return _provider_base.is_ollama(self.base_url)
 
-    def _reasoning_effort_extra(
-        self, *, force_no_thinking: bool = False
-    ) -> Dict[str, Any]:
+    def _reasoning_effort_extra(self, *, force_no_thinking: bool = False) -> Dict[str, Any]:
         """Top-level ``reasoning_effort`` fuer OpenAI-Reasoning-Modelle (#1738).
 
         Provider kommt aus der bestehenden Detection (``_detect_provider``),
@@ -52,30 +52,28 @@ class LLMClientQuirksMixin:
             return False
         return self._detect_provider() == "minimax"
 
-    def _minimax_thinking_extra_body(
-        self, *, force_no_thinking: bool = False
-    ) -> Dict[str, Any]:
+    def _minimax_thinking_extra_body(self, *, force_no_thinking: bool = False) -> Dict[str, Any]:
         """
         Builds the MiniMax thinking configuration for a request.
-        
+
         Parameters:
             force_no_thinking (bool): Whether to disable reasoning regardless of the
                 configured thinking preference.
-        
+
         Returns:
             Dict[str, Any]: A request body containing ``thinking.type`` set to
                 ``"adaptive"`` when reasoning is enabled or ``"disabled"`` otherwise.
         """
         think_on = self._think and not force_no_thinking
-        return {"thinking": {"type": "adaptive" if think_on else "disabled"}}
+        return thinking_extra_body(ollama=False, minimax=True, think=think_on) or {}
 
     @staticmethod
     def _uses_max_completion_tokens(model: str) -> bool:
         """Determine whether a model uses the ``max_completion_tokens`` parameter.
-        
+
         Parameters:
             model (str): Model name to inspect.
-        
+
         Returns:
             bool: ``True`` if the model uses ``max_completion_tokens``, ``False`` otherwise.
         """
@@ -138,11 +136,11 @@ class LLMClientQuirksMixin:
     ) -> Dict[str, int]:
         """
         Build the token-limit parameter for the selected model.
-        
+
         Parameters:
             max_tokens (int): Maximum number of completion tokens.
             model (Optional[str]): Model used to select the token-limit parameter; defaults to the client's model.
-        
+
         Returns:
             Dict[str, int]: A mapping containing either ``max_completion_tokens`` or ``max_tokens`` with the requested limit.
         """
