@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 permissions:
@@ -12,9 +12,10 @@ permissions:
 
 # Veraltete PR-Laeufe abbrechen, sobald ein neuer Commit gepusht wird.
 # Auf push:main und workflow_dispatch NICHT abbrechen — dort ist jeder Lauf
-# ein eigenstaendiger Nachweis fuer genau einen main-Stand.
+# ein eigenstaendiger Nachweis fuer genau einen main-Stand. Label-Läufe nutzen
+# eine eigene Gruppe, damit das Nachlabeln keinen laufenden PR-Gate-Lauf abbricht.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'labeled' && format('label-{0}', github.event.label.name) || 'default' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -22,6 +23,9 @@ jobs:
     name: Security scans
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.action != 'labeled'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
@@ -216,7 +220,8 @@ jobs:
     # bereits in pull_request.labels fuehrt.
     if: |
       github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'needs-backend-ci')
+      (github.event.action == 'labeled' && github.event.label.name == 'needs-backend-ci') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'needs-backend-ci'))
     env:
       # Tests instantiate LLMClient() directly (e.g. test_ontology_generator);
       # the constructor rejects an empty API key. No HTTP calls are made.
@@ -392,7 +397,8 @@ jobs:
     # bereits in pull_request.labels fuehrt.
     if: |
       github.event_name != 'pull_request' ||
-      contains(github.event.pull_request.labels.*.name, 'needs-frontend-ci')
+      (github.event.action == 'labeled' && github.event.label.name == 'needs-frontend-ci') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'needs-frontend-ci'))
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
@@ -482,7 +488,7 @@ jobs:
     timeout-minutes: 20
     # Runs on every PR — fast mandatory gate, no label required.
     # Heavy backend jobs (full coverage, matrix) remain in the 'backend' job on push:main.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action != 'labeled'
     env:
       LLM_API_KEY: dummy-ci-key
       FLASK_DEBUG: "true"
@@ -629,7 +635,7 @@ jobs:
     timeout-minutes: 20
     # Runs on every PR — fast mandatory gate, no label required.
     # Full test + coverage remain in the 'frontend' job on push:main.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.action != 'labeled'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
