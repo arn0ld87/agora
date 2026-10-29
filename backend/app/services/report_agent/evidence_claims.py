@@ -73,7 +73,11 @@ def has_agent_grounded_evidence(
     Nachtrag 2026-10-10, #1778, geteilter Helper ``has_two_action_voices``).
     Spiegelt
     ``ReportClaimModel.agent_grounded_for_medium`` (Issue #906 Defekt 1).
-    ``supports_claim`` wird hier nicht gefordert — analog zum medium-Validator.
+    Jeder Beleg muss den Claim ausdrücklich stützen (``supports_claim is
+    True``), wie im medium-Validator ``_require_quote_and_seed`` seit #1894.
+    Ohne diese Bedingung bliebe ein Claim hier ``medium``, den der Vertrag
+    danach ablehnt — die API lieferte dann die ganze Map als
+    ``evidence_omitted`` statt eines sichtbar herabgestuften Claims.
     Das Quote-Feld ist Pflicht (ADR-0002 Z. 54; Codex PR-Review #961 P2): ein
     zusammengefasstes Interview ohne Original-Zitat ist nicht agent_grounded.
 
@@ -102,16 +106,18 @@ def has_agent_grounded_evidence(
             continue
         if entry.get("supports_claim") is False or source.get("supports_claim") is False:
             continue
+        # ``supports_claim`` ist ein Binding-Feld, daher hat der Eintrag
+        # Vorrang, ersatzweise der Record.
+        if entry.get("supports_claim", source.get("supports_claim")) is not True:
+            continue
         sk = source.get("source_kind")
         if sk == "agent_quote" and source.get("quote"):
             has_agent_quote = True
         elif sk == "seed_corpus":
             has_seed_corpus = True
         # ADR-0002-Nachtrag 2026-10-10 (#1778): stützende Aktionsbelege
-        # zählen als Stimmen. ``supports_claim`` ist ein Binding-Feld, daher
-        # hat der Eintrag Vorrang, ersatzweise der Record.
-        if entry.get("supports_claim", source.get("supports_claim")) is True:
-            action_voices.append((sk, source.get("voice_key")))
+        # zählen als Stimmen.
+        action_voices.append((sk, source.get("voice_key")))
     return (has_agent_quote and has_seed_corpus) or has_two_action_voices(action_voices)
 
 

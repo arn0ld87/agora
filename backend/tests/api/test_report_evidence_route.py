@@ -93,6 +93,47 @@ class TestReportEvidenceRoute:
         # Claim fällt auf low — das prüft
         # ``test_medium_claim_with_unanchored_seed_falls_to_low``.
         seed_item["source_id_anchor"] = "seed_doc:doc_1#chunk:0"
+        # #1894: medium zählt nur ausdrücklich stützende Belege.
+        seed_item["supports_claim"] = True
+        evidence_map["sections"][0]["claims"][0]["evidence"].append(
+            {
+                "producer_key": "agent:persona_1:quote:1",
+                "type": "agent_interview",
+                "source_kind": "agent_quote",
+                "source": "agent:persona_1",
+                "snippet": "Wörtliches Zitat.",
+                "quote": "Wörtliches Zitat.",
+                "persona_stakeholder_group": "kunden",
+                "supports_claim": True,
+            }
+        )
+        with (
+            patch("app.api.report.validate_report_id", return_value=True),
+            patch(
+                "app.api.report.ReportManager.get_evidence_map",
+                return_value=evidence_map,
+            ),
+        ):
+            resp = client.get(f"/api/report/{VALID_REPORT_ID}/evidence")
+
+        assert resp.status_code == 200
+        body = resp.get_json()
+        claim = body["data"]["sections"][0]["claims"][0]
+        assert claim["confidence_label"] == "medium"
+
+    def test_medium_claim_without_confirmed_support_falls_to_low(self, client):
+        """#1894: Zitat und Seed ohne ``supports_claim is True`` tragen kein medium.
+
+        Der medium-Validator verlangt seit #1894 ausdrücklich stützende Belege.
+        Die Herabstufung beim Laden muss dieselbe Regel anwenden, sonst bleibt
+        der Claim ``medium``, der Vertrag lehnt die Map ab und die Route
+        liefert ``evidence_omitted`` statt eines sichtbar abgestuften Claims.
+        """
+        evidence_map = _legacy_medium_seed_only_map()
+        seed_item = evidence_map["sections"][0]["claims"][0]["evidence"][0]
+        seed_item["producer_key"] = "fixture-seed:doc_1"
+        seed_item["source_id_anchor"] = "seed_doc:doc_1#chunk:0"
+        # Bewusst kein supports_claim an Seed und Zitat.
         evidence_map["sections"][0]["claims"][0]["evidence"].append(
             {
                 "producer_key": "agent:persona_1:quote:1",
@@ -115,8 +156,9 @@ class TestReportEvidenceRoute:
 
         assert resp.status_code == 200
         body = resp.get_json()
+        assert "evidence_omitted" not in body
         claim = body["data"]["sections"][0]["claims"][0]
-        assert claim["confidence_label"] == "medium"
+        assert claim["confidence_label"] == "low"
 
     def test_medium_claim_with_unanchored_seed_falls_to_low(self, client):
         """ADR-0013 / Issue #1154: Seed-Status braucht einen auflösbaren Anker.
