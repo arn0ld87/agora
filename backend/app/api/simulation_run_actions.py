@@ -152,7 +152,7 @@ def execute_stop_simulation():
     manager = manager_cls()
     state = manager.get_simulation(simulation_id)
     if state:
-        manager._set_status(state, SimulationStatus.PAUSED)
+        manager._set_status(state, SimulationStatus.STOPPED)
         reg = _get_sym("run_registry", None)
         run = reg.get_latest_by_linked_id("simulation_id", simulation_id, run_type="simulation_run")
         if run:

@@ -449,7 +449,7 @@ def _restart_simulation_prepare(run: dict):
         metadata={
             "graph_id": state.graph_id,
             "branch_name": state.branch_name,
-            **_runs_mod.workspace_credential_metadata(),
+            **_runs_mod._inherited_credential_scope_metadata(run),
             # #1778: weitertragen, damit auch ein zweiter Restart sie kennt.
             **({"contested_question": contested_question} if contested_question else {}),
             # #1779: Aktivitätsmodus ebenso weitertragen.
@@ -466,6 +466,7 @@ def _restart_simulation_prepare(run: dict):
         # Opus-Review-Folgebefund zu #778). Exakt derselbe Resolver-Pfad wie
         # simulation_prepare.py::prepare_simulation.
         from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY
+        from ..services.llm_provider_registry import LlmProviderRegistry
 
         _runs_mod.seed_run_stage_routing(
             run_id,
@@ -476,22 +477,26 @@ def _restart_simulation_prepare(run: dict):
         route_router = _runs_mod.StageModelRouter(run_id)
         resolved_route = route_router.resolve("persona_generation")
         route_router.lock_stage("persona_generation", resolved_route)
-        resolved_api_key = _runs_mod.resolve_route_api_key(resolved_route, None)
 
-        if resolved_api_key is None and not _runs_mod.is_local_endpoint(resolved_route.base_url_sanitized):
-            guard_message = (
-                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
-                f"für Provider '{resolved_route.provider_id}'. "
-                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
-                "oder im Sitzungsfeld eingeben."
-            )
-            guard_error = ValueError(guard_message)
-            # RunLifecycle liest die failed-Meldung über dieses Attribut (#841).
-            guard_error.run_failure_message = guard_message  # type: ignore[attr-defined]
-            raise guard_error
+        if LlmProviderRegistry.uses_session_auth(resolved_route.provider_id):
+            resolved_api_key = None
+        else:
+            resolved_api_key = _runs_mod.resolve_route_api_key(resolved_route, None)
 
-        if resolved_api_key is None and _runs_mod.is_local_endpoint(resolved_route.base_url_sanitized):
-            resolved_api_key = LOCAL_NO_AUTH_API_KEY
+            if resolved_api_key is None and not _runs_mod.is_local_endpoint(resolved_route.base_url_sanitized):
+                guard_message = (
+                    f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                    f"für Provider '{resolved_route.provider_id}'. "
+                    "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                    "oder im Sitzungsfeld eingeben."
+                )
+                guard_error = ValueError(guard_message)
+                # RunLifecycle liest die failed-Meldung über dieses Attribut (#841).
+                guard_error.run_failure_message = guard_message  # type: ignore[attr-defined]
+                raise guard_error
+
+            if resolved_api_key is None and _runs_mod.is_local_endpoint(resolved_route.base_url_sanitized):
+                resolved_api_key = LOCAL_NO_AUTH_API_KEY
 
         effective_llm_runtime = _runs_mod.build_runtime_llm_config(resolved_route, resolved_api_key)
 
@@ -509,6 +514,7 @@ def _restart_simulation_prepare(run: dict):
             # das Cancel-Flag hier nie ankommen — ein neu gestarteter Restart
             # war trotz "Restart"-Angebot im Endzustand nicht abbrechbar.
             from ..services.prepare_service import PrepareCancelledError
+            from ..services.sim.cancel_flag import clear_cancel
 
             try:
                 task_manager.update_task(
@@ -592,12 +598,24 @@ def _restart_simulation_prepare(run: dict):
                 _runs_mod.run_registry.update_run(
                     new_run["run_id"], status="failed", message=str(exc), error=str(exc)
                 )
+                failed_state = manager.get_simulation(simulation_id)
+                if failed_state:
+                    failed_state.error = str(exc)
+                    try:
+                        manager._set_status(failed_state, _runs_mod.SimulationStatus.FAILED)
+                    except Exception:  # noqa: BLE001
+                        failed_state.status = _runs_mod.SimulationStatus.FAILED
+                        manager._save_simulation_state(failed_state)
+            finally:
+                clear_cancel(new_run["run_id"])
 
         def scoped_prepare_job():
             with _runs_mod.workspace_credential_context_for_run(new_run["run_id"]):
                 run_prepare()
 
-        threading.Thread(target=scoped_prepare_job, daemon=True).start()
+        from ..api.simulation_prepare import _track_active_prepare_job
+        tracked_job = _track_active_prepare_job(simulation_id, scoped_prepare_job)
+        threading.Thread(target=tracked_job, daemon=True).start()
 
     return {"run_id": new_run["run_id"], "task_id": task_id, "status": "processing"}
 
