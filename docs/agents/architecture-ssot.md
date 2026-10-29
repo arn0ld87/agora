@@ -27,8 +27,8 @@
 | Claim-Qualifikation, Stimme/Dokumentanker & Belegdichte | `backend/app/services/report_agent/claim_qualification.py` (`QualifiedClaimEvidence`, `qualify_claim_evidence`, `evaluate_claim_mode_gate`, `compute_evidence_density`) |
 | Abschnitts-Pipeline & atomare Evidence-/Markdown-Persistenz | `backend/app/services/report_agent/section_pipeline.py` (`SectionGenerationPipeline`, `SectionExecutionState`, `_persist_section_atomically`, `filter_structured_metadata_against_verified_section`, `drop_unrepairable_section_entries`, #1475) |
 | Run-/Jobstatus | RunRegistry / Run-Contracts |
-| Run-Read-Model (Listen-/Detail-Anreicherung) | `backend/app/services/run_read_model.py` (aus `api/runs.py` extrahiert, #1496) |
-| Simulations-Read-Metriken (Timeline/Agent-Stats) | `backend/app/services/sim/run_metrics.py` (aus `sim/monitor.py` extrahiert, #1496) |
+| Run-Read-Model (Listen-/Detail-/Usage-Anreicherung, Filter-Parsing) | `backend/app/services/run_read_model.py` (`build_run_summary`, `attach_summary`, `build_run_detail`, `build_runs_list_response`, `resolve_run_usage`, `parse_status_param`, #1496) |
+| Simulations-Read-Metriken & Laufzeit-Timings (Timeline/Agent-Stats/UTC-Dauer) | `backend/app/services/sim/run_metrics.py` (`get_timeline`, `get_agent_stats`, `as_aware_utc`, `compute_elapsed_seconds`, `resolve_manifest_timing`, #1496) |
 | OASIS-Simulations-Laufzeit (Modell-Factory, Graph-Policies, Round-0-Seeding, Redis-Emission) | `backend/scripts/sim_runtime/runtime_execution.py` (`create_simulation_llm_model`, `configure_platform_agent_graph`, `execute_initial_posts_round`, `emit_round_actions_to_redis`, genutzt von `platform_runner.py` und `run_parallel_simulation.py`) |
 | Report-Artefakte | `backend/uploads/reports/<report_id>/` |
 | Report-Vollständigkeitsprüfung vor Abschluss | `backend/app/services/report_agent/requirement_checker.py` (`RequirementChecker`, #1302) |
