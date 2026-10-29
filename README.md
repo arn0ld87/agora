@@ -12,7 +12,7 @@
 
 **Documents → Knowledge Graph → Personas → Simulation → auditable report**
 
-[![Version](https://img.shields.io/badge/version-0.9.8-635BFF?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.9.9-635BFF?style=flat-square)](./VERSION)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-111827?style=flat-square)](./LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21830644-1682D4?style=flat-square)](https://doi.org/10.5281/zenodo.21830644)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -298,7 +298,7 @@ Run `bun run build` for the frontend production build. The [pre-push gate](./doc
 
 ## Current status
 
-**Current product version:** `0.9.8` Stability Beta, released on 13 October 2026. It is a corrective patch release on top of `0.9.7` and **not** `0.10.0`. The `v0.9.7` tag shipped no container images or release assets, because its release pipeline failed on a CI-only issue. `0.9.8` supplies them and also fixes the report tab after a second start. The release notes for [`0.9.8`](./docs/2026-10-13-v0.9.8-release-notes.md) and [`0.9.7`](./docs/2026-10-13-v0.9.7-release-notes.md) and [`CHANGELOG.md`](./CHANGELOG.md) list the changes. The next planned cut is still `0.10.0-rc.1`.
+**Current product version:** `0.9.9` Stability Beta, released on 29 October 2026. It is a patch release on top of `0.9.8` and **not** `0.10.0`. Neither the `v0.9.7` nor the `v0.9.8` tag shipped container images or release assets: `v0.9.7` failed on a CI-only issue, and `v0.9.8` (tagged late, on 29 October) failed the image security scan because fixable HIGH vulnerabilities had been published for bundled Python packages in the meantime. `0.9.9` ships the updated packages, the images and the release assets, plus all changes merged since `0.9.8`. The release notes for [`0.9.9`](./docs/2026-10-29-v0.9.9-release-notes.md), [`0.9.8`](./docs/2026-10-13-v0.9.8-release-notes.md) and [`0.9.7`](./docs/2026-10-13-v0.9.7-release-notes.md) and [`CHANGELOG.md`](./CHANGELOG.md) list the changes. The next planned cut is still `0.10.0-rc.1`.
 
 The exact verified state, recent test evidence, known gaps, and current baseline are maintained in [`docs/STATUS.md`](./docs/STATUS.md). Release priorities and 0.10/1.0 gates are maintained in [`ROADMAP.md`](./ROADMAP.md). This README deliberately avoids embedding fast-aging test counters.
 

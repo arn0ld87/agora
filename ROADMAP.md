@@ -4,7 +4,7 @@
 
 **Geprüfte Main-Baseline:** `d8ed7370` (GitHub-Issue-/CI-Abgleich vom 13.10.2026; keine neue lokale Vollsuite)
 
-**Aktuelle Produktversion:** `0.9.8` (Release-Schnitt, Stability Beta) — nächster Schnitt `0.10.0-rc.1`
+**Aktuelle Produktversion:** `0.9.9` (Release-Schnitt, Stability Beta) — nächster Schnitt `0.10.0-rc.1`
 **Istzustand:** [`docs/STATUS.md`](docs/STATUS.md)
 
 Diese Datei beschreibt ausschließlich die **strategische Release-Reihenfolge**. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt. Ein erledigter Commit gehört nicht als Mini-Changelog hier hinein; dafür existiert `changelog.d/`. Offenbar braucht selbst Dokumentation eine Gewaltenteilung.
@@ -65,6 +65,12 @@ Die verbleibenden Punkte werden nicht durch weitere 0.9-Featureflächen verdeckt
 
 ---
 
+## 0.9.9 — Patch-Release
+
+`0.9.9` folgt am 29.10.2026 auf `0.9.8`. Der Tag `v0.9.8` wurde erst an diesem Tag auf den Release-Commit vom 13.10. gesetzt. Sein Tag-Lauf scheiterte im Trivy-Gate, weil inzwischen behebbare HIGH-CVEs für `pillow`, `virtualenv`, `pypdf`, `certifi` und `filelock` veröffentlicht waren. Ein veröffentlichter Tag wird nicht verschoben ([`docs/release-process.md`](docs/release-process.md) §9). `0.9.9` liefert deshalb die aktualisierten Pakete, die GHCR-Images und die Release-Artefakte und enthält alle 23 Commits seit `0.9.8`, darunter die Re-Audit-Fixes #1884 bis #1898 (Epic [#1899](https://github.com/arn0ld87/agora/issues/1899)). Es beansprucht keines der 0.10-Gates, der Weg dorthin ist in Epic [#1900](https://github.com/arn0ld87/agora/issues/1900) gebündelt.
+
+---
+
 ## 0.9.8 — Korrektur-Patch
 
 `0.9.8` folgt am selben Tag auf `0.9.7`. Zum Tag `v0.9.7` gibt es keine GHCR-Images und keine Release-Artefakte, weil der Prod-Proxy-Smoke an einer fehlenden Schreibfreigabe für `backend/data` auf dem CI-Runner gescheitert ist. Den Fix enthält #1873. `0.9.8` holt Images und Artefakte nach und enthält zusätzlich den 409-Fix für den Bericht-Reiter (#1872). Inhaltlich gilt für `0.9.8` alles, was unten zu `0.9.7` steht, und es erfüllt ebenso wenig die 0.10-/1.0-Gates.
@@ -115,7 +121,7 @@ Agora soll nicht nur technisch funktionieren, sondern Ergebnisse **reproduzierba
 
 ## Release-Sequenz
 
-`v0.9.6` ist getaggt, `0.9.7` und der Korrektur-Patch `0.9.8` folgen als weitere Zwischenreleases. Der beschlossene Weg ([#1651](https://github.com/arn0ld87/agora/issues/1651), [#1658](https://github.com/arn0ld87/agora/issues/1658)) lautet:
+`v0.9.6` ist getaggt, `0.9.7`, der Korrektur-Patch `0.9.8` und das Patch-Release `0.9.9` folgen als weitere Zwischenreleases. Der beschlossene Weg ([#1651](https://github.com/arn0ld87/agora/issues/1651), [#1658](https://github.com/arn0ld87/agora/issues/1658)) lautet:
 
 1. `0.10.0-rc.1`: Feature-Freeze, sobald der P0-Blocker geschlossen und alle verhaltens- oder vertragsändernden Nicht-Bugs gelandet sind.
 2. Weitere `0.10.0-rc.N`: nur Fixes, Tests und Dokumentation. `0.10.0` stabil erst ohne offene P0/P1 im 0.10-Milestone; es ist die Upgrade-Quelle für 1.0.

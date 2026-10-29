@@ -2,7 +2,7 @@
 
 **Stand:** 20.09.2026  
 **Geprüfte Main-Baseline:** `b62aea62`  
-**Produktversion:** `0.9.8`
+**Produktversion:** `0.9.9`
 
 Dieses Dokument beschreibt die **aktuelle produktive Architektur** und ihre noch offenen Grenzen. Der frühere April-2026-Zielentwurf mit geplanten Modulnamen ist als Migrationsgeschichte überholt; der tatsächliche Istzustand steht hier, Detailentscheidungen in [`decisions/`](decisions/) und der verifizierte Projektstatus in [`STATUS.md`](STATUS.md).
 

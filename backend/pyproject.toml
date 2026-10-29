@@ -1,6 +1,6 @@
 [project]
 name = "agora-backend"
-version = "0.9.8"
+version = "0.9.9"
 description = "Agora - Hybrid Multi-Agent Resonance Simulator on Neo4j + Ollama"
 requires-python = ">=3.14,<3.15"
 license = { text = "AGPL-3.0" }

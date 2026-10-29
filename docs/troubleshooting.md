@@ -2,7 +2,7 @@
 
 **Stand:** 20.09.2026  
 **Geprüfte Main-Baseline:** `b62aea62`  
-**Produktversion:** `0.9.8`
+**Produktversion:** `0.9.9`
 
 Symptom → wahrscheinliche Ursache → Diagnose → Behebung. Für Fehlercodes siehe [`api-contracts.md`](api-contracts.md), für Konfiguration [`configuration.md`](configuration.md), für Provider-Routing [`provider-runtime-settings.md`](provider-runtime-settings.md).
 
