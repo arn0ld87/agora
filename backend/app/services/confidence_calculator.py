@@ -55,7 +55,11 @@ import statistics
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.contracts.report_contract import counts_for_confidence, has_two_action_voices
-from app.services.report_agent.claim_provenance import resolve_independent_source_keys
+from app.services.report_agent.claim_qualification import (  # noqa: F401
+    GENERIC_ENTITY_TYPES as _GENERIC_ENTITY_TYPES,
+    count_independent_sources as _count_independent_sources,
+    role_family_key_for_entry,
+)
 
 
 def _drop_hand_made(evidence: List[Dict]) -> List[Dict]:
@@ -78,13 +82,6 @@ _CONTRADICTION_PENALTY_AMOUNT: float = 0.2
 _CONTRADICTION_STD_THRESHOLD: float = 0.6
 _CONTRADICTION_RANGE_LOW: float = -0.3
 _CONTRADICTION_RANGE_HIGH: float = 0.3
-
-#: Auffangtypen zaehlen nicht als Rollenfamilie (Issue #1248). Spiegelt
-#: ``report_contract._GENERIC_ENTITY_TYPES`` — der Konsenswert muss dieselbe
-#: Vorstellung von "Gruppe" haben wie der Validator, der darueber entscheidet.
-_GENERIC_ENTITY_TYPES: frozenset[str] = frozenset(
-    {"person", "organization", "entity", "node", "unknown", "other"}
-)
 
 #: #1778: Belegtyp der Simulationsbeiträge (Aktionsstimmen).
 _ACTION_EVIDENCE_TYPE: str = "agent_action"
@@ -186,10 +183,6 @@ def _independence_key(e: Dict[str, Any]) -> Tuple[str, str, str]:
     if voice:
         return ("voice", str(voice), "")
     return ("source", str(e.get("type") or ""), str(e.get("source") or ""))
-
-
-def _count_independent_sources(evidence: List[Dict[str, Any]]) -> int:
-    return len(set(resolve_independent_source_keys(evidence)))
 
 
 def _component_consistency(evidence: List[Dict]) -> float:
@@ -479,13 +472,9 @@ def compute_confidence_breakdown(evidence: List[Dict]) -> Dict[str, float]:
     # ueber dasselbe Label entscheidet.
     groups: set[str] = set()
     for e in quote_items:
-        family = " ".join(str(e.get("persona_role_family") or "").split()).casefold()
-        if family and family not in _GENERIC_ENTITY_TYPES:
-            groups.add(f"family:{family}")
-            continue
-        title = " ".join(str(e.get("persona_stakeholder_group") or "").split()).casefold()
-        if title:
-            groups.add(f"title:{title}")
+        key = role_family_key_for_entry(e)
+        if key:
+            groups.add(key)
     if len(groups) >= 3:
         consensus = 1.0
     elif len(groups) == 2:

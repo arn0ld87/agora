@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from ...contracts.report_contract import counts_for_confidence
 from ...contracts.report_v3 import (
     Claim as ReportV3Claim,
     DataGap as ReportV3DataGap,
@@ -12,10 +11,17 @@ from ...contracts.report_v3 import (
 )
 from ...utils.logger import get_logger
 from .claim_dedup import dedup_claims, duplicate_report
-from .claim_provenance import (
+from .claim_qualification import (  # noqa: F401
+    _CLAIM_TYPES,
+    _VALID_CONFIDENCE,
+    claim_type_of as _claim_type_of,
+    count_independent_sources_for_refs as _count_independent_sources,
     derive_aggregation_basis,
     derive_confidence_scope as _derive_confidence_scope,
-    resolve_independent_source_keys,
+    evaluate_claim_mode_gate,
+    should_downgrade_single_source as _should_downgrade_single_source,
+    valid_evidence_refs_for_claim as _valid_evidence_refs_for_claim,
+    wording_confidence as _wording_confidence,
 )
 from .evidence import text_confidence_label_of
 from .metadata_merge import merge_section_metadata
@@ -23,11 +29,6 @@ from .threshold_deviation import drop_unresolvable_deviations
 from .threshold_provenance import bind_threshold_provenance, dedup_thresholds
 
 logger = get_logger("agora.report_agent")
-
-#: Werte von ``report_contract.ClaimType`` (Issue #1400); Unbekanntes faellt
-#: auf ``None`` statt die v3-Validierung zu sprengen.
-_CLAIM_TYPES = frozenset({"empirical", "analytical", "recommendation", "structural"})
-_VALID_CONFIDENCE = frozenset({"speculative", "low", "medium", "high", "verified"})
 
 
 def _text_confidence_for(
@@ -89,90 +90,6 @@ def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> N
     )
 
 
-def _claim_type_of(
-    claim: Dict[str, Any],
-) -> Literal["empirical", "analytical", "recommendation", "structural"] | None:
-    value = claim.get("claim_type")
-    return value if value in _CLAIM_TYPES else None  # type: ignore[return-value]
-
-
-def _wording_confidence(
-    claim_type: Optional[str],
-    confidence: Literal["speculative", "low", "medium", "high", "verified"],
-) -> Literal["speculative", "low", "medium", "high", "verified"] | None:
-    """Issue #1400: der Wortlaut-Hinweis gilt nur Tatsachenbehauptungen.
-
-    Das Label wird unabhaengig vom Typ abgesenkt; nur eine Tatsache kann
-    sicherer formuliert sein, als ihr Label traegt.
-    """
-    return confidence if claim_type in (None, "empirical") else None
-
-
-def _count_independent_sources(
-    evidence_refs: Iterable[str],
-    raw_evidence: Any,
-    evidence_index: Mapping[str, Any],
-) -> int:
-    """Zaehlt unabhaengige Stuetzquellen unter den gueltigen Evidence-Refs.
-
-    Zwei Items mit demselben voice_key (z. B. zwei Zitate derselben Persona)
-    zaehlen als nur eine Stimme (ADR-0002, Issue #1766).
-    Zwei Chunks aus demselben Seed-Dokument zaehlen als nur eine Quelle (Befund 1.2).
-    """
-    items_by_eid: Dict[str, Dict[str, Any]] = {}
-    if isinstance(raw_evidence, list):
-        for item in raw_evidence:
-            if isinstance(item, dict) and item.get("evidence_id"):
-                eid = str(item.get("evidence_id"))
-                if eid not in items_by_eid and item.get("supports_claim") is True:
-                    items_by_eid[eid] = item
-
-    pairs: list[tuple[Dict[str, Any], Optional[Mapping[str, Any]]]] = []
-    for eid in evidence_refs:
-        item = items_by_eid.get(eid) or {"evidence_id": eid}
-        record = evidence_index.get(eid) if isinstance(evidence_index, Mapping) else None
-        record_map = record if isinstance(record, Mapping) else None
-        pairs.append((item, record_map))
-
-    return len(set(resolve_independent_source_keys(pairs)))
-
-
-def _valid_evidence_refs_for_claim(
-    claim: Dict[str, Any],
-    evidence_index: Dict[str, Any],
-) -> List[str]:
-    """Extrahiert deduplizierte, unterstützende Evidence-IDs eines Claims."""
-    refs: List[str] = []
-    for item in claim.get("evidence") or []:
-        if not isinstance(item, dict):
-            continue
-        raw_id = item.get("evidence_id")
-        if not raw_id or item.get("supports_claim") is not True:
-            continue
-        if not counts_for_confidence(item):
-            continue
-        eid = str(raw_id)
-        idx_entry = evidence_index.get(eid)
-        if isinstance(idx_entry, (dict, Mapping)) and not counts_for_confidence(idx_entry):
-            continue
-        if eid not in refs:
-            refs.append(eid)
-    return refs
-
-
-def _should_downgrade_single_source(
-    independent_sources: int,
-    confidence: str,
-    claim_type: Optional[str],
-) -> bool:
-    """Prüft, ob ein Claim wegen Einzelquelle auf ``low`` abgestuft werden muss."""
-    if independent_sources > 1:
-        return False
-    if confidence in {"high", "verified"}:
-        return True
-    return confidence == "medium" and claim_type not in ("structural", "recommendation")
-
-
 def _extract_claims_for_section(
     raw_claims: Any,
     *,
@@ -191,61 +108,45 @@ def _extract_claims_for_section(
     damit die ID die finale Liste beschreibt und nicht die Rohextraktion.
 
     Die Funktion ist bewusst frei von Instanz-Zustand — sie haengt nur an ihren
-    Argumenten und den Modul-Helfern ``derive_aggregation_basis``,
-    ``_derive_confidence_scope`` und ``_text_confidence_for``.
+    Argumenten und dem kanonischen Qualifikations-Gate ``evaluate_claim_mode_gate``.
     """
     claims: List[ReportV3Claim] = []
     claim_slot = 0
     for claim in raw_claims or []:
         if not isinstance(claim, dict):
             continue
-        evidence_refs = _valid_evidence_refs_for_claim(claim, evidence_index)
-        # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
-        # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
-        if not evidence_refs:
+        raw_label = str(claim.get("confidence_label") or "speculative")
+        initial_conf: Literal["speculative", "low", "medium", "high", "verified"] = (
+            raw_label if raw_label in _VALID_CONFIDENCE else "speculative"  # type: ignore[assignment]
+        )
+        decision = evaluate_claim_mode_gate(
+            claim,
+            evidence_index,
+            report_mode=report_mode,
+            recorded_text_confidence=_text_confidence_for(claim, initial_conf),
+        )
+        if not decision.accepted:
             continue
         statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
-        if len(statement) < 8:
-            continue
-        label = str(claim.get("confidence_label") or "speculative")
-        confidence: Literal["speculative", "low", "medium", "high", "verified"] = (
-            label if label in _VALID_CONFIDENCE else "speculative"  # type: ignore[assignment]
-        )
-        single_source_text_confidence: (
-            Literal["speculative", "low", "medium", "high", "verified"] | None
-        ) = None
-        claim_type = _claim_type_of(claim)
-        independent_sources = _count_independent_sources(
-            evidence_refs, claim.get("evidence"), evidence_index
-        )
-        if _should_downgrade_single_source(independent_sources, confidence, claim_type):
-            single_source_text_confidence = _wording_confidence(claim_type, confidence)
-            confidence = "low"
-        # strict: speculative/low-confidence Claims werden gedroppt
-        if report_mode == "strict" and confidence in {"speculative", "low"}:
-            continue
         claim_slot += 1
         claims.append(
             ReportV3Claim(
                 id=f"C{section_index}_{claim_slot:02d}",
                 statement=statement,
-                evidence_refs=evidence_refs,
-                confidence=confidence,
+                evidence_refs=list(decision.qualified_evidence.valid_evidence_refs),
+                confidence=decision.confidence,
                 # Issue #1358: beide Angaben stammen aus derselben Menge
-                # stuetzender Items. Vorher stand hier der Literalwert
-                # "persona" — jeder Claim behauptete damit Persona-
-                # Traegerschaft, auch wenn er ausschliesslich aus dem
-                # Seed-Dokument stammte.
-                aggregation_basis=derive_aggregation_basis(claim.get("evidence"), evidence_index),
-                confidence_scope=_derive_confidence_scope(claim.get("evidence"), evidence_index),
+                # stuetzender Items im qualifizierten Beleg-Objekt.
+                aggregation_basis=decision.qualified_evidence.aggregation_basis,
+                confidence_scope=decision.qualified_evidence.confidence_scope,
                 # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
                 # abgestuft wurde. Der Wortlaut stammt dann aus einer
                 # hoeheren Stufe und deckt mehr Sicherheit ab als das
                 # Label — ohne dass irgendetwas am Text geaendert wird.
                 text_confidence=(
-                    _text_confidence_for(claim, confidence) or single_source_text_confidence
+                    _text_confidence_for(claim, decision.confidence) or decision.text_confidence
                 ),
-                claim_type=claim_type,
+                claim_type=decision.claim_type,
             )
         )
     return claims
