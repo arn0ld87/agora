@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ...observability import sim_active_gauge, sim_counter, sim_duration_histogram
@@ -26,8 +26,12 @@ from ...utils.logger import get_logger
 from .action_log_reader import get_actions as _get_actions
 from .action_log_reader import read_action_log_chunk
 from .live_progress import refresh_live_action_counts, reset_live_action_counts
-from .run_metrics import get_agent_stats as _aggregate_agent_stats
-from .run_metrics import get_timeline as _aggregate_timeline
+from .run_metrics import (
+    compute_elapsed_seconds as _compute_elapsed_seconds,
+    get_agent_stats as _aggregate_agent_stats,
+    get_timeline as _aggregate_timeline,
+    resolve_manifest_timing as _resolve_manifest_timing,
+)
 from .process_manager import _read_cancel_abort, _write_cancel_abort
 from .run_state_store import RunnerStatus, SimulationRunState
 
@@ -41,13 +45,6 @@ _TERMINATION_REASON_BY_STATUS = {
     RunnerStatus.FAILED: "error",
     RunnerStatus.STOPPED: "user_cancel",
 }
-
-
-def _as_aware_utc(dt: datetime) -> datetime:
-    """Naive datetimes als UTC annehmen — ``SimulationRunState``-Timestamps
-    stammen aus ``datetime.now().isoformat()`` ohne tzinfo, während
-    ``ManifestRuntime`` (Codex-Fund) jetzt ``AwareDatetime`` verlangt."""
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _read_run_usage_summary(run_dir: str) -> Optional[Dict[str, Any]]:
@@ -65,7 +62,7 @@ def _read_run_usage_summary(run_dir: str) -> Optional[Dict[str, Any]]:
     try:
         with open(os.path.join(run_dir, USAGE_SUMMARY_FILENAME), encoding="utf-8") as handle:
             data = json.load(handle)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except FileNotFoundError, json.JSONDecodeError, OSError:
         return None
     return data if isinstance(data, dict) else None
 
@@ -101,18 +98,9 @@ def _finalize_manifest_for_simulation(
         if not run:
             return
 
-        started_at = (
-            _as_aware_utc(datetime.fromisoformat(state.started_at))
-            if state.started_at
-            else datetime.now(timezone.utc)
-        )
-        completed_at = (
-            _as_aware_utc(datetime.fromisoformat(state.completed_at))
-            if state.completed_at
-            else None
-        )
-        duration_seconds = (
-            int((completed_at - started_at).total_seconds()) if completed_at else None
+        started_at, completed_at, duration_seconds = _resolve_manifest_timing(
+            state.started_at,
+            state.completed_at,
         )
 
         run_dir = ArtifactLocator.run_dir(run["run_id"])
@@ -152,7 +140,7 @@ def _read_budget_abort(sim_dir: str) -> Optional[Dict[str, Any]]:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
         return data if isinstance(data, dict) else None
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except FileNotFoundError, json.JSONDecodeError, OSError:
         return None
 
 
@@ -210,9 +198,7 @@ def _cancel_supervision(
         logger.warning("cancel supervision failed for %s: %s", simulation_id, exc)
         return False
 
-    _write_cancel_abort(
-        sim_dir, {"run_id": run_id, "ts": time.time(), "source": "backend-monitor"}
-    )
+    _write_cancel_abort(sim_dir, {"run_id": run_id, "ts": time.time(), "source": "backend-monitor"})
     try:
         from ..simulation_ipc import write_control_state
 
@@ -222,9 +208,7 @@ def _cancel_supervision(
     try:
         from .process_manager import terminate_run
 
-        terminate_run(
-            simulation_id, processes=processes, grace_period=CANCEL_GRACE_SECONDS
-        )
+        terminate_run(simulation_id, processes=processes, grace_period=CANCEL_GRACE_SECONDS)
     except Exception as exc:  # noqa: BLE001
         logger.warning("cancel terminate failed for %s: %s", simulation_id, exc)
     return True
@@ -279,28 +263,6 @@ def _budget_supervision(simulation_id: str, sim_dir: str) -> Optional[Dict[str, 
     return None
 
 
-def _compute_elapsed_seconds(started_at: Optional[str]) -> float:
-    """Berechnet die vergangene Zeit seit ``started_at`` in Sekunden.
-
-    Gibt 0.0 zurück wenn ``started_at`` fehlt oder nicht parsebar ist —
-    damit Metric-Calls bei fehlerhaftem State nicht werfen.
-
-    Args:
-        started_at: ISO-8601-Zeitstempel aus ``SimulationRunState.started_at``.
-
-    Returns:
-        Vergangene Sekunden als Float (>= 0.0).
-    """
-    if not started_at:
-        return 0.0
-    try:
-        start_dt = datetime.fromisoformat(started_at)
-        elapsed = (datetime.now() - start_dt).total_seconds()
-        return max(0.0, elapsed)
-    except (ValueError, OverflowError):
-        return 0.0
-
-
 def _generation_is_stale(
     simulation_id: str,
     generation: int,
@@ -338,9 +300,7 @@ def _handle_cancel_termination(
     # "user_cancel" erhalten (Rueckwaertskompatibilitaet mit
     # vorhandenen Markern und mit source="backend-monitor").
     cancel_source = cancel_abort.get("source")
-    cancel_termination_reason = (
-        "user_stop" if cancel_source == "user_stop" else "user_cancel"
-    )
+    cancel_termination_reason = "user_stop" if cancel_source == "user_stop" else "user_cancel"
     state.runner_status = RunnerStatus.STOPPED
     state.completed_at = datetime.now().isoformat()
     state.error = None
@@ -367,8 +327,7 @@ def _handle_cancel_termination(
                 status="stopped",
                 termination_reason=cancel_termination_reason,
                 message=(
-                    "Cancel bestätigt — OASIS-Subprozess beendet, "
-                    "Teilergebnisse bleiben erhalten"
+                    "Cancel bestätigt — OASIS-Subprozess beendet, Teilergebnisse bleiben erhalten"
                 ),
                 event_type=cancel_termination_reason,
                 event_details={"exit_code": exit_code},
@@ -510,9 +469,7 @@ def _apply_terminal_state(
     if exit_code == 0:
         _handle_completed_termination(simulation_id, state, elapsed_seconds)
         return None
-    _handle_failed_termination(
-        simulation_id, state, sim_dir, exit_code, elapsed_seconds
-    )
+    _handle_failed_termination(simulation_id, state, sim_dir, exit_code, elapsed_seconds)
     return None
 
 
@@ -776,7 +733,6 @@ def monitor_simulation(
             except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
                 logger.debug("monitor: file handle close failed, ignoring: %s", exc)
             stderr_files.pop(simulation_id, None)
-
 
 
 def get_timeline(

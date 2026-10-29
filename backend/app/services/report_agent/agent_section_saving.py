@@ -6,314 +6,23 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 from pydantic import ValidationError
 
 from .agent_hypotheses import ReportAgentHypothesesMixin
+from .section_pipeline_steps import (
+    _collect_evidence_refs_from_claim,
+    _drop_unrepairable_section_entries,
+    _extract_metadata_entry_claim_ids,
+    _extract_metadata_entry_refs,
+    _extract_verified_claims_and_evidence_ids,
+    _filter_structured_metadata_against_verified_section,
+    _find_metadata_entry_text,
+    _is_metadata_entry_grounded,
+    drop_unrepairable_section_entries,
+    filter_structured_metadata_against_verified_section,
+)
+from .section_pipeline_types import SectionExecutionState
 
 if TYPE_CHECKING:
-    from .section_evidence_outcome import SectionEvidenceOutcome
     from .postprocess_timing import PostprocessPhaseTracker
-
-
-def _drop_unrepairable_section_entries(
-    sections: List[Dict[str, Any]], second_error: ValidationError
-) -> List[Dict[str, Any]]:
-    """Entfernt nach fehlgeschlagener Erst-Reparatur verbleibende fehlerhafte Einträge."""
-    indices_to_remove: Dict[Any, set] = {}
-    removed_entries: List[Dict[str, Any]] = []
-    for err in second_error.errors():
-        loc = err.get("loc") or ()
-        if len(loc) < 4 or loc[0] != "sections":
-            continue
-        si, kind, idx = loc[1], loc[2], loc[3]
-        if kind not in ("claims", "hypotheses", "hypotheses_appendix"):
-            continue
-        if not isinstance(si, int) or not (0 <= si < len(sections)):
-            continue
-        entries = sections[si].get(kind) or []
-        if not isinstance(idx, int) or not (0 <= idx < len(entries)):
-            continue
-        key = (si, kind)
-        if idx in indices_to_remove.get(key, set()):
-            continue
-        indices_to_remove.setdefault(key, set()).add(idx)
-        entry = entries[idx]
-        entry_id = (
-            str(entry.get("claim_id") or entry.get("hypothesis_id") or "")
-            if isinstance(entry, dict)
-            else ""
-        )
-        removed_entries.append(
-            {
-                "section_index": sections[si].get("section_index", 0),
-                "claim_id": entry_id,
-                "violation": str(err.get("type") or "unknown"),
-                "action": "dropped",
-                "detail": str(err.get("msg") or "")[:500],
-            }
-        )
-    for (si, kind), indices in indices_to_remove.items():
-        entries = sections[si].get(kind)
-        if isinstance(entries, list):
-            for i in sorted(indices, reverse=True):
-                del entries[i]
-    return removed_entries
-
-
-def _collect_evidence_refs_from_claim(claim: Dict[str, Any], target: set[str]) -> None:
-    """Sammelt alle Evidence-IDs und -Referenzen aus einem Claim-Dict."""
-    for ev in claim.get("evidence") or []:
-        if isinstance(ev, dict) and ev.get("evidence_id"):
-            target.add(str(ev["evidence_id"]).strip())
-        elif isinstance(ev, str) and ev.strip():
-            target.add(ev.strip())
-    for ref in claim.get("evidence_refs") or []:
-        if ref and str(ref).strip():
-            target.add(str(ref).strip())
-    for ref in claim.get("supporting_evidence_ids") or []:
-        if ref and str(ref).strip():
-            target.add(str(ref).strip())
-
-
-def _extract_verified_claims_and_evidence_ids(
-    verified_claims: Optional[List[Dict[str, Any]]],
-) -> tuple[set[str], set[str], dict[str, set[str]], dict[str, str]]:
-    """Extrahiert verifizierte Claim-IDs, Evidence-IDs, Claim->Evidence-Map und Claim->Statement-Map."""
-    claim_ids: set[str] = set()
-    evidence_ids: set[str] = set()
-    claim_evidence_map: dict[str, set[str]] = {}
-    claim_statements: dict[str, str] = {}
-    if not verified_claims:
-        return claim_ids, evidence_ids, claim_evidence_map, claim_statements
-
-    for idx, c in enumerate(verified_claims):
-        if not isinstance(c, dict):
-            continue
-        cid = c.get("claim_id")
-        cid_str = str(cid).strip() if cid is not None and str(cid).strip() else None
-        synthetic_key = cid_str or f"__idx_{idx}"
-        claim_ev: set[str] = set()
-        _collect_evidence_refs_from_claim(c, claim_ev)
-        stmt = str(c.get("statement") or c.get("text") or "").strip().lower()
-        if stmt:
-            claim_statements[synthetic_key] = stmt
-        if cid_str:
-            claim_ids.add(cid_str)
-        claim_evidence_map.setdefault(synthetic_key, set()).update(claim_ev)
-        evidence_ids.update(claim_ev)
-
-    return claim_ids, evidence_ids, claim_evidence_map, claim_statements
-
-
-_METADATA_TEXT_KEYS = (
-    "text",
-    "description",
-    "title",
-    "content",
-    "recommendation",
-    "risk",
-    "action",
-    "step",
-    "milestone",
-    "item",
-    "titel",
-    "beschreibung",
-    "begruendung",
-    "massnahme",
-    "risiko",
-    "meilenstein",
-)
-
-
-def _find_metadata_entry_text(entry: Dict[str, Any]) -> str:
-    """Sucht den ersten nicht-leeren Textwert aus bekannten Metadatenfeldern."""
-    for key in _METADATA_TEXT_KEYS:
-        val = entry.get(key)
-        if isinstance(val, str) and val.strip():
-            return val.strip()
-    return ""
-
-
-def _extract_metadata_entry_refs(entry: Dict[str, Any]) -> List[str]:
-    """Extrahiert alle Evidence-Referenzstrings aus einem Metadateneintrag."""
-    raw = list(entry.get("evidence_refs") or []) + list(entry.get("supporting_evidence_ids") or [])
-    return [str(r).strip() for r in raw if r and str(r).strip()]
-
-
-def _extract_metadata_entry_claim_ids(entry: Dict[str, Any]) -> List[str]:
-    """Extrahiert alle referenzierten Claim-IDs aus einem Metadateneintrag."""
-    raw: List[str] = []
-    cid = entry.get("claim_id")
-    if cid is not None and str(cid).strip():
-        raw.append(str(cid).strip())
-    cids = entry.get("claim_ids") or entry.get("supporting_claim_ids") or []
-    if isinstance(cids, (list, tuple, set)):
-        for item in cids:
-            if item is not None and str(item).strip():
-                raw.append(str(item).strip())
-    elif isinstance(cids, str) and cids.strip():
-        raw.append(cids.strip())
-    return list(dict.fromkeys(raw))
-
-
-def _refs_belong_to_single_claim_context(
-    entry_refs: List[str],
-    entry_text: str,
-    *,
-    verified_evidence_ids: set[str],
-    claim_evidence_map: Optional[dict[str, set[str]]],
-    claim_statements: Optional[dict[str, str]],
-    persisted_content_lower: str,
-) -> bool:
-    """Prüft für Einträge ohne claim_id, ob alle Evidence-Refs zu einem gemeinsamen Claim gehören und Text nicht fremdgebunden ist."""
-    if not all(r in verified_evidence_ids for r in entry_refs):
-        return False
-    ev_map = claim_evidence_map or {}
-    ref_set = set(entry_refs)
-    owning_cids = [cid for cid, evs in ev_map.items() if ref_set.issubset(evs)]
-    if not owning_cids:
-        return False
-    if not entry_text:
-        return True
-    snippet = entry_text[:60].lower()
-    stmts = claim_statements or {}
-    matching_cids = [
-        cid for cid, st in stmts.items() if st and (snippet in st or st[:60] in snippet)
-    ]
-    if matching_cids:
-        return all(cid in owning_cids for cid in matching_cids)
-    return True
-
-
-def _check_claim_and_refs_grounding(
-    referenced_claim_ids: List[str],
-    entry_refs: List[str],
-    entry_text: str,
-    *,
-    verified_claim_ids: set[str],
-    verified_evidence_ids: set[str],
-    claim_evidence_map: Optional[dict[str, set[str]]],
-    claim_statements: Optional[dict[str, str]],
-    persisted_content_lower: str,
-) -> bool:
-    """Prüft, ob Claim-IDs verifiziert sind und Evidence-Refs zu den referenzierten Claims passen."""
-    if referenced_claim_ids:
-        if any(cid not in verified_claim_ids for cid in referenced_claim_ids):
-            return False
-        if entry_refs:
-            allowed_refs: set[str] = set()
-            for cid in referenced_claim_ids:
-                allowed_refs.update((claim_evidence_map or {}).get(cid, set()))
-            return bool(allowed_refs) and all(r in allowed_refs for r in entry_refs)
-        return True
-
-    if entry_refs:
-        return _refs_belong_to_single_claim_context(
-            entry_refs,
-            entry_text,
-            verified_evidence_ids=verified_evidence_ids,
-            claim_evidence_map=claim_evidence_map,
-            claim_statements=claim_statements,
-            persisted_content_lower=persisted_content_lower,
-        )
-
-    return True
-
-
-def _is_metadata_entry_grounded(
-    entry: Dict[str, Any],
-    *,
-    verified_claim_ids: set[str],
-    verified_evidence_ids: set[str],
-    claim_evidence_map: Optional[dict[str, set[str]]] = None,
-    claim_statements: Optional[dict[str, str]] = None,
-    persisted_content_lower: str,
-    has_claims: bool,
-    has_content: bool,
-) -> bool:
-    """Prüft, ob ein einzelner strukturierter Metadateneintrag ausreichend gestützt ist."""
-    if not has_claims or not has_content:
-        return False
-
-    referenced_claim_ids = _extract_metadata_entry_claim_ids(entry)
-    entry_refs = _extract_metadata_entry_refs(entry)
-    entry_text = _find_metadata_entry_text(entry)
-
-    if referenced_claim_ids or entry_refs:
-        return _check_claim_and_refs_grounding(
-            referenced_claim_ids,
-            entry_refs,
-            entry_text,
-            verified_claim_ids=verified_claim_ids,
-            verified_evidence_ids=verified_evidence_ids,
-            claim_evidence_map=claim_evidence_map,
-            claim_statements=claim_statements,
-            persisted_content_lower=persisted_content_lower,
-        )
-
-    return bool(entry_text and entry_text[:60].lower() in persisted_content_lower)
-
-
-def _filter_structured_metadata_against_verified_section(
-    structured_metadata: Optional[Dict[str, Any]],
-    *,
-    verified_claims: Optional[List[Dict[str, Any]]],
-    persisted_content: Optional[str],
-) -> Dict[str, Any]:
-    """Filtert Metadaten-Listen gegen die verifizierten Claims und den Sektionsinhalt.
-
-    Issue #1885 / Befund 3.1 & PR #1893:
-    - recommendations, change_recommendations, risks, timeline, next_steps, items konsistent filtern:
-      - Wenn Eintrag claim_id(s) besitzt: muss jeder referenzierte Claim verifiziert sein.
-      - Wenn Eintrag mit claim_id(s) auch evidence_refs besitzt: mind. eine Referenz muss aus
-        den Evidence-IDs genau dieses/dieser referenzierten Claims stammen (keine Fremd-Evidence).
-      - Wenn Eintrag ohne claim_id(s) evidence_refs besitzt: mind. eine Referenz muss in den
-        verifizierten Evidence-IDs der Sektion liegen.
-      - Wenn verified_claims leer ist oder persisted_content leer ist: keine ungeerdeten Einträge.
-      - Wenn weder claim_id(s) noch evidence_refs: Eintrag muss im persisted_content auffindbar sein.
-    """
-    if not structured_metadata or not isinstance(structured_metadata, dict):
-        return {} if structured_metadata is not None else {}
-
-    verified_claims_list = verified_claims or []
-    persisted_content_str = persisted_content or ""
-    persisted_content_lower = persisted_content_str.lower()
-    has_claims = bool(verified_claims_list)
-    has_content = bool(persisted_content_str.strip())
-
-    claim_ids, evidence_ids, claim_evidence_map, claim_statements = (
-        _extract_verified_claims_and_evidence_ids(verified_claims_list)
-    )
-
-    target_keys = (
-        "recommendations",
-        "change_recommendations",
-        "risks",
-        "timeline",
-        "next_steps",
-        "items",
-    )
-    filtered: Dict[str, Any] = dict(structured_metadata)
-
-    for key in target_keys:
-        items = filtered.get(key)
-        if not items or not isinstance(items, list):
-            continue
-
-        filtered[key] = [
-            entry
-            for entry in items
-            if isinstance(entry, dict)
-            and _is_metadata_entry_grounded(
-                entry,
-                verified_claim_ids=claim_ids,
-                verified_evidence_ids=evidence_ids,
-                claim_evidence_map=claim_evidence_map,
-                claim_statements=claim_statements,
-                persisted_content_lower=persisted_content_lower,
-                has_claims=has_claims,
-                has_content=has_content,
-            )
-        ]
-
-    return filtered
+    from .section_evidence_outcome import SectionEvidenceOutcome
 
 
 class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
@@ -323,27 +32,8 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
         evidence_map: Any
         _pending_section_metadata: Any
 
-    def _save_evidence_section(
-        self, report_id: str, section_index: int, section_title: str, content: str
-    ) -> "SectionEvidenceOutcome":
-        """Extrahiert Claims, bindet Evidence und persistiert die Evidenzkarte."""
-        from . import agent as _agent_mod
-        from .output_contract import is_fallback_content  # noqa: PLC0415
-
-        report_logger = getattr(self, "report_logger", None)
-        phase_tracker: Optional[PostprocessPhaseTracker] = None
-        if report_logger is not None:
-            phase_tracker = _agent_mod.PostprocessPhaseTracker(
-                report_id,
-                section_index=section_index,
-                section_title=section_title,
-                report_logger=report_logger,
-                report_manager=_agent_mod.ReportManager,
-            )
-
-        def _phase(name: str):
-            return phase_tracker.phase(name) if phase_tracker is not None else nullcontext()
-
+    def _ensure_normalized_evidence_map(self, report_id: str, _agent_mod: Any) -> Dict[str, str]:
+        """Initialisiert oder normalisiert ``self.evidence_map`` und liefert ``id_remap``."""
         id_remap: Dict[str, str] = {}
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
@@ -357,43 +47,75 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
         self.evidence_map.setdefault("schema_version", _agent_mod.CURRENT_SCHEMA_VERSION)
         self.evidence_map.setdefault("evidence_index", {})
         self.evidence_map.setdefault("global_evidence_refs", [])
+        return id_remap
 
-        generation_failed = is_fallback_content(content)
+    def _extract_and_finalize_section_claims(
+        self,
+        *,
+        section_index: int,
+        section_title: str,
+        content: str,
+        generation_failed: bool,
+        id_remap: Dict[str, str],
+        phase_tracker: Optional["PostprocessPhaseTracker"],
+        _agent_mod: Any,
+    ) -> tuple[
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+        List[Dict[str, Any]],
+    ]:
+        """Extrahiert und finalisiert die Claims der Sektion oder erzeugt einen Fallback-Gap."""
         if generation_failed:
             _agent_mod.logger.warning(
                 "section %d (%r): Fallback-Inhalt — keine Claim-/Evidence-Extraktion.",
                 section_index,
                 section_title,
             )
-            claims: List[Dict[str, Any]] = []
-            raw_hypotheses: List[Dict[str, Any]] = []
-            gate_decisions: List[Dict[str, Any]] = []
-            data_gaps: List[Dict[str, Any]] = [
-                {
-                    "gap_id": f"gap_{section_index:02d}",
-                    "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
-                    "claim_text": section_title,
-                }
-            ]
-        else:
-            heartbeat_cb = phase_tracker.heartbeat if phase_tracker is not None else None
-            with _phase("claim_extraction_and_evidence_binding"):
-                extracted_claims = self._build_claims_for_section(content, heartbeat=heartbeat_cb)
-            with _phase("claim_finalization"):
-                claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
-                    extracted_claims
-                )
-            if id_remap:
-                claims = _agent_mod._remap_claim_bindings(claims, id_remap)
+            return (
+                [],
+                [],
+                [
+                    {
+                        "gap_id": f"gap_{section_index:02d}",
+                        "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
+                        "claim_text": section_title,
+                    }
+                ],
+                [],
+            )
 
-        prose_entries = (getattr(self, "_pending_prose_hypotheses", {}) or {}).get(
-            section_index, []
-        )
+        def _phase(name: str):
+            return phase_tracker.phase(name) if phase_tracker is not None else nullcontext()
+
+        heartbeat_cb = phase_tracker.heartbeat if phase_tracker is not None else None
+        with _phase("claim_extraction_and_evidence_binding"):
+            extracted_claims = self._build_claims_for_section(content, heartbeat=heartbeat_cb)
+        with _phase("claim_finalization"):
+            claims, raw_hypotheses, data_gaps, gate_decisions = self._finalize_section_claims(
+                extracted_claims
+            )
+        if id_remap:
+            claims = _agent_mod._remap_claim_bindings(claims, id_remap)
+        return claims, raw_hypotheses, data_gaps, gate_decisions
+
+    def _merge_prose_hypotheses_and_gate_decisions(
+        self,
+        *,
+        section_index: int,
+        raw_hypotheses: List[Dict[str, Any]],
+        gate_decisions: List[Dict[str, Any]],
+        prose_entries: List[Any],
+        _agent_mod: Any,
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Führt Fließtext-Hypothesen, Gate-Entscheidungen und Hypothesen-Cap zusammen."""
+        from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
+
         prose_hypotheses = [entry[0] for entry in prose_entries]
-        raw_hypotheses = list(raw_hypotheses) + prose_hypotheses
-        for _position, _hypothesis in enumerate(raw_hypotheses, start=1):
-            if isinstance(_hypothesis, dict):
-                _hypothesis["hypothesis_id"] = f"hypothesis_{_position:02d}"
+        combined_hypotheses = list(raw_hypotheses) + prose_hypotheses
+        for position, hypothesis in enumerate(combined_hypotheses, start=1):
+            if isinstance(hypothesis, dict):
+                hypothesis["hypothesis_id"] = f"hypothesis_{position:02d}"
         gate_decisions.extend(_agent_mod.prose_gate_decisions(prose_entries, self._truncate))
         if gate_decisions:
             self.evidence_map["gate_decision_log"] = list(
@@ -404,46 +126,20 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
         if coverage_ledger:
             self.evidence_map["evidence_coverage_ledger"] = coverage_ledger.as_payload()
 
-        from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
+        hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(combined_hypotheses)
+        return hypotheses_visible, hypotheses_appendix, gate_decisions
 
-        hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)
-
-        raw_metadata = (getattr(self, "_pending_section_metadata", {}) or {}).get(section_index, {})
-        filtered_metadata = _filter_structured_metadata_against_verified_section(
-            raw_metadata,
-            verified_claims=claims,
-            persisted_content=content,
-        )
-        if hasattr(self, "_pending_section_metadata") and isinstance(
-            self._pending_section_metadata, dict
-        ):
-            self._pending_section_metadata[section_index] = filtered_metadata
-
-        quote_validation_failed = bool(
-            (getattr(self, "_pending_quote_validation_failed", {}) or {}).get(section_index, False)
-        )
-
-        section_entry = {
-            "section_index": section_index,
-            "section_title": section_title,
-            "section_summary": self._truncate(content, 400),
-            "claims": claims,
-            "hypotheses": hypotheses_visible,
-            "hypotheses_appendix": hypotheses_appendix,
-            "data_gaps": data_gaps,
-            "structured_metadata": filtered_metadata,
-            "generation_failed": generation_failed,
-            "quote_validation_failed": quote_validation_failed,
-            "unbound_evidence_refs": (
-                getattr(self, "_pending_unbound_evidence_refs", {}) or {}
-            ).get(section_index, []),
-            "unverified_statements": (
-                getattr(self, "_pending_unverified_statements", {}) or {}
-            ).get(section_index, []),
-        }
-        if phase_tracker is not None:
-            phase_tracker.start_phase("evidence_map_persistence")
-
+    def _validate_and_persist_evidence_map(
+        self,
+        *,
+        report_id: str,
+        section_index: int,
+        section_title: str,
+        content: str,
+        section_entry: Dict[str, Any],
+        _agent_mod: Any,
+    ) -> Dict[str, Any]:
+        """Fügt den Section-Eintrag ein, validiert/repariert EvidenceMapModel und speichert atomar."""
         existing_sections = _agent_mod.normalize_sections_for_contract(
             [s for s in self.evidence_map["sections"] if s.get("section_index") != section_index],
             evidence_index=_agent_mod.ReportAgent._evidence_index_map(cast(Any, self)),
@@ -504,14 +200,136 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
         _agent_mod.cap_section_key_takeaways(validated, section_index)
         self.evidence_map = validated
         _agent_mod.ReportManager.save_evidence_map(report_id, validated)
+        return validated
+
+    def _save_evidence_section(
+        self,
+        report_id: str,
+        section_index: int,
+        section_title: str,
+        content: str,
+        *,
+        section_state: Optional[SectionExecutionState] = None,
+    ) -> "SectionEvidenceOutcome":
+        """Extrahiert Claims, bindet Evidence und persistiert die Evidenzkarte."""
+        from . import agent as _agent_mod
+        from .output_contract import is_fallback_content  # noqa: PLC0415
+
+        state = section_state or SectionExecutionState.from_agent_pending(
+            self,
+            section_index=section_index,
+            title=section_title,
+            content=content,
+        )
+        state.sync_from_agent_hooks(self)
+
+        report_logger = getattr(self, "report_logger", None)
+        phase_tracker: Optional[PostprocessPhaseTracker] = None
+        if report_logger is not None:
+            phase_tracker = _agent_mod.PostprocessPhaseTracker(
+                report_id,
+                section_index=section_index,
+                section_title=section_title,
+                report_logger=report_logger,
+                report_manager=_agent_mod.ReportManager,
+            )
+
+        id_remap = ReportAgentSectionSavingMixin._ensure_normalized_evidence_map(
+            self, report_id, _agent_mod
+        )
+        generation_failed = is_fallback_content(content)
+        claims, raw_hypotheses, data_gaps, gate_decisions = (
+            ReportAgentSectionSavingMixin._extract_and_finalize_section_claims(
+                self,
+                section_index=section_index,
+                section_title=section_title,
+                content=content,
+                generation_failed=generation_failed,
+                id_remap=id_remap,
+                phase_tracker=phase_tracker,
+                _agent_mod=_agent_mod,
+            )
+        )
+
+        prose_entries = state.prose_hypotheses or (
+            getattr(self, "_pending_prose_hypotheses", {}) or {}
+        ).get(section_index, [])
+        hypotheses_visible, hypotheses_appendix, gate_decisions = (
+            ReportAgentSectionSavingMixin._merge_prose_hypotheses_and_gate_decisions(
+                self,
+                section_index=section_index,
+                raw_hypotheses=raw_hypotheses,
+                gate_decisions=gate_decisions,
+                prose_entries=prose_entries,
+                _agent_mod=_agent_mod,
+            )
+        )
+
+        raw_metadata = state.raw_metadata or (
+            getattr(self, "_pending_section_metadata", {}) or {}
+        ).get(section_index, {})
+        filtered_metadata = _filter_structured_metadata_against_verified_section(
+            raw_metadata,
+            verified_claims=claims,
+            persisted_content=content,
+        )
+        state.filtered_metadata = filtered_metadata
+        if hasattr(self, "_pending_section_metadata") and isinstance(
+            self._pending_section_metadata, dict
+        ):
+            self._pending_section_metadata[section_index] = filtered_metadata
+
+        quote_validation_failed = bool(
+            state.quote_validation_failed
+            or (getattr(self, "_pending_quote_validation_failed", {}) or {}).get(
+                section_index, False
+            )
+        )
+        unbound_refs = list(
+            state.unbound_evidence_refs
+            or (getattr(self, "_pending_unbound_evidence_refs", {}) or {}).get(section_index, [])
+        )
+        unverified_statements = list(
+            state.unverified_statements
+            or (getattr(self, "_pending_unverified_statements", {}) or {}).get(section_index, [])
+        )
+
+        section_entry = {
+            "section_index": section_index,
+            "section_title": section_title,
+            "section_summary": self._truncate(content, 400),
+            "claims": claims,
+            "hypotheses": hypotheses_visible,
+            "hypotheses_appendix": hypotheses_appendix,
+            "data_gaps": data_gaps,
+            "structured_metadata": filtered_metadata,
+            "generation_failed": generation_failed,
+            "quote_validation_failed": quote_validation_failed,
+            "unbound_evidence_refs": unbound_refs,
+            "unverified_statements": unverified_statements,
+        }
+        if phase_tracker is not None:
+            phase_tracker.start_phase("evidence_map_persistence")
+
+        validated = ReportAgentSectionSavingMixin._validate_and_persist_evidence_map(
+            self,
+            report_id=report_id,
+            section_index=section_index,
+            section_title=section_title,
+            content=content,
+            section_entry=section_entry,
+            _agent_mod=_agent_mod,
+        )
         if phase_tracker is not None:
             phase_tracker.end_phase()
-        return _agent_mod.SectionEvidenceOutcome.from_persisted_section(
+        outcome = _agent_mod.SectionEvidenceOutcome.from_persisted_section(
             validated,
             section_index,
             gate_decisions=gate_decisions,
             generation_failed=generation_failed,
         )
+        state.evidence_outcome = outcome
+        return outcome
 
     def _record_section_metadata(self, section_index: int, metadata: Dict[str, Any]) -> None:
         """Merkt die Struktur-Metadaten eines Abschnitts für ReportV3 vor."""
@@ -525,5 +343,14 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
 __all__ = [
     "ReportAgentSectionSavingMixin",
     "ReportAgentHypothesesMixin",
+    "_collect_evidence_refs_from_claim",
+    "_drop_unrepairable_section_entries",
+    "_extract_metadata_entry_claim_ids",
+    "_extract_metadata_entry_refs",
+    "_extract_verified_claims_and_evidence_ids",
     "_filter_structured_metadata_against_verified_section",
+    "_find_metadata_entry_text",
+    "_is_metadata_entry_grounded",
+    "drop_unrepairable_section_entries",
+    "filter_structured_metadata_against_verified_section",
 ]

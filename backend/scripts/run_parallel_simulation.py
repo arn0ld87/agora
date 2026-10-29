@@ -32,35 +32,43 @@ Log structure:
 import sys
 import os
 
-if sys.platform == 'win32':
+if sys.platform == "win32":
     # Set Python default I/O encoding to UTF-8
     # This affects all open() calls without specified encoding
-    os.environ.setdefault('PYTHONUTF8', '1')
-    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
     # Reconfigure standard output stream to UTF-8 (fix console encoding issues)
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    if hasattr(sys.stderr, 'reconfigure'):
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     # Force set default encoding (affects default encoding of open() function)
     # Note: This must be set when Python starts, runtime configuration may not work
     # So we also need to monkey-patch the built-in open function
     import builtins
+
     _original_open = builtins.open
 
-    def _utf8_open(file, mode='r', buffering=-1, encoding=None, errors=None,
-                   newline=None, closefd=True, opener=None):
+    def _utf8_open(
+        file,
+        mode="r",
+        buffering=-1,
+        encoding=None,
+        errors=None,
+        newline=None,
+        closefd=True,
+        opener=None,
+    ):
         """
         Wrap open() function to use UTF-8 encoding by default for text mode
         This can fix the issue that third-party libraries (like OASIS) don't specify encoding when reading files
         """
         # Only set default encoding for text mode (non-binary) without specified encoding
-        if encoding is None and 'b' not in mode:
-            encoding = 'utf-8'
-        return _original_open(file, mode, buffering, encoding, errors,
-                              newline, closefd, opener)
+        if encoding is None and "b" not in mode:
+            encoding = "utf-8"
+        return _original_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
 
     builtins.open = _utf8_open
 
@@ -183,7 +191,9 @@ def _install_runtime_profile() -> None:
     global _memory_stop
     _bert_profile = install_bert_memory_profile()
     _memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
-    logging.getLogger("agora.run_parallel_simulation").info("bert-memory profile = %s", _bert_profile)
+    logging.getLogger("agora.run_parallel_simulation").info(
+        "bert-memory profile = %s", _bert_profile
+    )
     _mean_pooling_patched = install_recsys_mean_pooling_patch()
     logging.getLogger("agora.run_parallel_simulation").info(
         "twhin-bert mean-pooling patch installed = %s (#1236)", _mean_pooling_patched
@@ -193,14 +203,18 @@ def _install_runtime_profile() -> None:
         "reddit nested-comments patch installed = %s (#1713 S5)", _nested_comments_patched
     )
     _camel_context_floor = apply_camel_context_floor()
-    logging.getLogger("agora.run_parallel_simulation").info("context-patch token_limit floor = %s", _camel_context_floor)
+    logging.getLogger("agora.run_parallel_simulation").info(
+        "context-patch token_limit floor = %s", _camel_context_floor
+    )
 
-if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
+
+if __name__ == "__main__" and any(arg in sys.argv for arg in ("-h", "--help")):
     build_parallel_parser().parse_args()
     sys.exit(0)
 
 from app.config import Config
 from app.contracts.persona_contract import VOICE_REGISTER_VALUES
+
 # Aktivitaets-Untergrenzen und geteilte Runden-Auswahl (#1713 Slice S4).
 # Zuordnung Konfigurations-Agent → OASIS-Position (#1778).
 from app.services.simulation_agent_identity import (
@@ -212,6 +226,7 @@ from app.services.simulation_activity_policy import (
     TWITTER_MAX_REC_POST_LEN,
     TWITTER_REFRESH_REC_POST_COUNT,
 )
+
 # Aktivitaetsmodell (#1779): Auswahl nach belegter Rate, eine Ziehung je Runde
 # fuer beide Plattformen; Altkonfigurationen ohne ``activity_model`` behalten
 # den bisherigen Pfad (``select_active_agent_ids``) unveraendert.
@@ -288,6 +303,7 @@ def init_logging_for_simulation(simulation_dir: str):
     old_log_dir = os.path.join(simulation_dir, "log")
     if os.path.exists(old_log_dir):
         import shutil
+
         shutil.rmtree(old_log_dir, ignore_errors=True)
 
 
@@ -309,7 +325,7 @@ try:
         LLMAction,
         ManualAction,
         generate_twitter_agent_graph,
-        generate_reddit_agent_graph
+        generate_reddit_agent_graph,
     )
 except ImportError as e:
     print(f"Error: Missing dependency {e}")
@@ -327,6 +343,7 @@ try:
         attach_tools_to_agents,
         augment_profile_with_stance,
     )
+
     AGENT_TOOLS_AVAILABLE = True
 except ImportError as _e:
     AGENT_TOOLS_AVAILABLE = False
@@ -419,8 +436,10 @@ IPC_COMMANDS_DIR = "ipc_commands"
 IPC_RESPONSES_DIR = "ipc_responses"
 ENV_STATUS_FILE = "env_status.json"
 
+
 class CommandType:
     """Command type constants"""
+
     INTERVIEW = "interview"
     BATCH_INTERVIEW = "batch_interview"
     CLOSE_ENV = "close_env"
@@ -429,10 +448,10 @@ class CommandType:
 class ParallelIPCHandler:
     """
     Dual-platform IPC command handler
-    
+
     Manage environments of both platforms, handle Interview commands
     """
-    
+
     def __init__(
         self,
         simulation_dir: str,
@@ -465,40 +484,45 @@ class ParallelIPCHandler:
         # Ensure directory exists
         os.makedirs(self.commands_dir, exist_ok=True)
         os.makedirs(self.responses_dir, exist_ok=True)
-    
+
     def update_status(self, status: str):
         """Update environment status"""
-        with open(self.status_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                "status": status,
-                "twitter_available": self.twitter_env is not None,
-                "reddit_available": self.reddit_env is not None,
-                "timestamp": datetime.now().isoformat()
-            }, f, ensure_ascii=False, indent=2)
-    
+        with open(self.status_file, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "status": status,
+                    "twitter_available": self.twitter_env is not None,
+                    "reddit_available": self.reddit_env is not None,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
     def poll_command(self) -> Optional[Dict[str, Any]]:
         """Poll for pending commands"""
         if not os.path.exists(self.commands_dir):
             return None
-        
+
         # Get command files (sorted by time)
         command_files = []
         for filename in os.listdir(self.commands_dir):
-            if filename.endswith('.json'):
+            if filename.endswith(".json"):
                 filepath = os.path.join(self.commands_dir, filename)
                 command_files.append((filepath, os.path.getmtime(filepath)))
-        
+
         command_files.sort(key=lambda x: x[1])
-        
+
         for filepath, _ in command_files:
             try:
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 continue
-        
+
         return None
-    
+
     async def send_response(
         self,
         command_id: str,
@@ -525,11 +549,11 @@ class ParallelIPCHandler:
             "result": result,
             "error": error,
             "budget_exceeded": budget_exceeded,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         response_file = os.path.join(self.responses_dir, f"{command_id}.json")
-        with open(response_file, 'w', encoding='utf-8') as f:
+        with open(response_file, "w", encoding="utf-8") as f:
             json.dump(response, f, ensure_ascii=False, indent=2)
 
         # Delete command file (best-effort; bridge-only commands have none)
@@ -543,14 +567,14 @@ class ParallelIPCHandler:
         # stays as the rolling-upgrade fallback.
         if self.redis_bridge is not None and self.redis_bridge.active:
             await self.redis_bridge.publish_response(command_id, response)
-    
+
     def _get_env_and_graph(self, platform: str):
         """
         Get environment and agent_graph for specified platform
-        
+
         Args:
             platform: Platform name ("twitter" or "reddit")
-            
+
         Returns:
             (env, agent_graph, platform_name) or (None, None, None)
         """
@@ -560,7 +584,7 @@ class ParallelIPCHandler:
             return self.reddit_env, self.reddit_agent_graph, "reddit"
         else:
             return None, None, None
-    
+
     async def _interview_single_platform(
         self, agent_id: int, prompt: str, platform: str, report_run_id: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -582,8 +606,7 @@ class ParallelIPCHandler:
         try:
             agent = agent_graph.get_agent(agent_id)
             interview_action = ManualAction(
-                action_type=ActionType.INTERVIEW,
-                action_args={"prompt": prompt}
+                action_type=ActionType.INTERVIEW, action_args={"prompt": prompt}
             )
             actions = {agent: interview_action}
             # Tech-Review Slice B4c: physische Modellaufrufe waehrend dieses
@@ -637,15 +660,23 @@ class ParallelIPCHandler:
         """
         # If platform is specified, only interview that platform
         if platform in ("twitter", "reddit"):
-            result = await self._interview_single_platform(agent_id, prompt, platform, report_run_id)
+            result = await self._interview_single_platform(
+                agent_id, prompt, platform, report_run_id
+            )
 
             if "error" in result:
                 budget_exceeded = result.get("budget_exceeded")
-                await self.send_response(command_id, "failed", error=result["error"], budget_exceeded=budget_exceeded)
+                await self.send_response(
+                    command_id, "failed", error=result["error"], budget_exceeded=budget_exceeded
+                )
                 if budget_exceeded:
-                    print(f"  Interview failed (budget exceeded): agent_id={agent_id}, platform={platform}, error={result['error']}")
+                    print(
+                        f"  Interview failed (budget exceeded): agent_id={agent_id}, platform={platform}, error={result['error']}"
+                    )
                 else:
-                    print(f"  Interview failed: agent_id={agent_id}, platform={platform}, error={result['error']}")
+                    print(
+                        f"  Interview failed: agent_id={agent_id}, platform={platform}, error={result['error']}"
+                    )
                 return False
             else:
                 await self.send_response(command_id, "completed", result=result)
@@ -654,14 +685,12 @@ class ParallelIPCHandler:
 
         # Platform not specified: interview both platforms simultaneously
         if not self.twitter_env and not self.reddit_env:
-            await self.send_response(command_id, "failed", error="No available simulation environment")
+            await self.send_response(
+                command_id, "failed", error="No available simulation environment"
+            )
             return False
 
-        results = {
-            "agent_id": agent_id,
-            "prompt": prompt,
-            "platforms": {}
-        }
+        results = {"agent_id": agent_id, "prompt": prompt, "platforms": {}}
         success_count = 0
         budget_exceeded_info: Optional[Dict[str, Any]] = None
 
@@ -670,16 +699,18 @@ class ParallelIPCHandler:
         platforms_to_interview = []
 
         if self.twitter_env:
-            tasks.append(self._interview_single_platform(agent_id, prompt, "twitter", report_run_id))
+            tasks.append(
+                self._interview_single_platform(agent_id, prompt, "twitter", report_run_id)
+            )
             platforms_to_interview.append("twitter")
 
         if self.reddit_env:
             tasks.append(self._interview_single_platform(agent_id, prompt, "reddit", report_run_id))
             platforms_to_interview.append("reddit")
-        
+
         # Execute in parallel
         platform_results = await asyncio.gather(*tasks)
-        
+
         # Detect budget_exceeded BEFORE success_count aggregation
         # If any platform hit a hard budget, that takes precedence — the Run
         # must end stopped/termination_reason=budget_* (never soften).
@@ -690,26 +721,34 @@ class ParallelIPCHandler:
             elif budget_exceeded_info is None and platform_result.get("budget_exceeded"):
                 # First budget_exceeded wins — Run ends with that dimension
                 budget_exceeded_info = platform_result["budget_exceeded"]
-        
+
         if budget_exceeded_info:
             # Budget exceeded on at least one platform: report structured abort
-            errors = [f"{p}: {r.get('error', 'Unknown error')}" for p, r in results["platforms"].items()]
+            errors = [
+                f"{p}: {r.get('error', 'Unknown error')}" for p, r in results["platforms"].items()
+            ]
             await self.send_response(
                 command_id, "failed", error="; ".join(errors), budget_exceeded=budget_exceeded_info
             )
-            print(f"  Interview failed (budget exceeded): agent_id={agent_id}, dimension={budget_exceeded_info['dimension']}")
+            print(
+                f"  Interview failed (budget exceeded): agent_id={agent_id}, dimension={budget_exceeded_info['dimension']}"
+            )
             return False
 
         if success_count > 0:
             await self.send_response(command_id, "completed", result=results)
-            print(f"  Interview completed: agent_id={agent_id}, success_platforms={success_count}/{len(platforms_to_interview)}")
+            print(
+                f"  Interview completed: agent_id={agent_id}, success_platforms={success_count}/{len(platforms_to_interview)}"
+            )
             return True
         else:
-            errors = [f"{p}: {r.get('error', 'Unknown error')}" for p, r in results["platforms"].items()]
+            errors = [
+                f"{p}: {r.get('error', 'Unknown error')}" for p, r in results["platforms"].items()
+            ]
             await self.send_response(command_id, "failed", error="; ".join(errors))
             print(f"  Interview failed: agent_id={agent_id}, All platforms failed")
             return False
-    
+
     async def handle_batch_interview(
         self,
         command_id: str,
@@ -736,7 +775,7 @@ class ParallelIPCHandler:
         twitter_interviews = []
         reddit_interviews = []
         both_platforms_interviews = []  # Need to interview both platforms simultaneously
-        
+
         for interview in interviews:
             item_platform = interview.get("platform", platform)
             if item_platform == "twitter":
@@ -746,17 +785,17 @@ class ParallelIPCHandler:
             else:
                 # Platform not specified: interview both platforms
                 both_platforms_interviews.append(interview)
-        
+
         # Split both_platforms_interviews to two platforms
         if both_platforms_interviews:
             if self.twitter_env:
                 twitter_interviews.extend(both_platforms_interviews)
             if self.reddit_env:
                 reddit_interviews.extend(both_platforms_interviews)
-        
+
         results = {}
         budget_exceeded_info: Optional[Dict[str, Any]] = None
-        
+
         # Handle Twitter platform interview
         if twitter_interviews and self.twitter_env:
             try:
@@ -767,12 +806,11 @@ class ParallelIPCHandler:
                     try:
                         agent = self.twitter_agent_graph.get_agent(agent_id)
                         twitter_actions[agent] = ManualAction(
-                            action_type=ActionType.INTERVIEW,
-                            action_args={"prompt": prompt}
+                            action_type=ActionType.INTERVIEW, action_args={"prompt": prompt}
                         )
                     except Exception as e:
                         print(f"  Warning: Unable to get Twitter Agent {agent_id}: {e}")
-                
+
                 if twitter_actions:
                     with report_attribution(self.budget_guard, report_run_id):
                         await self.twitter_env.step(twitter_actions)
@@ -791,7 +829,7 @@ class ParallelIPCHandler:
                 print(f"  Twitter batch Interview failed (budget exceeded): {e}")
             except Exception as e:
                 print(f"  Twitter batch Interview failed: {e}")
-        
+
         # Handle Reddit platform interview
         if reddit_interviews and self.reddit_env:
             try:
@@ -802,12 +840,11 @@ class ParallelIPCHandler:
                     try:
                         agent = self.reddit_agent_graph.get_agent(agent_id)
                         reddit_actions[agent] = ManualAction(
-                            action_type=ActionType.INTERVIEW,
-                            action_args={"prompt": prompt}
+                            action_type=ActionType.INTERVIEW, action_args={"prompt": prompt}
                         )
                     except Exception as e:
                         print(f"  Warning: Unable to get Reddit Agent {agent_id}: {e}")
-                
+
                 if reddit_actions:
                     with report_attribution(self.budget_guard, report_run_id):
                         await self.reddit_env.step(reddit_actions)
@@ -828,52 +865,57 @@ class ParallelIPCHandler:
                 print(f"  Reddit batch Interview failed (budget exceeded): {e}")
             except Exception as e:
                 print(f"  Reddit batch Interview failed: {e}")
-        
+
         if budget_exceeded_info:
             # Budget exceeded on at least one platform: report structured abort
             await self.send_response(
-                command_id, "failed", error="Budget exceeded during batch interview", budget_exceeded=budget_exceeded_info
+                command_id,
+                "failed",
+                error="Budget exceeded during batch interview",
+                budget_exceeded=budget_exceeded_info,
             )
-            print(f"  Batch Interview failed (budget exceeded): dimension={budget_exceeded_info['dimension']}")
+            print(
+                f"  Batch Interview failed (budget exceeded): dimension={budget_exceeded_info['dimension']}"
+            )
             return False
-        
+
         if results:
-            await self.send_response(command_id, "completed", result={
-                "interviews_count": len(results),
-                "results": results
-            })
+            await self.send_response(
+                command_id,
+                "completed",
+                result={"interviews_count": len(results), "results": results},
+            )
             print(f"  Batch Interview completed: {len(results)} Agents")
             return True
         else:
             await self.send_response(command_id, "failed", error="No successful interviews")
             return False
-    
+
     def _get_interview_result(self, agent_id: int, platform: str) -> Dict[str, Any]:
         """Get the latest Interview result from database"""
         db_path = os.path.join(self.simulation_dir, f"{platform}_simulation.db")
-        
-        result = {
-            "agent_id": agent_id,
-            "response": None,
-            "timestamp": None
-        }
-        
+
+        result = {"agent_id": agent_id, "response": None, "timestamp": None}
+
         if not os.path.exists(db_path):
             return result
-        
+
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            
+
             # Query the latest Interview record
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT user_id, info, created_at
                 FROM trace
                 WHERE action = ? AND user_id = ?
                 ORDER BY created_at DESC
                 LIMIT 1
-            """, (ActionType.INTERVIEW.value, agent_id))
-            
+            """,
+                (ActionType.INTERVIEW.value, agent_id),
+            )
+
             row = cursor.fetchone()
             if row:
                 user_id, info_json, created_at = row
@@ -883,14 +925,14 @@ class ParallelIPCHandler:
                     result["timestamp"] = created_at
                 except json.JSONDecodeError:
                     result["response"] = info_json
-            
+
             conn.close()
-            
+
         except Exception as e:
             print(f"  Failed to read Interview result: {e}")
-        
+
         return result
-    
+
     async def _execute_command(
         self, command_id: str, command_type: str, args: Dict[str, Any]
     ) -> bool:
@@ -967,7 +1009,7 @@ class ParallelIPCHandler:
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration file"""
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -1014,189 +1056,50 @@ try:
         _parse_model_context_limits,
         resolve_model_runtime_settings,
     )
+    from .sim_runtime.runtime_execution import (
+        allowed_emit_action_types,
+        configure_platform_agent_graph,
+        create_simulation_llm_model,
+        emit_round_actions_to_redis,
+        execute_initial_posts_round,
+        resolve_graph_agent_names,
+    )
 except ImportError:
     from sim_runtime.llm_config import (
         _parse_model_context_limits,
         resolve_model_runtime_settings,
     )
+    from sim_runtime.runtime_execution import (
+        allowed_emit_action_types,
+        configure_platform_agent_graph,
+        create_simulation_llm_model,
+        emit_round_actions_to_redis,
+        execute_initial_posts_round,
+        resolve_graph_agent_names,
+    )
 
 
 def create_model(config: Dict[str, Any], use_boost: bool = False):
-    """
-    Create an LLM model using the configured provider and runtime settings.
-    
-    Parameters:
-        config (Dict[str, Any]): Simulation configuration, including an optional
-            ``llm_model`` override.
-        use_boost (bool): Whether to use the optional acceleration-provider
-            configuration when available.
-    
-    Returns:
-        The configured LLM model instance.
-    
-    Raises:
-        ValueError: If an OpenAI-compatible provider is selected without an API
-            key.
-    """
-    # Check if acceleration configuration exists
-    boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")
-    boost_base_url = os.environ.get("LLM_BOOST_BASE_URL", "")
-    boost_model = os.environ.get("LLM_BOOST_MODEL_NAME", "")
-    # Finding H5 (#1688): _sim_common.load_workspace_secret_env_from_fd()
-    # already pops LLM_BOOST_* for a workspace-scoped run, so boost_api_key
-    # above is normally already empty here — this is defense-in-depth
-    # against boost ever reaching a workspace run through any other path.
-    has_boost_config = bool(boost_api_key) and not is_workspace_credential_scope()
-    
-    # Choose which LLM to use based on parameters and configuration
-    # Model selection precedence: sim-config (UI choice) > .env > fallback.
-    # API key/base URL still come from .env (secrets stay out of sim-config).
-    config_model = config.get("llm_model", "") or ""
-    if use_boost and has_boost_config:
-        # Use acceleration configuration
-        llm_api_key = boost_api_key
-        llm_base_url = boost_base_url
-        llm_model = config_model or boost_model or os.environ.get("LLM_MODEL_NAME", "")
-        config_label = "[Acceleration LLM]"
-    else:
-        # useCommon configuration
-        llm_api_key = os.environ.get("LLM_API_KEY", "")
-        llm_base_url = os.environ.get("LLM_BASE_URL", "")
-        llm_model = config_model or os.environ.get("LLM_MODEL_NAME", "")
-        config_label = "[Common LLM]"
-
-    # Final fallback: qwen3-coder-next:cloud hat 256k context, nano-Varianten kippen bei
-    # großen Persona-Prompts (Context-Overflow).
-    if not llm_model:
-        llm_model = "qwen3-coder-next:cloud"
-    
-    runtime_settings = resolve_model_runtime_settings(llm_model)
-
-    # Issue #1423: CLI-Transport (codex_cli) hat weder base_url noch api_key.
-    # Die URL-basierte Erkennung darunter hat nichts zu mustern und liefe in
-    # den OPENAI-Zweig, der das geroutete Modell an das geerbte LLM_BASE_URL
-    # schickt — genau der beobachtete HTTP 400. Das Signal setzt
-    # ``build_route_subprocess_env`` anhand der Registry.
-    if claude_cli_transport_active():
-        print(f"{config_label} model={llm_model}, transport=cli (claude)", flush=True)
-        return ClaudeCliModel(
-            model_type=llm_model, api_key=os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
-        )
-    if cli_transport_active():
-        print(f"{config_label} model={llm_model}, transport=cli (codex)", flush=True)
-        return CodexCliModel(model_type=llm_model)
-
-    platform = detect_oasis_platform(llm_model, llm_base_url)
-    think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
-
-    print(
-        f"{config_label} model={llm_model}, "
-        f"base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
-        f"platform={platform.value}, "
-        f"completion_max_tokens={runtime_settings['completion_max_tokens']}, "
-        f"memory_token_limit={runtime_settings['memory_token_limit']}, "
-        f"ollama_num_ctx={runtime_settings['ollama_num_ctx']}",
-        flush=True,
-    )
-
-    model_cfg: Dict[str, Any] = build_camel_completion_params(
-        model=llm_model,
-        completion_max_tokens=runtime_settings["completion_max_tokens"],
-        base_url=llm_base_url or None,
-    )
-
-    if platform == ModelPlatformType.GEMINI:
-        # CAMEL 0.2.78 nennt den Adapter GeminiModel, spricht aber weiterhin
-        # Googles OpenAI-Compat-API und rekonstruiert Tool-Historie ohne
-        # extra_content.google.thought_signature. Unser Adapter bindet die
-        # Signatur an die Tool-Call-ID und echoed sie im Folgeturn.
-        # Praezedenz wie beim urspruenglichen GOOGLE_API_KEY: der aufgeloeste
-        # llm_api_key (aus Store/Route via LLM_API_KEY injiziert) ist massgeblich;
-        # ambientes GEMINI_/GOOGLE_API_KEY nur als Fallback.
-        _gemini_key = (
-            llm_api_key
-            or os.environ.get("GEMINI_API_KEY", "")
-            or os.environ.get("GOOGLE_API_KEY", "")
-        )
-        os.environ["GOOGLE_API_KEY"] = _gemini_key
-        # CAMELs GeminiModel liest GEMINI_API_KEY (nicht GOOGLE_API_KEY).
-        # Der Backend-Spawner injiziert den Store-Key bereits als GEMINI_API_KEY
-        # (build_route_subprocess_env); dieser Fallback deckt den Standalone-/
-        # Dev-Pfad ab, in dem nur LLM_API_KEY/GOOGLE_API_KEY gesetzt ist.
-        os.environ["GEMINI_API_KEY"] = _gemini_key
-        return _create_gemini_model(
-            model_type=llm_model,
-            model_config_dict=model_cfg,
-            api_key=_gemini_key,
-        )
-
-    elif platform == ModelPlatformType.OLLAMA:
-        # CAMEL's OllamaModel inherits from OpenAICompatibleModel: it builds an
-        # openai.OpenAI(base_url=url) client and calls POST {url}/chat/
-        # completions.  It has no native /api/chat path — the earlier comment
-        # here claimed the opposite and was the reason nobody normalised the
-        # URL.  Both Ollama defaults (https://ollama.com, http://localhost:11434)
-        # carry no /v1, which is correct for Agora's own HTTP path (native
-        # /api/chat, strips /v1 anyway) and wrong for CAMEL: the preflight probe
-        # hit https://ollama.com/chat/completions and got Ollama's HTML 404 page
-        # back as an openai.NotFoundError.  resolve_camel_ollama_url delegates
-        # to the provider SSoT instead of re-deriving the rule here.
-        # Build extra_body inline: we already dispatched via the provider SSoT
-        # (detect_oasis_platform), so re-running the _is_ollama_route gate
-        # inside build_camel_extra_body() would be redundant detection.
-        # (Since #670 that gate also delegates to the SSoT and no longer
-        # mis-classifies :latest models or ollama.com URLs.)
-        os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
-        extra_body: Dict[str, Any] = {"think": think_on}
-        if runtime_settings["ollama_num_ctx"] is not None:
-            extra_body["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
-        model_cfg["extra_body"] = extra_body
-        return ModelFactory.create(
-            model_platform=ModelPlatformType.OLLAMA,
-            model_type=llm_model,
-            url=resolve_camel_ollama_url(llm_base_url or None),
-            api_key=llm_api_key or None,
-            model_config_dict=model_cfg,
-        )
-
-    else:
-        # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, MiniMax, etc.
-        # Ollama-only think/num_ctx bleiben aus (400 sonst). Einzige Ausnahme:
-        # MiniMax (api.minimax.io) akzeptiert ein eigenes `thinking`-Feld (Spec),
-        # das build_minimax_extra_body ausschliesslich fuer MiniMax-Routen setzt.
-        if llm_api_key:
-            os.environ["OPENAI_API_KEY"] = llm_api_key
-
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError(
-                "Missing API Key configuration, please set LLM_API_KEY in .env file in project root"
+    """Create an LLM model using the shared ``sim_runtime.runtime_execution`` SSoT."""
+    return create_simulation_llm_model(
+        config,
+        use_boost=use_boost,
+        model_factory=ModelFactory,
+        gemini_model_creator=_create_gemini_model,
+        claude_cli_model_cls=ClaudeCliModel,
+        codex_cli_model_cls=CodexCliModel,
+        claude_cli_transport_check=claude_cli_transport_active,
+        cli_transport_check=cli_transport_active,
+        workspace_credential_scope_check=is_workspace_credential_scope,
+        platform_detector=detect_oasis_platform,
+        build_completion_params_fn=lambda *, model, completion_max_tokens, base_url=None: (
+            build_camel_completion_params(
+                model=model,
+                completion_max_tokens=completion_max_tokens,
+                base_url=base_url,
             )
-
-        if llm_base_url:
-            os.environ["OPENAI_BASE_URL"] = llm_base_url
-            os.environ["OPENAI_API_BASE"] = llm_base_url
-            os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-
-        minimax_extra = build_minimax_extra_body(
-            model=llm_model, base_url=llm_base_url, think=think_on
-        )
-        if minimax_extra:
-            model_cfg["extra_body"] = minimax_extra
-
-        # Explizite Übergabe von url/api_key an ModelFactory.create statt
-        # blindes Verlassen auf os.environ: CAMELs OpenAIModel.__init__ gibt
-        # expliziten Parametern Vorrang vor OPENAI_API_KEY/OPENAI_API_BASE_URL.
-        # Ein Stale-Parent-Env (z. B. OpenAI-Default aus .env) konnte sonst die
-        # aufgelöste Route überschatten → 404 ``model MiniMax-M3 not found``
-        # (Root Cause). url/api_key leer → None → CAMEL fällt wie bisher auf
-        # Env zurück (Standalone-/Dev-Pfad unbeschädigt).
-        return ModelFactory.create(
-            model_platform=ModelPlatformType.OPENAI,
-            model_type=llm_model,
-            model_config_dict=model_cfg,
-            url=llm_base_url or None,
-            api_key=llm_api_key or None,
-        )
+        ),
+    )
 
 
 def build_initial_post_actions(
@@ -1277,10 +1180,7 @@ def format_initial_posts_log(published_count: int, distinct_agents: int) -> str:
 
 
 def get_active_agents_for_round(
-    env,
-    config: Dict[str, Any],
-    current_hour: int,
-    round_num: int
+    env, config: Dict[str, Any], current_hour: int, round_num: int
 ) -> List:
     """Decide which Agents to activate this round based on time and configuration"""
     # Geteilte Auswahl-Logik mit platform_runner.py (#1713 Slice S4). Mit
@@ -1306,7 +1206,10 @@ def get_active_agents_for_round(
             # still verwerfen, sondern sichtbar machen (#1779).
             logging.getLogger("agora.run_parallel_simulation").warning(
                 "Runde %s: Agent %s nicht aktivierbar (%s: %s)",
-                round_num, agent_id, type(exc).__name__, exc,
+                round_num,
+                agent_id,
+                type(exc).__name__,
+                exc,
             )
 
     return active_agents
@@ -1314,6 +1217,7 @@ def get_active_agents_for_round(
 
 class PlatformSimulation:
     """Platform simulation result container"""
+
     def __init__(self):
         self.env = None
         self.agent_graph = None
@@ -1321,6 +1225,301 @@ class PlatformSimulation:
         # Budget-Guard (Tech-Review Slice B4c): None bei Stop/Normal-Durchlauf,
         # Info-Dict bei Budget-Abbruch — spiegelt platform_runner.py.
         self.budget_abort_info = None
+
+
+async def _run_parallel_platform_simulation(
+    *,
+    platform_slug: str,
+    platform_label: str,
+    profile_filename: str,
+    db_filename: str,
+    use_boost: bool,
+    available_actions: List[Any],
+    fallback_observation: str,
+    graph_generator: Any,
+    config: Dict[str, Any],
+    simulation_dir: str,
+    action_logger: Optional[PlatformActionLogger] = None,
+    main_logger: Optional[SimulationLogManager] = None,
+    max_rounds: Optional[int] = None,
+    budget_guard: Optional[SubprocessBudgetGuard] = None,
+) -> PlatformSimulation:
+    """Shared platform simulation loop for ``run_twitter_simulation`` and ``run_reddit_simulation``."""
+    result = PlatformSimulation()
+
+    def log_info(msg: str) -> None:
+        if main_logger:
+            main_logger.info(f"[{platform_label}] {msg}")
+        else:
+            print(f"[{platform_label}] {msg}")
+
+    log_info("Initializing...")
+
+    model = create_model(config, use_boost=use_boost)
+    if budget_guard is not None:
+        model = budget_guard.wrap_model(model)
+    preflight_model_probe(model)
+
+    tool_loop = None
+    enable_tools = config.get("enable_agent_tools", False)
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        log_info("Agent tools enabled — will attach native FunctionTools after graph generation")
+        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
+    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
+    profile_path = os.path.join(simulation_dir, profile_filename)
+    if not os.path.exists(profile_path):
+        log_info(f"Error: Profile file does not exist: {profile_path}")
+        return result
+
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            profile_path = augment_profile_with_stance(
+                profile_path,
+                config.get("agent_configs", []),
+                platform=platform_slug,
+                contested_statement=(config.get("contested_question") or {}).get("statement"),
+                activity_limits=activity_limits_sentence(config),
+            )
+        except Exception as e:
+            log_info(
+                f"augment_profile_with_stance ({platform_slug}) failed, "
+                f"using unaugmented profile: {e}"
+            )
+
+    result.agent_graph = await graph_generator(
+        profile_path=profile_path,
+        model=model,
+        available_actions=available_actions,
+    )
+
+    activation_limits, agent_names = configure_platform_agent_graph(
+        result.agent_graph,
+        config,
+        platform_slug=platform_slug,
+        enable_tools=enable_tools,
+        agent_tools_available=AGENT_TOOLS_AVAILABLE,
+        log=log_info,
+        build_tools_fn=build_camel_function_tools if AGENT_TOOLS_AVAILABLE else None,
+        attach_tools_fn=attach_tools_to_agents if AGENT_TOOLS_AVAILABLE else None,
+        install_feed_comment_cap_fn=install_feed_comment_cap,
+        install_stance_anchor_fn=install_stance_anchor,
+        install_activation_limits_fn=install_activation_limits_from_config,
+        describe_memory_policy_fn=describe_memory_policy,
+    )
+    selection_config = for_platform(config, platform_slug)
+
+    db_path = os.path.join(simulation_dir, db_filename)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    if platform_slug == "twitter":
+        platform_arg: Any = oasis.Platform(
+            db_path=db_path,
+            recsys_type="twhin-bert",
+            refresh_rec_post_count=TWITTER_REFRESH_REC_POST_COUNT,
+            max_rec_post_len=TWITTER_MAX_REC_POST_LEN,
+            following_post_count=TWITTER_FOLLOWING_POST_COUNT,
+        )
+        result.env = oasis.make(
+            agent_graph=result.agent_graph,
+            platform=platform_arg,
+            database_path=db_path,
+            semaphore=resolve_sim_max_concurrency(),
+        )
+    else:
+        result.env = oasis.make(
+            agent_graph=result.agent_graph,
+            platform=oasis.DefaultPlatformType.REDDIT,
+            database_path=db_path,
+            semaphore=resolve_sim_max_concurrency(),
+        )
+
+    await result.env.reset()
+    log_info("Environment started")
+
+    if action_logger:
+        action_logger.log_simulation_start(config)
+
+    total_actions = 0
+    last_rowid = 0
+
+    time_config = config.get("time_config", {})
+    total_hours = time_config.get("total_simulation_hours", 72)
+    minutes_per_round = time_config.get("minutes_per_round", 30)
+    total_rounds = (total_hours * 60) // minutes_per_round
+
+    if max_rounds is not None and max_rounds > 0:
+        original_rounds = total_rounds
+        total_rounds = min(total_rounds, max_rounds)
+        if total_rounds < original_rounds:
+            log_info(
+                f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})"
+            )
+
+    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
+    if start_hour_offset != 0:
+        log_info(
+            f"Short run: shifting simulated clock to start at hour "
+            f"{start_hour_offset:02d}:00 (active-hour overlap)"
+        )
+
+    start_time = datetime.now()
+    sim_clock_anchor = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
+    redis_url_for_emit = os.environ.get("REDIS_URL")
+
+    last_rowid, initial_action_count = await execute_initial_posts_round(
+        env=result.env,
+        config=config,
+        platform_slug=platform_slug,
+        db_path=db_path,
+        agent_names=agent_names,
+        last_rowid=last_rowid,
+        action_logger=action_logger,
+        simulation_id=sim_id_for_emit,
+        redis_url=redis_url_for_emit,
+        sim_clock_anchor=sim_clock_anchor,
+        start_hour_offset=start_hour_offset,
+        minutes_per_round=minutes_per_round,
+        log=log_info,
+        build_initial_actions_fn=build_initial_post_actions,
+        fetch_actions_fn=fetch_new_actions_from_db,
+        emit_fn=_emit_post_created_to_redis,
+    )
+    if action_logger:
+        total_actions += initial_action_count
+
+    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
+    agent_configs_by_id = {cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])}
+    for round_num in range(total_rounds):
+        if _shutdown_event and _shutdown_event.is_set():
+            if main_logger:
+                main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
+            break
+
+        decision = round_control.check(round_num)
+        if decision.action == RoundAction.STOP:
+            break
+        if decision.action == RoundAction.BUDGET_ABORT:
+            result.budget_abort_info = decision.budget_abort_info
+            break
+
+        simulated_minutes = round_num * minutes_per_round
+        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
+        simulated_day = simulated_minutes // (60 * 24) + 1
+
+        active_agents = get_active_agents_for_round(
+            result.env, selection_config, simulated_hour, round_num
+        )
+
+        if action_logger:
+            action_logger.log_round_start(round_num + 1, simulated_hour)
+
+        if not active_agents:
+            if action_logger:
+                action_logger.log_round_end(
+                    round_num + 1, 0, simulated_minutes=simulated_minutes + minutes_per_round
+                )
+            continue
+
+        if tool_loop and enable_tools:
+            actions = {}
+            for agent_id, agent in active_agents:
+                try:
+                    try:
+                        observation = result.env.get_observation(agent)
+                    except Exception:
+                        observation = fallback_observation
+
+                    agent_name = getattr(agent, "username", f"Agent_{agent_id}")
+                    agent_role = getattr(agent, "profession", "Unknown")
+                    agent_bio = getattr(agent, "bio", "")
+                    agent_cfg = agent_configs_by_id.get(agent_id, {})
+
+                    action = await tool_loop.decide_action(
+                        agent=agent,
+                        observation=observation,
+                        available_actions=[a.value for a in available_actions],
+                        agent_name=agent_name,
+                        agent_role=agent_role,
+                        agent_bio=agent_bio,
+                        language=config.get("language", "de"),
+                        stance=agent_cfg.get("stance"),
+                        sentiment_bias=agent_cfg.get("sentiment_bias"),
+                        posts_per_hour=agent_cfg.get("posts_per_hour"),
+                        comments_per_hour=agent_cfg.get("comments_per_hour"),
+                        contested_statement=(config.get("contested_question") or {}).get(
+                            "statement"
+                        ),
+                    )
+                    actions[agent] = action
+                except Exception as e:
+                    log_info(
+                        f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction"
+                    )
+                    actions[agent] = LLMAction()
+        else:
+            actions = {agent: LLMAction() for _, agent in active_agents}
+
+        with round_activation_limits(activation_limits, round_num + 1):
+            await result.env.step(actions)
+        prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
+
+        actual_actions, last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
+
+        round_action_count = 0
+        for action_data in actual_actions:
+            if action_logger:
+                action_logger.log_action(
+                    round_num=round_num + 1,
+                    agent_id=action_data["agent_id"],
+                    agent_name=action_data["agent_name"],
+                    action_type=action_data["action_type"],
+                    action_args=action_data["action_args"],
+                )
+                total_actions += 1
+                round_action_count += 1
+
+        await emit_round_actions_to_redis(
+            actions=actual_actions,
+            platform_slug=platform_slug,
+            simulation_id=sim_id_for_emit,
+            redis_url=redis_url_for_emit,
+            round_num=round_num + 1,
+            sim_clock_anchor=sim_clock_anchor,
+            start_hour_offset=start_hour_offset,
+            simulated_minutes=simulated_minutes,
+            minutes_per_round=minutes_per_round,
+            emit_fn=_emit_post_created_to_redis,
+        )
+
+        if action_logger:
+            action_logger.log_round_end(
+                round_num + 1,
+                round_action_count,
+                simulated_minutes=simulated_minutes + minutes_per_round,
+            )
+
+        if (round_num + 1) % 20 == 0:
+            progress = (round_num + 1) / total_rounds * 100
+            log_info(
+                f"Day {simulated_day}, {simulated_hour:02d}:00 - "
+                f"Round {round_num + 1}/{total_rounds} ({progress:.1f}%)"
+            )
+
+    if action_logger:
+        action_logger.log_simulation_end(total_rounds, total_actions)
+
+    result.total_actions = total_actions
+    elapsed = (datetime.now() - start_time).total_seconds()
+    log_info(
+        f"Simulation loop completed! Time taken: {elapsed:.1f}seconds, "
+        f"Total actions: {total_actions}"
+    )
+
+    return result
 
 
 async def run_twitter_simulation(
@@ -1331,397 +1530,25 @@ async def run_twitter_simulation(
     max_rounds: Optional[int] = None,
     budget_guard: Optional[SubprocessBudgetGuard] = None,
 ) -> PlatformSimulation:
-    """Run Twitter simulation
-
-    Args:
-        config: Simulation configuration
-        simulation_dir: Simulation directory
-        action_logger: Action logger
-        main_logger: Main logger manager
-        max_rounds: Maximum simulation rounds (optional, used to truncate long simulations)
-        budget_guard: geteilter Guard aus ``main()`` (Tech-Review Slice B4c);
-            ``None`` heisst kein Usage-Recording/Hard-Budget fuer diesen Lauf.
-
-    Returns:
-        PlatformSimulation: Result object containing env and agent_graph
-    """
-    result = PlatformSimulation()
-
-    def log_info(msg):
-        if main_logger:
-            main_logger.info(f"[Twitter] {msg}")
-        else:
-            print(f"[Twitter] {msg}")
-
-    log_info("Initializing...")
-
-    # Twitter use common LLM configuration
-    model = create_model(config, use_boost=False)
-    if budget_guard is not None:
-        model = budget_guard.wrap_model(model)
-    # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
-    # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
-    # N-facher identischer Fehler während der Simulation.
-    preflight_model_probe(model)
-
-    # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
-    # Tools are attached to each SocialAgent after generation below; OASIS's
-    # built-in LLMAction() then drives them through OpenAI-compatible tool_calls.
+    """Run Twitter simulation."""
     tool_loop = None
-    enable_tools = config.get("enable_agent_tools", False)
-    if enable_tools and AGENT_TOOLS_AVAILABLE:
-        log_info("Agent tools enabled — will attach native FunctionTools after graph generation")
-        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
-    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
-        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
-
-    # OASIS Twitter uses CSV format
-    profile_path = os.path.join(simulation_dir, "twitter_profiles.csv")
-    if not os.path.exists(profile_path):
-        log_info(f"Error: Profile file does not exist: {profile_path}")
-        return result
-
-    # Issue #1713 Slice S6 (Teil 2, Rest von #1323): tool_loop bleibt hier
-    # fest None (#1215) — build_agent_prompt_with_tools wird in diesem Pfad
-    # nie aufgerufen. Die Haltung muss stattdessen im Profiltext stehen, den
-    # OASIS beim Graph-Aufbau in den System-Prompt jedes Agenten übernimmt.
-    # augment_profile_with_stance schreibt eine eigene Kopie, twitter_profiles.csv
-    # bleibt für Persona-Galerie/Interviews/Report unverändert.
-    if AGENT_TOOLS_AVAILABLE:
-        try:
-            profile_path = augment_profile_with_stance(
-                profile_path,
-                config.get("agent_configs", []),
-                platform="twitter",
-                contested_statement=(config.get("contested_question") or {}).get("statement"),
-                activity_limits=activity_limits_sentence(config),
-            )
-        except Exception as e:
-            log_info(f"augment_profile_with_stance (twitter) failed, using unaugmented profile: {e}")
-
-    result.agent_graph = await generate_twitter_agent_graph(
-        profile_path=profile_path,
-        model=model,
+    _ = tool_loop
+    return await _run_parallel_platform_simulation(
+        platform_slug="twitter",
+        platform_label="Twitter",
+        profile_filename="twitter_profiles.csv",
+        db_filename="twitter_simulation.db",
+        use_boost=False,
         available_actions=TWITTER_ACTIONS,
+        fallback_observation="You are on Twitter. Check your timeline and decide what to do.",
+        graph_generator=generate_twitter_agent_graph,
+        config=config,
+        simulation_dir=simulation_dir,
+        action_logger=action_logger,
+        main_logger=main_logger,
+        max_rounds=max_rounds,
+        budget_guard=budget_guard,
     )
-
-    # Memory-Token-Limit auch dann anheben, wenn keine Tools attached werden:
-    # CAMELs ScoreBasedContextCreator-Default (8192) wuerde sonst zuschlagen,
-    # bevor attach_tools_to_agents() greift.
-    if AGENT_TOOLS_AVAILABLE:
-        try:
-            from agent_tools import enforce_memory_token_limit
-            enforce_memory_token_limit(result.agent_graph)
-        except Exception as e:
-            log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
-    log_info(describe_memory_policy())
-    install_feed_comment_cap(result.agent_graph, log=log_info)
-    # #1779: Haltung + Streitfrage je Aktivierung im Feed-Text (ausgerichtete Konfiguration).
-    install_stance_anchor(
-        result.agent_graph,
-        config.get("agent_configs", []),
-        (config.get("contested_question") or {}).get("statement"),
-        log=log_info,
-    )
-
-    # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
-    # to every SocialAgent. OASIS triggers these through its normal LLMAction()
-    # step — no ReACT prompt parsing required.
-    if enable_tools and AGENT_TOOLS_AVAILABLE:
-        try:
-            fn_tools = build_camel_function_tools(config)
-            attached = attach_tools_to_agents(result.agent_graph, fn_tools)
-            log_info(f"Attached {len(fn_tools)} FunctionTools to Twitter agents ({attached} bindings)")
-        except Exception as e:
-            log_info(f"Failed to attach native FunctionTools: {e}")
-
-    # #1779: Obergrenze je Aktivierung (nur mit time_config.activity_model).
-    activation_limits = install_activation_limits_from_config(
-        result.agent_graph, config, log=log_info
-    )
-    # Auswahl dieser Plattformschleife: eine Ziehung je Runde fuer beide Plattformen.
-    selection_config = for_platform(config, "twitter")
-
-    # Get Agent real name mapping from config (use entity_name instead of default Agent_X)
-    agent_names = get_agent_names_from_config(config)
-    # If an agent is not in config, use OASIS default name
-    for agent_id, agent in result.agent_graph.get_agents():
-        if agent_id not in agent_names:
-            agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-
-    db_path = os.path.join(simulation_dir, "twitter_simulation.db")
-    if os.path.exists(db_path):
-        os.remove(db_path)
-
-    # Issue #1713 Slice S4: OASIS-Default haelt den Twitter-Feed sehr eng
-    # (siehe simulation_activity_policy.py Docstring) — eigenes Platform-
-    # Objekt statt DefaultPlatformType.TWITTER, damit refresh_rec_post_count/
-    # max_rec_post_len/following_post_count ueber die im OASIS-Paket
-    # vorgesehenen Parameter greifen.
-    twitter_platform = oasis.Platform(
-        db_path=db_path,
-        recsys_type="twhin-bert",
-        refresh_rec_post_count=TWITTER_REFRESH_REC_POST_COUNT,
-        max_rec_post_len=TWITTER_MAX_REC_POST_LEN,
-        following_post_count=TWITTER_FOLLOWING_POST_COUNT,
-    )
-    result.env = oasis.make(
-        agent_graph=result.agent_graph,
-        platform=twitter_platform,
-        database_path=db_path,
-        # Gleichzeitige LLM-Aufrufe je Plattform, konfigurierbar (#1772).
-        semaphore=resolve_sim_max_concurrency(),
-    )
-
-    await result.env.reset()
-    log_info("Environment started")
-
-    if action_logger:
-        action_logger.log_simulation_start(config)
-
-    total_actions = 0
-    last_rowid = 0  # Track last processed row in Database (use rowid to avoid created_at format differences)
-
-    # Rundentakt vorab aufloesen (verschoben aus dem alten "Main simulation
-    # loop"-Abschnitt, #1713 UI-2a): die Startpost-Emission unten braucht
-    # minutes_per_round/start_hour_offset/sim_clock_anchor bereits fuer Runde
-    # 0 — vorher existierten diese Variablen erst nach der Startpost-Phase.
-    time_config = config.get("time_config", {})
-    total_hours = time_config.get("total_simulation_hours", 72)
-    minutes_per_round = time_config.get("minutes_per_round", 30)
-    total_rounds = (total_hours * 60) // minutes_per_round
-
-    # If maximum rounds specified, truncate
-    if max_rounds is not None and max_rounds > 0:
-        original_rounds = total_rounds
-        total_rounds = min(total_rounds, max_rounds)
-        if total_rounds < original_rounds:
-            log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-
-    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
-    if start_hour_offset != 0:
-        log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
-
-    start_time = datetime.now()
-    # Task 1 — Anker für virtuelle Sim-Zeit. tz-aware UTC, 00:00 als
-    # Tagesbasis, damit sim_time deterministisch aus
-    # (start_hour_offset, simulated_minutes) ableitbar bleibt.
-    sim_clock_anchor = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-
-    # Execute initial events
-    event_config = config.get("event_config", {})
-    initial_posts = event_config.get("initial_posts", [])
-
-    # Log round 0 start (initial event phase)
-    if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-
-    initial_action_count = 0
-    if initial_posts:
-        initial_actions, published_count = build_initial_post_actions(
-            initial_posts, result.env.agent_graph
-        )
-
-        if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(format_initial_posts_log(published_count, len(initial_actions)))
-            # #1713 UI-2a (L4): echte post_id aus der DB lesen statt vor dem
-            # Schreiben zu raten. Die alte on_published-Callback lief VOR
-            # env.step() — der Post existierte da noch nicht in der
-            # OASIS-DB, post_id blieb leer und der Startpost fehlte im
-            # Aktionsprotokoll wie im Live-Feed. fetch_new_actions_from_db
-            # liest dieselbe trace-Tabelle wie die Hauptrunde und reichert
-            # post_id ueber denselben Pfad an (oasis_action_ingest).
-            initial_db_actions, last_rowid = fetch_new_actions_from_db(
-                db_path, last_rowid, agent_names
-            )
-            _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
-            _redis_url_for_emit = os.environ.get("REDIS_URL")
-            _action_count = len(initial_db_actions)
-            for _action_idx, action_data in enumerate(initial_db_actions):
-                if action_logger:
-                    action_logger.log_action(
-                        round_num=0,
-                        agent_id=action_data["agent_id"],
-                        agent_name=action_data["agent_name"],
-                        action_type=action_data["action_type"],
-                        action_args=action_data["action_args"],
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
-                if action_data.get("action_type") == "CREATE_POST":
-                    await _emit_post_created_to_redis(
-                        simulation_id=_sim_id_for_emit,
-                        platform="twitter",
-                        action_data=action_data,
-                        redis_url=_redis_url_for_emit,
-                        round_num=0,
-                        sim_time_iso=compute_post_sim_time(
-                            sim_clock_anchor,
-                            start_hour_offset,
-                            0,
-                            minutes_per_round,
-                            _action_idx,
-                            _action_count,
-                        ).isoformat(),
-                    )
-
-    # Log round 0 end
-    if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
-
-    # Main simulation loop
-    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
-    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
-    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
-    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
-    agent_configs_by_id = {
-        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
-    }
-    for round_num in range(total_rounds):
-        # Check if received exit signal
-        if _shutdown_event and _shutdown_event.is_set():
-            if main_logger:
-                main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
-            break
-
-        decision = round_control.check(round_num)
-        if decision.action == RoundAction.STOP:
-            break
-        if decision.action == RoundAction.BUDGET_ABORT:
-            result.budget_abort_info = decision.budget_abort_info
-            break
-
-        simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
-        simulated_day = simulated_minutes // (60 * 24) + 1
-
-        active_agents = get_active_agents_for_round(
-            result.env, selection_config, simulated_hour, round_num
-        )
-
-        # Log round start regardless of active agents
-        if action_logger:
-            action_logger.log_round_start(round_num + 1, simulated_hour)
-
-        if not active_agents:
-            # Log round end even without active agents (actions_count=0)
-            if action_logger:
-                action_logger.log_round_end(
-                    round_num + 1, 0, simulated_minutes=simulated_minutes + minutes_per_round
-                )
-            continue
-
-        # Build actions
-        if tool_loop and enable_tools:
-            actions = {}
-            for agent_id, agent in active_agents:
-                try:
-                    try:
-                        observation = result.env.get_observation(agent)
-                    except Exception:
-                        observation = "You are on Twitter. Check your timeline and decide what to do."
-
-                    agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
-                    agent_role = getattr(agent, 'profession', 'Unknown')
-                    agent_bio = getattr(agent, 'bio', '')
-                    agent_cfg = agent_configs_by_id.get(agent_id, {})
-
-                    action = await tool_loop.decide_action(
-                        agent=agent,
-                        observation=observation,
-                        available_actions=[a.value for a in TWITTER_ACTIONS],
-                        agent_name=agent_name,
-                        agent_role=agent_role,
-                        agent_bio=agent_bio,
-                        language=config.get("language", "de"),
-                        stance=agent_cfg.get("stance"),
-                        sentiment_bias=agent_cfg.get("sentiment_bias"),
-                        posts_per_hour=agent_cfg.get("posts_per_hour"),
-                        comments_per_hour=agent_cfg.get("comments_per_hour"),
-                        contested_statement=(config.get("contested_question") or {}).get("statement"),
-                    )
-                    actions[agent] = action
-                except Exception as e:
-                    log_info(f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction")
-                    actions[agent] = LLMAction()
-        else:
-            actions = {agent: LLMAction() for _, agent in active_agents}
-        # #1779: Zaehler je Agent nur um die Aktivierung dieser Runde.
-        with round_activation_limits(activation_limits, round_num + 1):
-            await result.env.step(actions)
-        # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
-        prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
-
-        # Get actual executed actions from Database and log
-        actual_actions, last_rowid = fetch_new_actions_from_db(
-            db_path, last_rowid, agent_names
-        )
-
-        round_action_count = 0
-        _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
-        _redis_url_for_emit = os.environ.get("REDIS_URL")
-        # Sim-Zeit für CREATE_POST-Frames dieser Round — pro Action über das
-        # Minutenbudget der Runde verteilt, damit die Live-Feed-Uhr zwischen
-        # zwei Rundengrenzen nicht stillsteht (#1018).
-        _action_count = len(actual_actions)
-        for _action_idx, action_data in enumerate(actual_actions):
-            if action_logger:
-                action_logger.log_action(
-                    round_num=round_num + 1,
-                    agent_id=action_data['agent_id'],
-                    agent_name=action_data['agent_name'],
-                    action_type=action_data['action_type'],
-                    action_args=action_data['action_args']
-                )
-                total_actions += 1
-                round_action_count += 1
-            # Slice 5-pre: emit PostCreatedEvent to Redis for SSE live-feed.
-            # #1713 UI-2a: Twitter emittiert seit Slice UI-2a auch REPOST und
-            # QUOTE_POST — beide sind eigene Beitraege im Feed, nicht nur
-            # stille Aktionszaehler.
-            if action_data.get("action_type") in ("CREATE_POST", "REPOST", "QUOTE_POST"):
-                await _emit_post_created_to_redis(
-                    simulation_id=_sim_id_for_emit,
-                    platform="twitter",
-                    action_data=action_data,
-                    redis_url=_redis_url_for_emit,
-                    round_num=round_num + 1,
-                    sim_time_iso=compute_post_sim_time(
-                        sim_clock_anchor,
-                        start_hour_offset,
-                        simulated_minutes,
-                        minutes_per_round,
-                        _action_idx,
-                        _action_count,
-                    ).isoformat(),
-                )
-
-        if action_logger:
-            action_logger.log_round_end(
-                round_num + 1,
-                round_action_count,
-                # Zeit NACH Abschluss der Runde — simulated_minutes ist der Stand
-                # zu Rundenbeginn. Damit wächst der Wert je Runde streng monoton.
-                simulated_minutes=simulated_minutes + minutes_per_round,
-            )
-
-        if (round_num + 1) % 20 == 0:
-            progress = (round_num + 1) / total_rounds * 100
-            log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-
-    # Note: Do not close environment, keep for Interview use
-
-    if action_logger:
-        action_logger.log_simulation_end(total_rounds, total_actions)
-
-    result.total_actions = total_actions
-    elapsed = (datetime.now() - start_time).total_seconds()
-    log_info(f"Simulation loop completed! Time taken: {elapsed:.1f}seconds, Total actions: {total_actions}")
-
-    return result
 
 
 async def run_reddit_simulation(
@@ -1732,369 +1559,31 @@ async def run_reddit_simulation(
     max_rounds: Optional[int] = None,
     budget_guard: Optional[SubprocessBudgetGuard] = None,
 ) -> PlatformSimulation:
-    """Run Reddit simulation
-
-    Args:
-        config: Simulation configuration
-        simulation_dir: Simulation directory
-        action_logger: Action logger
-        main_logger: Main logger manager
-        max_rounds: Maximum simulation rounds (optional, used to truncate long simulations)
-        budget_guard: geteilter Guard aus ``main()`` (Tech-Review Slice B4c);
-            ``None`` heisst kein Usage-Recording/Hard-Budget fuer diesen Lauf.
-
-    Returns:
-        PlatformSimulation: Result object containing env and agent_graph
-    """
-    result = PlatformSimulation()
-
-    def log_info(msg):
-        if main_logger:
-            main_logger.info(f"[Reddit] {msg}")
-        else:
-            print(f"[Reddit] {msg}")
-
-    log_info("Initializing...")
-
-    # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
-    model = create_model(config, use_boost=True)
-    if budget_guard is not None:
-        model = budget_guard.wrap_model(model)
-    # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
-    # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
-    # N-facher identischer Fehler während der Simulation.
-    preflight_model_probe(model)
-
-    # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
+    """Run Reddit simulation."""
     tool_loop = None
-    enable_tools = config.get("enable_agent_tools", False)
-    if enable_tools and AGENT_TOOLS_AVAILABLE:
-        log_info("Agent tools enabled — will attach native FunctionTools after graph generation")
-        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
-    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
-        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
-
-    profile_path = os.path.join(simulation_dir, "reddit_profiles.json")
-    if not os.path.exists(profile_path):
-        log_info(f"Error: Profile file does not exist: {profile_path}")
-        return result
-
-    # Issue #1713 Slice S6 (Teil 2, Rest von #1323): siehe Kommentar im
-    # Twitter-Zweig oben — derselbe Grund, derselbe Mechanismus.
-    if AGENT_TOOLS_AVAILABLE:
-        try:
-            profile_path = augment_profile_with_stance(
-                profile_path,
-                config.get("agent_configs", []),
-                platform="reddit",
-                contested_statement=(config.get("contested_question") or {}).get("statement"),
-                activity_limits=activity_limits_sentence(config),
-            )
-        except Exception as e:
-            log_info(f"augment_profile_with_stance (reddit) failed, using unaugmented profile: {e}")
-
-    result.agent_graph = await generate_reddit_agent_graph(
-        profile_path=profile_path,
-        model=model,
+    _ = tool_loop
+    return await _run_parallel_platform_simulation(
+        platform_slug="reddit",
+        platform_label="Reddit",
+        profile_filename="reddit_profiles.json",
+        db_filename="reddit_simulation.db",
+        use_boost=True,
         available_actions=REDDIT_ACTIONS,
+        fallback_observation="You are on Reddit. Check the feed and decide what to do.",
+        graph_generator=generate_reddit_agent_graph,
+        config=config,
+        simulation_dir=simulation_dir,
+        action_logger=action_logger,
+        main_logger=main_logger,
+        max_rounds=max_rounds,
+        budget_guard=budget_guard,
     )
-
-    # Memory-Token-Limit auch ohne Tools auf das resolvte Modell-Budget heben.
-    if AGENT_TOOLS_AVAILABLE:
-        try:
-            from agent_tools import enforce_memory_token_limit
-            enforce_memory_token_limit(result.agent_graph)
-        except Exception as e:
-            log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
-    log_info(describe_memory_policy())
-    install_feed_comment_cap(result.agent_graph, log=log_info)
-    # #1779: Haltungsanker je Aktivierung, siehe Twitter-Zweig.
-    install_stance_anchor(
-        result.agent_graph,
-        config.get("agent_configs", []),
-        (config.get("contested_question") or {}).get("statement"),
-        log=log_info,
-    )
-
-    # Native CAMEL function-calling for Reddit agents (see Twitter branch).
-    if enable_tools and AGENT_TOOLS_AVAILABLE:
-        try:
-            fn_tools = build_camel_function_tools(config)
-            attached = attach_tools_to_agents(result.agent_graph, fn_tools)
-            log_info(f"Attached {len(fn_tools)} FunctionTools to Reddit agents ({attached} bindings)")
-        except Exception as e:
-            log_info(f"Failed to attach native FunctionTools: {e}")
-
-    # #1779: Obergrenze je Aktivierung (nur mit time_config.activity_model).
-    activation_limits = install_activation_limits_from_config(
-        result.agent_graph, config, log=log_info
-    )
-    # Auswahl dieser Plattformschleife: eine Ziehung je Runde fuer beide Plattformen.
-    selection_config = for_platform(config, "reddit")
-
-    # Get Agent real name mapping from config (use entity_name instead of default Agent_X)
-    agent_names = get_agent_names_from_config(config)
-    # If an agent is not in config, use OASIS default name
-    for agent_id, agent in result.agent_graph.get_agents():
-        if agent_id not in agent_names:
-            agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-
-    db_path = os.path.join(simulation_dir, "reddit_simulation.db")
-    if os.path.exists(db_path):
-        os.remove(db_path)
-    
-    result.env = oasis.make(
-        agent_graph=result.agent_graph,
-        platform=oasis.DefaultPlatformType.REDDIT,
-        database_path=db_path,
-        # Gleichzeitige LLM-Aufrufe je Plattform, konfigurierbar (#1772).
-        semaphore=resolve_sim_max_concurrency(),
-    )
-
-    await result.env.reset()
-    log_info("Environment started")
-
-    if action_logger:
-        action_logger.log_simulation_start(config)
-
-    total_actions = 0
-    last_rowid = 0  # Track last processed row in Database (use rowid to avoid created_at format differences)
-
-    # Rundentakt vorab aufloesen (siehe Twitter-Branch oben, #1713 UI-2a).
-    time_config = config.get("time_config", {})
-    total_hours = time_config.get("total_simulation_hours", 72)
-    minutes_per_round = time_config.get("minutes_per_round", 30)
-    total_rounds = (total_hours * 60) // minutes_per_round
-
-    # If maximum rounds specified, truncate
-    if max_rounds is not None and max_rounds > 0:
-        original_rounds = total_rounds
-        total_rounds = min(total_rounds, max_rounds)
-        if total_rounds < original_rounds:
-            log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-
-    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
-    if start_hour_offset != 0:
-        log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
-
-    start_time = datetime.now()
-    # Task 1 — Anker für virtuelle Sim-Zeit (siehe Twitter-Branch oben).
-    sim_clock_anchor = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-
-    # Execute initial events
-    event_config = config.get("event_config", {})
-    initial_posts = event_config.get("initial_posts", [])
-
-    # Log round 0 start (initial event phase)
-    if action_logger:
-        action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-
-    initial_action_count = 0
-    if initial_posts:
-        initial_actions, published_count = build_initial_post_actions(
-            initial_posts, result.env.agent_graph
-        )
-
-        if initial_actions:
-            await result.env.step(initial_actions)
-            log_info(format_initial_posts_log(published_count, len(initial_actions)))
-            # #1713 UI-2a (L4) — siehe Twitter-Branch: echte post_id nach
-            # env.step() aus der trace-Tabelle lesen statt vor dem Schreiben
-            # zu raten.
-            initial_db_actions, last_rowid = fetch_new_actions_from_db(
-                db_path, last_rowid, agent_names
-            )
-            _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
-            _redis_url_for_emit = os.environ.get("REDIS_URL")
-            _action_count = len(initial_db_actions)
-            for _action_idx, action_data in enumerate(initial_db_actions):
-                if action_logger:
-                    action_logger.log_action(
-                        round_num=0,
-                        agent_id=action_data["agent_id"],
-                        agent_name=action_data["agent_name"],
-                        action_type=action_data["action_type"],
-                        action_args=action_data["action_args"],
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
-                if action_data.get("action_type") == "CREATE_POST":
-                    await _emit_post_created_to_redis(
-                        simulation_id=_sim_id_for_emit,
-                        platform="reddit",
-                        action_data=action_data,
-                        redis_url=_redis_url_for_emit,
-                        round_num=0,
-                        sim_time_iso=compute_post_sim_time(
-                            sim_clock_anchor,
-                            start_hour_offset,
-                            0,
-                            minutes_per_round,
-                            _action_idx,
-                            _action_count,
-                        ).isoformat(),
-                    )
-
-    # Log round 0 end
-    if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
-
-    # Main simulation loop
-    round_control = RoundBoundaryControl(simulation_dir, budget_guard)
-    # Issue #1713 Slice S6: Haltung/Beitragsneigung nachschlagbar je Agent,
-    # damit sie im Tool-Loop (falls aktiv) in den Prompt gelangen statt nur
-    # in der Config zu stehen (Befund 7: Konsens/Echo nach einer Runde).
-    agent_configs_by_id = {
-        cfg.get("agent_id"): cfg for cfg in config.get("agent_configs", [])
-    }
-    for round_num in range(total_rounds):
-        # Check if received exit signal
-        if _shutdown_event and _shutdown_event.is_set():
-            if main_logger:
-                main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
-            break
-
-        decision = round_control.check(round_num)
-        if decision.action == RoundAction.STOP:
-            break
-        if decision.action == RoundAction.BUDGET_ABORT:
-            result.budget_abort_info = decision.budget_abort_info
-            break
-
-        simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
-        simulated_day = simulated_minutes // (60 * 24) + 1
-
-        active_agents = get_active_agents_for_round(
-            result.env, selection_config, simulated_hour, round_num
-        )
-
-        # Log round start regardless of active agents
-        if action_logger:
-            action_logger.log_round_start(round_num + 1, simulated_hour)
-
-        if not active_agents:
-            # Log round end even without active agents (actions_count=0)
-            if action_logger:
-                action_logger.log_round_end(
-                    round_num + 1, 0, simulated_minutes=simulated_minutes + minutes_per_round
-                )
-            continue
-
-        # Build actions
-        if tool_loop and enable_tools:
-            actions = {}
-            for agent_id, agent in active_agents:
-                try:
-                    try:
-                        observation = result.env.get_observation(agent)
-                    except Exception:
-                        observation = "You are on Reddit. Check the feed and decide what to do."
-
-                    agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
-                    agent_role = getattr(agent, 'profession', 'Unknown')
-                    agent_bio = getattr(agent, 'bio', '')
-                    agent_cfg = agent_configs_by_id.get(agent_id, {})
-
-                    action = await tool_loop.decide_action(
-                        agent=agent,
-                        observation=observation,
-                        available_actions=[a.value for a in REDDIT_ACTIONS],
-                        agent_name=agent_name,
-                        agent_role=agent_role,
-                        agent_bio=agent_bio,
-                        language=config.get("language", "de"),
-                        stance=agent_cfg.get("stance"),
-                        sentiment_bias=agent_cfg.get("sentiment_bias"),
-                        posts_per_hour=agent_cfg.get("posts_per_hour"),
-                        comments_per_hour=agent_cfg.get("comments_per_hour"),
-                        contested_statement=(config.get("contested_question") or {}).get("statement"),
-                    )
-                    actions[agent] = action
-                except Exception as e:
-                    log_info(f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction")
-                    actions[agent] = LLMAction()
-        else:
-            actions = {agent: LLMAction() for _, agent in active_agents}
-        # #1779: Zaehler je Agent nur um die Aktivierung dieser Runde.
-        with round_activation_limits(activation_limits, round_num + 1):
-            await result.env.step(actions)
-        # #1772: Feeds frueherer Aktivierungen aus dem Agentengedaechtnis nehmen.
-        prune_graph_memories(result.agent_graph, round_num=round_num + 1, log=log_info)
-
-        # Get actual executed actions from Database and log
-        actual_actions, last_rowid = fetch_new_actions_from_db(
-            db_path, last_rowid, agent_names
-        )
-
-        round_action_count = 0
-        _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
-        _redis_url_for_emit = os.environ.get("REDIS_URL")
-        # Siehe Twitter-Pfad: Sim-Zeit pro Action über das Minutenbudget der
-        # Runde verteilt (#1018).
-        _action_count = len(actual_actions)
-        for _action_idx, action_data in enumerate(actual_actions):
-            if action_logger:
-                action_logger.log_action(
-                    round_num=round_num + 1,
-                    agent_id=action_data['agent_id'],
-                    agent_name=action_data['agent_name'],
-                    action_type=action_data['action_type'],
-                    action_args=action_data['action_args']
-                )
-                total_actions += 1
-                round_action_count += 1
-            # Slice 5-pre: emit PostCreatedEvent to Redis for SSE live-feed.
-            # Reddit emittiert Posts und Kommentare — Kommentare tragen
-            # parent_post_id, damit der Reply-Tree Äste bekommt (#1216 5c).
-            if action_data.get("action_type") in ("CREATE_POST", "CREATE_COMMENT"):
-                await _emit_post_created_to_redis(
-                    simulation_id=_sim_id_for_emit,
-                    platform="reddit",
-                    action_data=action_data,
-                    redis_url=_redis_url_for_emit,
-                    round_num=round_num + 1,
-                    sim_time_iso=compute_post_sim_time(
-                        sim_clock_anchor,
-                        start_hour_offset,
-                        simulated_minutes,
-                        minutes_per_round,
-                        _action_idx,
-                        _action_count,
-                    ).isoformat(),
-                )
-
-        if action_logger:
-            action_logger.log_round_end(
-                round_num + 1,
-                round_action_count,
-                # Zeit NACH Abschluss der Runde — simulated_minutes ist der Stand
-                # zu Rundenbeginn. Damit wächst der Wert je Runde streng monoton.
-                simulated_minutes=simulated_minutes + minutes_per_round,
-            )
-
-        if (round_num + 1) % 20 == 0:
-            progress = (round_num + 1) / total_rounds * 100
-            log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-
-    # Note: Do not close environment, keep for Interview use
-
-    if action_logger:
-        action_logger.log_simulation_end(total_rounds, total_actions)
-
-    result.total_actions = total_actions
-    elapsed = (datetime.now() - start_time).total_seconds()
-    log_info(f"Simulation loop completed! Time taken: {elapsed:.1f}seconds, Total actions: {total_actions}")
-
-    return result
 
 
 async def main():
     parser = build_parallel_parser()
     args = parser.parse_args()
-    
+
     # Create shutdown event at the start of main function to ensure the whole program can respond to exit signal
     global _shutdown_event
     _shutdown_event = asyncio.Event()
@@ -2104,7 +1593,7 @@ async def main():
     if not os.path.exists(args.config):
         print(f"Error: Configuration file does not exist: {args.config}")
         sys.exit(1)
-    
+
     config, agents_without_profile = load_aligned_config(args.config)
     simulation_dir = os.path.dirname(args.config) or "."
     # Issue #1160 F: Der Seed steht vor jeder Zufallsentscheidung des Laufs —
@@ -2115,15 +1604,15 @@ async def main():
         config, fallback=os.path.basename(simulation_dir.rstrip("/"))
     )
     wait_for_commands = not args.no_wait
-    
+
     # Initialize logging configuration (disable OASIS logs, clean up old files)
     init_logging_for_simulation(simulation_dir)
-    
+
     # Create log manager
     log_manager = SimulationLogManager(simulation_dir)
     twitter_logger = log_manager.get_twitter_logger()
     reddit_logger = log_manager.get_reddit_logger()
-    
+
     log_manager.info("=" * 60)
     log_manager.info("OASIS dual-platform parallel simulation")
     log_manager.info(f"Configuration file: {args.config}")
@@ -2146,12 +1635,12 @@ async def main():
     )
     log_manager.info(f"Wait mode: {'Enabled' if wait_for_commands else 'Disabled'}")
     log_manager.info("=" * 60)
-    
+
     time_config = config.get("time_config", {})
-    total_hours = time_config.get('total_simulation_hours', 72)
-    minutes_per_round = time_config.get('minutes_per_round', 30)
+    total_hours = time_config.get("total_simulation_hours", 72)
+    minutes_per_round = time_config.get("minutes_per_round", 30)
     config_total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     log_manager.info("Simulation parameters:")
     log_manager.info(f"  - Total simulation duration: {total_hours}hours")
     log_manager.info(f"  - Time per round: {minutes_per_round}minutes")
@@ -2161,13 +1650,13 @@ async def main():
         if args.max_rounds < config_total_rounds:
             log_manager.info(f"  - Actual execution rounds: {args.max_rounds} (Truncated)")
     log_manager.info(f"  - Number of Agents: {len(config.get('agent_configs', []))}")
-    
+
     log_manager.info("Log structure:")
     log_manager.info("  - Main log: simulation.log")
     log_manager.info("  - Twitter actions: twitter/actions.jsonl")
     log_manager.info("  - Reddit actions: reddit/actions.jsonl")
     log_manager.info("=" * 60)
-    
+
     start_time = datetime.now()
 
     # Budget-Guard (Tech-Review Slice B4c): Usage-Recording in den gemeinsamen
@@ -2179,7 +1668,11 @@ async def main():
         if budget_guard is not None:
             log_manager.info(
                 "[budget-guard] usage recording active"
-                + (f" (enforcement={budget_guard.enforcement})" if budget_guard.budget_config else "")
+                + (
+                    f" (enforcement={budget_guard.enforcement})"
+                    if budget_guard.budget_config
+                    else ""
+                )
             )
     except Exception as exc:  # noqa: BLE001 — Guard ist Zusatz, kein Blocker
         log_manager.warning(f"[budget-guard] setup failed ({exc}); continuing without")
@@ -2229,7 +1722,7 @@ async def main():
         log_manager.info("Enter wait mode - environment keeps running")
         log_manager.info("Supported commands: interview, batch_interview, close_env")
         log_manager.info("=" * 60)
-        
+
         # Create IPC handler
         ipc_handler = ParallelIPCHandler(
             simulation_dir=simulation_dir,
@@ -2247,6 +1740,7 @@ async def main():
         if redis_url:
             try:
                 from subprocess_redis_bridge import RedisIPCBridge
+
                 sim_id = os.path.basename(simulation_dir.rstrip("/"))
                 redis_bridge = RedisIPCBridge(
                     simulation_id=sim_id,
@@ -2256,9 +1750,7 @@ async def main():
                 started = await redis_bridge.start()
                 if started:
                     ipc_handler.redis_bridge = redis_bridge
-                    log_manager.info(
-                        f"[IPC] Redis bridge active on {redis_url} for sim {sim_id}"
-                    )
+                    log_manager.info(f"[IPC] Redis bridge active on {redis_url} for sim {sim_id}")
                 else:
                     redis_bridge = None
             except Exception as exc:
@@ -2290,16 +1782,16 @@ async def main():
         ipc_handler.update_status("stopped")
         if redis_bridge is not None:
             await redis_bridge.stop()
-    
+
     # Close environment
     if twitter_result and twitter_result.env:
         await twitter_result.env.close()
         log_manager.info("[Twitter] Environment closed")
-    
+
     if reddit_result and reddit_result.env:
         await reddit_result.env.close()
         log_manager.info("[Reddit] Environment closed")
-    
+
     log_manager.info("=" * 60)
     log_manager.info("All completed!")
     log_manager.info("Log files:")
@@ -2312,30 +1804,31 @@ async def main():
 def setup_signal_handlers(loop=None):
     """
     Set signal handlers to ensure proper exit when receiving SIGTERM/SIGINT
-    
+
     Persistent simulation scenario：Simulation completeafter does not exit，Wait for interview command
     When receiving termination signal, need to：
     1. Notify asyncio loop to exit wait
     2. Give program a chance to clean up resources properly (close database, environment, etc.)
     3. Then exit
     """
+
     def signal_handler(signum, frame):
         global _cleanup_done
         sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
         print(f"\nReceived {sig_name} signal, exiting...")
-        
+
         if not _cleanup_done:
             _cleanup_done = True
             # Set event to notify asyncio loop to exit (give loop a chance to clean up)
             if _shutdown_event:
                 _shutdown_event.set()
-        
+
         # Don't directly sys.exit(), let asyncio loop exit normally and clean up
         # Force exit only if signal is received repeatedly
         else:
             print("Force exit...")
             sys.exit(1)
-    
+
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -2353,6 +1846,7 @@ if __name__ == "__main__":
         # Clean up multiprocessing resource tracker (prevent warning on exit)
         try:
             from multiprocessing import resource_tracker
+
             resource_tracker._resource_tracker._stop()
         except Exception:
             pass

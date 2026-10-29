@@ -3,20 +3,20 @@
 import time as _time_mod
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple
 from ..utils.logger import get_logger
+from .request_plan import extract_int_token_usage
 
 logger = get_logger("agora.llm_client")
 
 
 class LLMClientTelemetryMixin:
     if TYPE_CHECKING:
+
         def __getattr__(self, name: str) -> Any: ...
         def __setattr__(self, name: str, value: Any) -> None: ...
 
     def _publish_model_active(
         self,
-        context: Literal[
-            "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
-        ],
+        context: Literal["chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"],
         *,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
@@ -48,9 +48,7 @@ class LLMClientTelemetryMixin:
             )
             model_event_bus.publish(event)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "model_event_bus.publish failed (LLM call proceeds): %s", exc
-            )
+            logger.warning("model_event_bus.publish failed (LLM call proceeds): %s", exc)
 
     def _budget_enforcer(self):
         """RunBudgetEnforcer für diesen Run (None ohne Budget oder run_id).
@@ -93,9 +91,7 @@ class LLMClientTelemetryMixin:
         except BudgetExceededError:
             raise
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "budget check_before_call failed (LLM call proceeds): %s", exc
-            )
+            logger.warning("budget check_before_call failed (LLM call proceeds): %s", exc)
 
     def remaining_hard_call_budget(self) -> Optional[int]:
         """Verbleibende Calls unter einem harten ``max_llm_calls``-Budget.
@@ -285,14 +281,13 @@ class LLMClientTelemetryMixin:
         """
         if usage is None:
             usage = getattr(response, "usage", None)
-        prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
-        completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+        prompt_tokens, completion_tokens = extract_int_token_usage(usage)
         self._log_invocation_event(
             stage=context,
             latency_ms=latency_ms,
             success=True,
-            prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
-            completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             model=model,
         )
         # Weiche Budget-Limits nach dem abgeschlossenen Call pruefen (#764).
