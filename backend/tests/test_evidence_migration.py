@@ -166,9 +166,10 @@ def _claim(label, evidence):
     }
 
 
-_SEED = {"source_kind": "seed_corpus", "source": "seed"}
+# #1894: medium zählt nur ausdrücklich stützende Belege (``supports_claim``).
+_SEED = {"source_kind": "seed_corpus", "source": "seed", "supports_claim": True}
 _GRAPH = {"source_kind": "graph_relation", "source": "graph"}
-_QUOTE = {"source_kind": "agent_quote", "quote": "Wörtliches Zitat."}
+_QUOTE = {"source_kind": "agent_quote", "quote": "Wörtliches Zitat.", "supports_claim": True}
 _QUOTE_EMPTY = {"source_kind": "agent_quote", "quote": ""}
 _QUOTE_MISSING = {"source_kind": "agent_quote"}
 
