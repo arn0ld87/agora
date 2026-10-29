@@ -29,6 +29,7 @@
 | Run-/Jobstatus | RunRegistry / Run-Contracts |
 | Run-Read-Model (Listen-/Detail-Anreicherung) | `backend/app/services/run_read_model.py` (aus `api/runs.py` extrahiert, #1496) |
 | Simulations-Read-Metriken (Timeline/Agent-Stats) | `backend/app/services/sim/run_metrics.py` (aus `sim/monitor.py` extrahiert, #1496) |
+| OASIS-Simulations-Laufzeit (Modell-Factory, Graph-Policies, Round-0-Seeding, Redis-Emission) | `backend/scripts/sim_runtime/runtime_execution.py` (`create_simulation_llm_model`, `configure_platform_agent_graph`, `execute_initial_posts_round`, `emit_round_actions_to_redis`, genutzt von `platform_runner.py` und `run_parallel_simulation.py`) |
 | Report-Artefakte | `backend/uploads/reports/<report_id>/` |
 | Report-Vollständigkeitsprüfung vor Abschluss | `backend/app/services/report_agent/requirement_checker.py` (`RequirementChecker`, #1302) |
 | Interview-Panel-Rotation | `backend/app/services/interview_panel.py` (`InterviewPanelTracker`, #1303) |
