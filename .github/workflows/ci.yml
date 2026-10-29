@@ -297,7 +297,8 @@ jobs:
         # dass CI rot wird. Branch-Coverage wurde gar nicht gemessen.
         # Die Schwellen stehen jetzt in backend/coverage-baseline.json und
         # werden im naechsten Step einzeln geprueft.
-        run: uv run pytest --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-report=json:coverage.json
+        # 2026-10-29: Parallelisiert mit pytest-xdist (-n 4 --dist loadfile).
+        run: uv run pytest -n 4 --dist loadfile --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-report=json:coverage.json
 
       - name: Coverage-Gate gegen gemessene Baseline (Issue #1495)
         working-directory: backend
@@ -543,7 +544,7 @@ jobs:
 
       - name: Pytest contracts (fast subset)
         working-directory: backend
-        run: uv run pytest tests/contracts/ -q
+        run: uv run pytest tests/contracts/ -n 4 --dist loadfile -q
 
       # Issue #1671 (Entscheidung #1667): Ratchet und Schönungs-Check gegen
       # v0.9.6. Braucht keinen Coverage-Lauf und laeuft deshalb auf jedem PR,
@@ -600,11 +601,18 @@ jobs:
       # denselben Job-Wert `FLASK_DEBUG: "true"`; Tests, deren Verhalten vom
       # Debug-Modus abhaengt, parametrisieren ihn selbst
       # (siehe tests/api/test_graph_ontology_upload_atomicity.py::flask_debug).
+      #
+      # 2026-10-29: PR-Test-Splitting via select_pr_tests.py. Führt die
+      # verpflichtende Core-Suite (Regression, Unit, Security, Dependencies,
+      # Report-Agent-Pipeline, LLM, Storage) sowie geänderte Test-/App-Module
+      # per Git-Diff mit pytest-xdist (-n 4 --dist loadfile) aus.
+      # tests/contracts/ wird ignoriert, da bereits im vorherigen Step geprüft.
       - name: Backend tests (PR subset, no coverage)
         working-directory: backend
         run: |
-          uv run pytest tests/ \
-            --ignore=tests/contracts \
+          TEST_TARGETS=$(uv run python scripts/select_pr_tests.py --ignore-contracts)
+          uv run pytest $TEST_TARGETS \
+            -n 4 --dist loadfile \
             -q --no-cov -x
 
       # 2026-07-25 wieder aktiviert (Issue #883). Der 2026-05-17 entfernte Job
