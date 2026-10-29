@@ -88,7 +88,7 @@ run_backend() {
   fi
 
   step "Backend: Pydantic-Contract-Tests"
-  (cd backend && uv run pytest tests/contracts/ -x -q) || fail "contract tests"
+  (cd backend && uv run pytest tests/contracts/ -n 4 --dist loadfile -x -q) || fail "contract tests"
 
   # 2026-08-03 (Issue #1055): Pre-Push-Backend-Tests (Sub-Set, kein Coverage).
   # Spiegel des ``Backend tests (PR subset, no coverage)``-Steps in
@@ -97,13 +97,15 @@ run_backend() {
   # Contract-Tests-Step bleibt seriell.
   # 2026-08-08: nur noch unter GATE_FULL=1 — CI faehrt die volle Suite mit
   # Coverage-Gate auf jedem PR, lokal bleibt das Gate ein Sanity-Check.
+  # 2026-10-29: PR-Test-Splitting via select_pr_tests.py --ignore-contracts.
   if [ "${GATE_FULL:-0}" = "1" ]; then
-  step "Backend: tests (PR subset, no coverage, GATE_FULL=1)"
-  (cd backend && FLASK_DEBUG=false uv run pytest tests/ \
-      -n 4 -p no:warnings \
-      --ignore=tests/contracts \
-      -q --no-cov -x) \
-    || fail "backend tests"
+    step "Backend: tests (PR subset, no coverage, GATE_FULL=1)"
+    (cd backend && {
+      read -r -a TEST_TARGETS <<< "$(uv run python scripts/select_pr_tests.py --ignore-contracts)"
+      FLASK_DEBUG=false uv run pytest "${TEST_TARGETS[@]}" \
+        -n 4 --dist loadfile -p no:warnings \
+        -q --no-cov -x
+    }) || fail "backend tests"
   else
     warn "Backend-Test-Subset uebersprungen (GATE_FULL=1 erzwingt ihn; CI faehrt die volle Suite)"
   fi

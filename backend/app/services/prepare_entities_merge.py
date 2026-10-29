@@ -412,10 +412,15 @@ def _phase_read_entities_from_checkpoint(
         )
         return None
     primary: List["EntityNode"] = [entity for entity in primary_raw if entity is not None]
+    expanded_set = set(checkpoint.expanded_entity_uuids)
+    primary_set = set(checkpoint.primary_entity_uuids)
+    # Reserve-Kandidaten, die bereits in expanded_entity_uuids übernommen wurden,
+    # nicht erneut in reserve_entities anbieten (Finding 1).
     reserve = [
         entity
         for entity in _lookup_entities_by_uuid(by_uuid, checkpoint.reserve_entity_uuids)
         if entity is not None
+        and not (entity.uuid in expanded_set and entity.uuid not in primary_set)
     ]
 
     filtered = FilteredEntities(

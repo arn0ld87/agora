@@ -444,6 +444,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         except Exception as e :# noqa: BLE001 — exception is logged; swallowed intentionally
             _legacy .logger .error (f"Failed to generate persona for entity {entity .name }: {str (e )}")
             # Create a fallback profile
+            fallback_segment = getattr(entity, "segment", None) or getattr(entity, "_quota_segment", None) or (entity_type if entity_type != "Entity" else None)
             fallback_profile =OasisAgentProfile (
             user_id =idx ,
             user_name =self ._generate_username (entity .name ),
@@ -453,6 +454,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             source_entity_uuid =entity .uuid ,
             source_entity_type =entity_type ,
             affiliation =entity .affiliation ,
+            segment =fallback_segment ,
             # Issue #1029: Notprofil nach einem Ausfall — noch
             # dünner als das regelbasierte, also erst recht nicht
             # als echte Stimme zu behandeln.
@@ -594,6 +596,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
             except Exception as e :# noqa: BLE001
                 _legacy .logger .error (f"Cooperative greenlet failed unexpectedly for entity {entity .name }: {str (e )}")
                 entity_type =entity .get_entity_type ()or "Entity"
+                fallback_segment = getattr(entity, "segment", None) or getattr(entity, "_quota_segment", None) or (entity_type if entity_type != "Entity" else None)
                 fallback_profile =OasisAgentProfile (
                 user_id =idx ,
                 user_name =self ._generate_username (entity .name ),
@@ -603,6 +606,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
                 source_entity_uuid =entity .uuid ,
                 source_entity_type =entity_type ,
                 affiliation =entity .affiliation ,
+                segment =fallback_segment ,
                 # Issue #1029: Notprofil nach einem Ausfall — noch
                 # dünner als das regelbasierte, also erst recht
                 # nicht als echte Stimme zu behandeln.
@@ -651,6 +655,7 @@ demographic_slots :Optional [List [PersonaDemographicSlot ]]=None ,
         coherence_check =functools .partial (
         _incoherence_ineligible ,degradations =degradations
         ),
+        on_profile_saved =on_profile_saved ,
         )
         # Nachbesetzte Profile koennen Namen mit bestehenden teilen.
         _dedupe_profile_names (self ,profiles )

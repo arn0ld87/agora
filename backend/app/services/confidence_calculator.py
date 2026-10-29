@@ -55,6 +55,7 @@ import statistics
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.contracts.report_contract import counts_for_confidence, has_two_action_voices
+from app.services.report_agent.claim_provenance import resolve_independent_source_keys
 
 
 def _drop_hand_made(evidence: List[Dict]) -> List[Dict]:
@@ -70,6 +71,7 @@ def _drop_hand_made(evidence: List[Dict]) -> List[Dict]:
     byte-gleich bleiben.
     """
     return [item for item in evidence if counts_for_confidence(item)]
+
 
 # MAI-14: Schwellwerte für Sentiment-Contradiction-Heuristik.
 _CONTRADICTION_PENALTY_AMOUNT: float = 0.2
@@ -187,7 +189,7 @@ def _independence_key(e: Dict[str, Any]) -> Tuple[str, str, str]:
 
 
 def _count_independent_sources(evidence: List[Dict[str, Any]]) -> int:
-    return len({_independence_key(e) for e in evidence})
+    return len(set(resolve_independent_source_keys(evidence)))
 
 
 def _component_consistency(evidence: List[Dict]) -> float:
@@ -202,9 +204,7 @@ def _component_consistency(evidence: List[Dict]) -> float:
     return 0.0
 
 
-def _apply_single_source_cap(
-    score: float, *, unique_sources: int, has_strong_match: bool
-) -> float:
+def _apply_single_source_cap(score: float, *, unique_sources: int, has_strong_match: bool) -> float:
     """Deckelt Ein-Quellen-Claims auf höchstens ``low`` — außer bei starkem Match.
 
     ``has_strong_match`` verwendet dieselbe 0.85-Schwelle wie die Verified-
@@ -327,9 +327,7 @@ def _compute_confidence_with_penalties(
     score = max(0.0, min(1.0, raw))
 
     has_strong_match = any(
-        float(e.get("match_score") or 0.0) >= 0.85
-        for e in evidence
-        if "match_score" in e
+        float(e.get("match_score") or 0.0) >= 0.85 for e in evidence if "match_score" in e
     )
     unique_sources = _count_independent_sources(evidence)
 
@@ -340,11 +338,7 @@ def _compute_confidence_with_penalties(
 
     # Task 08: Medium-Cap — kein Claim darf "high" sein, wenn alle
     # match_scores unter 0.55 liegen.
-    match_scores = [
-        float(e.get("match_score") or 0.0)
-        for e in evidence
-        if "match_score" in e
-    ]
+    match_scores = [float(e.get("match_score") or 0.0) for e in evidence if "match_score" in e]
     all_weak_matches = match_scores and max(match_scores) < 0.55
     if all_weak_matches:
         score = min(score, 0.64)

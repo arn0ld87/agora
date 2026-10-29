@@ -15,7 +15,7 @@ from .claim_dedup import dedup_claims, duplicate_report
 from .claim_provenance import (
     derive_aggregation_basis,
     derive_confidence_scope as _derive_confidence_scope,
-    resolve_canonical_voice_keys,
+    resolve_independent_source_keys,
 )
 from .evidence import text_confidence_label_of
 from .metadata_merge import merge_section_metadata
@@ -63,10 +63,7 @@ def _dedup_claims_with_log(claims: list) -> list:
     logger.info(
         "build_report_v3: %d Claim-Dublette(n) entfernt: %s",
         len(duplicates),
-        "; ".join(
-            f"{entry['claim_id']}→{entry['duplicate_of']}"
-            for entry in duplicates[:5]
-        ),
+        "; ".join(f"{entry['claim_id']}→{entry['duplicate_of']}" for entry in duplicates[:5]),
     )
     return dedup_claims(claims)
 
@@ -87,9 +84,7 @@ def _bind_and_dedup_thresholds(metadata_kwargs: dict, evidence_index: dict) -> N
     # es im Bericht gibt — ein Verweis auf eine verworfene zeigte ins Leere.
     metadata_kwargs["thresholds"] = drop_unresolvable_deviations(
         dedup_thresholds(
-            bind_threshold_provenance(
-                metadata_kwargs["thresholds"], list(evidence_index.values())
-            )
+            bind_threshold_provenance(metadata_kwargs["thresholds"], list(evidence_index.values()))
         )
     )
 
@@ -122,6 +117,7 @@ def _count_independent_sources(
 
     Zwei Items mit demselben voice_key (z. B. zwei Zitate derselben Persona)
     zaehlen als nur eine Stimme (ADR-0002, Issue #1766).
+    Zwei Chunks aus demselben Seed-Dokument zaehlen als nur eine Quelle (Befund 1.2).
     """
     items_by_eid: Dict[str, Dict[str, Any]] = {}
     if isinstance(raw_evidence, list):
@@ -131,23 +127,14 @@ def _count_independent_sources(
                 if eid not in items_by_eid and item.get("supports_claim") is True:
                     items_by_eid[eid] = item
 
-    pairs: list[tuple[str, Dict[str, Any], Optional[Mapping[str, Any]]]] = []
+    pairs: list[tuple[Dict[str, Any], Optional[Mapping[str, Any]]]] = []
     for eid in evidence_refs:
         item = items_by_eid.get(eid) or {"evidence_id": eid}
         record = evidence_index.get(eid) if isinstance(evidence_index, Mapping) else None
         record_map = record if isinstance(record, Mapping) else None
-        pairs.append((eid, item, record_map))
+        pairs.append((item, record_map))
 
-    voice_keys = resolve_canonical_voice_keys(
-        [(item, record_map) for _, item, record_map in pairs]
-    )
-    unique_keys: set[Any] = set()
-    for (eid, _, _), vk in zip(pairs, voice_keys):
-        if vk:
-            unique_keys.add(("voice", vk))
-        else:
-            unique_keys.add(("ref", eid))
-    return len(unique_keys)
+    return len(set(resolve_independent_source_keys(pairs)))
 
 
 def _valid_evidence_refs_for_claim(
@@ -224,9 +211,9 @@ def _extract_claims_for_section(
         confidence: Literal["speculative", "low", "medium", "high", "verified"] = (
             label if label in _VALID_CONFIDENCE else "speculative"  # type: ignore[assignment]
         )
-        single_source_text_confidence: Literal[
-            "speculative", "low", "medium", "high", "verified"
-        ] | None = None
+        single_source_text_confidence: (
+            Literal["speculative", "low", "medium", "high", "verified"] | None
+        ) = None
         claim_type = _claim_type_of(claim)
         independent_sources = _count_independent_sources(
             evidence_refs, claim.get("evidence"), evidence_index
@@ -238,32 +225,29 @@ def _extract_claims_for_section(
         if report_mode == "strict" and confidence in {"speculative", "low"}:
             continue
         claim_slot += 1
-        claims.append(ReportV3Claim(
-            id=f"C{section_index}_{claim_slot:02d}",
-            statement=statement,
-            evidence_refs=evidence_refs,
-            confidence=confidence,
-            # Issue #1358: beide Angaben stammen aus derselben Menge
-            # stuetzender Items. Vorher stand hier der Literalwert
-            # "persona" — jeder Claim behauptete damit Persona-
-            # Traegerschaft, auch wenn er ausschliesslich aus dem
-            # Seed-Dokument stammte.
-            aggregation_basis=derive_aggregation_basis(
-                claim.get("evidence"), evidence_index
-            ),
-            confidence_scope=_derive_confidence_scope(
-                claim.get("evidence"), evidence_index
-            ),
-            # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
-            # abgestuft wurde. Der Wortlaut stammt dann aus einer
-            # hoeheren Stufe und deckt mehr Sicherheit ab als das
-            # Label — ohne dass irgendetwas am Text geaendert wird.
-            text_confidence=(
-                _text_confidence_for(claim, confidence)
-                or single_source_text_confidence
-            ),
-            claim_type=claim_type,
-        ))
+        claims.append(
+            ReportV3Claim(
+                id=f"C{section_index}_{claim_slot:02d}",
+                statement=statement,
+                evidence_refs=evidence_refs,
+                confidence=confidence,
+                # Issue #1358: beide Angaben stammen aus derselben Menge
+                # stuetzender Items. Vorher stand hier der Literalwert
+                # "persona" — jeder Claim behauptete damit Persona-
+                # Traegerschaft, auch wenn er ausschliesslich aus dem
+                # Seed-Dokument stammte.
+                aggregation_basis=derive_aggregation_basis(claim.get("evidence"), evidence_index),
+                confidence_scope=_derive_confidence_scope(claim.get("evidence"), evidence_index),
+                # Issue #1012: nur gesetzt, wenn der Claim nachtraeglich
+                # abgestuft wurde. Der Wortlaut stammt dann aus einer
+                # hoeheren Stufe und deckt mehr Sicherheit ab als das
+                # Label — ohne dass irgendetwas am Text geaendert wird.
+                text_confidence=(
+                    _text_confidence_for(claim, confidence) or single_source_text_confidence
+                ),
+                claim_type=claim_type,
+            )
+        )
     return claims
 
 
@@ -282,9 +266,7 @@ def _build_hypothesis_export_ids(
                 continue
             raw_id = str(hypothesis.get("hypothesis_id") or "").strip()
             if raw_id:
-                hypothesis_export_ids[raw_id] = (
-                    f"{id_prefix}{section_index}_{h_slot_idx:02d}"
-                )
+                hypothesis_export_ids[raw_id] = f"{id_prefix}{section_index}_{h_slot_idx:02d}"
     return hypothesis_export_ids
 
 
@@ -305,20 +287,20 @@ def _extract_data_gaps_for_section(
         reason = str(gap.get("gap_reason") or "").strip()
         description = claim_text if not reason else f"{claim_text} ({reason})"
         description = description.strip() or "Datenluecke ohne Claim-Text."
-        hypothesis_ref = hypothesis_export_ids.get(
-            str(gap.get("hypothesis_id") or "").strip()
-        )
+        hypothesis_ref = hypothesis_export_ids.get(str(gap.get("hypothesis_id") or "").strip())
         suggested_fix = gap.get("suggested_fix")
         severity: Literal["low", "medium", "high"] = (
             "high" if reason == "no_evidence_bound" else "medium"
         )
-        data_gaps.append(ReportV3DataGap(
-            id=f"G{section_index}_{gap_slot:02d}",
-            beschreibung=description,
-            severity=severity,
-            suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
-            related_hypothesis_id=hypothesis_ref,
-        ))
+        data_gaps.append(
+            ReportV3DataGap(
+                id=f"G{section_index}_{gap_slot:02d}",
+                beschreibung=description,
+                severity=severity,
+                suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
+                related_hypothesis_id=hypothesis_ref,
+            )
+        )
     return data_gaps
 
 
@@ -327,14 +309,14 @@ def _parse_optional_int(value: Any) -> Optional[int]:
         return None
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
 def _parse_clamped_confidence(value: Any) -> float:
     try:
         score = float(value or 0.0)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         score = 0.0
     return max(0.0, min(1.0, score))
 
@@ -355,20 +337,20 @@ def _extract_hypotheses_for_section(
                 continue
             hypothesis_id = f"{id_prefix}{section_index}_{h_slot_idx:02d}"
             origin_raw = hypothesis.get("origin_section_index", section_index)
-            hypotheses.append(ReportV3Hypothesis(
-                id=hypothesis_id,
-                hypothesis_text=text,
-                rationale=str(hypothesis.get("rationale") or ""),
-                suggested_evidence=[
-                    str(item)
-                    for item in (hypothesis.get("suggested_evidence") or [])
-                    if str(item).strip()
-                ],
-                origin_section_index=_parse_optional_int(origin_raw),
-                confidence_score=_parse_clamped_confidence(
-                    hypothesis.get("confidence_score")
-                ),
-            ))
+            hypotheses.append(
+                ReportV3Hypothesis(
+                    id=hypothesis_id,
+                    hypothesis_text=text,
+                    rationale=str(hypothesis.get("rationale") or ""),
+                    suggested_evidence=[
+                        str(item)
+                        for item in (hypothesis.get("suggested_evidence") or [])
+                        if str(item).strip()
+                    ],
+                    origin_section_index=_parse_optional_int(origin_raw),
+                    confidence_score=_parse_clamped_confidence(hypothesis.get("confidence_score")),
+                )
+            )
     return hypotheses
 
 
@@ -387,11 +369,11 @@ def _build_metadata_kwargs(
     metadata_kwargs = merged.as_report_v3_kwargs()
     for slot, items in list(metadata_kwargs.items()):
         metadata_kwargs[slot] = [
-            item.model_copy(update={
-                "evidence_refs": [
-                    ref for ref in item.evidence_refs if ref in evidence_index
-                ]
-            })
+            item.model_copy(
+                update={
+                    "evidence_refs": [ref for ref in item.evidence_refs if ref in evidence_index]
+                }
+            )
             if hasattr(item, "evidence_refs")
             else item
             for item in items

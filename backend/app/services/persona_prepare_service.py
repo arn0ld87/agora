@@ -34,6 +34,7 @@ from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .llm_routing_seed import workspace_credential_metadata
+from .prepare_service import _persist_identity_bindings
 from .run_registry import RunRegistry
 from .simulation_activity_policy import (
     enforce_active_hours_floor,
@@ -125,7 +126,9 @@ def prepare_from_personas(
 
     profiles = _translate_personas(personas, from_set=persona_set_id is not None)
     manager._store.write_json(simulation_id, "reddit_profiles", profiles)
-    _write_twitter_csv(manager._get_simulation_dir(simulation_id), profiles)
+    sim_dir = manager._get_simulation_dir(simulation_id)
+    _write_twitter_csv(sim_dir, profiles)
+    _persist_identity_bindings(state, sim_dir, profiles)
 
     config = _build_config(state, profiles)
     manager._store.write_json(simulation_id, "simulation_config", config)
@@ -273,6 +276,8 @@ def _translate_persona(
                 f"Persona {username!r} aus einem Satz ohne gültige Herkunft: {origin!r}"
             )
         profile["persona_set_origin"] = origin
+    if "identity_binding" in persona and persona["identity_binding"] is not None:
+        profile["identity_binding"] = persona["identity_binding"]
     return profile
 
 

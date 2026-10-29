@@ -29,6 +29,8 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
     for entry in evidence or []:
         if not isinstance(entry, dict):
             continue
+        if not counts_for_confidence(entry):
+            continue
         if entry.get("source_kind") != "agent_quote":
             continue
         if not entry.get("supports_claim"):
@@ -98,6 +100,8 @@ def has_agent_grounded_evidence(
         source = record if isinstance(record, dict) else entry
         if not counts_for_confidence(entry) or not counts_for_confidence(source):
             continue
+        if entry.get("supports_claim") is False or source.get("supports_claim") is False:
+            continue
         sk = source.get("source_kind")
         if sk == "agent_quote" and source.get("quote"):
             has_agent_quote = True
@@ -106,7 +110,7 @@ def has_agent_grounded_evidence(
         # ADR-0002-Nachtrag 2026-10-10 (#1778): stützende Aktionsbelege
         # zählen als Stimmen. ``supports_claim`` ist ein Binding-Feld, daher
         # hat der Eintrag Vorrang, ersatzweise der Record.
-        if entry.get("supports_claim", source.get("supports_claim")):
+        if entry.get("supports_claim", source.get("supports_claim")) is True:
             action_voices.append((sk, source.get("voice_key")))
     return (has_agent_quote and has_seed_corpus) or has_two_action_voices(action_voices)
 

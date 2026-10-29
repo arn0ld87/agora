@@ -53,7 +53,9 @@ from .section_pipeline_steps import (
     _verify_prose_facts,
 )
 from .section_pipeline_runner import (
+    _cleanup_pending_state,
     process_section,
+    run_section_pipeline,
 )
 
 logger = get_logger('agora.report_agent')
@@ -88,6 +90,8 @@ __all__ = [
     "logger",
     "os",
     "process_section",
+    "run_section_pipeline",
+    "_cleanup_pending_state",
     "profile_from_evidence_index",
     "resolve_section_evidence_records",
     "section_kind_expects_quotes",

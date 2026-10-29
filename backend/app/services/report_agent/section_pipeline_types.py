@@ -52,6 +52,7 @@ class SectionEvidenceOutcome:
     data_gaps: List[Dict[str, Any]] = field(default_factory=list)
     gate_decisions: List[Dict[str, Any]] = field(default_factory=list)
     generation_failed: bool = False
+    quote_validation_failed: bool = False
 
     @classmethod
     def from_persisted_section(
@@ -86,6 +87,7 @@ class SectionEvidenceOutcome:
             data_gaps=list(entry.get("data_gaps") or []),
             gate_decisions=list(gate_decisions),
             generation_failed=generation_failed,
+            quote_validation_failed=bool(entry.get("quote_validation_failed", False)),
         )
 
 
@@ -106,6 +108,8 @@ class SectionResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
     #: Claim-Extraktion und Evidence-Binding.
     evidence: SectionEvidenceOutcome = field(default_factory=SectionEvidenceOutcome)
+    #: Ungebundene Evidence-Referenzen der Sektion (Issue #1324 / Befund 3.2).
+    unbound_evidence_refs: List[str] = field(default_factory=list)
 
     @property
     def bound_claims(self) -> List[Dict[str, Any]]:

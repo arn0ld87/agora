@@ -8,6 +8,7 @@ import threading
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from ..contracts.llm_routing_contract import StageId
     from ..utils.llm_client import LLMClient
 
 
@@ -88,6 +89,207 @@ def _inherited_credential_scope_metadata(original_run: dict) -> dict:
     return _runs_mod.workspace_credential_metadata()
 
 
+def _resolve_simulation_platform(run: dict, config: dict | None, state) -> str:
+    """Bestimmt die Plattform für den Resume/Restart-Lauf.
+
+    Reihenfolge:
+    1. Run-Manifest / Run-Metadaten (falls dort persistiert)
+    2. Simulation-Config (config['platform'])
+    3. Simulation-State (state.platform falls vorhanden)
+    4. Fallback auf 'parallel'
+    """
+    metadata = run.get("metadata") or {}
+    if metadata.get("platform"):
+        return str(metadata["platform"])
+    if config and config.get("platform"):
+        return str(config["platform"])
+    if getattr(state, "platform", None):
+        return str(state.platform)
+    return "parallel"
+
+
+def _capture_resume_manifest_draft(
+    run_id: str,
+    simulation_id: str,
+    state,
+    resolved_route,
+    platform: str,
+    max_rounds: int | None,
+    enable_graph_memory_update: bool,
+    memory_update_graph_id: str | None,
+    original_run_id: str | None = None,
+) -> None:
+    """Draft-Manifest für einen Simulation-Resume/Restart schreiben (Finding 4.1)."""
+    _runs_mod = _runs_module()
+    try:
+        from .. import __version__
+        from ..contracts.run_manifest_contract import ai_route_snapshot_from_ai_route
+        from ..services.manifest_capture import ManifestCapture
+        from ..services.runtime_run_config import RuntimeRunConfig
+
+        config = _runs_mod.SimulationManager().get_simulation_config(simulation_id)
+        config_hash = ManifestCapture.simulation_config_hash(config)
+
+        seed_document_hash, seed_document_filename = ManifestCapture.seed_document_snapshot(
+            state.project_id
+        )
+
+        canonical_route = RuntimeRunConfig(run_id).load_ai_route_snapshot("simulation_rounds")
+        if canonical_route is None and original_run_id:
+            canonical_route = RuntimeRunConfig(original_run_id).load_ai_route_snapshot("simulation_rounds")
+        ai_route_snapshot = (
+            ai_route_snapshot_from_ai_route(canonical_route).model_dump(mode="json")
+            if canonical_route is not None
+            else None
+        )
+
+        ManifestCapture.capture_draft_best_effort(
+            run_id=run_id,
+            run_dir=_runs_mod.ArtifactLocator.run_dir(run_id),
+            seed_document_hash=seed_document_hash,
+            seed_document_filename=seed_document_filename,
+            simulation_config_hash=config_hash,
+            graph_id=state.graph_id or "unknown",
+            agora_version=__version__,
+            schema_version="1.0.0",
+            random_seed=None,
+            simulation_id_seed=simulation_id,
+            routing={
+                "simulation_rounds": {
+                    "model": resolved_route.model,
+                    "provider": resolved_route.provider_id,
+                    "base_url": resolved_route.base_url_sanitized or "",
+                    "ai_route_snapshot": ai_route_snapshot,
+                }
+            },
+            prompts=ManifestCapture.oasis_prompt_snapshots(),
+            platform=platform,
+            max_rounds=max_rounds,
+            enable_graph_memory_update=enable_graph_memory_update,
+            memory_update_graph_id=memory_update_graph_id,
+        )
+    except Exception:  # noqa: BLE001 — best-effort
+        _runs_mod.logger.warning(
+            "Draft-Manifest-Vorbereitung für resume run_id=%s fehlgeschlagen", run_id, exc_info=True
+        )
+
+
+def _try_soft_resume_paused_process(_runs_mod, simulation_id: str, run_id: str) -> dict | None:
+    existing_run_state = _runs_mod.SimulationRunner.get_run_state(simulation_id)
+    if existing_run_state and existing_run_state.runner_status == _runs_mod.RunnerStatus.PAUSED:
+        from ..services.sim.process_manager import is_process_alive
+
+        if is_process_alive(existing_run_state.process_pid):
+            from ..services.simulation_ipc import set_pause_state
+
+            set_pause_state(_runs_mod.ArtifactLocator.simulation_dir(simulation_id), False)
+            _runs_mod.run_registry.update_run(
+                run_id,
+                status="processing",
+                message="Simulation resumed",
+                message_key="run.simulation_resumed",
+                artifacts=_runs_mod._simulation_artifacts(simulation_id),
+                resume_capability={"available": True, "action": "resume", "label": "Resume run"},
+            )
+            return {"run_id": run_id, "status": "processing", "message": "Simulation resumed"}
+    return None
+
+
+def _resolve_configured_max_rounds(run: dict, config: dict, state) -> int | None:
+    run_meta = run.get("metadata") or {}
+    val = run_meta.get("max_rounds")
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    val = config.get("max_rounds")
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    val = getattr(state, "max_rounds", None)
+    if val is not None:
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+def _resolve_resume_limits_and_budget(_runs_mod, run: dict, config: dict, state):
+    from ..services.run_budget import get_run_budget_config as _get_run_budget_config
+
+    original_is_workspace_scoped = _runs_mod._original_run_is_workspace_scoped(run)
+    original_budget_config = _get_run_budget_config(run["run_id"])
+    configured_max_rounds = _resolve_configured_max_rounds(run, config, state)
+    return _runs_mod.apply_demo_run_limits(
+        configured_max_rounds, original_budget_config, demo_scoped=original_is_workspace_scoped
+    )
+
+
+def _resolve_enable_graph_memory_update(run: dict, config: dict, state) -> bool:
+    run_meta = run.get("metadata") or {}
+    val = run_meta.get("enable_graph_memory_update")
+    if val is not None:
+        return bool(val)
+    val = config.get("enable_graph_memory_update")
+    if val is not None:
+        return bool(val)
+    val = getattr(state, "enable_graph_memory_update", None)
+    if val is not None:
+        return bool(val)
+    return False
+
+
+def _resolve_graph_memory_settings(_runs_mod, run: dict, config: dict, state) -> tuple[bool, str | None]:
+    enable_graph_memory_update = _resolve_enable_graph_memory_update(run, config, state)
+    run_meta = run.get("metadata") or {}
+    val = run_meta.get("memory_update_graph_id")
+    if val is not None:
+        memory_update_graph_id = str(val) if val else None
+    else:
+        cfg_val = config.get("memory_update_graph_id")
+        if cfg_val is not None:
+            memory_update_graph_id = str(cfg_val) if cfg_val else None
+        else:
+            memory_update_graph_id = getattr(state, "graph_id", None)
+    if not memory_update_graph_id and getattr(state, "project_id", None):
+        project = _runs_mod.ProjectManager.get_project(state.project_id)
+        if project:
+            memory_update_graph_id = getattr(project, "graph_id", None)
+    return enable_graph_memory_update, memory_update_graph_id
+
+
+def _persist_inherited_stage_snapshot(
+    original_run_id: str,
+    new_run_id: str,
+    resolved_route,
+    stage_id: StageId = "simulation_rounds",
+) -> None:
+    """Kopiert bzw. persistiert den kanonischen Stage-Snapshot auf den neuen Run (PR #1895)."""
+    from ..services.runtime_run_config import RuntimeRunConfig
+
+    _runs_mod = _runs_module()
+    orig_cfg = RuntimeRunConfig(original_run_id)
+    new_cfg = RuntimeRunConfig(new_run_id)
+
+    orig_canonical = orig_cfg.load_ai_route_snapshot(stage_id)
+    if orig_canonical is not None:
+        new_cfg.save_ai_route_snapshot(stage_id, orig_canonical)
+
+    orig_stage = orig_cfg.load_stage_snapshot(stage_id)
+    if orig_stage is not None:
+        new_cfg.save_stage_snapshot(stage_id, orig_stage)
+    elif resolved_route is not None:
+        new_cfg.save_stage_snapshot(stage_id, resolved_route.model_dump(mode="json"))
+
+    if orig_canonical is None and resolved_route is not None:
+        router = _runs_mod.StageModelRouter(new_run_id)
+        router.lock_stage(stage_id, resolved_route)
+
+
 def _resume_or_restart_simulation_run(run: dict):
     _runs_mod = _runs_module()
     simulation_id = _runs_mod._linked_or_entity_id(run, "simulation_id", "simulation_id")
@@ -96,19 +298,12 @@ def _resume_or_restart_simulation_run(run: dict):
     if not state:
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
-    existing_run_state = _runs_mod.SimulationRunner.get_run_state(simulation_id)
-    if existing_run_state and existing_run_state.runner_status == _runs_mod.RunnerStatus.PAUSED:
-        from ..services.simulation_ipc import set_pause_state
-        set_pause_state(_runs_mod.ArtifactLocator.simulation_dir(simulation_id), False)
-        _runs_mod.run_registry.update_run(
-            run["run_id"],
-            status="processing",
-            message="Simulation resumed",
-            message_key="run.simulation_resumed",
-            artifacts=_runs_mod._simulation_artifacts(simulation_id),
-            resume_capability={"available": True, "action": "resume", "label": "Resume run"},
-        )
-        return {"run_id": run["run_id"], "status": "processing", "message": "Simulation resumed"}
+    soft_resume_res = _try_soft_resume_paused_process(_runs_mod, simulation_id, run["run_id"])
+    if soft_resume_res is not None:
+        return soft_resume_res
+
+    config = manager.get_simulation_config(simulation_id) or {}
+    platform = _resolve_simulation_platform(run, config, state)
 
     # Finding H2 (#1688): a restart previously called
     # ``SimulationRunner.start_simulation`` bare — no route, no
@@ -136,16 +331,14 @@ def _resume_or_restart_simulation_run(run: dict):
     # ORIGINAL run's persisted owner, not the live requester — an operator
     # restarting a demo-capped workspace run must not lift that cap just by
     # being the one clicking "restart".
-    from ..services.run_budget import get_run_budget_config as _get_run_budget_config
-
-    original_is_workspace_scoped = _runs_mod._original_run_is_workspace_scoped(run)
-    original_budget_config = _get_run_budget_config(run["run_id"])
     try:
-        max_rounds, budget_config = _runs_mod.apply_demo_run_limits(
-            None, original_budget_config, demo_scoped=original_is_workspace_scoped
-        )
+        max_rounds, budget_config = _resolve_resume_limits_and_budget(_runs_mod, run, config, state)
     except _runs_mod.DemoLimitExceededError as exc:
         return _runs_mod.json_error(exc.message, status=400, code="demo_limit_exceeded")
+
+    enable_graph_memory_update, memory_update_graph_id = _resolve_graph_memory_settings(
+        _runs_mod, run, config, state
+    )
 
     # Issue #1183: Der Run-Record entsteht VOR dem Prozessstart im
     # Lifecycle-Fenster — schlägt der Start fehl, existiert ein failed-Record
@@ -166,31 +359,65 @@ def _resume_or_restart_simulation_run(run: dict):
         metadata={
             "graph_id": state.graph_id,
             "branch_name": state.branch_name,
+            "platform": platform,
+            "max_rounds": max_rounds,
+            "enable_graph_memory_update": enable_graph_memory_update,
+            "memory_update_graph_id": memory_update_graph_id if enable_graph_memory_update else None,
             **_runs_mod._inherited_credential_scope_metadata(run),
         },
     ) as lifecycle:
         new_run = lifecycle.record
+        from ..services.manifest_capture import ManifestCapture
         from ..services.run_budget import set_run_budget_config as _set_run_budget_config
         from .simulation_run import _apply_budget_to_simulation
 
         _apply_budget_to_simulation(
             simulation_id, new_run["run_id"], budget_config, _set_run_budget_config
         )
+
+        _persist_inherited_stage_snapshot(
+            original_run_id=run["run_id"],
+            new_run_id=new_run["run_id"],
+            resolved_route=resolved_route,
+            stage_id="simulation_rounds",
+        )
+
+        _capture_resume_manifest_draft(
+            run_id=new_run["run_id"],
+            original_run_id=run["run_id"],
+            simulation_id=simulation_id,
+            state=state,
+            resolved_route=resolved_route,
+            platform=platform,
+            max_rounds=max_rounds,
+            enable_graph_memory_update=enable_graph_memory_update,
+            memory_update_graph_id=memory_update_graph_id if enable_graph_memory_update else None,
+        )
+
         # Finding F1 (Codex-Review Runde 3, PR #1476): requested_run_id ist
         # run["run_id"] — der urspruenglich angefragte, hier zu resumierende
         # (moeglicherweise verwaiste) Run, NICHT das gerade eben angelegte
         # Replacement-Manifest (new_run["run_id"]). Ohne diese gezielte
         # Weitergabe koennte die Stale-Korrektur bei mehreren historischen
         # "processing"-Manifesten einen falschen, neueren Run treffen.
-        new_run_state = _runs_mod.SimulationRunner.start_simulation(
-            simulation_id=simulation_id,
-            platform="parallel",
-            max_rounds=max_rounds,
-            requested_run_id=run["run_id"],
-            runtime_env=_runs_mod.build_route_subprocess_env(
-                resolved_route, resolved_api_key, new_run["run_id"]
-            ),
-        )
+        try:
+            new_run_state = _runs_mod.SimulationRunner.start_simulation(
+                simulation_id=simulation_id,
+                platform=platform,
+                max_rounds=max_rounds,
+                enable_graph_memory_update=enable_graph_memory_update,
+                graph_id=memory_update_graph_id if enable_graph_memory_update else None,
+                requested_run_id=run["run_id"],
+                runtime_env=_runs_mod.build_route_subprocess_env(
+                    resolved_route, resolved_api_key, new_run["run_id"]
+                ),
+            )
+        except Exception:
+            ManifestCapture.discard_draft_best_effort(
+                run_id=new_run["run_id"],
+                run_dir=_runs_mod.ArtifactLocator.run_dir(new_run["run_id"]),
+            )
+            raise
         state.status = _runs_mod.SimulationStatus.RUNNING
         manager._save_simulation_state(state)
         lifecycle.succeed(status="processing", message="Simulation restarted", message_key="run.simulation_restarted")

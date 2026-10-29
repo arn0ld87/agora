@@ -322,14 +322,14 @@ def generate_report(
             )
             if result.failed:
                 failed_section_indices.append(section_num)
-            if result.restored:
-                continue
             if result.quote_validation_failed:
                 if section_num not in quote_validation_failed_section_indices:
                     quote_validation_failed_section_indices.append(section_num)
                 ReportManager.save_quote_validation_failed_sections(
                     report_id, quote_validation_failed_section_indices
                 )
+            if result.restored:
+                continue
             generated_sections.append(result.markdown)
             completed_section_titles.append(result.title)
             _persist_work_trace_markers(agent, report_id)

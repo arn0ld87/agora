@@ -222,8 +222,11 @@ def execute_stop_run(run_id: str):
         manager = mgr_cls()
         sim_state = manager.get_simulation(simulation_id)
         if sim_state:
-            sim_state.status = SimulationStatus.STOPPED
-            manager._save_simulation_state(sim_state)
+            try:
+                manager._set_status(sim_state, SimulationStatus.STOPPED)
+            except Exception:  # noqa: BLE001
+                sim_state.status = SimulationStatus.STOPPED
+                manager._save_simulation_state(sim_state)
         artifacts_fn = getattr(mod, "_simulation_artifacts", _simulation_artifacts)
         mod.run_registry.update_run(
             run_id,
@@ -249,6 +252,8 @@ def execute_cancel_run(run_id: str):
     resolved_run_id = run.get("run_id") or run_id
     current_status = run.get("status", "")
     if current_status == "pending":
+        cancel_fn = getattr(mod, "_request_cancel", _request_cancel)
+        cancel_fn(resolved_run_id)
         registry_cls = getattr(mod, "RunRegistry", None)
         registry_inst = registry_cls() if registry_cls else mod.run_registry
         registry_inst.update_run(

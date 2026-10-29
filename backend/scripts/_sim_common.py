@@ -1673,3 +1673,168 @@ def install_reddit_nested_comments_patch() -> bool:
         actual_version,
     )
     return True
+
+
+# ---------------------------------------------------------------------------
+# Redis Live-Feed Emission (#1216, #1009, #1713)
+# ---------------------------------------------------------------------------
+
+_redis_clients: dict[str, Any] = {}
+
+
+def _get_redis_client(redis_url: str) -> Any:
+    """Lazy-init und cache eines asyncio-Redis-Clients pro URL."""
+    if redis_url not in _redis_clients:
+        import redis.asyncio as aioredis  # type: ignore[import-not-found]
+        _redis_clients[redis_url] = aioredis.from_url(redis_url, decode_responses=True)
+    return _redis_clients[redis_url]
+
+
+async def _emit_post_created_to_redis(
+    simulation_id: str,
+    platform: str,
+    action_data: dict[str, Any],
+    redis_url: str | None,
+    sim_time_iso: str | None = None,
+    round_num: int | None = None,
+    redis_client_getter: Callable[[str], Any] | None = None,
+) -> None:
+    """Publish a PostCreatedEvent to Redis after a CREATE_POST/CREATE_COMMENT/
+    REPOST/QUOTE_POST action.
+
+    Runs inside the asyncio event loop of the OASIS subprocess (Pfad B).
+    Silently no-ops when REDIS_URL is unset or Redis is unreachable.
+
+    Channel: agora:sim:{simulation_id}:post_created
+    """
+    if not redis_url:
+        return
+    from app.contracts.persona_contract import VOICE_REGISTER_VALUES
+    from datetime import timezone
+
+    action_args = action_data.get("action_args", {})
+    action_type = action_data.get("action_type", "CREATE_POST")
+    platform_value = "twitter" if "twitter" in platform.lower() else "reddit"
+
+    kind = {
+        "CREATE_COMMENT": "comment",
+        "REPOST": "repost",
+        "QUOTE_POST": "quote",
+    }.get(action_type, "post")
+
+    quoted_post_id: str | None = None
+    quote_body: str | None = None
+    reposted_post_id: str | None = None
+    root_post_id: str | None = None
+    parent_persona_id: str | None = None
+    parent_persona_name: str | None = None
+
+    parent_comment_id_val: str | None = None
+    if action_type == "CREATE_COMMENT":
+        body = action_args.get("content") or action_args.get("text") or ""
+        raw_id = action_args.get("comment_id") or action_args.get("id")
+        parent_raw = action_args.get("post_id") or action_args.get("new_post_id")
+        if not raw_id or not parent_raw or not body:
+            return
+        post_id = f"{platform_value}:comment:{raw_id}"
+        parent_post_id = f"{platform_value}:{parent_raw}"
+        root_post_id = parent_post_id
+        author_agent_id = action_args.get("post_author_agent_id")
+        parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
+        parent_persona_name = action_args.get("post_author_name") or None
+        raw_pcid = action_args.get("parent_comment_id")
+        if raw_pcid is not None:
+            parent_comment_id_val = str(raw_pcid)
+    elif action_type == "REPOST":
+        body = ""
+        raw_id = str(action_args.get("new_post_id") or action_args.get("post_id") or "")
+        if not raw_id:
+            return
+        post_id = f"{platform_value}:{raw_id}"
+        parent_post_id = None
+        original_raw = action_args.get("original_post_id")
+        if original_raw:
+            reposted_post_id = f"{platform_value}:{original_raw}"
+            root_post_id = reposted_post_id
+        author_agent_id = action_args.get("original_author_agent_id")
+        parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
+        parent_persona_name = action_args.get("original_author_name") or None
+    elif action_type == "QUOTE_POST":
+        body = action_args.get("quote_content") or ""
+        raw_id = str(action_args.get("new_post_id") or action_args.get("post_id") or "")
+        if not raw_id or not body:
+            return
+        post_id = f"{platform_value}:{raw_id}"
+        parent_post_id = None
+        quoted_raw = action_args.get("quoted_id")
+        if quoted_raw:
+            quoted_post_id = f"{platform_value}:{quoted_raw}"
+        quote_body = action_args.get("original_content") or None
+        author_agent_id = action_args.get("original_author_agent_id")
+        parent_persona_id = str(author_agent_id) if author_agent_id is not None else None
+        parent_persona_name = action_args.get("original_author_name") or None
+    else:  # CREATE_POST
+        body = action_args.get("content") or action_args.get("text") or ""
+        raw_id = str(
+            action_args.get("post_id")
+            or action_args.get("new_post_id")
+            or action_args.get("id")
+            or ""
+        )
+        if not raw_id or not body:
+            return
+        post_id = f"{platform_value}:{raw_id}"
+        parent_raw = action_args.get("parent_post_id")
+        parent_post_id = f"{platform_value}:{parent_raw}" if parent_raw else None
+
+    persona_id = str(action_data.get("agent_id", ""))
+    persona_name = action_data.get("agent_name") or f"Agent {persona_id}"
+    voice_register = str(action_args.get("voice_register", "neutral-de"))
+    if voice_register not in VOICE_REGISTER_VALUES:
+        voice_register = "neutral-de"
+
+    if platform_value == "reddit":
+        try:
+            score = int(action_args.get("score", 0) or 0)
+        except (TypeError, ValueError):
+            score = 0
+    else:
+        score = 0
+
+    payload: dict[str, Any] = {
+        "event_type": "post_created",
+        "simulation_id": simulation_id,
+        "post_id": post_id,
+        "parent_post_id": parent_post_id,
+        "platform": platform_value,
+        "persona_id": persona_id,
+        "persona_name": persona_name,
+        "voice_register": voice_register,
+        "is_simulated": True,
+        "body": body,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "score": score,
+        "sim_time": sim_time_iso,
+        "kind": kind,
+        "round_num": round_num,
+        "parent_comment_id": parent_comment_id_val,
+        "root_post_id": root_post_id,
+        "quoted_post_id": quoted_post_id,
+        "reposted_post_id": reposted_post_id,
+        "quote_body": quote_body,
+        "parent_persona_id": parent_persona_id,
+        "parent_persona_name": parent_persona_name,
+        "like_count": 0,
+    }
+    channel = f"agora:sim:{simulation_id}:post_created"
+    try:
+        getter = redis_client_getter or _get_redis_client
+        client = getter(redis_url)
+        await client.publish(channel, json.dumps(payload, ensure_ascii=False))
+    except Exception:
+        logging.getLogger("agora._sim_common").debug(
+            "emit_post_created_to_redis failed for sim=%s post=%s (non-fatal)",
+            simulation_id,
+            post_id,
+        )
+

@@ -25,6 +25,7 @@ from .persona_identity_binding import write_identity_binding_manifest  # noqa: F
 from .persona_quota_defaults import default_dach_industry_quota  # noqa: F401
 from .prepare_requirement_selection import requirement_hash as _requirement_hash  # noqa: F401
 from .settings_layer import get_default_service as _get_settings  # noqa: F401
+from .sim.cancel_flag import is_cancel_requested  # noqa: F401
 from .simulation_config_generator import SimulationConfigGenerator  # noqa: F401
 
 if TYPE_CHECKING:

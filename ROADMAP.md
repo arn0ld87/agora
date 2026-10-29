@@ -67,7 +67,7 @@ Die verbleibenden Punkte werden nicht durch weitere 0.9-Featureflächen verdeckt
 
 ## 0.9.9 — Patch-Release
 
-`0.9.9` folgt am 29.10.2026 auf `0.9.8`. Der Tag `v0.9.8` wurde erst an diesem Tag auf den Release-Commit vom 13.10. gesetzt. Sein Tag-Lauf scheiterte im Trivy-Gate, weil inzwischen behebbare HIGH-CVEs für `pillow`, `virtualenv`, `pypdf`, `certifi` und `filelock` veröffentlicht waren. Ein veröffentlichter Tag wird nicht verschoben ([`docs/release-process.md`](docs/release-process.md) §9). `0.9.9` liefert deshalb die aktualisierten Pakete, die GHCR-Images und die Release-Artefakte und enthält alle 17 Commits seit `0.9.8`, darunter die ersten Re-Audit-Fixes (Epic [#1899](https://github.com/arn0ld87/agora/issues/1899)). Es beansprucht keines der 0.10-Gates, der Weg dorthin ist in Epic [#1900](https://github.com/arn0ld87/agora/issues/1900) gebündelt.
+`0.9.9` folgt am 29.10.2026 auf `0.9.8`. Der Tag `v0.9.8` wurde erst an diesem Tag auf den Release-Commit vom 13.10. gesetzt. Sein Tag-Lauf scheiterte im Trivy-Gate, weil inzwischen behebbare HIGH-CVEs für `pillow`, `virtualenv`, `pypdf`, `certifi` und `filelock` veröffentlicht waren. Ein veröffentlichter Tag wird nicht verschoben ([`docs/release-process.md`](docs/release-process.md) §9). `0.9.9` liefert deshalb die aktualisierten Pakete, die GHCR-Images und die Release-Artefakte und enthält alle 23 Commits seit `0.9.8`, darunter die Re-Audit-Fixes #1884 bis #1898 (Epic [#1899](https://github.com/arn0ld87/agora/issues/1899)). Es beansprucht keines der 0.10-Gates, der Weg dorthin ist in Epic [#1900](https://github.com/arn0ld87/agora/issues/1900) gebündelt.
 
 ---
 
