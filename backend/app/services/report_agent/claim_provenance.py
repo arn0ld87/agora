@@ -38,6 +38,7 @@ keine Gattung. Sie koennen eine Mehrheit also nur verhindern, nie begruenden.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Any, Literal, Mapping, Optional, Sequence
 
@@ -310,11 +311,28 @@ def resolve_canonical_voice_keys(
     ]
 
 
+_CHUNK_SUFFIX_RE = re.compile(r":(?:chunk[s_:]?|page[s_:]?|p[:_]?)\d+$", re.IGNORECASE)
+
+
+def _extract_doc_from_anchor(anchor: str) -> Optional[str]:
+    for pfx in ("seed_doc:", "seed-doc:", "doc:"):
+        if anchor.startswith(pfx):
+            rest = anchor[len(pfx) :].strip()
+            if "#" in rest:
+                doc_part = rest.split("#", 1)[0].strip()
+            else:
+                doc_part = _CHUNK_SUFFIX_RE.sub("", rest).strip()
+            if doc_part:
+                return f"doc:{doc_part}"
+    return None
+
+
 def _seed_doc_key(record: Mapping[str, Any]) -> Optional[str]:
     """Ermittelt einen kanonischen Dokument-Schlüssel für Seed-Dokumente/Korpus-Belege.
 
     Zwei Chunks oder Zitate aus demselben Seed-Dokument erhalten denselben Key
     (z. B. ``doc:<id>``), damit sie als eine einzige Quelle zählen (Befund 1.2).
+    Erhält Doppelpunkte innerhalb der eigentlichen document_id (z. B. seed_doc:budget:2025#chunk:0).
     """
     for field in ("source_doc_id", "document_id", "doc_id"):
         val = record.get(field)
@@ -323,12 +341,9 @@ def _seed_doc_key(record: Mapping[str, Any]) -> Optional[str]:
 
     anchor = str(record.get("source_id_anchor") or "").strip()
     if anchor:
-        for pfx in ("seed_doc:", "seed-doc:", "doc:"):
-            if anchor.startswith(pfx):
-                rest = anchor[len(pfx) :]
-                doc_part = rest.split("#")[0].split(":")[0]
-                if doc_part:
-                    return f"doc:{doc_part}"
+        doc_from_anchor = _extract_doc_from_anchor(anchor)
+        if doc_from_anchor:
+            return doc_from_anchor
         return f"anchor:{anchor}"
 
     kind = str(record.get("source_kind") or record.get("type") or "").strip().lower()
@@ -354,6 +369,22 @@ def _normalize_entry_pair(
     return {}, None
 
 
+def _fallback_field(
+    item: Mapping[str, Any],
+    record: Optional[Mapping[str, Any]],
+    *keys: str,
+) -> str:
+    for k in keys:
+        val = item.get(k)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+        if record is not None:
+            rval = record.get(k)
+            if rval is not None and str(rval).strip():
+                return str(rval).strip()
+    return ""
+
+
 def _resolve_non_voice_key(
     item: Mapping[str, Any],
     record: Optional[Mapping[str, Any]],
@@ -364,20 +395,12 @@ def _resolve_non_voice_key(
     if doc_key:
         return ("doc", str(doc_key))
 
-    source_val = str(item.get("source") or (record.get("source") if record else "") or "").strip()
-    type_val = str(
-        item.get("type")
-        or (record.get("type") if record else "")
-        or item.get("source_kind")
-        or (record.get("source_kind") if record else "")
-        or "source"
-    ).strip()
-    eid = str(
-        item.get("evidence_id") or (record.get("evidence_id") if record else "") or ""
-    ).strip()
-
+    source_val = _fallback_field(item, record, "source")
     if source_val:
+        type_val = _fallback_field(item, record, "type", "source_kind") or "source"
         return ("source", f"{type_val}:{source_val}")
+
+    eid = _fallback_field(item, record, "evidence_id")
     if eid:
         return ("ref", eid)
     return ("inline", str(index))

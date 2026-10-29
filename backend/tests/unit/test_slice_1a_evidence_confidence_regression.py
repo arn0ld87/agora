@@ -159,6 +159,37 @@ def test_befund_1_2_source_id_anchor_deduplication():
     assert calc_independent_sources(evidence) == 2
 
 
+def test_befund_1_2_source_id_anchor_preserves_colons_in_doc_ids():
+    # Dateinamen mit Doppelpunkten führen zu Anchors wie seed_doc:budget:2025#chunk:0
+    # Diese dürfen nicht zu doc:budget kollabieren, sondern müssen als zwei
+    # unabhängige Dokumente gezählt werden.
+    evidence = [
+        {
+            "evidence_id": "b2025_c0",
+            "source_kind": "seed_corpus",
+            "source_id_anchor": "seed_doc:budget:2025#chunk:0",
+            "supports_claim": True,
+        },
+        {
+            "evidence_id": "b2025_c1",
+            "source_kind": "seed_corpus",
+            "source_id_anchor": "seed_doc:budget:2025#chunk:1",
+            "supports_claim": True,
+        },
+        {
+            "evidence_id": "b2026_c0",
+            "source_kind": "seed_corpus",
+            "source_id_anchor": "seed_doc:budget:2026#chunk:0",
+            "supports_claim": True,
+        },
+    ]
+    assert calc_independent_sources(evidence) == 2
+
+    refs = ["b2025_c0", "b2025_c1", "b2026_c0"]
+    index = {e["evidence_id"]: e for e in evidence}
+    assert manager_independent_sources(refs, evidence, index) == 2
+
+
 # ---------------------------------------------------------------------------
 # Befund 1.3: Group-Fallback Kollision mit bekanntem Sprecher derselben Gruppe
 # ---------------------------------------------------------------------------
