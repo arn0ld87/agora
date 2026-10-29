@@ -25,6 +25,7 @@
 | Embedding-Verarbeitung/Migration | `embedding_service.py` + `embedding_migration.py` |
 | Evidence-Gating | ADR-0002 Hartanker (siehe `CLAUDE.md`) |
 | Claim-Qualifikation, Stimme/Dokumentanker & Belegdichte | `backend/app/services/report_agent/claim_qualification.py` (`QualifiedClaimEvidence`, `qualify_claim_evidence`, `evaluate_claim_mode_gate`, `compute_evidence_density`) |
+| Abschnitts-Pipeline & atomare Evidence-/Markdown-Persistenz | `backend/app/services/report_agent/section_pipeline.py` (`SectionGenerationPipeline`, `SectionExecutionState`, `_persist_section_atomically`, `filter_structured_metadata_against_verified_section`, `drop_unrepairable_section_entries`, #1475) |
 | Run-/Jobstatus | RunRegistry / Run-Contracts |
 | Run-Read-Model (Listen-/Detail-Anreicherung) | `backend/app/services/run_read_model.py` (aus `api/runs.py` extrahiert, #1496) |
 | Simulations-Read-Metriken (Timeline/Agent-Stats) | `backend/app/services/sim/run_metrics.py` (aus `sim/monitor.py` extrahiert, #1496) |
