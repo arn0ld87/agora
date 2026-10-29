@@ -260,8 +260,18 @@ class SqliteLlmProfileRepository:
 #: Bleibt bestehen, damit PR 3 kein Rename quer durch den Bestand erzwingt.
 LlmProfilesStore = SqliteLlmProfileRepository
 
-_store_singleton = SqliteLlmProfileRepository()
+# Erst beim ersten Abruf anlegen: ``__init__`` öffnet die Datenbank und setzt
+# ``journal_mode=WAL``, wofür SQLite eine exklusive Sperre braucht. Beim Import
+# angelegt, kollidierten parallele Importe (pytest-xdist-Collection) mit
+# ``database is locked``, und jeder Import berührte die echte Instanz-DB.
+_store_singleton: Optional[SqliteLlmProfileRepository] = None
+_singleton_lock = threading.Lock()
 
 
 def get_llm_profiles_store() -> SqliteLlmProfileRepository:
+    global _store_singleton
+    if _store_singleton is None:
+        with _singleton_lock:
+            if _store_singleton is None:
+                _store_singleton = SqliteLlmProfileRepository()
     return _store_singleton

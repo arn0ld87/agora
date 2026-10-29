@@ -13,6 +13,8 @@ in die echte ``backend/instance/llm_profiles.db`` schreiben.
 """
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -273,3 +275,46 @@ def test_factory_returns_the_postgres_adapter_when_selected(monkeypatch):
     monkeypatch.setattr(Config, "LLM_PROFILE_BACKEND", "postgres")
 
     assert isinstance(get_llm_profile_repository(), PostgresLlmProfileRepository)
+
+
+# ---------------------------------------------------------------------------
+# 8. Kein Datenbankzugriff beim Import
+# ---------------------------------------------------------------------------
+
+
+def test_import_does_not_open_the_database():
+    """Der Import darf keine Verbindung öffnen (pytest-xdist-Collection).
+
+    Vorher legte das Modul seinen Singleton beim Import an; ``__init__`` setzt
+    ``journal_mode=WAL`` und braucht dafür eine exklusive Sperre. Importierten
+    mehrere xdist-Worker das Modul gleichzeitig, scheiterte die Collection mit
+    ``sqlite3.OperationalError: database is locked``. Ein frischer Interpreter
+    prüft das ohne Rücksicht darauf, was dieser Prozess schon importiert hat.
+    """
+    backend_dir = Path(__file__).resolve().parents[2]
+    code = (
+        "import sqlite3\n"
+        "def _forbidden(*args, **kwargs):\n"
+        "    raise AssertionError('sqlite3.connect beim Import')\n"
+        "sqlite3.connect = _forbidden\n"
+        "import app.services.llm_profiles_store as m\n"
+        "assert m._store_singleton is None\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=backend_dir,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_store_getter_creates_one_instance_lazily(tmp_path, monkeypatch):
+    monkeypatch.setattr(store_module, "_instance_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "_store_singleton", None)
+
+    first = store_module.get_llm_profiles_store()
+
+    assert first is store_module.get_llm_profiles_store()
+    assert (tmp_path / "llm_profiles.db").is_file()
