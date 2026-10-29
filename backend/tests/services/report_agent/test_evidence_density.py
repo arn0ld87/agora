@@ -24,7 +24,12 @@ from app.services.run_budget import BudgetExceededError
 
 
 def _link(evidence_id: str, *, supports: bool = True, **extra: Any) -> Dict[str, Any]:
-    return {"evidence_id": evidence_id, "supports_claim": supports, "entailment": "entails", **extra}
+    return {
+        "evidence_id": evidence_id,
+        "supports_claim": supports,
+        "entailment": "entails",
+        **extra,
+    }
 
 
 def _claim(score: float, *links: Dict[str, Any]) -> Dict[str, Any]:
@@ -58,7 +63,11 @@ def _evidence_map() -> Dict[str, Any]:
             "e-int-a1": {"type": "agent_interview", "source": "interview", "voice_key": "agent:1"},
             "e-int-a2": {"type": "agent_interview", "source": "interview", "voice_key": "agent:1"},
             "e-int-b1": {"type": "agent_interview", "source": "interview", "voice_key": "agent:2"},
-            "e-act-c": {"type": "agent_action", "source": "simulation_actions", "voice_key": "agent:3"},
+            "e-act-c": {
+                "type": "agent_action",
+                "source": "simulation_actions",
+                "voice_key": "agent:3",
+            },
         },
     }
 
@@ -81,9 +90,9 @@ def test_zaehlt_die_belegdichte_der_claims():
     assert density.multi_independent_ratio == pytest.approx(1 / 5)
 
 
-def test_felder_des_claim_eintrags_ueberschreiben_den_index():
-    # Der Index kennt keine Stimme, der Claim-Eintrag trägt sie: gleiche Stimme
-    # heißt keine Unabhängigkeit.
+def test_kanonischer_index_hat_vorrang_vor_claim_eintrag():
+    # Befund 1.1: Der kanonische Index ist autoritativ gegenüber lokalen Claim-Feldern.
+    # Hier gibt der Index zwei getrennte Stimmen vor -> unabhängig.
     evidence_map = {
         "sections": [
             {
@@ -105,20 +114,28 @@ def test_felder_des_claim_eintrags_ueberschreiben_den_index():
     density = compute_evidence_density(evidence_map)
 
     assert density.claims_multi_support == 1
-    assert density.claims_multi_independent == 0
+    assert density.claims_multi_independent == 1
 
 
-def test_belegart_aus_dem_claim_eintrag_hat_vorrang_unbekannte_art_ist_unknown():
+def test_belegart_des_index_hat_vorrang_unbekannter_index_nutzt_claim_eintrag():
+    # Befund 1.1: Index bestimmt Belegart (document schlägt agent_action);
+    # fehlt der Index-Eintrag, greift der Claim-Eintrag (agent_action).
     evidence_map = {
         "sections": [
-            {"claims": [_claim(0.7, _link("e1", type="agent_action"), _link("e-fehlt"))]}
+            {
+                "claims": [
+                    _claim(
+                        0.7, _link("e1", type="agent_action"), _link("e-fehlt", type="agent_action")
+                    )
+                ]
+            }
         ],
         "evidence_index": {"e1": {"type": "document"}},
     }
 
     density = compute_evidence_density(evidence_map)
 
-    assert density.supporting_links_by_type == {"agent_action": 1, "unknown": 1}
+    assert density.supporting_links_by_type == {"agent_action": 1, "document": 1}
     assert density.claims_with_action_support == 1
 
 
@@ -231,9 +248,7 @@ def test_schreibfehler_wird_nicht_geschluckt(reports_dir, monkeypatch):
         workflow._persist_evidence_density(_Agent(_evidence_map()), "report-3")
 
 
-def test_zaehlfehler_bricht_den_bericht_nicht_ab_und_wird_protokolliert(
-    reports_dir, monkeypatch
-):
+def test_zaehlfehler_bricht_den_bericht_nicht_ab_und_wird_protokolliert(reports_dir, monkeypatch):
     from unittest.mock import MagicMock
 
     from app.services.report_agent import workflow

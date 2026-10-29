@@ -3,6 +3,7 @@
 Enthält EvidenceMapModel, EvidenceOmissionModel, Response-Varianten und
 ReportContractModel samt zugehörigen Validatoren.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -79,8 +80,7 @@ def _validate_claim_bindings(
     if unknown:
         raise ValueError(
             f"Section {section.section_index} Claim {claim.claim_id} "
-            "referenziert unbekannte Evidence: "
-            + ", ".join(unknown)
+            "referenziert unbekannte Evidence: " + ", ".join(unknown)
         )
 
     resolved = [(binding, index[binding.evidence_id]) for binding in claim.evidence]
@@ -114,6 +114,7 @@ def _require_two_supporting_groups(
         if binding.supports_claim
         and record.source_kind == EvidenceSourceKind.agent_quote
         and record.persona_stakeholder_group
+        and counts_for_confidence(record)
     }
     if len(groups) < 2:
         raise ValueError(
@@ -149,16 +150,22 @@ def _require_quote_and_seed(
     am Record, ``supports_claim`` am Binding).
     """
     has_agent_quote = any(
-        record.source_kind == EvidenceSourceKind.agent_quote and record.quote
-        for _, record in resolved
+        record.source_kind == EvidenceSourceKind.agent_quote
+        and bool(record.quote)
+        and binding.supports_claim is True
+        and counts_for_confidence(record)
+        for binding, record in resolved
     )
     has_seed = any(
-        record.source_kind == EvidenceSourceKind.seed_corpus for _, record in resolved
+        record.source_kind == EvidenceSourceKind.seed_corpus
+        and binding.supports_claim is True
+        and counts_for_confidence(record)
+        for binding, record in resolved
     )
     has_action_voices = has_two_action_voices(
         (record.source_kind, record.voice_key)
         for binding, record in resolved
-        if binding.supports_claim
+        if binding.supports_claim is True and counts_for_confidence(record)
     )
     if not ((has_agent_quote and has_seed) or has_action_voices):
         raise ValueError(
@@ -214,15 +221,18 @@ def _hand_work_reason(
         ConfidenceLabel.verified,
     ) and not any(binding.supports_claim for binding in counted):
         return "supports_claim=True nur an solcher Evidence"
-    if claim.confidence_label == ConfidenceLabel.verified and not any(
-        (binding.match_score or 0.0) >= 0.85 for binding in counted
-    ):
-        return "match_score >= 0.85 nur an solcher Evidence"
+    if claim.confidence_label == ConfidenceLabel.verified:
+        if not any((binding.match_score or 0.0) >= 0.85 for binding in counted):
+            return "match_score >= 0.85 nur an solcher Evidence"
+        supporting_counted = [b for b in counted if b.supports_claim]
+        if len({b.evidence_id for b in supporting_counted}) < 2:
+            return "mindestens zwei stuetzende Quellen nur mit solcher Evidence"
     return None
 
 
 class EvidenceMapModel(BaseModel):
     """Persistierte Evidence-Map. Ablöse für die rohen Dicts in report_agent.py."""
+
     model_config = _STRICT
     schema_version: Literal[3] = 3
     report_id: str = Field(min_length=1)
@@ -307,7 +317,7 @@ class EvidenceMapResponseSuccessVariant(BaseModel):
         description=(
             "Pflichtfeld ohne Default (Review B7 Runde 5, Issue #1477 F1): "
             "ein Default wandert im generierten JSON-Schema aus der "
-            "``required``-Liste heraus und liesse ``{\"data\": ...}`` ohne "
+            '``required``-Liste heraus und liesse ``{"data": ...}`` ohne '
             "``success`` durch, obwohl die Zod-Grenze im Frontend "
             "(``reportContract.ts``) ``success: true`` verlangt."
         ),
@@ -360,6 +370,7 @@ class EvidenceMapResponseModel(
 
 class ReportContractModel(BaseModel):
     """Wurzel — was tatsächlich beim Export rausgeht."""
+
     model_config = _STRICT
     schema_version: Literal[2] = 2
     exported_at: datetime
@@ -387,4 +398,3 @@ __all__ = [
     "_reject_label_resting_on_hand_work",
     "_hand_work_reason",
 ]
-
