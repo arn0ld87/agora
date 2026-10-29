@@ -8,19 +8,30 @@ setzt er als Argument ein.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock
 
 import pytest
 
 from app.llm.request_plan import (
+    DEFAULT_CHAT_QUIRKS,
     DEFAULT_REQUEST_OPTIONS,
+    REASONING_EFFORT_QUIRK,
     TEMPERATURE_QUIRK,
     TOKEN_KEY_QUIRK,
+    VISION_QUIRKS,
     Quirk,
     RequestOptions,
     RequestPlan,
     build_request,
     execute,
+    execute_with_retry,
+    extract_int_token_usage,
+    extract_non_stream_chat_choice,
+    reassemble_chat_stream,
+    should_force_stream,
+    strip_thinking_tags,
     thinking_extra_body,
 )
 
@@ -171,9 +182,7 @@ def test_thinking_extra_body_ollama_without_num_ctx_leaves_server_default() -> N
     }
 
 
-@pytest.mark.parametrize(
-    ("think", "expected"), [(True, "adaptive"), (False, "disabled")]
-)
+@pytest.mark.parametrize(("think", "expected"), [(True, "adaptive"), (False, "disabled")])
 def test_thinking_extra_body_minimax_uses_its_own_field(think: bool, expected: str) -> None:
     assert thinking_extra_body(ollama=False, minimax=True, think=think) == {
         "thinking": {"type": expected}
@@ -292,9 +301,7 @@ def test_execute_lets_the_outer_quirk_take_over_after_the_inner_one_gave_up() ->
     ``max_tokens``, nicht mit der Korrektur des inneren Quirks.
     """
     attempt = _Recorder(failures=[_token_key_400(), _temperature_400()])
-    assert (
-        execute(_plan(), attempt, quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK)) == "ok"
-    )
+    assert execute(_plan(), attempt, quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK)) == "ok"
     assert len(attempt.calls) == 3
     assert attempt.calls[0]["max_tokens"] == 4096
     assert attempt.calls[1]["max_completion_tokens"] == 4096  # innerer Quirk
@@ -306,9 +313,7 @@ def test_execute_lets_the_outer_quirk_take_over_after_the_inner_one_gave_up() ->
 def test_execute_offers_the_inner_quirk_again_inside_the_outer_retry() -> None:
     """Nach der äußeren Korrektur steht der innere Quirk erneut zur Verfügung."""
     attempt = _Recorder(failures=[_temperature_400(), _token_key_400()])
-    assert (
-        execute(_plan(), attempt, quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK)) == "ok"
-    )
+    assert execute(_plan(), attempt, quirks=(TOKEN_KEY_QUIRK, TEMPERATURE_QUIRK)) == "ok"
     assert len(attempt.calls) == 3
     assert attempt.calls[1] == {  # äußere Korrektur, Token-Key noch original
         "model": "gpt-4o",
@@ -327,9 +332,7 @@ def test_execute_applies_quirks_in_the_given_order() -> None:
             seen.append(name)
             return {**kwargs, "touched_by": name}
 
-        return Quirk(
-            name=name, remedy=name, matches=lambda _exc: True, rewrite=_rewrite
-        )
+        return Quirk(name=name, remedy=name, matches=lambda _exc: True, rewrite=_rewrite)
 
     attempt = _Recorder(failures=[_Boom("anything")])
     execute(_plan(), attempt, quirks=(_tag("inner"), _tag("outer")))
@@ -343,3 +346,128 @@ def test_execute_does_not_mutate_the_plan() -> None:
     attempt = _Recorder(failures=[_token_key_400()])
     execute(plan, attempt, quirks=(TOKEN_KEY_QUIRK,))
     assert plan.kwargs == before
+
+
+# ---------------------------------------------------------------------------
+# execute_with_retry + response helpers (Slice #6 Deep Module)
+# ---------------------------------------------------------------------------
+
+
+def test_default_quirk_tuples_preserve_chat_and_vision_policies() -> None:
+    assert DEFAULT_CHAT_QUIRKS == (
+        TOKEN_KEY_QUIRK,
+        TEMPERATURE_QUIRK,
+        REASONING_EFFORT_QUIRK,
+    )
+    assert VISION_QUIRKS == (TOKEN_KEY_QUIRK,)
+
+
+def test_execute_with_retry_delegates_to_retry_runner_and_applies_quirks() -> None:
+    seen_retry_kwargs: Dict[str, Any] = {}
+
+    def _fake_retry_runner(fn: Any, **kwargs: Any) -> Any:
+        seen_retry_kwargs.update(kwargs)
+        return fn()
+
+    attempt = _Recorder(failures=[_token_key_400()])
+    result = execute_with_retry(
+        _plan(),
+        provider_attempt=attempt,
+        retry_runner=_fake_retry_runner,
+        max_retries=5,
+        initial_delay=0.5,
+        max_delay=15.0,
+        quirks=VISION_QUIRKS,
+        label="vision",
+    )
+    assert result == "ok"
+    assert len(attempt.calls) == 2
+    assert attempt.calls[1]["max_completion_tokens"] == 4096
+    assert seen_retry_kwargs == {
+        "max_retries": 5,
+        "initial_delay": 0.5,
+        "max_delay": 15.0,
+    }
+
+
+@pytest.mark.parametrize(
+    ("is_ollama", "env_value", "expected"),
+    [
+        (False, None, False),
+        (False, "1", False),
+        (True, None, True),
+        (True, "1", True),
+        (True, "true", True),
+        (True, "yes", True),
+        (True, "0", False),
+        (True, "false", False),
+    ],
+)
+def test_should_force_stream_respects_ollama_and_env_override(
+    is_ollama: bool, env_value: Optional[str], expected: bool
+) -> None:
+    assert should_force_stream(is_ollama=is_ollama, env_value=env_value) is expected
+
+
+def test_strip_thinking_tags_removes_think_blocks_and_trims() -> None:
+    raw = "<think>\ninternal reasoning\n</think>\n  Final answer.  "
+    assert strip_thinking_tags(raw) == "Final answer."
+
+
+def test_extract_int_token_usage_filters_booleans_and_mocks() -> None:
+    assert extract_int_token_usage(None) == (None, None)
+    valid = SimpleNamespace(prompt_tokens=120, completion_tokens=45)
+    assert extract_int_token_usage(valid) == (120, 45)
+    bool_usage = SimpleNamespace(prompt_tokens=True, completion_tokens=False)
+    assert extract_int_token_usage(bool_usage) == (None, None)
+    mock_usage = MagicMock()
+    assert extract_int_token_usage(mock_usage) == (None, None)
+
+
+def test_reassemble_chat_stream_concatenates_chunks_and_extracts_usage() -> None:
+    expected_usage = SimpleNamespace(prompt_tokens=10, completion_tokens=2)
+    chunks = [
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content="Hello "),
+                    finish_reason=None,
+                )
+            ],
+            usage=None,
+        ),
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content="world!"),
+                    finish_reason="stop",
+                )
+            ],
+            usage=expected_usage,
+        ),
+    ]
+    content, finish, comp_tok, usage = reassemble_chat_stream(chunks)
+    assert content == "Hello world!"
+    assert finish == "stop"
+    assert comp_tok == 2
+    assert usage is expected_usage
+    assert extract_int_token_usage(usage) == (10, 2)
+
+
+def test_extract_non_stream_chat_choice_returns_content_finish_and_usage() -> None:
+    expected_usage = SimpleNamespace(prompt_tokens=33, completion_tokens=64)
+    resp = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="Direct reply"),
+                finish_reason="length",
+            )
+        ],
+        usage=expected_usage,
+    )
+    content, finish, comp_tok, usage = extract_non_stream_chat_choice(resp)
+    assert content == "Direct reply"
+    assert finish == "length"
+    assert comp_tok == 64
+    assert usage is expected_usage
+    assert extract_int_token_usage(usage) == (33, 64)
