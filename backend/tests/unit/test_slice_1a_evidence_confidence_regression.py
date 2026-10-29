@@ -314,6 +314,56 @@ def test_befund_1_4_require_quote_and_seed_rejects_contradicting():
         _require_quote_and_seed(section, claim, resolved)
 
 
+def test_befund_1_4_require_quote_and_seed_rejects_unconfirmed_supports_claim_none():
+    section = ReportSectionModel(
+        section_index=1,
+        section_title="Titel der Section",
+        section_summary="Zusammenfassung der Section",
+    )
+    claim = IndexedReportClaimModel(
+        claim_id="claim_01",
+        claim_text="Gueltiger Claim-Text fuer den Test",
+        confidence_label=ConfidenceLabel.medium,
+        confidence_score=0.7,
+        evidence=[
+            ClaimEvidenceBindingModel(
+                evidence_id="ev_11111111111111111111111111111111", supports_claim=None
+            ),
+            ClaimEvidenceBindingModel(
+                evidence_id="ev_22222222222222222222222222222222", supports_claim=None
+            ),
+        ],
+    )
+    resolved = [
+        (
+            claim.evidence[0],
+            EvidenceRecordModel(
+                evidence_id="ev_11111111111111111111111111111111",
+                source_kind=EvidenceSourceKind.agent_quote,
+                persona_stakeholder_group="Bürger",
+                producer_key="interviews",
+                type="agent_interview",
+                source="interview_01",
+                snippet="Snippet des Zitats",
+                quote="Wortlaut",
+            ),
+        ),
+        (
+            claim.evidence[1],
+            EvidenceRecordModel(
+                evidence_id="ev_22222222222222222222222222222222",
+                source_kind=EvidenceSourceKind.seed_corpus,
+                producer_key="seed_corpus",
+                type="seed_document",
+                source="seed_01",
+                snippet="Snippet des Seeds",
+            ),
+        ),
+    ]
+    with pytest.raises(ValueError, match="medium verlangt agent_quote und seed_corpus"):
+        _require_quote_and_seed(section, claim, resolved)
+
+
 # ---------------------------------------------------------------------------
 # Befund 1.5: Stakeholder-Gruppen filtern Handarbeit & Handwork-Reason für Verified
 # ---------------------------------------------------------------------------

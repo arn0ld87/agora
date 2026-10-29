@@ -152,20 +152,20 @@ def _require_quote_and_seed(
     has_agent_quote = any(
         record.source_kind == EvidenceSourceKind.agent_quote
         and bool(record.quote)
-        and binding.supports_claim is not False
+        and binding.supports_claim is True
         and counts_for_confidence(record)
         for binding, record in resolved
     )
     has_seed = any(
         record.source_kind == EvidenceSourceKind.seed_corpus
-        and binding.supports_claim is not False
+        and binding.supports_claim is True
         and counts_for_confidence(record)
         for binding, record in resolved
     )
     has_action_voices = has_two_action_voices(
         (record.source_kind, record.voice_key)
         for binding, record in resolved
-        if binding.supports_claim and counts_for_confidence(record)
+        if binding.supports_claim is True and counts_for_confidence(record)
     )
     if not ((has_agent_quote and has_seed) or has_action_voices):
         raise ValueError(
