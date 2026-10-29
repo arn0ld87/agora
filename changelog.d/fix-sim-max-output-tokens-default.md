@@ -1,0 +1,3 @@
+### Fixed
+
+- **Simulation fiel seit #1897 auf 8192 Ausgabe-Tokens zurück (29.10.2026).** Mit dem SinglePlatformRunner-Refactor wanderte die Modell-Konfiguration nach `backend/scripts/sim_runtime/llm_config.py`, und der Default von `LLM_MAX_OUTPUT_TOKENS` lautete dort `Config.LLM_MAX_OUTPUT_TOKENS` (8192) statt der seit 2026-05-16 für Simulationen festgelegten 16384. Bei Multi-Agent-Workloads mit großem `num_ctx` schnitt das Antworten still ab. Der Default ist wieder 16384; ein explizit gesetztes `LLM_MAX_OUTPUT_TOKENS` gewinnt weiterhin. `tests/scripts/test_run_simulation_default_tokens.py` prüft jetzt die neue Fundstelle.

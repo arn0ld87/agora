@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 
-# _create_model ist mit dem SinglePlatformRunner-Refactor in die Basis
-# sim_runtime/platform_runner.py gewandert; der Default lebt jetzt dort als
-# Single Source of Truth (dünne Entry-Points erben unverändert).
+# Seit #1897 löst sim_runtime/llm_config.py::resolve_model_runtime_settings die
+# Laufzeitwerte für alle Runner auf; der Default lebt dort als Single Source of
+# Truth (platform_runner.py und die dünnen Entry-Points rufen sie nur auf).
 SCRIPTS = (
-    "backend/scripts/sim_runtime/platform_runner.py",
+    "backend/scripts/sim_runtime/llm_config.py",
 )
 
 _PATTERN = re.compile(

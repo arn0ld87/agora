@@ -15,6 +15,7 @@ from app.services.artifact_store import InMemoryArtifactStore
 from app.services.manifest_capture import ManifestCapture
 from app.services.run_registry import RunRegistry
 from app.utils.rate_limit import llm_trigger_rate_limiter
+from tests._blueprint_guard import drop_inherited_auth_guards
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ def env(tmp_path, monkeypatch):
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
+    drop_inherited_auth_guards(app)
 
     registry = RunRegistry()
 

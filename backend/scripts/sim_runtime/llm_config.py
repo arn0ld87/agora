@@ -36,9 +36,10 @@ def _parse_model_context_limits() -> Dict[str, int]:
 
 def resolve_model_runtime_settings(model_name: str) -> Dict[str, Any]:
     """Resolve completion, CAMEL memory budget and local Ollama num_ctx hints."""
-    completion_max_tokens = int(
-        os.environ.get("LLM_MAX_OUTPUT_TOKENS", str(Config.LLM_MAX_OUTPUT_TOKENS))
-    )
+    # Sim-Default bewusst 16384, nicht ``Config.LLM_MAX_OUTPUT_TOKENS`` (8192):
+    # 8192 schnitt Multi-Agent-Antworten bei großem num_ctx still ab (CAMEL).
+    # Gesichert durch tests/scripts/test_run_simulation_default_tokens.py.
+    completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "16384"))
     default_memory_limit = int(
         os.environ.get("LLM_CONTEXT_LIMIT", str(Config.LLM_CONTEXT_LIMIT))
     )

@@ -21,6 +21,7 @@ from app.security.principal_context import set_principal
 from app.api import user_profile_bp
 from app.contracts.user_profile_contract import MAX_AVATAR_BYTES
 from app.services.user_profile_store import reset_user_profile_store_for_tests
+from tests._blueprint_guard import drop_inherited_auth_guards
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _MINIMAL_PNG = _PNG_MAGIC + b"\x00" * 32
@@ -40,6 +41,9 @@ def _reset_store(tmp_path, monkeypatch):
 def app() -> Flask:
     flask_app = Flask(__name__)
     flask_app.register_blueprint(user_profile_bp, url_prefix="/api/profile")
+    # Sonst ersetzt ein von ``create_app()`` geerbter Guard den Test-Principal
+    # durch einen anonymen, und beide Nutzer landen im gemeinsamen Store.
+    drop_inherited_auth_guards(flask_app)
     flask_app.config["TESTING"] = True
 
     @flask_app.before_request

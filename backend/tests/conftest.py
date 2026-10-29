@@ -8,6 +8,7 @@ Stellt sicher dass:
 5. AGORA_AUTH_TOKEN nicht aus der lokalen .env in die Suite leakt.
 6. ``torch`` vorab geladen ist (verhindert einen Interpreter-Segfault, s.u.).
 """
+
 from __future__ import annotations
 
 import os
@@ -85,6 +86,12 @@ from cryptography.fernet import Fernet
 from dotenv import dotenv_values
 
 from tests import _real_data_guard
+from tests._oasis_log_dir import ensure_oasis_log_dir
+
+# OASIS legt ``./log`` beim Import ohne ``exist_ok`` an; unter xdist rennen die
+# Worker dabei gegeneinander (#1898). Der Controller lädt diese Conftest vor dem
+# Start der Worker, also legen wir das Verzeichnis hier einmal race-frei an.
+ensure_oasis_log_dir()
 
 # Schreibsperre für die echten Datenverzeichnisse (#1632). Sie wird hier auf
 # Modulebene installiert, also vor dem Import der ersten Testdatei, damit auch
@@ -99,8 +106,7 @@ _REAL_DATA_DIR_ENV = os.environ.get("AGORA_DATA_DIR") or next(
             _real_data_guard.BACKEND_DIR.parent / ".env",
             _real_data_guard.BACKEND_DIR / ".env",
         )
-        if env_file.is_file()
-        and (value := dotenv_values(env_file).get("AGORA_DATA_DIR"))
+        if env_file.is_file() and (value := dotenv_values(env_file).get("AGORA_DATA_DIR"))
     ),
     None,
 )
@@ -309,6 +315,7 @@ def _global_fernet_env(monkeypatch, tmp_path):
     # Fernet-Cache im Persistence-Modul invalidieren
     try:
         import app.services.api_keys_persistence as _pm
+
         _pm._fernet_instance = None
         _pm._fernet_key_raw = None
     except ImportError:
@@ -318,6 +325,7 @@ def _global_fernet_env(monkeypatch, tmp_path):
     try:
         from app.services.api_keys_store import ApiKeysStore
         import app.services.api_keys_store as _sm
+
         _sm._store_singleton = ApiKeysStore()
     except ImportError:
         pass
@@ -327,6 +335,7 @@ def _global_fernet_env(monkeypatch, tmp_path):
     # Cleanup: Cache nach Test invalidieren
     try:
         import app.services.api_keys_persistence as _pm
+
         _pm._fernet_instance = None
         _pm._fernet_key_raw = None
     except ImportError:
@@ -360,6 +369,6 @@ def hermetic_settings(monkeypatch, tmp_path):
     # ``_override`` ueber mehrere Zugriffe hinweg lebt. Eine Fabrik wuerde das
     # Override bei jedem ``_get_settings()`` verlieren und damit ein anderes
     # Verhalten pruefen als die Anwendung zeigt.
-    service = SettingsService(instance_path=tmp_path / 'settings.json')
-    monkeypatch.setattr(oasis_profile_generator, '_get_settings', lambda: service)
+    service = SettingsService(instance_path=tmp_path / "settings.json")
+    monkeypatch.setattr(oasis_profile_generator, "_get_settings", lambda: service)
     return oasis_profile_generator
