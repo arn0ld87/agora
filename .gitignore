@@ -113,6 +113,8 @@ PLAN.md.bak
 
 # Log files
 backend/logs/
+# OASIS legt beim Import ./log an, auch in der Test-Conftest (#1898)
+backend/log/
 *.log
 
 # Archives / Snapshots (kein Backup im Repo)
