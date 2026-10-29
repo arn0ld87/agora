@@ -768,6 +768,22 @@ def count_supporting_stakeholder_groups(
     return len(supporting_stakeholder_groups(evidence, evidence_index))
 
 
+def _entry_counts_for_grounded_medium(
+    entry: Mapping[str, Any],
+    index: Mapping[str, Any],
+) -> Optional[Tuple[Mapping[str, Any], Optional[bool]]]:
+    """Löst einen Evidence-Eintrag für die ``agent_grounded``-Prüfung auf."""
+    record = index.get(str(entry.get("evidence_id") or ""))
+    has_index_record = isinstance(record, Mapping)
+    source: Mapping[str, Any] = record if isinstance(record, Mapping) else entry
+    if not counts_for_confidence(entry) or not counts_for_confidence(source):
+        return None
+    supports = entry.get("supports_claim", source.get("supports_claim"))
+    if supports is False or (has_index_record and supports is not True):
+        return None
+    return source, supports if isinstance(supports, bool) else None
+
+
 def has_agent_grounded_evidence(
     evidence: Any,
     *,
@@ -781,18 +797,16 @@ def has_agent_grounded_evidence(
     for entry in evidence or []:
         if not isinstance(entry, Mapping):
             continue
-        record = index.get(str(entry.get("evidence_id") or ""))
-        source = record if isinstance(record, Mapping) else entry
-        if not counts_for_confidence(entry) or not counts_for_confidence(source):
+        resolved = _entry_counts_for_grounded_medium(entry, index)
+        if resolved is None:
             continue
-        if entry.get("supports_claim") is False or source.get("supports_claim") is False:
-            continue
+        source, supports = resolved
         sk = source.get("source_kind")
         if sk == "agent_quote" and source.get("quote"):
             has_agent_quote = True
         elif sk == "seed_corpus":
             has_seed_corpus = True
-        if entry.get("supports_claim", source.get("supports_claim")) is True:
+        if supports is True:
             action_voices.append((sk, source.get("voice_key")))
     return (has_agent_quote and has_seed_corpus) or has_two_action_voices(action_voices)
 
