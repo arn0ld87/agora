@@ -29,6 +29,7 @@ from app.contracts.auth_contract import AuthType, Principal
 from app.contracts.workspace_contract import WorkspaceRole
 from app.security.principal_context import set_principal
 from app.utils.endpoints import LOCAL_NO_AUTH_API_KEY
+from tests._blueprint_guard import drop_inherited_auth_guards
 
 
 @pytest.fixture
@@ -38,6 +39,7 @@ def client():
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.extensions = {"neo4j_storage": MagicMock(name="Neo4jStorage")}
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
+    drop_inherited_auth_guards(app)
     return app.test_client()
 
 
@@ -51,6 +53,7 @@ def test_jwt_generate_profiles_rejected_before_graph_or_provider_lookup(monkeypa
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
+    drop_inherited_auth_guards(app)
 
     @app.before_request
     def bind_jwt_principal():

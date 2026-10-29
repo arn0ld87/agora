@@ -22,6 +22,7 @@ from app.contracts.workspace_contract import WorkspaceRole
 from app.security.principal_context import legacy_principal, set_principal
 from app.services.llm_runtime import RuntimeLlmConfig
 from app.services.simulation_manager import SimulationStatus
+from tests._blueprint_guard import drop_inherited_auth_guards
 
 VALID_SIM_ID = "sim_0123456789ab"
 
@@ -77,6 +78,7 @@ def test_jwt_start_rejects_graph_memory_before_operator_clients_are_called(monke
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
+    drop_inherited_auth_guards(app)
 
     @app.before_request
     def bind_jwt_principal():
