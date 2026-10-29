@@ -245,6 +245,46 @@ def _is_verifying_record(record: Any) -> bool:
     return True
 
 
+def _record_text(record: Any) -> str:
+    if not isinstance(record, dict):
+        return ""
+    return " ".join(
+        str(record.get(key) or "")
+        for key in ("snippet", "quote", "value", "content", "text")
+    ).strip()
+
+
+def _record_carries_threshold(
+    record: Any,
+    threshold: Threshold,
+    label_tokens: set[str] | frozenset[str] | None = None,
+) -> bool:
+    """Prüft, ob ein Beleg den Schwellenwert stützen darf UND dessen Zahl + Label trägt."""
+    if not _is_verifying_record(record):
+        return False
+    if threshold.kind == "date":
+        return False
+    try:
+        val = float(threshold.value)
+    except (ValueError, TypeError):
+        return False
+    text = _record_text(record)
+    if not text:
+        return False
+    unit = normalize_unit(threshold.unit or "")
+    if not _text_carries_threshold(text, val, unit):
+        return False
+    if label_tokens is not None:
+        if not label_tokens:
+            return False
+        text_tokens = _label_tokens(text)
+        if len(label_tokens & text_tokens) / len(label_tokens) < LABEL_MATCH_THRESHOLD:
+            return False
+    elif coverage_ratio(threshold.label, text) < LABEL_MATCH_THRESHOLD:
+        return False
+    return True
+
+
 def _evidence_texts(evidence_pool: Sequence[Dict[str, Any]]) -> List[tuple[str, str]]:
     out: List[tuple[str, str]] = []
     for record in evidence_pool:
@@ -253,10 +293,7 @@ def _evidence_texts(evidence_pool: Sequence[Dict[str, Any]]) -> List[tuple[str, 
         evidence_id = str(record.get("evidence_id") or "").strip()
         if not evidence_id:
             continue
-        text = " ".join(
-            str(record.get(key) or "")
-            for key in ("snippet", "quote", "value", "content", "text")
-        ).strip()
+        text = _record_text(record)
         if text:
             out.append((evidence_id, text))
     return out
@@ -276,10 +313,11 @@ def bind_threshold_provenance(
 
     Bereits belegte Thresholds behalten gültige Referenzen; zeigt eine
     mitgelieferte Referenz im Pool auf einen unzulässigen Record (``inferred``,
-    ``web_source``, ``graph_origin in ('manual', 'edited')``) oder blieb nach
-    dem Index-Filter in ``build_report_v3`` ein ``verified``-Threshold ohne
-    ``evidence_refs`` zurück, wird die Referenz bereinigt und der Status ohne
-    Texttreffer auf ``heuristic`` zurückgesetzt.
+    ``web_source``, ``graph_origin in ('manual', 'edited')``) oder belegt der
+    referenzierte Record Zahl und Label des Thresholds nicht im Text, wird die
+    Referenz bereinigt. Bleibt nach der Bereinigung kein Beleg übrig, sucht die
+    Bindung im Pool nach echten Texttreffern; findet sich keiner, sinkt der
+    Status auf ``heuristic``.
     """
     texts = _evidence_texts(evidence_pool)
     pool_by_id: Dict[str, Dict[str, Any]] = {
@@ -294,7 +332,11 @@ def bind_threshold_provenance(
             cleaned_refs = [
                 ref
                 for ref in threshold.evidence_refs
-                if ref not in pool_by_id or _is_verifying_record(pool_by_id[ref])
+                if (
+                    _record_carries_threshold(pool_by_id[ref], threshold)
+                    if ref in pool_by_id
+                    else (threshold.evidence_status != "verified")
+                )
             ]
             if cleaned_refs != list(threshold.evidence_refs):
                 threshold = threshold.model_copy(update={"evidence_refs": cleaned_refs})

@@ -289,3 +289,56 @@ def test_report_v3_rejects_threshold_with_unknown_evidence_ref():
             ],
         )
 
+
+def test_prebound_ref_with_unrelated_number_is_stripped_and_downgraded():
+    """Befund 2.1: Ein Threshold, der vorab eine existierende Seed-Referenz
+    erhält, deren Text jedoch eine völlig andere Zahl/Kennzahl beschreibt,
+    darf nicht ungeprüft verified bleiben, sondern wird bereinigt."""
+    hallucinated = _threshold(
+        label="Projektbudget in EUR",
+        value=500.0,
+        unit="eur",
+        evidence_refs=["ev_seed_80"],
+        evidence_status="verified",
+    )
+
+    result = bind_threshold_provenance([hallucinated], [SEED])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_prebound_ref_with_matching_number_but_wrong_topic_is_stripped():
+    """Befund 2.1: Gleiche Zahl (80%), aber fremdes Label im Seed-Text
+    (Kantine statt Schulung) darf eine vorab gesetzte Referenz nicht legitimieren."""
+    noise = _record("An 80 Prozent der Standorte gibt es eine Kantine.", "ev_canteen")
+    prebound = _threshold(
+        label="Schulungsquote vor Produktivstart",
+        value=80.0,
+        unit="percent",
+        evidence_refs=["ev_canteen"],
+        evidence_status="verified",
+    )
+
+    result = bind_threshold_provenance([prebound], [noise])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_prebound_ref_with_matching_number_and_topic_is_retained():
+    """Stimmen Zahl und Label im Seed-Text mit dem Schwellenwert überein,
+    bleibt die vorab gesetzte Referenz erhalten."""
+    prebound = _threshold(
+        label="Schulungsquote vor Produktivstart",
+        value=80.0,
+        unit="percent",
+        evidence_refs=["ev_seed_80"],
+        evidence_status="verified",
+    )
+
+    result = bind_threshold_provenance([prebound], [SEED])
+
+    assert result[0].evidence_refs == ["ev_seed_80"]
+    assert result[0].evidence_status == "verified"
+

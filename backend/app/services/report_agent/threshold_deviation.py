@@ -162,15 +162,27 @@ def _is_incompatible_deviation_target(
     )
 
 
+def _threshold_value_key(threshold: Threshold) -> Any:
+    if threshold.kind == "date":
+        return str(threshold.value)
+    try:
+        return round(float(threshold.value), 6)
+    except (ValueError, TypeError):
+        return threshold.value
+
+
 def drop_unresolvable_deviations(thresholds: Sequence[Threshold]) -> List[Threshold]:
-    """Entfernt Verweise auf Schwellenwerte, die es im Bericht nicht gibt oder
-    die fachlich eine andere Größe betreffen.
+    """Entfernt Verweise auf Schwellenwerte, die es im Bericht nicht gibt,
+    die fachlich eine andere Größe betreffen oder die als widersprüchliche
+    Geschwister-Abweichungen mit unterschiedlichen Werten auf denselben
+    Ausgangswert verweisen.
 
     Das Ziel kann an der Validierung gescheitert oder eine Modellerfindung
     sein. Der Verweis fällt weg, der Wert bleibt — und steht er im
     Widerspruch zu einem anderen, meldet ihn die Erkennung.
     """
     by_id = {threshold.id: threshold for threshold in thresholds}
+    target_child_values: Dict[str, Any] = {}
     cleaned: List[Threshold] = []
     for threshold in thresholds:
         target_id = threshold.deviates_from
@@ -181,11 +193,19 @@ def drop_unresolvable_deviations(thresholds: Sequence[Threshold]) -> List[Thresh
         source_key = threshold_measure_key(threshold)
         target_key = threshold_measure_key(target) if target is not None else None
         mismatch = _is_incompatible_deviation_target(source_key, target_key)
+
+        child_val = _threshold_value_key(threshold)
+        conflicting_sibling = (
+            target_id in target_child_values
+            and target_child_values[target_id] != child_val
+        )
+
         if (
             target is None
             or target_id == threshold.id
             or not (threshold.deviation_rationale or "").strip()
             or mismatch
+            or conflicting_sibling
         ):
             cleaned.append(
                 threshold.model_copy(
@@ -193,6 +213,7 @@ def drop_unresolvable_deviations(thresholds: Sequence[Threshold]) -> List[Thresh
                 )
             )
         else:
+            target_child_values[target_id] = child_val
             cleaned.append(threshold)
     return cleaned
 
@@ -208,7 +229,23 @@ def _is_linked(group: Sequence[Threshold]) -> bool:
     """Hängen alle Werte der Gruppe über begründete Verweise zusammen?
 
     Gleiche Werte gelten als verbunden — sie widersprechen einander nicht.
+    Widersprüchliche Geschwister-Abweichungen (mehrere Kinder mit
+    verschiedenen Werten auf dasselbe Ziel) gelten nicht als konsistent
+    verbunden.
     """
+    children_by_target: Dict[str, List[Threshold]] = {}
+    for threshold in group:
+        if (
+            threshold.deviates_from
+            and (threshold.deviation_rationale or "").strip()
+        ):
+            children_by_target.setdefault(threshold.deviates_from, []).append(threshold)
+
+    for children in children_by_target.values():
+        distinct_child_values = {_threshold_value_key(child) for child in children}
+        if len(distinct_child_values) > 1:
+            return False
+
     parent = {threshold.id: threshold.id for threshold in group}
     by_value: Dict[Any, str] = {}
     for threshold in group:
@@ -217,7 +254,7 @@ def _is_linked(group: Sequence[Threshold]) -> bool:
             and (threshold.deviation_rationale or "").strip()
         ):
             parent[_find(parent, threshold.id)] = _find(parent, threshold.deviates_from)
-        twin = by_value.setdefault(threshold.value, threshold.id)
+        twin = by_value.setdefault(_threshold_value_key(threshold), threshold.id)
         parent[_find(parent, threshold.id)] = _find(parent, twin)
     roots: Set[str] = {_find(parent, threshold.id) for threshold in group}
     return len(roots) == 1
