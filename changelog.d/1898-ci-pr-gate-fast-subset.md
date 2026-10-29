@@ -1,0 +1,3 @@
+### Performance & CI
+
+- **PR-Smoke-Gate Test-Splitting & Parallelisierung (`#1898`)**: Trennt in `.github/workflows/ci.yml` (`backend-pr-gate`) und `scripts/pre-push-gate.sh` das schnelle PR-Test-Subset via `backend/scripts/select_pr_tests.py` (verpflichtende Core-Suite für Contracts, Regression, Unit, Security, Dependencies, Report-Agent-Pipeline, Confidence/Evidence-Binder, LLM und Storage plus diff-basierte Tests für geänderte Dateien) von der vollständigen Backend-Testsuite und parallelisiert sowohl `backend-pr-gate` als auch den vollständigen Coverage-Lauf (`backend`) mit `pytest-xdist` (`-n 4 --dist loadfile`). Reduziert die Pytest-Laufzeit im PR-Gate von ~12 Minuten (sequentieller Komplettlauf) auf unter 1 Minute.
