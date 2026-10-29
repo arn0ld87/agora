@@ -11,128 +11,26 @@ from __future__ import annotations
 
 import json
 import os
-from collections import Counter
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Optional
 
 from ...contracts.evidence_density_contract import EvidenceDensity
-from ...contracts.report_contract import counts_for_confidence
 from ...utils.logger import get_logger
-from ..confidence_calculator import _count_independent_sources
 from .artifact_read import read_contract_artifact
+from .claim_qualification import (  # noqa: F401
+    _ACTION_TYPE,
+    _CAP_TOLERANCE,
+    _SINGLE_SOURCE_CAP,
+    _is_at_single_source_cap,
+    _ratio,
+    compute_evidence_density,
+    supporting_entries_for_claim as _supporting_entries,
+)
 from .storage import write_json_atomic
 
 logger = get_logger("agora.report_agent.evidence_density")
 
 #: Dateiname der Zählung im Berichtsverzeichnis.
 EVIDENCE_DENSITY_FILENAME = "evidence_density.json"
-
-#: Ein-Quellen-Deckel des Confidence-Rechners (``_apply_single_source_cap``).
-_SINGLE_SOURCE_CAP = 0.59
-_CAP_TOLERANCE = 1e-9
-
-#: Belegart einer beobachteten Simulationshandlung.
-_ACTION_TYPE = "agent_action"
-
-
-def _supporting_entries(
-    claim: Mapping[str, Any],
-    evidence_index: Mapping[str, Any],
-) -> List[Dict[str, Any]]:
-    """Stützende Belege eines Claims, je ``evidence_id`` einmal.
-
-    Der Beleg im Claim trägt ``evidence_id`` und Bindungsfelder; ``type``,
-    ``source``, ``provenance_class`` und ``voice_key`` stehen im kanonischen Index.
-    Der kanonische Index ist autoritativ gegenüber lokalen Feldern des Claim-Eintrags.
-    Ausgeschlossen werden Belege, die nicht stützen, nicht für Confidence zählen
-    (counts_for_confidence=False) oder disqualifizierende Provenance-Klassen tragen.
-    """
-    merged: Dict[str, Dict[str, Any]] = {}
-    for entry in claim.get("evidence") or []:
-        if not isinstance(entry, Mapping):
-            continue
-        evidence_id = entry.get("evidence_id")
-        if not evidence_id or entry.get("supports_claim") is not True:
-            continue
-        key = str(evidence_id)
-        if key in merged:
-            continue
-        record = evidence_index.get(key)
-        combined: Dict[str, Any] = {k: v for k, v in entry.items() if v is not None}
-        if isinstance(record, Mapping):
-            combined.update(record)
-        if combined.get("supports_claim") is not True:
-            continue
-        if not counts_for_confidence(combined):
-            continue
-        prov_class = str(combined.get("provenance_class") or "").strip().lower()
-        if prov_class in {"template_scaffold", "hypothesis", "unverified", "inferred"}:
-            continue
-        if str(combined.get("source_kind") or "").strip().lower() == "inferred":
-            continue
-        merged[key] = combined
-    return list(merged.values())
-
-
-def _is_at_single_source_cap(claim: Mapping[str, Any]) -> bool:
-    score = claim.get("confidence_score")
-    if isinstance(score, bool) or not isinstance(score, (int, float)):
-        return False
-    return abs(float(score) - _SINGLE_SOURCE_CAP) <= _CAP_TOLERANCE
-
-
-def _ratio(count: int, total: int) -> Optional[float]:
-    return count / total if total else None
-
-
-def compute_evidence_density(evidence_map: Mapping[str, Any]) -> EvidenceDensity:
-    """Zählt die Belegdichte der Claims einer Evidence-Map.
-
-    Fehlende Schlüssel und Einträge, die kein Mapping sind, werden
-    übersprungen. Ohne Claims sind alle Zähler 0 und alle Quoten ``None``:
-    eine 0,0 würde „keine Dichte" behaupten, wo nichts gemessen wurde.
-    """
-    raw_index = evidence_map.get("evidence_index") if isinstance(evidence_map, Mapping) else None
-    evidence_index: Mapping[str, Any] = raw_index if isinstance(raw_index, Mapping) else {}
-    raw_sections = evidence_map.get("sections") if isinstance(evidence_map, Mapping) else None
-
-    total = without = single = multi = multi_independent = at_cap = with_action = 0
-    links_by_type: Counter[str] = Counter()
-
-    for section in raw_sections or []:
-        if not isinstance(section, Mapping):
-            continue
-        for claim in section.get("claims") or []:
-            if not isinstance(claim, Mapping):
-                continue
-            total += 1
-            at_cap += _is_at_single_source_cap(claim)
-            supporting = _supporting_entries(claim, evidence_index)
-            if not supporting:
-                without += 1
-                continue
-            kinds = [str(entry.get("type") or "unknown") for entry in supporting]
-            links_by_type.update(kinds)
-            if len(supporting) == 1:
-                single += 1
-            else:
-                multi += 1
-                multi_independent += _count_independent_sources(supporting) >= 2
-            with_action += _ACTION_TYPE in kinds
-
-    return EvidenceDensity(
-        claims_total=total,
-        claims_without_support=without,
-        claims_single_support=single,
-        claims_multi_support=multi,
-        claims_multi_independent=multi_independent,
-        claims_at_single_source_cap=at_cap,
-        claims_with_action_support=with_action,
-        supporting_links_by_type=dict(sorted(links_by_type.items())),
-        single_support_ratio=_ratio(single, total),
-        action_support_ratio=_ratio(with_action, total),
-        single_source_cap_ratio=_ratio(at_cap, total),
-        multi_independent_ratio=_ratio(multi_independent, total),
-    )
 
 
 def load_evidence_density(report_folder: str) -> Optional[EvidenceDensity]:

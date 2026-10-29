@@ -156,13 +156,14 @@ Ein Fallback-Outline oder ein Cancel mit fehlenden Sections wird nicht mehr stil
 
 Ein fehlgeschlagenes Binding ist nicht automatisch ein Data Gap. Wenn die Information vorhanden ist, aber das Matching scheitert, muss das als Binding-/Gate-Problem sichtbar bleiben.
 
-### Beleg, Stimme und Quellenart
+### Beleg, Stimme, Dokumentanker und Quellenart
 
 - **Beleg:** ein einzelner Evidence-Eintrag, etwa ein Simulationspost, eine Interviewantwort oder eine Seed-Stelle.
 - **Stimme:** eine Persona, unabhängig davon, über wie viele Belege und Kanäle sie auftritt. Ein Post und eine Interviewantwort derselben Persona sind zwei Belege, aber eine Stimme.
+- **Dokumentanker:** das Ursprungsdokument (`doc:<id>`) eines Primär- oder Seed-Korpus-Belegs (`seed_doc:` / `source_doc_id`). Mehrere Stellen aus demselben Ursprungsdokument teilen denselben Dokumentanker und sind für die Unabhängigkeitszählung eine Quelle, keine Persona-Stimme.
 - **Quellenart:** die Herkunftsklasse eines Belegs. Die Quellenarten stehen im nächsten Abschnitt.
 
-Zwei Belege gelten als voneinander unabhängig, wenn sie von verschiedenen Stimmen oder aus verschiedenen Quellenarten stammen. Mehrere Belege derselben Stimme sind nicht unabhängig. Übereinstimmung mehrerer Stimmen bleibt Simulationskonsens: Alle Personas sind synthetisch.
+Zwei Belege gelten als voneinander unabhängig, wenn sie von verschiedenen Stimmen, verschiedenen Dokumentankern oder aus verschiedenen Quellenarten stammen. Mehrere Belege derselben Stimme oder desselben Dokumentankers sind nicht unabhängig. Übereinstimmung mehrerer Stimmen bleibt Simulationskonsens: Alle Personas sind synthetisch.
 
 ### Streitfrage
 

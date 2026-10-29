@@ -33,7 +33,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Mapping, Optional, Sequence
 
-from .claim_provenance import derive_confidence_scope
+from .claim_qualification import derive_confidence_scope
 
 logger = logging.getLogger(__name__)
 
