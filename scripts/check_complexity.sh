@@ -8,7 +8,7 @@
 # werden akzeptiert, bis individuelle Refactor-Issues sie beseitigen.
 #
 # Verwendung (lokal):    bash scripts/check_complexity.sh
-# CI:                    s. .github/workflows/contract-gates.yml::complexity-gate
+# CI:                    s. .github/workflows/ci.yml::backend-pr-gate
 # Neue D+-Funktion ok?   Eintrag in backend/radon-allowlist.txt + Issue/PR-Begründung
 set -euo pipefail
 

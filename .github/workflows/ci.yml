@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -22,10 +22,6 @@ jobs:
     name: Security scans
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: |
-      github.event_name != 'pull_request' ||
-      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-      github.event.label.name == 'needs-python314'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
@@ -220,7 +216,6 @@ jobs:
     # bereits in pull_request.labels fuehrt.
     if: |
       github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'needs-backend-ci') ||
       contains(github.event.pull_request.labels.*.name, 'needs-backend-ci')
     env:
       # Tests instantiate LLMClient() directly (e.g. test_ontology_generator);
@@ -334,6 +329,37 @@ jobs:
         working-directory: backend
         run: uv run ruff check .
 
+      - name: Schema-Drift-Check (MAI-04)
+        working-directory: backend
+        run: uv run python -m app.contracts.dump_schemas --check
+
+      - name: Version-Drift-Check
+        working-directory: backend
+        run: uv run python scripts/check_version_drift.py
+
+      - name: Cyclomatic-Complexity-Gate (MAI-17)
+        working-directory: backend
+        run: uv run python scripts/check_complexity.py
+
+      - name: Typ-Schuld-Gate (Issue #1495)
+        working-directory: backend
+        run: uv run python scripts/check_mypy_debt.py
+
+      - name: Evidence-Quality-Gate
+        working-directory: backend
+        run: |
+          uv run python scripts/check_evidence_quality.py \
+            --fixtures tests/eval/fixtures/good \
+            --min-evidence-coverage 0.85 \
+            --min-claim-support-ratio 0.75 \
+            --orphan-claim-rate 0.10 \
+            --require-schema-version 3
+
+      - name: Voice-Lint (DACH-Voice + Anti-Forecast)
+        if: github.event_name != 'pull_request'
+        working-directory: backend
+        run: uv run python scripts/check_voice.py
+
       # 2026-08-03 (Issue #1056): Hardstop-Erinnerung für pip-audit
       # ``--ignore-vuln``-Liste. Aktuell ist die Liste leer (Stand 2026-08-03);
       # der Step ist die Versicherung, dass eine künftige Wiedereinführung
@@ -366,7 +392,6 @@ jobs:
     # bereits in pull_request.labels fuehrt.
     if: |
       github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'needs-frontend-ci') ||
       contains(github.event.pull_request.labels.*.name, 'needs-frontend-ci')
     steps:
       - name: Harden Runner
@@ -410,6 +435,11 @@ jobs:
       - name: Run frontend lint
         working-directory: frontend
         run: bun run lint
+
+      - name: Keine v3-Picker-Importe
+        env:
+          GITHUB_ACTIONS: "true"
+        run: python3 -u .github/scripts/check_legacy_model_picker.py
 
       - name: Run frontend typecheck
         working-directory: frontend
@@ -524,6 +554,32 @@ jobs:
         working-directory: backend
         run: uv run python scripts/check_coverage.py --integrity
 
+      - name: Schema-Drift-Check (MAI-04)
+        working-directory: backend
+        run: uv run python -m app.contracts.dump_schemas --check
+
+      - name: Version-Drift-Check
+        working-directory: backend
+        run: uv run python scripts/check_version_drift.py
+
+      - name: Cyclomatic-Complexity-Gate (MAI-17)
+        working-directory: backend
+        run: uv run python scripts/check_complexity.py
+
+      - name: Typ-Schuld-Gate (Issue #1495)
+        working-directory: backend
+        run: uv run python scripts/check_mypy_debt.py
+
+      - name: Evidence-Quality-Gate
+        working-directory: backend
+        run: |
+          uv run python scripts/check_evidence_quality.py \
+            --fixtures tests/eval/fixtures/good \
+            --min-evidence-coverage 0.85 \
+            --min-claim-support-ratio 0.75 \
+            --orphan-claim-rate 0.10 \
+            --require-schema-version 3
+
       # 2026-08-03 (Issue #1055): Pre-Merge-Backend-Tests. Ohne Coverage-Gate
       # und ohne DB-abhängige Marker -- die sind in hermetic fixtures gemockt.
       # fail-fast (-x) ist Absicht: ein roter Test bricht den PR sofort,
@@ -540,26 +596,9 @@ jobs:
       # (siehe tests/api/test_graph_ontology_upload_atomicity.py::flask_debug).
       - name: Backend tests (PR subset, no coverage)
         working-directory: backend
-        # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot.
-        # Plus weitere Pre-Existing-Test-Drift, die mit #1055 sichtbar wird:
-        #   #1064 Generate-Profiles-Endpoint (2 Tests)
-        #   #1065 NLTK-Import-Guard (1 Test, Egress-Limit CI)
-        # Bereits gefixt und deshalb aus dem Deselect raus:
-        #   #1059 LLM-Client-Metriken (5 Tests)  — gefixt mit #1066
-        #   #1061 Quota-Persistenz (2 Tests)     — Fixtures um Route/Override ergaenzt
-        #   #1063 Entity-Propagation (1 Test)    — Fixtures um Route/Override ergaenzt
-        #   #1060 OASIS-Voice-Register (3 Tests) — auf chat_json-Mock-Schicht gehoben
-        #   #1062 Bug-Reproduktion B (1 Test)    — auf chat_json-Mock-Schicht gehoben
-        # Deselect bis die jeweiligen Fixes gemerged sind, damit der neue
-        # PR-Gate den Rest der Suite fängt ohne an bereits getrackten
-        # Issues zu stranden. Liste schrumpft mit jedem Fix.
         run: |
           uv run pytest tests/ \
             --ignore=tests/contracts \
-            --deselect tests/scripts/test_oasis_preflight.py::TestPreflightSkipSwitch::test_skip_env_skips_probe_and_warns \
-            --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
-            --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_passes_llm_model_to_generator \
-            --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \
             -q --no-cov -x
 
       # 2026-07-25 wieder aktiviert (Issue #883). Der 2026-05-17 entfernte Job
@@ -631,6 +670,11 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: bun run lint
+
+      - name: Keine v3-Picker-Importe
+        env:
+          GITHUB_ACTIONS: "true"
+        run: python3 -u .github/scripts/check_legacy_model_picker.py
 
       - name: Typecheck
         working-directory: frontend

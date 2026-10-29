@@ -25,7 +25,7 @@ SCRIPT = REPO_ROOT / "scripts" / "check_mypy_debt.py"
 CONFIG = REPO_ROOT / "mypy-debt.ini"
 BASELINE = REPO_ROOT / "mypy-debt-baseline.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-WORKFLOW = REPO_ROOT.parent / ".github" / "workflows" / "contract-gates.yml"
+WORKFLOW = REPO_ROOT.parent / ".github" / "workflows" / "ci.yml"
 PRE_PUSH = REPO_ROOT.parent / "scripts" / "pre-push-gate.sh"
 
 

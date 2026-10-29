@@ -63,7 +63,7 @@ run_backend() {
     || fail "complexity gate — neue D+-Hotspots; siehe backend/radon-allowlist.txt"
 
   step "Backend: Typ-Schuld-Gate (mypy, Issue #1495)"
-  # Spiegel des CI-Jobs "Typ-Schuld-Gate" im contract-gates-Workflow.
+  # Spiegel des CI-Steps "Typ-Schuld-Gate (Issue #1495)" in ci.yml.
   # Blockiert neue mypy-Fehler in den Bereichen, die pyproject.toml per
   # ignore_errors abschaltet. Bestand steht in mypy-debt-baseline.txt.
   (cd backend && uv run python scripts/check_mypy_debt.py) \
@@ -92,24 +92,9 @@ run_backend() {
 
   # 2026-08-03 (Issue #1055): Pre-Push-Backend-Tests (Sub-Set, kein Coverage).
   # Spiegel des ``Backend tests (PR subset, no coverage)``-Steps in
-  # ``.github/workflows/ci.yml``. Lokal wie CI mit FLASK_DEBUG=false,
-  # damit die Tests gegen das Produktionsverhalten laufen -- ein
-  # Debug-only Sentinel-Leak (Issue #1058) bricht hier nicht.
-  # Issue #1054 (offen, pre-existing) lässt test_oasis_preflight rot;
-  # plus Drift in #1060, #1061, #1062, #1063, #1065.
-  # #1064 Generate-Profiles-Endpoint (2 Tests).
-  # #1059 (LLM-Client-Metriken-Tests) ist mit #1066 gefixt; die fünf
-  # Tests dort sind aus dem Deselect raus. Deselect bis die übrigen
-  # Fixes gemerged sind; Liste schrumpft weiter.
+  # ``.github/workflows/ci.yml``.
   # 2026-08-05 (Issue #1106): pytest-xdist parallelisiert den Subset-Lauf;
-  # identische Testmenge (--deselect/--ignore unveraendert), Contract-Tests-
-  # Step bleibt seriell. Gemessen auf M3/16GB: seriell 117s; `-n 4` mit
-  # Warning-Capture 270s+ bzw. Shutdown-Hang (>1.6 Mio Warnings werden pro
-  # Worker ueber die execnet-Pipe serialisiert), `-n 4 -p no:warnings` 33s.
-  # `-p no:warnings` ist hier keine Abschwaechung: das Repo definiert keine
-  # filterwarnings-Regeln (insb. kein `error`), Warnings sind im Smoke reine
-  # Anzeige. `-n auto` (=8) bewusst nicht: acht App-Importe sprengen 16 GB.
-  # Gezielte Warning-Filter bleiben Issue #1090.
+  # Contract-Tests-Step bleibt seriell.
   # 2026-08-08: nur noch unter GATE_FULL=1 — CI faehrt die volle Suite mit
   # Coverage-Gate auf jedem PR, lokal bleibt das Gate ein Sanity-Check.
   if [ "${GATE_FULL:-0}" = "1" ]; then
@@ -117,17 +102,6 @@ run_backend() {
   (cd backend && FLASK_DEBUG=false uv run pytest tests/ \
       -n 4 -p no:warnings \
       --ignore=tests/contracts \
-      --deselect tests/scripts/test_oasis_preflight.py::TestPreflightSkipSwitch::test_skip_env_skips_probe_and_warns \
-      --deselect tests/services/test_oasis_voice_register.py::test_llm_valid_voice_register_lands_in_profile \
-      --deselect tests/services/test_oasis_voice_register.py::test_llm_invalid_voice_register_fallback_neutral_de \
-      --deselect tests/services/test_oasis_voice_register.py::test_llm_missing_voice_register_fallback_neutral_de \
-      --deselect tests/test_quota_persistence.py::test_phase_generate_config_persists_quota_plan \
-      --deselect tests/test_quota_persistence.py::test_phase_generate_config_omits_quota_plan_when_none \
-      --deselect tests/services/test_bug_reproductions.py::test_repro_bug_b_oasis_profile_generator_thinking_tokens_parsing \
-      --deselect tests/test_entity_propagation.py::test_expanded_entities_propagate_to_config_generator \
-      --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_falls_back_when_no_llm_model \
-      --deselect tests/api/test_simulation_uses_request_model.py::test_generate_profiles_endpoint_passes_llm_model_to_generator \
-      --deselect tests/test_nltk_import_guard.py::test_ingestion_entrypoint_can_parse \
       -q --no-cov -x) \
     || fail "backend tests"
   else
