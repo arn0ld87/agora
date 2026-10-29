@@ -151,6 +151,10 @@ Nicht jede neue Umgebungsvariable gehört zu `0.9.x → 0.10` oder `0.10 → 1.0
 
 **`AGORA_SIM_FEED_MAX_COMMENTS`** (ebenfalls [#1772](https://github.com/arn0ld87/agora/issues/1772)). Default `5`, `0` = aus; **ändert das Verhalten neuer Läufe ohne Einstellung:** Im Feed jedes Agenten stehen je Post höchstens die neuesten fünf Kommentare, die Zahl der weggelassenen steht als `omitted_comments` am Post, und das Feed-JSON ist kompakt statt eingerückt. Mit `0` bleibt der Feed byte-identisch zu OASIS. Die Variable steht in `SAFE_ENV_KEYS`; kein Datenbestand betroffen, kein Migrationsschritt. Läufe mit unterschiedlichem Wert sind nicht vergleichbar (der Agent sieht andere Diskussionsstände).
 
+**Parität `SinglePlatformRunner` bei Tokendeckel und Provider-Erkennung ([#1897](https://github.com/arn0ld87/agora/pull/1897)).** Der Einzelplattform-Runner (`sim_runtime/platform_runner.py`, genutzt bei dedizierten Twitter- oder Reddit-Läufen) nutzt für Modell-Completion-Parameter nun wie der Parallel-Runner die gemeinsame Hilfsfunktion `build_camel_completion_params()`. Ohne explizit gesetztes `LLM_MAX_OUTPUT_TOKENS` gilt damit nicht mehr der zuvor fest einprogrammierte Fallback von 16.384 Tokens, sondern der zentrale Default `Config.LLM_MAX_OUTPUT_TOKENS` (Default `8192` in `backend/app/_config_groups.py`). Zudem nutzt `SinglePlatformRunner._create_model()` dieselbe Modellpräzedenz (`config["llm_model"]` > `LLM_MODEL_NAME` > Default `qwen3-coder-next:cloud`) und die zentrale Provider-Erkennung (`registry.detect_provider`).
+- **Verhaltenswechsel:** Einzelplattform-Läufe ohne explizites `LLM_MAX_OUTPUT_TOKENS` laufen nun mit dem kanonischen 8.192-Token-Limit statt 16.384. Wer das bisherige Limit benötigt, setzt `LLM_MAX_OUTPUT_TOKENS=16384` in der Umgebung.
+- **Upgrade/Rollback:** Keine Datenmigration. Ältere Stände nutzen wieder den hartcodierten Wert 16.384.
+
 ---
 
 ## 0.9.7 → 0.9.8

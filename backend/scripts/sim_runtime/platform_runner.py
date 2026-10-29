@@ -573,13 +573,15 @@ class SinglePlatformRunner:
         try:
             fn_tools = build_camel_function_tools(self.config)
             attached = attach_tools_to_agents(self.agent_graph, fn_tools)
-            print(
-                f"[ToolUse] Attached {len(fn_tools)} FunctionTools to {self.PLATFORM_NAME} agents ({attached} bindings)",
-                flush=True,
+            logger.info(
+                "[ToolUse] Attached %d FunctionTools to %s agents (%d bindings)",
+                len(fn_tools),
+                self.PLATFORM_NAME,
+                attached,
             )
             return attached
         except Exception as e:
-            print(f"[ToolUse] Failed to attach native FunctionTools: {e}", flush=True)
+            logger.warning("[ToolUse] Failed to attach native FunctionTools: %s", e)
             return 0
 
     async def run(self, max_rounds: int = None):
