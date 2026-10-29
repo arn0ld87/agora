@@ -610,8 +610,8 @@ jobs:
       - name: Backend tests (PR subset, no coverage)
         working-directory: backend
         run: |
-          TEST_TARGETS=$(uv run python scripts/select_pr_tests.py --ignore-contracts)
-          uv run pytest $TEST_TARGETS \
+          read -r -a TEST_TARGETS <<< "$(uv run python scripts/select_pr_tests.py --ignore-contracts)"
+          uv run pytest "${TEST_TARGETS[@]}" \
             -n 4 --dist loadfile \
             -q --no-cov -x
 

@@ -93,21 +93,41 @@ def _map_test_path(norm: str) -> list[str]:
     return []
 
 
+# Konservativer Fallback fuer App-Dateien ohne direktes Test-Mapping
+CONSERVATIVE_APP_FALLBACK_DIRS: tuple[str, ...] = (
+    "tests/api",
+    "tests/services",
+    "tests/utils",
+    "tests/config",
+    "tests/infrastructure",
+    "tests/observability",
+)
+
+_FALLBACK_SEARCH_PATTERNS: tuple[str, ...] = (
+    "tests/unit/**/test_*{key}*.py",
+    "tests/regression/**/test_*{key}*.py",
+    "tests/services/**/test_*{key}*.py",
+    "tests/api/**/test_*{key}*.py",
+    "tests/utils/**/test_*{key}*.py",
+    "tests/config/**/test_*{key}*.py",
+    "tests/infrastructure/**/test_*{key}*.py",
+    "tests/observability/**/test_*{key}*.py",
+    "tests/eval/**/test_*{key}*.py",
+    "tests/perf/**/test_*{key}*.py",
+    "tests/test_*{key}*.py",
+)
+
+
 def _search_fallback_tests(stem: str) -> list[str]:
-    """Sucht Unit-, Service-, API- und Regressions-Tests nach Stem oder 2-Token-Prefix."""
+    """Sucht passende Tests ueber alle dedizierten Test-Verzeichnisse nach Stem oder 2-Token-Prefix."""
     matches: list[str] = []
     tokens = [tok for tok in stem.split("_") if tok]
     search_keys = [stem]
     if len(tokens) >= 2:
         search_keys.append(f"{tokens[0]}_{tokens[1]}")
     for key in search_keys:
-        for pattern in (
-            f"tests/unit/**/test_*{key}*.py",
-            f"tests/regression/**/test_*{key}*.py",
-            f"tests/services/**/test_*{key}*.py",
-            f"tests/api/**/test_*{key}*.py",
-            f"tests/test_*{key}*.py",
-        ):
+        for pattern_tmpl in _FALLBACK_SEARCH_PATTERNS:
+            pattern = pattern_tmpl.format(key=key)
             for path in BACKEND_DIR.glob(pattern):
                 rel = str(path.relative_to(BACKEND_DIR))
                 if rel not in matches:
@@ -117,10 +137,10 @@ def _search_fallback_tests(stem: str) -> list[str]:
     return matches
 
 
-def _map_api_path(stem: str) -> list[str]:
-    """Mappt Aenderungen unter app/api/."""
+def _map_dedicated_pkg_path(pkg: str, stem: str) -> list[str]:
+    """Mappt Aenderungen unter app/<pkg>/ mit dediziertem tests/<pkg>-Verzeichnis."""
     candidates = (
-        f"tests/api/test_{stem}.py",
+        f"tests/{pkg}/test_{stem}.py",
         f"tests/test_{stem}.py",
     )
     for c in candidates:
@@ -128,12 +148,15 @@ def _map_api_path(stem: str) -> list[str]:
             return [c]
     matches = [
         str(p.relative_to(BACKEND_DIR))
-        for p in BACKEND_DIR.glob(f"tests/api/**/test_*{stem}*.py")
+        for p in BACKEND_DIR.glob(f"tests/{pkg}/**/test_*{stem}*.py")
     ]
     if matches:
         return matches
-    if (BACKEND_DIR / "tests/api").exists():
-        return ["tests/api"]
+    fallback_matches = _search_fallback_tests(stem)
+    if fallback_matches:
+        return fallback_matches
+    if (BACKEND_DIR / f"tests/{pkg}").is_dir():
+        return [f"tests/{pkg}"]
     return []
 
 
@@ -157,7 +180,28 @@ def _map_services_path(parts: list[str], stem: str) -> list[str]:
     if not targets:
         targets.extend(_search_fallback_tests(stem))
 
+    if not targets and (BACKEND_DIR / "tests/services").is_dir():
+        return ["tests/services"]
+
     return targets
+
+
+def _map_root_app_file(stem: str) -> list[str]:
+    """Mappt Root-Dateien unter app/ (z. B. config.py, app.py)."""
+    targets: list[str] = []
+    if (BACKEND_DIR / f"tests/{stem}").is_dir():
+        targets.append(f"tests/{stem}")
+    for c in (f"tests/test_{stem}.py", f"tests/test_app_{stem}.py"):
+        if (BACKEND_DIR / c).exists():
+            targets.append(c)
+    if not targets:
+        targets.extend(_search_fallback_tests(stem))
+    return targets
+
+
+def _conservative_app_fallback() -> list[str]:
+    """Konservativer Fallback auf dedizierte App-Testsuiten bei nicht zuordenbaren App-Dateien."""
+    return [d for d in CONSERVATIVE_APP_FALLBACK_DIRS if (BACKEND_DIR / d).exists()]
 
 
 def _map_app_path(rel_app: str) -> list[str]:
@@ -169,21 +213,19 @@ def _map_app_path(rel_app: str) -> list[str]:
     if pkg in ("contracts", "security", "llm", "storage"):
         return []
 
-    if pkg == "api":
-        return _map_api_path(stem)
-
     if pkg == "services":
         return _map_services_path(parts, stem)
 
-    # Root-Dateien unter app/ (z. B. config.py, app.py)
-    candidates = (
-        f"tests/test_{stem}.py",
-        f"tests/test_app_{stem}.py",
-    )
-    targets = [c for c in candidates if (BACKEND_DIR / c).exists()]
-    if not targets:
-        targets.extend(_search_fallback_tests(stem))
-    return targets
+    if len(parts) == 1:
+        targets = _map_root_app_file(stem)
+        return targets if targets else _conservative_app_fallback()
+
+    if (BACKEND_DIR / f"tests/{pkg}").is_dir():
+        targets = _map_dedicated_pkg_path(pkg, stem)
+        return targets if targets else _conservative_app_fallback()
+
+    targets = _search_fallback_tests(stem)
+    return targets if targets else _conservative_app_fallback()
 
 
 def _map_scripts_path(norm: str) -> list[str]:

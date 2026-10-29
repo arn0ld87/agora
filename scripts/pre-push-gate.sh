@@ -101,8 +101,8 @@ run_backend() {
   if [ "${GATE_FULL:-0}" = "1" ]; then
     step "Backend: tests (PR subset, no coverage, GATE_FULL=1)"
     (cd backend && {
-      TEST_TARGETS=$(uv run python scripts/select_pr_tests.py --ignore-contracts)
-      FLASK_DEBUG=false uv run pytest $TEST_TARGETS \
+      read -r -a TEST_TARGETS <<< "$(uv run python scripts/select_pr_tests.py --ignore-contracts)"
+      FLASK_DEBUG=false uv run pytest "${TEST_TARGETS[@]}" \
         -n 4 --dist loadfile -p no:warnings \
         -q --no-cov -x
     }) || fail "backend tests"

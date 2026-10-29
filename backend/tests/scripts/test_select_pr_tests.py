@@ -101,6 +101,20 @@ def test_map_changed_file_app_modules() -> None:
     # contracts ist im Core abgedeckt
     assert map_changed_file_to_tests("backend/app/contracts/report.py") == []
 
+    # utils -> test_file_parser.py existiert unter tests/utils/
+    mapped_utils = map_changed_file_to_tests("backend/app/utils/file_parser.py")
+    assert "tests/utils/test_file_parser.py" in mapped_utils
+
+    # config.py -> dediziertes tests/config-Verzeichnis enthalten
+    mapped_config = map_changed_file_to_tests("backend/app/config.py")
+    assert "tests/config" in mapped_config
+
+    # Unbekannte App-Datei -> konservativer Fallback statt leerer Liste
+    mapped_unknown = map_changed_file_to_tests("backend/app/models/nonexistent_xyz_model.py")
+    assert len(mapped_unknown) > 0
+    assert "tests/api" in mapped_unknown
+    assert "tests/services" in mapped_unknown
+
     # scripts -> test_check_voice.py existiert
     mapped_script = map_changed_file_to_tests("backend/scripts/check_voice.py")
     assert "tests/scripts/test_check_voice.py" in mapped_script or len(mapped_script) > 0
