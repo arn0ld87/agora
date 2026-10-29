@@ -5,18 +5,10 @@ from uuid import UUID
 
 from ..contracts.llm_routing_contract import ResolvedRoute
 from ..utils.logger import get_logger
+from ._client_shim import get_client_attr as _get_client_attr
 from .json_mode import _read_active_config_safely
 
 logger = get_logger("agora.llm_client")
-
-
-def _get_client_attr(name: str, default: Any = None) -> Any:
-    import sys
-
-    mod = sys.modules.get("app.llm.client")
-    if mod is not None and hasattr(mod, name):
-        return getattr(mod, name)
-    return default
 
 
 def get_llm_provider_secrets_store() -> Any:

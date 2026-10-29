@@ -1,7 +1,6 @@
 
 """Transport resolution and initialization mixin for LLMClient."""
 
-import sys
 from typing import TYPE_CHECKING, Any, Optional
 
 from openai import OpenAI
@@ -13,19 +12,13 @@ from ..contracts.provider_types import (
     PROVIDER_CODEX_CLI,
 )
 from ..utils.logger import get_logger
+from ._client_shim import get_client_attr as _get_client_attr
 from .providers.claude_cli import ClaudeCliClient
 from .providers.codex_cli import CodexCliClient
 from .providers.registry import openai_compat_base_url
 from .transport_security import ensure_credentialed_transport_security
 
 logger = get_logger("agora.llm_client")
-
-
-def _get_client_attr(name: str, default: Any = None) -> Any:
-    mod = sys.modules.get("app.llm.client")
-    if mod is not None and hasattr(mod, name):
-        return getattr(mod, name)
-    return default
 
 
 class LLMClientTransportMixin:
