@@ -13,8 +13,8 @@
 | Provider mit `transport="cli"` (Codex, ChatGPT-Abo) | `backend/app/llm/providers/codex_cli.py` (kein HTTP, Session-Auth via `codex login`, #1405) |
 | Provider mit `transport="cli"` (Claude Code, Claude-Abo) | `backend/app/llm/providers/claude_cli.py` (kein HTTP, `CLAUDE_CODE_OAUTH_TOKEN` im Fernet-Secret-Store, isoliertes `HOME`/`cwd` je Aufruf, #1531) |
 | Amazon Bedrock (OpenAI-kompatibler mantle-Pfad) | `OpenAIAdapter` + Bearer-Token, Host-Erkennung `registry.py::_is_bedrock_host` (`bedrock-mantle.<region>.api.aws` / `bedrock-runtime.<region>.amazonaws.com`, #1282) |
-| Request-Shaping (kwargs-Bau, Provider-Quirks) | `backend/app/llm/request_plan.py::build_request` + `RequestOptions` |
-| Request-Fehlerbehandlung/Retry | `backend/app/llm/request_plan.py::execute` |
+| Request-Shaping (kwargs-Bau, Provider-Quirks, Thinking-Body, Stream-Policy) | `backend/app/llm/request_plan.py` (`build_request`, `RequestOptions`, `thinking_extra_body` via `providers.ollama.build_ollama_extra_body`, `should_force_stream`) |
+| Request-Fehlerbehandlung, Retry & Response-Auslesung | `backend/app/llm/request_plan.py` (`execute`, `execute_with_retry`, `DEFAULT_CHAT_QUIRKS`, `VISION_QUIRKS`, `reassemble_chat_stream`, `extract_non_stream_chat_choice`, `extract_int_token_usage`, `strip_thinking_tags`) |
 | Modellfähigkeiten (modellnamenbasiert: Token-Key, `temperature`, `reasoning_effort`) | `backend/app/llm/model_capabilities.py` (reine Funktionen, von `LLMClient` über `providers/openai.py` und vom Simulations-Subprozess über `scripts/_sim_common.py` gelesen, #1766); die Provider-Frage bleibt bei `detect_provider` |
 | Strukturierte LLM-Calls | `backend/app/llm/client.py::LLMClient.chat_json` (Pydantic-Schema, strict-mode, Repair) |
 | Modellauswahl-UI | `frontend/src/components/v4/forms/AiModelPicker.vue` |
