@@ -30,7 +30,7 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 # _sim_common: Paket- und Direktaufruf-Import-Muster wie die Runner-Skripte.
@@ -38,20 +38,33 @@ from typing import Any, Dict, List
 # (Tracing/Logging/Env-Load/Profiling) bleiben in den Entry-Points.
 try:
     from ._sim_common import (
+        _emit_post_created_to_redis,
         build_camel_completion_params,
+        build_minimax_extra_body,
+        compute_post_sim_time,
         compute_start_hour_offset,
         detect_oasis_platform,
         preflight_model_probe,
+        resolve_camel_ollama_url,
         seed_simulation_rng,
     )
 except ImportError:  # direct script execution
     from _sim_common import (
+        _emit_post_created_to_redis,
         build_camel_completion_params,
+        build_minimax_extra_body,
+        compute_post_sim_time,
         compute_start_hour_offset,
         detect_oasis_platform,
         preflight_model_probe,
+        resolve_camel_ollama_url,
         seed_simulation_rng,
     )
+
+try:
+    from .llm_config import resolve_model_runtime_settings
+except ImportError:
+    from sim_runtime.llm_config import resolve_model_runtime_settings
 
 # Issue #1423: CLI-Transport (codex_cli). Der Fallback zeigt auf
 # ``sim_runtime.codex_cli_model``, NICHT auf ``codex_cli_model``: bei direkter
@@ -98,6 +111,7 @@ from app.services.simulation_activity_policy import (
 )
 from app.services.simulation_activity_model import (
     RUNTIME_PLATFORMS_KEY,
+    activity_limits_sentence,
     agent_ids_in_graph,
     for_platform,
     select_round_agent_ids_from_config,
@@ -114,10 +128,18 @@ from oasis import ActionType, LLMAction, ManualAction  # noqa: E402
 # Modul-Attribut-Quelle (AgentToolRegistry/ToolAwareActionLoop); dieser
 # Import hier versorgt nur die in ``run`` genutzten Symbole.
 try:
-    from agent_tools import create_tool_aware_loop
+    from agent_tools import (
+        attach_tools_to_agents,
+        augment_profile_with_stance,
+        build_camel_function_tools,
+        create_tool_aware_loop,
+    )
     AGENT_TOOLS_AVAILABLE = True
 except ImportError:
     create_tool_aware_loop = None  # type: ignore[assignment]
+    attach_tools_to_agents = None  # type: ignore[assignment]
+    augment_profile_with_stance = None  # type: ignore[assignment]
+    build_camel_function_tools = None  # type: ignore[assignment]
     AGENT_TOOLS_AVAILABLE = False
 
 # Action-Log (#1713): der Single-Platform-Pfad schrieb bisher nie
@@ -134,7 +156,6 @@ from agent_memory import describe_memory_policy, prune_graph_memories
 from oasis_action_ingest import (
     fetch_new_actions_from_db,
     get_agent_names_from_config,
-    get_max_trace_rowid,
 )
 
 # Global variables: for signal handling (von den Entry-Point-``main``
@@ -143,6 +164,36 @@ _shutdown_event = None
 _cleanup_done = False
 
 logger = logging.getLogger(__name__)
+
+
+def _create_gemini_model(
+    *,
+    model_type: str,
+    model_config_dict: dict[str, Any],
+    api_key: str,
+):
+    try:
+        try:
+            from .gemini_thought_signatures import create_gemini_thought_signature_model
+        except ImportError:
+            from gemini_thought_signatures import create_gemini_thought_signature_model
+
+        return create_gemini_thought_signature_model(
+            model_type=model_type,
+            model_config_dict=model_config_dict,
+            api_key=api_key,
+        )
+    except Exception as exc:
+        logger.warning(
+            "create_gemini_thought_signature_model failed (%s: %s); falling back to ModelFactory.create",
+            type(exc).__name__,
+            exc,
+        )
+        return ModelFactory.create(
+            model_platform=ModelPlatformType.GEMINI,
+            model_type=model_type,
+            model_config_dict=model_config_dict,
+        )
 
 
 async def agent_observation(agent: Any) -> str:
@@ -268,7 +319,19 @@ class SinglePlatformRunner:
 
     def _get_profile_path(self) -> str:
         """Get Profile file path (platform-spezifischer Dateiname)"""
-        return os.path.join(self.simulation_dir, self.PROFILE_FILENAME)
+        profile_path = os.path.join(self.simulation_dir, self.PROFILE_FILENAME)
+        if AGENT_TOOLS_AVAILABLE and augment_profile_with_stance is not None:
+            try:
+                profile_path = augment_profile_with_stance(
+                    profile_path,
+                    self.config.get("agent_configs", []),
+                    platform=self.PLATFORM_SLUG or "twitter",
+                    contested_statement=(self.config.get("contested_question") or {}).get("statement"),
+                    activity_limits=activity_limits_sentence(self.config),
+                )
+            except Exception as e:
+                logger.info("augment_profile_with_stance (%s) failed, using unaugmented profile: %s", self.PLATFORM_SLUG, e)
+        return profile_path
 
     def _get_db_path(self) -> str:
         """Get database path"""
@@ -278,19 +341,19 @@ class SinglePlatformRunner:
         """
         Create LLM model
 
-        Unified use of configuration in project root .env file (highest priority)：
-        - LLM_API_KEY: API key
-        - LLM_BASE_URL: API base URL
-        - LLM_MODEL_NAME: Model name
+        Model selection precedence: sim-config (UI choice) > .env > fallback.
+        API key/base URL still come from .env (secrets stay out of sim-config).
         """
-        # Read configuration from .env first
+        config_model = self.config.get("llm_model", "") or ""
         llm_api_key = os.environ.get("LLM_API_KEY", "")
         llm_base_url = os.environ.get("LLM_BASE_URL", "")
-        llm_model = os.environ.get("LLM_MODEL_NAME", "")
+        llm_model = config_model or os.environ.get("LLM_MODEL_NAME", "")
 
-        # If not in .env, use config as fallback
+        # Final fallback: qwen3-coder-next:cloud hat 256k context
         if not llm_model:
-            llm_model = self.config.get("llm_model", "qwen3-coder-next:cloud")
+            llm_model = "qwen3-coder-next:cloud"
+
+        runtime_settings = resolve_model_runtime_settings(llm_model)
 
         # Issue #1423: CLI-Transport (codex_cli) hat weder base_url noch
         # api_key — die URL-basierte Plattform-Erkennung darunter hat nichts
@@ -309,19 +372,20 @@ class SinglePlatformRunner:
 
         platform = detect_oasis_platform(llm_model, llm_base_url)
         think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
-        ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
-        completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "16384"))
 
         print(
             f"LLM configuration: model={llm_model}, "
             f"base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
-            f"platform={platform.value}",
+            f"platform={platform.value}, "
+            f"completion_max_tokens={runtime_settings['completion_max_tokens']}, "
+            f"memory_token_limit={runtime_settings['memory_token_limit']}, "
+            f"ollama_num_ctx={runtime_settings['ollama_num_ctx']}",
             flush=True,
         )
 
         model_cfg: dict = build_camel_completion_params(
             model=llm_model,
-            completion_max_tokens=completion_max_tokens,
+            completion_max_tokens=runtime_settings["completion_max_tokens"],
             # Wie im Parallel-Runner: ohne die URL erkennt der Helper OpenRouter
             # nicht und sendet kein ``reasoning_effort`` (Review #1779).
             base_url=llm_base_url or None,
@@ -330,37 +394,37 @@ class SinglePlatformRunner:
         if platform == ModelPlatformType.GEMINI:
             # Gemini-3 requires thought_signature echo in multi-turn tool calls.
             # Route via CAMEL's GeminiModel; do NOT touch OPENAI_BASE_URL.
-            os.environ["GOOGLE_API_KEY"] = llm_api_key or os.environ.get("GOOGLE_API_KEY", "")
-            return ModelFactory.create(
-                model_platform=ModelPlatformType.GEMINI,
+            _gemini_key = (
+                llm_api_key
+                or os.environ.get("GEMINI_API_KEY", "")
+                or os.environ.get("GOOGLE_API_KEY", "")
+            )
+            os.environ["GOOGLE_API_KEY"] = _gemini_key
+            os.environ["GEMINI_API_KEY"] = _gemini_key
+            return _create_gemini_model(
                 model_type=llm_model,
                 model_config_dict=model_cfg,
+                api_key=_gemini_key,
             )
 
         elif platform == ModelPlatformType.OLLAMA:
             # Ollama Cloud no longer serves OpenAI-compat /v1.
             # CAMEL's OllamaModel speaks the native /api/chat endpoint.
-            # Build extra_body inline: we already dispatched via the provider
-            # SSoT (detect_oasis_platform), so re-running the _is_ollama_route
-            # gate inside build_camel_extra_body() would be redundant detection.
-            # (Since #670 that gate also delegates to the SSoT and no longer
-            # mis-classifies :latest models or ollama.com URLs.)
             os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
             extra_body: dict = {"think": think_on}
-            if ctx_limit is not None:
-                extra_body["options"] = {"num_ctx": ctx_limit}
+            if runtime_settings["ollama_num_ctx"] is not None:
+                extra_body["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
             model_cfg["extra_body"] = extra_body
             return ModelFactory.create(
                 model_platform=ModelPlatformType.OLLAMA,
                 model_type=llm_model,
-                url=llm_base_url or None,
+                url=resolve_camel_ollama_url(llm_base_url or None),
                 api_key=llm_api_key or None,
                 model_config_dict=model_cfg,
             )
 
         else:
             # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, etc.
-            # No extra_body: think/num_ctx are Ollama-only and would 400 here.
             if llm_api_key:
                 os.environ["OPENAI_API_KEY"] = llm_api_key
 
@@ -373,6 +437,12 @@ class SinglePlatformRunner:
                 os.environ["OPENAI_BASE_URL"] = llm_base_url
                 os.environ["OPENAI_API_BASE"] = llm_base_url
                 os.environ["OPENAI_API_BASE_URL"] = llm_base_url
+
+            minimax_extra = build_minimax_extra_body(
+                model=llm_model, base_url=llm_base_url, think=think_on
+            )
+            if minimax_extra:
+                model_cfg["extra_body"] = minimax_extra
 
             return ModelFactory.create(
                 model_platform=ModelPlatformType.OPENAI,
@@ -478,6 +548,7 @@ class SinglePlatformRunner:
         actual_actions, new_last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
+        self._last_round_actions = actual_actions
         for action_data in actual_actions:
             self.action_logger.log_action(
                 round_num=round_num,
@@ -490,6 +561,28 @@ class SinglePlatformRunner:
             round_num, len(actual_actions), simulated_minutes=simulated_minutes_after
         )
         return len(actual_actions), new_last_rowid
+
+    def attach_function_tools_to_agent_graph(self) -> int:
+        """Attach native CAMEL function tools to all agents in self.agent_graph."""
+        if not (self.config.get("enable_agent_tools", False) and AGENT_TOOLS_AVAILABLE):
+            return 0
+        if build_camel_function_tools is None or attach_tools_to_agents is None:
+            return 0
+        if not self.agent_graph:
+            return 0
+        try:
+            fn_tools = build_camel_function_tools(self.config)
+            attached = attach_tools_to_agents(self.agent_graph, fn_tools)
+            logger.info(
+                "[ToolUse] Attached %d FunctionTools to %s agents (%d bindings)",
+                len(fn_tools),
+                self.PLATFORM_NAME,
+                attached,
+            )
+            return attached
+        except Exception as e:
+            logger.warning("[ToolUse] Failed to attach native FunctionTools: %s", e)
+            return 0
 
     async def run(self, max_rounds: int = None):
         """Run single-platform simulation
@@ -522,6 +615,13 @@ class SinglePlatformRunner:
         start_hour_offset = compute_start_hour_offset(self.config, total_rounds, minutes_per_round)
         if start_hour_offset != 0:
             print(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
+        # Sim-Clock-Anchor und ID/Redis für Live-Feed-Emissionen vor Runde 0 initialisieren (#1713 UI-2a)
+        sim_clock_anchor = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        _sim_id_for_emit = self.config.get("simulation_id") or os.path.basename(self.simulation_dir.rstrip("/"))
+        _redis_url_for_emit = os.environ.get("REDIS_URL")
 
         print("\nSimulation parameters:")
         print(f"  - Total simulation duration: {total_hours}hours")
@@ -576,6 +676,10 @@ class SinglePlatformRunner:
         except Exception as e:
             print(f"enforce_memory_token_limit ({self.PLATFORM_SLUG}-single) failed: {e}", flush=True)
         logger.info(describe_memory_policy())
+
+        # Native CAMEL function-calling for agents (Befund 6.2 Parität).
+        self.attach_function_tools_to_agent_graph()
+
         install_feed_comment_cap(self.agent_graph, log=logger.info)
         # #1779: Obergrenze je Aktivierung samt Satz im Agenten-Prompt (nur mit
         # time_config.activity_model).
@@ -682,15 +786,6 @@ class SinglePlatformRunner:
                 try:
                     agent = self.env.agent_graph.get_agent(agent_id)
                     self._assign_initial_action(initial_actions, agent, content)
-                    self.action_logger.log_action(
-                        round_num=0,
-                        agent_id=agent_id,
-                        agent_name=agent_names.get(agent_id, f"Agent_{agent_id}"),
-                        action_type="CREATE_POST",
-                        action_args={"content": content},
-                    )
-                    total_actions += 1
-                    initial_action_count += 1
                 except Exception as e:
                     print(f"  Warning: Unable to create for Agent {agent_id}Create initial posts: {e}")
 
@@ -709,10 +804,39 @@ class SinglePlatformRunner:
                     f"{'' if published == 1 else 's'} from {len(initial_actions)} "
                     f"distinct agent{'' if len(initial_actions) == 1 else 's'}"
                 )
-                # Initial-Posts sind bereits oben geloggt — last_rowid auf den
-                # aktuellen DB-Stand ziehen, sonst liest Runde 1 dieselben
-                # Trace-Zeilen erneut (#1713, wie run_parallel_simulation.py).
-                last_rowid = get_max_trace_rowid(db_path)
+                # #1713 UI-2a / Befund 6.2: echte post_id aus der DB lesen statt vor dem
+                # Schreiben zu raten. fetch_new_actions_from_db liest dieselbe
+                # trace-Tabelle wie die Hauptrunde und reichert post_id an.
+                initial_db_actions, last_rowid = fetch_new_actions_from_db(
+                    db_path, last_rowid, agent_names
+                )
+                _action_count = len(initial_db_actions)
+                for _action_idx, action_data in enumerate(initial_db_actions):
+                    self.action_logger.log_action(
+                        round_num=0,
+                        agent_id=action_data["agent_id"],
+                        agent_name=action_data["agent_name"],
+                        action_type=action_data["action_type"],
+                        action_args=action_data["action_args"],
+                    )
+                    total_actions += 1
+                    initial_action_count += 1
+                    if action_data.get("action_type") == "CREATE_POST":
+                        await _emit_post_created_to_redis(
+                            simulation_id=_sim_id_for_emit,
+                            platform=self.PLATFORM_SLUG or "twitter",
+                            action_data=action_data,
+                            redis_url=_redis_url_for_emit,
+                            round_num=0,
+                            sim_time_iso=compute_post_sim_time(
+                                sim_clock_anchor,
+                                start_hour_offset,
+                                0,
+                                minutes_per_round,
+                                _action_idx,
+                                _action_count,
+                            ).isoformat(),
+                        )
 
         self.action_logger.log_round_end(0, initial_action_count)
 
@@ -828,6 +952,32 @@ class SinglePlatformRunner:
                 simulated_minutes + minutes_per_round,
             )
             total_actions += round_actions
+
+            # Slice 5-pre / Befund 6.2: emit PostCreatedEvent to Redis for SSE live-feed.
+            actual_actions = getattr(self, "_last_round_actions", [])
+            _action_count = len(actual_actions)
+            allowed_emit_types = (
+                ("CREATE_POST", "CREATE_COMMENT")
+                if (self.PLATFORM_SLUG or "").lower() == "reddit"
+                else ("CREATE_POST", "REPOST", "QUOTE_POST")
+            )
+            for _action_idx, action_data in enumerate(actual_actions):
+                if action_data.get("action_type") in allowed_emit_types:
+                    await _emit_post_created_to_redis(
+                        simulation_id=_sim_id_for_emit,
+                        platform=self.PLATFORM_SLUG or "twitter",
+                        action_data=action_data,
+                        redis_url=_redis_url_for_emit,
+                        round_num=round_num + 1,
+                        sim_time_iso=compute_post_sim_time(
+                            sim_clock_anchor,
+                            start_hour_offset,
+                            simulated_minutes,
+                            minutes_per_round,
+                            _action_idx,
+                            _action_count,
+                        ).isoformat(),
+                    )
 
             # Print progress
             if (round_num + 1) % 10 == 0 or round_num == 0:
