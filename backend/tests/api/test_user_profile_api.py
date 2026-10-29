@@ -40,6 +40,12 @@ def _reset_store(tmp_path, monkeypatch):
 def app() -> Flask:
     flask_app = Flask(__name__)
     flask_app.register_blueprint(user_profile_bp, url_prefix="/api/profile")
+    # ``user_profile_bp`` ist ein Prozess-Singleton. Ein früheres ``create_app()``
+    # im selben xdist-Worker hängt per ``install_blueprint_guard`` den Auth-Guard
+    # daran, und diese App erbt ihn. Im offenen Modus setzt der Guard nach
+    # ``bind_test_principal`` einen anonymen Principal, beide Nutzer landen im
+    # gemeinsamen Store. Den geerbten Guard nur für diese Test-App entfernen.
+    flask_app.before_request_funcs.pop(user_profile_bp.name, None)
     flask_app.config["TESTING"] = True
 
     @flask_app.before_request
