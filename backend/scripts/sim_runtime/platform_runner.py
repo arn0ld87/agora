@@ -41,7 +41,6 @@ try:
         _emit_post_created_to_redis,
         build_camel_completion_params,
         build_minimax_extra_body,
-        compute_post_sim_time,
         compute_start_hour_offset,
         detect_oasis_platform,
         preflight_model_probe,
@@ -53,7 +52,6 @@ except ImportError:  # direct script execution
         _emit_post_created_to_redis,
         build_camel_completion_params,
         build_minimax_extra_body,
-        compute_post_sim_time,
         compute_start_hour_offset,
         detect_oasis_platform,
         preflight_model_probe,
@@ -84,6 +82,17 @@ try:
     from .sim_runtime.ipc import IPCHandler
 except ImportError:  # direct script execution
     from sim_runtime.ipc import IPCHandler
+
+try:
+    from .runtime_execution import (
+        create_simulation_llm_model,
+        emit_round_actions_to_redis,
+    )
+except ImportError:  # direct script execution
+    from sim_runtime.runtime_execution import (
+        create_simulation_llm_model,
+        emit_round_actions_to_redis,
+    )
 
 # Rundengrenzen-Kontrolle (Tech-Review Slice B4c): Pause/Stop/Budget an einer
 # Stelle statt inline in der Runden-Schleife dieser Klasse.
@@ -134,6 +143,7 @@ try:
         build_camel_function_tools,
         create_tool_aware_loop,
     )
+
     AGENT_TOOLS_AVAILABLE = True
 except ImportError:
     create_tool_aware_loop = None  # type: ignore[assignment]
@@ -222,6 +232,7 @@ def setup_signal_handlers():
     Set signal handlers to ensure proper exit when receiving SIGTERM/SIGINT
     Give program a chance to clean up resources properly (close database, environment, etc.)
     """
+
     def signal_handler(signum, frame):
         global _cleanup_done
         sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
@@ -249,14 +260,14 @@ class SinglePlatformRunner:
     """
 
     # --- Plattform-Konfiguration (von Subklasse zu setzen) ---
-    PLATFORM_NAME: str = ""        # "Twitter" / "Reddit" — für Banner-Prints
-    PLATFORM_SLUG: str = ""        # "twitter" / "reddit" — für Log-Strings
-    PROFILE_FILENAME: str = ""     # "twitter_profiles.csv" / "reddit_profiles.json"
-    DB_FILENAME: str = ""          # "twitter_simulation.db" / "reddit_simulation.db"
-    PLATFORM_TYPE: Any = None      # oasis.DefaultPlatformType.TWITTER / REDDIT
+    PLATFORM_NAME: str = ""  # "Twitter" / "Reddit" — für Banner-Prints
+    PLATFORM_SLUG: str = ""  # "twitter" / "reddit" — für Log-Strings
+    PROFILE_FILENAME: str = ""  # "twitter_profiles.csv" / "reddit_profiles.json"
+    DB_FILENAME: str = ""  # "twitter_simulation.db" / "reddit_simulation.db"
+    PLATFORM_TYPE: Any = None  # oasis.DefaultPlatformType.TWITTER / REDDIT
     AVAILABLE_ACTIONS: List[Any] = []
     AVAILABLE_ACTION_NAMES: List[str] = []
-    GRAPH_GENERATOR: Any = None    # generate_twitter_agent_graph / generate_reddit_agent_graph
+    GRAPH_GENERATOR: Any = None  # generate_twitter_agent_graph / generate_reddit_agent_graph
 
     def __init__(self, config_path: str, wait_for_commands: bool = True):
         """
@@ -294,7 +305,7 @@ class SinglePlatformRunner:
         Profil, träfe ein Zugriff mit der OASIS-Nummer in ``agent_configs``
         sonst den falschen Agenten (Name, Aktivität, Haltung, Startbeitrag).
         """
-        with open(self.config_path, 'r', encoding='utf-8') as f:
+        with open(self.config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         profiles = load_simulation_profiles(os.path.dirname(self.config_path) or ".")
         aligned, _agents_without_profile = align_config_to_profiles(config, profiles)
@@ -326,11 +337,17 @@ class SinglePlatformRunner:
                     profile_path,
                     self.config.get("agent_configs", []),
                     platform=self.PLATFORM_SLUG or "twitter",
-                    contested_statement=(self.config.get("contested_question") or {}).get("statement"),
+                    contested_statement=(self.config.get("contested_question") or {}).get(
+                        "statement"
+                    ),
                     activity_limits=activity_limits_sentence(self.config),
                 )
             except Exception as e:
-                logger.info("augment_profile_with_stance (%s) failed, using unaugmented profile: %s", self.PLATFORM_SLUG, e)
+                logger.info(
+                    "augment_profile_with_stance (%s) failed, using unaugmented profile: %s",
+                    self.PLATFORM_SLUG,
+                    e,
+                )
         return profile_path
 
     def _get_db_path(self) -> str:
@@ -344,120 +361,30 @@ class SinglePlatformRunner:
         Model selection precedence: sim-config (UI choice) > .env > fallback.
         API key/base URL still come from .env (secrets stay out of sim-config).
         """
-        config_model = self.config.get("llm_model", "") or ""
-        llm_api_key = os.environ.get("LLM_API_KEY", "")
-        llm_base_url = os.environ.get("LLM_BASE_URL", "")
-        llm_model = config_model or os.environ.get("LLM_MODEL_NAME", "")
-
-        # Final fallback: qwen3-coder-next:cloud hat 256k context
-        if not llm_model:
-            llm_model = "qwen3-coder-next:cloud"
-
-        runtime_settings = resolve_model_runtime_settings(llm_model)
-
-        # Issue #1423: CLI-Transport (codex_cli) hat weder base_url noch
-        # api_key — die URL-basierte Plattform-Erkennung darunter hat nichts
-        # zu mustern und liefe in den OPENAI-Zweig, der das geroutete Modell
-        # an das geerbte LLM_BASE_URL schickt. Das Signal kommt aus
-        # ``build_route_subprocess_env`` und ist damit an der Registry
-        # entschieden, nicht an einer zweiten Heuristik.
-        if claude_cli_transport_active():
-            print(f"LLM configuration: model={llm_model}, transport=cli (claude)", flush=True)
-            return ClaudeCliModel(
-                model_type=llm_model, api_key=os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
-            )
-        if cli_transport_active():
-            print(f"LLM configuration: model={llm_model}, transport=cli (codex)", flush=True)
-            return CodexCliModel(model_type=llm_model)
-
-        platform = detect_oasis_platform(llm_model, llm_base_url)
-        think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
-
-        print(
-            f"LLM configuration: model={llm_model}, "
-            f"base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
-            f"platform={platform.value}, "
-            f"completion_max_tokens={runtime_settings['completion_max_tokens']}, "
-            f"memory_token_limit={runtime_settings['memory_token_limit']}, "
-            f"ollama_num_ctx={runtime_settings['ollama_num_ctx']}",
-            flush=True,
-        )
-
-        model_cfg: dict = build_camel_completion_params(
-            model=llm_model,
-            completion_max_tokens=runtime_settings["completion_max_tokens"],
-            # Wie im Parallel-Runner: ohne die URL erkennt der Helper OpenRouter
-            # nicht und sendet kein ``reasoning_effort`` (Review #1779).
-            base_url=llm_base_url or None,
-        )
-
-        if platform == ModelPlatformType.GEMINI:
-            # Gemini-3 requires thought_signature echo in multi-turn tool calls.
-            # Route via CAMEL's GeminiModel; do NOT touch OPENAI_BASE_URL.
-            _gemini_key = (
-                llm_api_key
-                or os.environ.get("GEMINI_API_KEY", "")
-                or os.environ.get("GOOGLE_API_KEY", "")
-            )
-            os.environ["GOOGLE_API_KEY"] = _gemini_key
-            os.environ["GEMINI_API_KEY"] = _gemini_key
-            return _create_gemini_model(
-                model_type=llm_model,
-                model_config_dict=model_cfg,
-                api_key=_gemini_key,
-            )
-
-        elif platform == ModelPlatformType.OLLAMA:
-            # Ollama Cloud no longer serves OpenAI-compat /v1.
-            # CAMEL's OllamaModel speaks the native /api/chat endpoint.
-            os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
-            extra_body: dict = {"think": think_on}
-            if runtime_settings["ollama_num_ctx"] is not None:
-                extra_body["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
-            model_cfg["extra_body"] = extra_body
-            return ModelFactory.create(
-                model_platform=ModelPlatformType.OLLAMA,
-                model_type=llm_model,
-                url=resolve_camel_ollama_url(llm_base_url or None),
-                api_key=llm_api_key or None,
-                model_config_dict=model_cfg,
-            )
-
-        else:
-            # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, etc.
-            if llm_api_key:
-                os.environ["OPENAI_API_KEY"] = llm_api_key
-
-            if not os.environ.get("OPENAI_API_KEY"):
-                raise ValueError(
-                    "Missing API Key configuration, please set LLM_API_KEY in .env file in project root"
+        return create_simulation_llm_model(
+            self.config,
+            use_boost=False,
+            config_label_prefix="LLM configuration:",
+            model_factory=ModelFactory,
+            gemini_model_creator=_create_gemini_model,
+            claude_cli_model_cls=ClaudeCliModel,
+            codex_cli_model_cls=CodexCliModel,
+            claude_cli_transport_check=claude_cli_transport_active,
+            cli_transport_check=cli_transport_active,
+            build_completion_params_fn=lambda *, model, completion_max_tokens, base_url=None: (
+                build_camel_completion_params(
+                    model=model,
+                    completion_max_tokens=completion_max_tokens,
+                    base_url=base_url,
                 )
+            ),
+            resolve_runtime_settings_fn=resolve_model_runtime_settings,
+            detect_platform_fn=detect_oasis_platform,
+            resolve_ollama_url_fn=resolve_camel_ollama_url,
+            build_minimax_extra_fn=build_minimax_extra_body,
+        )
 
-            if llm_base_url:
-                os.environ["OPENAI_BASE_URL"] = llm_base_url
-                os.environ["OPENAI_API_BASE"] = llm_base_url
-                os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-
-            minimax_extra = build_minimax_extra_body(
-                model=llm_model, base_url=llm_base_url, think=think_on
-            )
-            if minimax_extra:
-                model_cfg["extra_body"] = minimax_extra
-
-            return ModelFactory.create(
-                model_platform=ModelPlatformType.OPENAI,
-                model_type=llm_model,
-                model_config_dict=model_cfg,
-                url=llm_base_url or None,
-                api_key=llm_api_key or None,
-            )
-
-    def _get_active_agents_for_round(
-        self,
-        env,
-        current_hour: int,
-        round_num: int
-    ) -> List:
+    def _get_active_agents_for_round(self, env, current_hour: int, round_num: int) -> List:
         """
         Decide which Agents to activate this round based on time and configuration
 
@@ -496,7 +423,10 @@ class SinglePlatformRunner:
                 # nicht still verwerfen (#1779).
                 logger.warning(
                     "Runde %s: Agent %s nicht aktivierbar (%s: %s)",
-                    round_num, agent_id, type(exc).__name__, exc,
+                    round_num,
+                    agent_id,
+                    type(exc).__name__,
+                    exc,
                 )
 
         return active_agents
@@ -515,10 +445,7 @@ class SinglePlatformRunner:
         Basis: ``env.step`` akzeptiert je Agent einen Einzelwert oder eine
         Liste. Ohne Kollision entsteht weiterhin kein zusaetzliches Wrapping.
         """
-        action = ManualAction(
-            action_type=ActionType.CREATE_POST,
-            action_args={"content": content}
-        )
+        action = ManualAction(action_type=ActionType.CREATE_POST, action_args={"content": content})
         existing = initial_actions.get(agent)
         if existing is None:
             initial_actions[agent] = action
@@ -545,17 +472,15 @@ class SinglePlatformRunner:
         Returns:
             (actions_logged, new_last_rowid)
         """
-        actual_actions, new_last_rowid = fetch_new_actions_from_db(
-            db_path, last_rowid, agent_names
-        )
+        actual_actions, new_last_rowid = fetch_new_actions_from_db(db_path, last_rowid, agent_names)
         self._last_round_actions = actual_actions
         for action_data in actual_actions:
             self.action_logger.log_action(
                 round_num=round_num,
-                agent_id=action_data['agent_id'],
-                agent_name=action_data['agent_name'],
-                action_type=action_data['action_type'],
-                action_args=action_data['action_args'],
+                agent_id=action_data["agent_id"],
+                agent_name=action_data["agent_name"],
+                action_type=action_data["action_type"],
+                action_args=action_data["action_args"],
             )
         self.action_logger.log_round_end(
             round_num, len(actual_actions), simulated_minutes=simulated_minutes_after
@@ -610,17 +535,23 @@ class SinglePlatformRunner:
             original_rounds = total_rounds
             total_rounds = min(total_rounds, max_rounds)
             if total_rounds < original_rounds:
-                print(f"\nRounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
+                print(
+                    f"\nRounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})"
+                )
 
         start_hour_offset = compute_start_hour_offset(self.config, total_rounds, minutes_per_round)
         if start_hour_offset != 0:
-            print(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+            print(
+                f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)"
+            )
 
         # Sim-Clock-Anchor und ID/Redis für Live-Feed-Emissionen vor Runde 0 initialisieren (#1713 UI-2a)
         sim_clock_anchor = datetime.now(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-        _sim_id_for_emit = self.config.get("simulation_id") or os.path.basename(self.simulation_dir.rstrip("/"))
+        _sim_id_for_emit = self.config.get("simulation_id") or os.path.basename(
+            self.simulation_dir.rstrip("/")
+        )
         _redis_url_for_emit = os.environ.get("REDIS_URL")
 
         print("\nSimulation parameters:")
@@ -646,8 +577,14 @@ class SinglePlatformRunner:
             budget_guard = SubprocessBudgetGuard.from_environment(self.simulation_dir)
             if budget_guard is not None:
                 model = budget_guard.wrap_model(model)
-                print("[budget-guard] usage recording active"
-                      + (f" (enforcement={budget_guard.enforcement})" if budget_guard.budget_config else ""))
+                print(
+                    "[budget-guard] usage recording active"
+                    + (
+                        f" (enforcement={budget_guard.enforcement})"
+                        if budget_guard.budget_config
+                        else ""
+                    )
+                )
         except Exception as exc:  # noqa: BLE001 — Guard ist Zusatz, kein Blocker
             print(f"[budget-guard] setup failed ({exc}); continuing without", flush=True)
             budget_guard = None
@@ -672,9 +609,12 @@ class SinglePlatformRunner:
         # CAMELs ScoreBasedContextCreator-Default bei 8192.
         try:
             from agent_tools import enforce_memory_token_limit
+
             enforce_memory_token_limit(self.agent_graph)
         except Exception as e:
-            print(f"enforce_memory_token_limit ({self.PLATFORM_SLUG}-single) failed: {e}", flush=True)
+            print(
+                f"enforce_memory_token_limit ({self.PLATFORM_SLUG}-single) failed: {e}", flush=True
+            )
         logger.info(describe_memory_policy())
 
         # Native CAMEL function-calling for agents (Befund 6.2 Parität).
@@ -752,6 +692,7 @@ class SinglePlatformRunner:
         if redis_url:
             try:
                 from subprocess_redis_bridge import RedisIPCBridge
+
                 sim_id = os.path.basename(self.simulation_dir.rstrip("/"))
                 self.redis_bridge = RedisIPCBridge(
                     simulation_id=sim_id,
@@ -787,7 +728,9 @@ class SinglePlatformRunner:
                     agent = self.env.agent_graph.get_agent(agent_id)
                     self._assign_initial_action(initial_actions, agent, content)
                 except Exception as e:
-                    print(f"  Warning: Unable to create for Agent {agent_id}Create initial posts: {e}")
+                    print(
+                        f"  Warning: Unable to create for Agent {agent_id}Create initial posts: {e}"
+                    )
 
             if initial_actions:
                 await self.env.step(initial_actions)
@@ -810,8 +753,7 @@ class SinglePlatformRunner:
                 initial_db_actions, last_rowid = fetch_new_actions_from_db(
                     db_path, last_rowid, agent_names
                 )
-                _action_count = len(initial_db_actions)
-                for _action_idx, action_data in enumerate(initial_db_actions):
+                for action_data in initial_db_actions:
                     self.action_logger.log_action(
                         round_num=0,
                         agent_id=action_data["agent_id"],
@@ -821,22 +763,19 @@ class SinglePlatformRunner:
                     )
                     total_actions += 1
                     initial_action_count += 1
-                    if action_data.get("action_type") == "CREATE_POST":
-                        await _emit_post_created_to_redis(
-                            simulation_id=_sim_id_for_emit,
-                            platform=self.PLATFORM_SLUG or "twitter",
-                            action_data=action_data,
-                            redis_url=_redis_url_for_emit,
-                            round_num=0,
-                            sim_time_iso=compute_post_sim_time(
-                                sim_clock_anchor,
-                                start_hour_offset,
-                                0,
-                                minutes_per_round,
-                                _action_idx,
-                                _action_count,
-                            ).isoformat(),
-                        )
+                await emit_round_actions_to_redis(
+                    actions=initial_db_actions,
+                    platform_slug=self.PLATFORM_SLUG or "twitter",
+                    simulation_id=_sim_id_for_emit,
+                    redis_url=_redis_url_for_emit,
+                    round_num=0,
+                    sim_clock_anchor=sim_clock_anchor,
+                    start_hour_offset=start_hour_offset,
+                    simulated_minutes=0,
+                    minutes_per_round=minutes_per_round,
+                    allowed_types=("CREATE_POST",),
+                    emit_fn=_emit_post_created_to_redis,
+                )
 
         self.action_logger.log_round_end(0, initial_action_count)
 
@@ -851,14 +790,16 @@ class SinglePlatformRunner:
             self.tool_loop = create_tool_aware_loop(
                 model=model,
                 config=self.config,
-                max_tool_calls=self.config.get("max_tool_calls_per_action", 2)
+                max_tool_calls=self.config.get("max_tool_calls_per_action", 2),
             )
             if self.tool_loop:
                 print("[ToolUse] Tool registry ready")
             else:
                 print("[ToolUse] Tool registry initialization failed (check Neo4j credentials)")
         elif enable_tools and not AGENT_TOOLS_AVAILABLE:
-            print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+            print(
+                "[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported"
+            )
 
         # #1779: Haltungsanker im Feed-Text, sofern der ReAct-Loop die Haltung nicht je Runde selbst liefert.
         self._install_stance_anchor()
@@ -886,9 +827,7 @@ class SinglePlatformRunner:
             simulated_day = simulated_minutes // (60 * 24) + 1
 
             # Get Agents activated this round
-            active_agents = self._get_active_agents_for_round(
-                self.env, simulated_hour, round_num
-            )
+            active_agents = self._get_active_agents_for_round(self.env, simulated_hour, round_num)
 
             # Log round start regardless of active agents (siehe Parallel-Runner)
             self.action_logger.log_round_start(round_num + 1, simulated_hour)
@@ -908,9 +847,9 @@ class SinglePlatformRunner:
                         observation = await agent_observation(agent)
 
                         # Get agent profile info
-                        agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
-                        agent_role = getattr(agent, 'profession', 'Unknown')
-                        agent_bio = getattr(agent, 'bio', '')
+                        agent_name = getattr(agent, "username", f"Agent_{agent_id}")
+                        agent_role = getattr(agent, "profession", "Unknown")
+                        agent_bio = getattr(agent, "bio", "")
                         agent_cfg = agent_configs_by_id.get(agent_id, {})
 
                         action = await self.tool_loop.decide_action(
@@ -925,9 +864,9 @@ class SinglePlatformRunner:
                             sentiment_bias=agent_cfg.get("sentiment_bias"),
                             posts_per_hour=agent_cfg.get("posts_per_hour"),
                             comments_per_hour=agent_cfg.get("comments_per_hour"),
-                            contested_statement=(
-                                self.config.get("contested_question") or {}
-                            ).get("statement"),
+                            contested_statement=(self.config.get("contested_question") or {}).get(
+                                "statement"
+                            ),
                         )
                         actions[agent] = action
                     except Exception as e:
@@ -935,10 +874,7 @@ class SinglePlatformRunner:
                         actions[agent] = LLMAction()
             else:
                 # Standard OASIS action
-                actions = {
-                    agent: LLMAction()
-                    for _, agent in active_agents
-                }
+                actions = {agent: LLMAction() for _, agent in active_agents}
 
             # Execute action; Zaehler je Agent nur um diese Aktivierung (#1779).
             with round_activation_limits(self.activation_limits, round_num + 1):
@@ -948,45 +884,39 @@ class SinglePlatformRunner:
 
             # Get actual executed actions from Database and log (#1713)
             round_actions, last_rowid = self._log_round_actions(
-                db_path, round_num + 1, agent_names, last_rowid,
+                db_path,
+                round_num + 1,
+                agent_names,
+                last_rowid,
                 simulated_minutes + minutes_per_round,
             )
             total_actions += round_actions
 
             # Slice 5-pre / Befund 6.2: emit PostCreatedEvent to Redis for SSE live-feed.
             actual_actions = getattr(self, "_last_round_actions", [])
-            _action_count = len(actual_actions)
-            allowed_emit_types = (
-                ("CREATE_POST", "CREATE_COMMENT")
-                if (self.PLATFORM_SLUG or "").lower() == "reddit"
-                else ("CREATE_POST", "REPOST", "QUOTE_POST")
+            await emit_round_actions_to_redis(
+                actions=actual_actions,
+                platform_slug=self.PLATFORM_SLUG or "twitter",
+                simulation_id=_sim_id_for_emit,
+                redis_url=_redis_url_for_emit,
+                round_num=round_num + 1,
+                sim_clock_anchor=sim_clock_anchor,
+                start_hour_offset=start_hour_offset,
+                simulated_minutes=simulated_minutes,
+                minutes_per_round=minutes_per_round,
+                emit_fn=_emit_post_created_to_redis,
             )
-            for _action_idx, action_data in enumerate(actual_actions):
-                if action_data.get("action_type") in allowed_emit_types:
-                    await _emit_post_created_to_redis(
-                        simulation_id=_sim_id_for_emit,
-                        platform=self.PLATFORM_SLUG or "twitter",
-                        action_data=action_data,
-                        redis_url=_redis_url_for_emit,
-                        round_num=round_num + 1,
-                        sim_time_iso=compute_post_sim_time(
-                            sim_clock_anchor,
-                            start_hour_offset,
-                            simulated_minutes,
-                            minutes_per_round,
-                            _action_idx,
-                            _action_count,
-                        ).isoformat(),
-                    )
 
             # Print progress
             if (round_num + 1) % 10 == 0 or round_num == 0:
                 elapsed = (datetime.now() - start_time).total_seconds()
                 progress = (round_num + 1) / total_rounds * 100
-                print(f"  [Day {simulated_day}, {simulated_hour:02d}:00] "
-                      f"Round {round_num + 1}/{total_rounds} ({progress:.1f}%) "
-                      f"- {len(active_agents)} agents active "
-                      f"- elapsed: {elapsed:.1f}s")
+                print(
+                    f"  [Day {simulated_day}, {simulated_hour:02d}:00] "
+                    f"Round {round_num + 1}/{total_rounds} ({progress:.1f}%) "
+                    f"- {len(active_agents)} agents active "
+                    f"- elapsed: {elapsed:.1f}s"
+                )
 
         self.action_logger.log_simulation_end(total_rounds, total_actions)
 
