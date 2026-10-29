@@ -31,6 +31,7 @@
 | Simulations-Read-Metriken & Laufzeit-Timings (Timeline/Agent-Stats/UTC-Dauer) | `backend/app/services/sim/run_metrics.py` (`get_timeline`, `get_agent_stats`, `as_aware_utc`, `compute_elapsed_seconds`, `resolve_manifest_timing`, #1496) |
 | OASIS-Simulations-Laufzeit (Modell-Factory, Graph-Policies, Round-0-Seeding, Redis-Emission) | `backend/scripts/sim_runtime/runtime_execution.py` (`create_simulation_llm_model`, `configure_platform_agent_graph`, `execute_initial_posts_round`, `emit_round_actions_to_redis`, genutzt von `platform_runner.py` und `run_parallel_simulation.py`) |
 | Report-Artefakte | `backend/uploads/reports/<report_id>/` |
+| Report-View-State & Fehlerklassifikation (Frontend) | `frontend/src/composables/run/report/reportViewState.ts` (`isReportRunningStatus`, `isReportTerminalWithEvidence`, `isReportTerminalStatus`, `isActiveRegistryRunForReport`, `isGenerateInProgressError`, `classifyReportLoadError`, `classifyReportEnvelope`, `classifyEvidenceEnvelope`) |
 | Report-Vollständigkeitsprüfung vor Abschluss | `backend/app/services/report_agent/requirement_checker.py` (`RequirementChecker`, #1302) |
 | Interview-Panel-Rotation | `backend/app/services/interview_panel.py` (`InterviewPanelTracker`, #1303) |
 | Projekt-Metadaten-Vertrag | `backend/app/contracts/project_contract.py` (Pydantic v2, ersetzt die `Project`-Dataclass) |

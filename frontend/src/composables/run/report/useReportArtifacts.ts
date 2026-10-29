@@ -10,7 +10,6 @@
  * oder Vertragsbruch der Antwort). Antworten laufen über `api/report.ts` durch Zod.
  */
 import { computed, ref, watch, type Ref } from 'vue'
-import { ApiError } from '@/api/envelope'
 import {
   getReportEvidenceDensity,
   getReportStanceAnalysis,
@@ -20,6 +19,7 @@ import {
 import type { EvidenceDensity } from '@/contracts/evidenceDensityContract'
 import type { ReportArtifactOmission } from '@/contracts/reportArtifactContract'
 import type { StanceAnalysis } from '@/contracts/stanceAnalysisContract'
+import { describeReportError, isUnsavedNotFoundError } from './reportViewState'
 
 export type ArtifactState<T> =
   | { status: 'idle' }
@@ -42,16 +42,12 @@ export interface UseReportArtifactsOptions {
   api?: Partial<ReportArtifactsApi>
 }
 
-function describe(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : String(err)
-}
-
 /** Zustand aus einer Antwort; der Fehler-Envelope `success: false` mit `not_found` ist ein 404. */
 export function toArtifactState<T>(
   res: { success: boolean; data?: T; artifact_omitted?: ReportArtifactOmission; code?: string; error?: string },
 ): ArtifactState<T> {
   if (res.success !== true) {
-    if (res.code === 'not_found') return { status: 'unsaved' }
+    if (isUnsavedNotFoundError(res)) return { status: 'unsaved' }
     return { status: 'failed', reason: res.error || res.code || 'unbekannter Fehler' }
   }
   if (res.artifact_omitted) return { status: 'omitted', omission: res.artifact_omitted }
@@ -60,8 +56,8 @@ export function toArtifactState<T>(
 }
 
 function fromError<T>(err: unknown): ArtifactState<T> {
-  if (err instanceof ApiError && err.status === 404) return { status: 'unsaved' }
-  return { status: 'failed', reason: describe(err) }
+  if (isUnsavedNotFoundError(err)) return { status: 'unsaved' }
+  return { status: 'failed', reason: describeReportError(err) }
 }
 
 export function useReportArtifacts(options: UseReportArtifactsOptions): {
