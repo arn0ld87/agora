@@ -5,6 +5,73 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-10-29
+
+Patch-Release auf `0.9.8`, ausdrücklich **kein** `0.10.0` und kein Release Candidate. Der Tag `v0.9.8` wurde am 29.10.2026 nachträglich auf den Release-Commit vom 13.10. gesetzt. Sein Tag-Lauf von `docker-image.yml` scheiterte im Trivy-Gate ([Run 40819888782](https://github.com/arn0ld87/agora/actions/runs/40819888782)): Seit dem 13.10. sind für fünf Python-Pakete im Image behebbare HIGH-CVEs veröffentlicht. Zu `v0.9.7` und `v0.9.8` gibt es deshalb keine GHCR-Images und keine Release-Artefakte. `0.9.9` liefert sie nach und enthält alle 17 Commits seit `0.9.8`, darunter die ersten Re-Audit-Fixes (Epic #1899). Neue Migrationen, Env-Variablen oder Compose-Änderungen gibt es nicht.
+
+### Security
+
+- **Behebbare HIGH-CVEs im Image geschlossen.** Gegen die Fassung von `0.9.8` meldete das Trivy-Gate 38 HIGH-Befunde: `pillow` 12.3.0 (28), `virtualenv` 21.14.2 (5), `pypdf` 6.19.0 (3), `certifi` 2025.11.12 (1), `filelock` 3.29.0 (1). `pillow` ist jetzt auf `>=13.0.0` angehoben, `pypdf` auf `>=6.21.2` mit gezieltem `exclude-newer`-Cutoff (#1884). Im Lockfile stehen `virtualenv` 21.15.1, `certifi` 2026.10.19 und `filelock` 4.2.4.
+
+### Fixed
+
+- **Threshold-Provenance-Bindung (Befund 2.1)**: `bind_threshold_provenance` in `backend/app/services/report_agent/threshold_provenance.py` validiert vorab übergebene `evidence_refs` nun über `_record_carries_threshold` gegen den tatsächlichen Text des Referenzrecords (Zahlenwert- und Label-Overlap-Prüfung). Halluzinierte Schwellenwerte, denen ein unpassender Seed-Beleg angehängt wurde, werden bereinigt und auf `heuristic` herabgestuft, sofern kein echter Textbeleg im Pool existiert.
+- **Threshold-Abweichungs-Validierung (Befund 2.2)**: `_is_linked` und `drop_unresolvable_deviations` in `backend/app/services/report_agent/threshold_deviation.py` prüfen gerichtete Verzweigungen auf identischen Zielwert. Weichen mehrere Abschnitte unabhängig voneinander mit unterschiedlichen Werten vom selben Basis-Schwellenwert ab (widersprüchliche Geschwister-Abweichung), wird dies nicht mehr fälschlich durch ungerichtetes Union-Find maskiert, sondern als Widerspruchskonflikt erkannt bzw. in `drop_unresolvable_deviations` sauber bereinigt.
+
+### Fixed (Läufe aus Personas: Agenten werden aktiviert — 2026-10-13)
+
+- **`POST /api/simulation/create-from-personas` schreibt je Persona einen `agent_configs`-Eintrag:** Bisher blieb die Liste leer. Die Rundenauswahl zieht ihre Kandidaten nur daraus, also wurde nie ein Agent aktiviert, und der Lauf endete mit 0 Aktionen als `completed`. Die Einträge tragen `agent_id` = `user_id` des Profils, Standardwerte ohne Modell und `config_source="persona_default"`. Vor dem Fix angelegte Läufe aus Personas müssen neu angelegt werden. (#1876)
+
+### Changed
+
+- **Codex-Binary im Image von `rust-v0.163.0` auf `rust-v0.164.0` angehoben.** Version und beide SHA256-Werte (amd64, arm64) im `Dockerfile` stammen aus der Herstellerquelle und wurden vor dem Pull Request gegen die ausgelieferten Dateien geprüft (automatischer Bump, #1861).
+
+### Changed
+
+- **Claude Code-Binary im Image von `2.1.287` auf `2.1.292` angehoben.** Version und beide SHA256-Werte (amd64, arm64) im `Dockerfile` stammen aus der Herstellerquelle und wurden vor dem Pull Request gegen die ausgelieferten Dateien geprüft (automatischer Bump, #1861).
+
+### Fixed
+
+- Selbst-Trigger in `.github/workflows/cve-monitor.yml` (`push.paths` und `pull_request.paths`) entfernt, sodass Aenderungen am Workflow selbst nicht mehr unnoetig den absichtlich rot bleibenden Supabase-CVE-Job auf PRs ausloesen.
+
+### Refactored
+
+- Vierfach duplizierte `_get_client_attr`-Shim-Funktion in `backend/app/llm/` (`_client_chat.py`, `_client_route_factory.py`, `_client_routes.py`, `_client_transport.py`) in ein zentrales Helper-Modul `backend/app/llm/_client_shim.py` (`get_client_attr`) konsolidiert. Bestehende Mocking-Pfade (`unittest.mock.patch("app.llm.client.*")`) und Module-Exports bleiben unveraendert kompatibel.
+
+### Fixed (Berichtsintegrität: einheitliche Evidenz-, Schwellenwert-, Attributions- und Degradationsregeln — 2026-10-28)
+
+- **Qualifizierende Evidenz und einheitliche Stimmenidentität (`evidence_ledger.py`):** Provenienz-Klassifikation (`source_grounded` vs. `derived_calculation`), `confidence_calculator` und `claim_dedup` nutzen nun eine gemeinsame Qualifikationsprüfung (`is_qualifying_support_evidence`) und kanonische Stimmenidentität (`canonical_voice_key`), sodass weder widerlegende Belege (`supports_claim=False`), abgeleitete Berechnungen noch manuelle Graph-Edits als unabhängige Quellen gezählt werden.
+- **Schwellenwert-Querverweise und Deviations-Guard (`threshold_verifier.py`, `deviation_guard.py`):** `verify_thresholds` löst `evidence_refs` gegen den globalen `evidence_index` auf und verwirft nicht-qualifizierende Belege; `audit_deviations` schließt `supports_claim=False` und unqualifizierte Provenienzen von der Baseline-Abdeckung aus.
+- **Simulationsbeitrag und Claim-Projektion (`simulation_contribution.py`, `manager.py`):** `compute_simulation_contribution` bewertet standardmäßig die im V3-Report exportierten Claims statt roher Sektionskandidaten und wendet dieselben Provenienz- und Stimmregeln wie der Report-Vertrag an; kanonische Deduplizierung priorisiert gestützte Claims vor ungestützten Duplikaten.
+- **Abschnittsbezogener Attributions-Guard (`attribution_guard.py`, `section_pipeline.py`):** `_correct_attribution` prüft vorrangig die qualifizierende Evidenz des aktuellen Abschnitts (`_active_section_evidence`), sodass Simulations- oder Interview-Evidenz aus früheren Abschnitten keine unbelegten Zeugenformeln in reinen Seed-Abschnitten freischaltet.
+- **Vollständiges Degradations-Ledger bei Teil-Reports und Resume (`workflow.py`, `manager.py`):** `_build_partial_report` reicht alle Laufzeit-Degradationen an `collect_run_degradations` durch und merged bestehende Einträge; `forced_final_sections`, `metadata_failed_sections` und `quote_validation_failed_sections` werden über Cancel/Resume hinweg in `run_events.json` persistiert.
+
+### Changed (Struktur-Modularisierung großer Backend-, Skript- und Frontend-Module — 2026-10-28)
+
+- **Report-Agent & Contracts (`app/services/report_agent/`, `app/contracts/`):** `workflow.py`, `manager.py`, `agent.py`, `evidence.py`, `section_pipeline.py`, `text_verification.py`, `run_degradation.py` und `report_contract.py` wurden in fokussierte Submodule mit kompatiblen Re-Export-Fassaden zerlegt.
+- **Core-Services, API & LLM-Client (`app/services/`, `app/api/`, `app/llm/`, `app/config.py`):** `evidence_entailment.py` (`app/services/entailment/`), `graph_build.py`, `prepare_service.py`, `prepare_entities.py`, `llm_routing_seed.py`, `api/runs.py`, `api/simulation_run.py`, `llm/client.py` und `config.py` wurden in wartbare Einzelmodule aufgeteilt.
+- **Simulations-Skripte & Frontend (`backend/scripts/`, `frontend/src/`):** `agent_tools.py`, `_sim_common.py` und `run_parallel_simulation.py` sowie `Dossier.vue`, `NewRunDialog.vue` und `HeroNewRun.vue` wurden in klar abgegrenzte Hilfsmodule und Vue-Subkomponenten zerlegt.
+
+### Fixed
+
+- Versehentliche Versions-Downgrades aus dem Merge-Konfliktaufloesungsschritt von `#1885` (`Dockerfile` `CLAUDE_CODE_VERSION=2.1.292`, `.github/workflows/actionlint.yml` `reviewdog/action-actionlint@v1.79.1`, `.github/workflows/docker-image.yml` `anchore/sbom-action@v0.24.3` sowie `changelog.d/1861-bump-claude-cli.md`) wiederhergestellt und das doppelte Changelog-Fragment `changelog.d/report-agent-modularization.md` bereinigt.
+- Kanonische Persona-Stimmenzaehlung in `backend/app/services/report_agent/claim_provenance.py` und `backend/app/services/report_agent/manager_claims.py` ueber gemischte Evidence-Repräsentationen (`agent_id`, `voice_key`, `agent_name`) vereinheitlicht, sodass derselbe Agent bei gemischten Belegformaten nicht mehrfach gezaehlt wird.
+- Abschnitts-Evidence-Aufloesung in `backend/app/services/report_agent/attribution_guard.py` (`resolve_section_evidence_records`) gegen das Ueberschreiben autoritativer Index-Metadaten (`source_kind`, `provenance_class`, `type`, `source_type`, `source_tier`, `epistemic_status`, `graph_origin`) durch widerspruechliche Abschnittseintraege gehaertet.
+- `docs/STATUS.md` und `docs/agents/release-priority.md` auf den Stand vom 28.10.2026 (`main@2c264f4f`) einschliesslich klarer Abgrenzung zwischen verifizierter PR-CI und offenen operativen/inhaltlichen RC-/1.0-Nachweisen aktualisiert.
+
+### Fixed (Lauf aus Personas auf Twitter — 2026-10-13)
+
+- **Simulation aus Personas stürzt auf Twitter nicht mehr ab:** `POST /api/simulation/create-from-personas` schrieb `twitter_profiles.csv` mit den Schlüsseln des Reddit-Profils, OASIS brach beim Laden der Agenten mit `KeyError: 'user_char'` ab. Der Pfad nutzt jetzt den Schreiber der Persona-Generierung (`write_twitter_csv`) und liefert `user_char` und `description`. Vor dem Fix angelegte Simulationen müssen neu angelegt werden.
+
+### Geändert
+
+- **CI/CD-Konsolidierung & Entmistung**:
+  - Drei redundante Einzel-Workflows (`contract-gates.yml`, `version-drift.yml`, `check-legacy-model-picker.yml`), die bei jedem PR bis zu 8 zusätzliche Python-Runner hochfuhren und dieselben Checks doppelt zu `ci.yml` ausführten, in `ci.yml` (`backend-pr-gate`, `backend`, `frontend-pr-gate`, `frontend`) integriert und entfernt.
+  - `e2e-smokes.yml` von 8 parallelen Docker-Compose-Stack-Jobs (jeweils vollständiger Image-Bake + Stack-Boot + Browser-Setup) auf einen konsolidierten `e2e-smoke`-Job (`Playwright E2E-Smokes`) zusammengeführt, der alle 10 Playwright-Specs seriell (`workers: 1`) gegen einen einmalig gebooteten Stack ausführt.
+  - Tote `--deselect`-Einträge (7 bereits gelöschte Testdateien, 2 gefixte Tests) aus `ci.yml` und `scripts/pre-push-gate.sh` entfernt.
+  - `unlabeled`-Trigger-Rauschen in `ci.yml` entfernt, `labeled`-Trigger gezielt auf die Opt-in-Labels `needs-backend-ci` und `needs-frontend-ci` gefiltert (ohne Re-Run der PR-Smoke-Gates), `cve-monitor.yml` auf PRs auf das Supabase-Image- und Risk-Register-Gate (`supabase-images`) beschränkt (`audit`-Job läuft nur außerhalb von PRs, da Python-Lockfiles bereits durch `ci.yml::security` und `dependency-review.yml` geprüft werden), und abgelaufene `GHSA-p4gq-832x-fm9v`-Ausnahme aus `dependency-review.yml` bereinigt.
+
+
 ## [0.9.8] - 2026-10-13
 
 Korrektur-Patch auf `0.9.7`, ausdrücklich **kein** `0.10.0` und kein RC. Der Tag-Lauf von `docker-image.yml` für `v0.9.7` ist im Prod-Proxy-Smoke an einem reinen CI-Fehler gescheitert. Zum Tag `v0.9.7` gibt es deshalb keine GHCR-Images und keine Release-Artefakte (`SHA256SUMS`, Digests, SBOMs). Das Image selbst war nicht betroffen. `0.9.8` liefert sie mit dem korrigierten Smoke nach (#1873). Außerdem folgt der Bericht-Reiter jetzt nach einem zweiten Start (409) dem laufenden Bericht (#1872). Neue Funktionen, Migrationen oder Env-Variablen gibt es nicht.

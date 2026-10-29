@@ -2,7 +2,7 @@
 
 Orientierung für Agenten und Maintainer, die mit Agora-Code, Laufartefakten oder Reports arbeiten.
 
-> **Stand:** 02.10.2026. **Abgeglichen gegen:** `main@4cbf0eb8`, Produktversion `0.9.8`.
+> **Stand:** 02.10.2026. **Abgeglichen gegen:** `main@4cbf0eb8`, Produktversion `0.9.9`.
 > Für den verifizierten Projekt-Iststand ist [`docs/STATUS.md`](docs/STATUS.md) führend. Diese Datei erklärt Begriffe, Datenflüsse und die wichtigsten Invarianten.
 
 ---
