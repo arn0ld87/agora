@@ -3,6 +3,7 @@
 Ausgelagert aus ``report_contract.py`` — alle Symbole werden dort vollständig
 re-exportiert.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -51,6 +52,7 @@ def _coerce_text_to_max_1000(value: Any) -> Any:
     if len(truncated) > 999:
         truncated = truncated[:999].rstrip() + "…"
     import logging as _logging
+
     _logging.getLogger("agora.report_contract").warning(
         "evidence-coercion: text truncated from %d to %d chars "
         "(LLM-Halluzination: vermutlich Markdown-Tabelle in Single-Statement-Slot)",
@@ -83,9 +85,7 @@ class ReportSectionHypothesisModel(BaseModel):
     _coerce_hypothesis_text = field_validator("hypothesis_text", mode="before")(
         _coerce_text_to_max_1000
     )
-    _coerce_rationale = field_validator("rationale", mode="before")(
-        _coerce_text_to_max_1000
-    )
+    _coerce_rationale = field_validator("rationale", mode="before")(_coerce_text_to_max_1000)
 
 
 class ReportSectionDataGapModel(BaseModel):
@@ -101,14 +101,10 @@ class ReportSectionDataGapModel(BaseModel):
     # entstanden ist (``if not supporting_ids:``-Zweig in agent.py). Optional,
     # weil der zweite Erzeuger (medium/high ohne Evidence, P2.1) keine
     # begleitende Hypothese anlegt.
-    hypothesis_id: Optional[str] = Field(
-        default=None, pattern=r"^hypothesis_\d{2,}$"
-    )
+    hypothesis_id: Optional[str] = Field(default=None, pattern=r"^hypothesis_\d{2,}$")
 
     # Sub-Slice 05.7: Pre-Validator (gleiche Begründung wie Hypothesis).
-    _coerce_claim_text = field_validator("claim_text", mode="before")(
-        _coerce_text_to_max_1000
-    )
+    _coerce_claim_text = field_validator("claim_text", mode="before")(_coerce_text_to_max_1000)
 
 
 class ReportSectionUnverifiedStatementModel(BaseModel):
@@ -157,6 +153,8 @@ class ReportSectionModel(BaseModel):
     structured_metadata: dict[str, Any] = Field(default_factory=dict)
     # P0-7: True, wenn der Abschnitt nur Fallback-/Fehlertext enthält.
     generation_failed: bool = False
+    # Issue #1299: True, wenn die Zitat-Validierung für diesen Abschnitt fehlgeschlagen ist.
+    quote_validation_failed: bool = False
     # Issue #1324: Evidence-Refs, die der Abschnitt zitiert, die aber in keiner
     # Bindung auftauchen. Sie wurden bisher nur geloggt — im persistierten
     # Artefakt war damit nicht nachvollziehbar, welcher Beleg fehlt, obwohl
@@ -231,6 +229,7 @@ class ReportOutlineModel(BaseModel):
 
 class ReportStatus(str, Enum):
     """Spiegelt models/report.py:ReportStatus 1:1."""
+
     pending = "pending"
     planning = "planning"
     generating = "generating"
@@ -321,6 +320,7 @@ class SimulationSnapshotModel(BaseModel):
 
 class ReportModel(BaseModel):
     """Spiegelt models/report.py:Report — aber als Pydantic mit Validierung."""
+
     model_config = _STRICT
     schema_version: Literal[2] = 2
     report_id: str = Field(min_length=1)

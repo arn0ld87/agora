@@ -322,6 +322,8 @@ export const ReportSectionSchema = z.object({
   structured_metadata: z.record(z.string(), z.unknown()).default({}),
   // P0-7: true, wenn dieser Abschnitt nur Fallback-/Fehlertext enthaelt.
   generation_failed: z.boolean().default(false),
+  // Issue #1299: true, wenn die Zitat-Validierung fuer diesen Abschnitt fehlgeschlagen ist.
+  quote_validation_failed: z.boolean().default(false),
   // Issue #1324: zitierte, aber nie gebundene Evidence-Refs des Abschnitts.
   unbound_evidence_refs: z.array(z.string()).default([]),
   // Issue #1356: Aussagen, die im Fliesstext stehen geblieben sind, fuer die

@@ -813,6 +813,11 @@
           "title": "Hypotheses Appendix",
           "type": "array"
         },
+        "quote_validation_failed": {
+          "default": false,
+          "title": "Quote Validation Failed",
+          "type": "boolean"
+        },
         "section_index": {
           "minimum": 1,
           "title": "Section Index",

@@ -46,12 +46,55 @@ def _restore_persisted_section(
         ctx.persisted_section_contents[section_index], section.title
     )
     generation_failed = bool(persisted_entry.get("generation_failed", False))
+    quote_validation_failed = bool(persisted_entry.get("quote_validation_failed", False))
+    metadata = dict(
+        persisted_entry.get("structured_metadata")
+        or persisted_entry.get("metadata")
+        or {}
+    )
+    unbound_evidence_refs = list(
+        persisted_entry.get("unbound_evidence_refs") or []
+    )
+
+    if metadata:
+        if not hasattr(section, "metadata") or section.metadata is None:
+            section.metadata = {}
+        section.metadata["structured_metadata"] = metadata
+        if hasattr(agent, "_record_section_metadata"):
+            agent._record_section_metadata(section_index, metadata)
+
+    if quote_validation_failed:
+        if not hasattr(section, "metadata") or section.metadata is None:
+            section.metadata = {}
+        section.metadata["quote_validation_failed"] = True
+
+    if unbound_evidence_refs:
+        pending = getattr(agent, "_pending_unbound_evidence_refs", None)
+        if pending is None:
+            pending = {}
+            agent._pending_unbound_evidence_refs = pending
+        pending[section_index] = unbound_evidence_refs
+
+    evidence_map = getattr(agent, "evidence_map", None)
+    if isinstance(evidence_map, dict):
+        evidence_outcome = SectionEvidenceOutcome.from_persisted_section(
+            evidence_map,
+            section_index,
+            gate_decisions=[],
+            generation_failed=generation_failed,
+        )
+    else:
+        evidence_outcome = SectionEvidenceOutcome(generation_failed=generation_failed)
+
     return SectionResult(
         section_index=section_index,
         title=section.title,
         content=section.content,
         failed=generation_failed,
-        evidence=SectionEvidenceOutcome(generation_failed=generation_failed),
+        quote_validation_failed=quote_validation_failed,
+        metadata=metadata,
+        evidence=evidence_outcome,
+        unbound_evidence_refs=unbound_evidence_refs,
         restored=True,
     )
 
