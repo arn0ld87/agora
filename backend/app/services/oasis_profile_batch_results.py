@@ -9,27 +9,138 @@ from contextvars import copy_context
 from typing import Any
 
 from . import oasis_profile_generator as _legacy
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 from .entity_reader import EntityNode
 from .oasis_profile_models import (
     OasisAgentProfile,
     PersonaIneligible,
     register_taken_display_name,
 )
+from .persona_identity_binding import resolve_identity_binding
 from .run_budget import BudgetExceededError
 
-def _backfill_rejected_slots (
-self: Any ,
-*,
-profiles :List [Optional [OasisAgentProfile ]],
-entities :List [EntityNode ],
-reserve_entities :List [EntityNode ],
-use_llm :bool ,
-rejected :List ["PersonaIneligible"],
-coherence_check :Optional [
-Callable [[OasisAgentProfile ,EntityNode ],Optional [PersonaIneligible ]]
-]=None ,
-)->None :
+
+def _entity_binding(generator: Any, entity: Any) -> Dict[str, Any]:
+    """Bindung der Entitaet als JSON-Dump (#1833), fuer Resume und Notprofile."""
+    get_type = getattr(entity, "get_entity_type", None)
+    entity_type = (get_type() if callable(get_type) else getattr(entity, "entity_type", None)) or "Entity"
+    is_group = (
+        generator._is_group_entity(entity_type)
+        if hasattr(generator, "_is_group_entity")
+        else False
+    )
+    return resolve_identity_binding(
+        entity_uuid=getattr(entity, "uuid", None),
+        entity_name=getattr(entity, "name", ""),
+        entity_type=entity_type,
+        attributes=getattr(entity, "attributes", None),
+        summary=getattr(entity, "summary", None),
+        is_collective_type=is_group,
+    ).model_dump(mode="json")
+
+
+def _find_next_reserve_candidate(
+    reserve_entities: List[EntityNode],
+    used: set[int],
+    preferred_type: Optional[str],
+) -> Optional[int]:
+    """Naechster unverbrauchter Reserve-Index, Typgleichheit bevorzugt.
+
+    Issue #1247 (CodeRabbit PR #1258): Ohne Typpraeferenz verbraucht die
+    Nachbesetzung stur den naechsten Eintrag. Gehoert der einer anderen
+    Rollenfamilie, faellt ein aktiver ``PersonaQuotaPlan`` anschliessend
+    durch ``_validate_persona_quota`` — und auch ohne Plan verschwindet
+    die Typvertretung, die das Round-Robin des Caps gerade gesichert
+    hat, obwohl weiter hinten ein gleichartiger Kandidat steht.
+    """
+    if preferred_type:
+        for idx, entity in enumerate(reserve_entities):
+            if idx in used:
+                continue
+            if (entity.get_entity_type() or "Entity") == preferred_type:
+                return idx
+    for idx in range(len(reserve_entities)):
+        if idx not in used:
+            return idx
+    return None
+
+
+def _try_generate_backfill_profile(
+    generator: Any,
+    candidate: EntityNode,
+    slot_idx: int,
+    candidate_slot: Any,
+    use_llm: bool,
+    coherence_check: Optional[Callable[[OasisAgentProfile, EntityNode], Optional[PersonaIneligible]]],
+    rejected: List["PersonaIneligible"],
+) -> Optional[OasisAgentProfile]:
+    """Erzeugt ein Profil fuer einen Reservekandidaten inkl. Rejection- und Coherence-Handling."""
+    try:
+        new_profile: Optional[OasisAgentProfile] = generator.generate_profile_from_entity(
+            entity=candidate,
+            user_id=slot_idx,
+            use_llm=use_llm,
+            demographic_slot=candidate_slot,
+        )
+    except PersonaIneligible as rejection:
+        rejected.append(rejection)
+        return None
+    except BudgetExceededError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — Nachrücker duerfen den Lauf nicht kippen
+        _legacy.logger.warning(
+            "Nachbesetzung fuer Slot %d fehlgeschlagen (%s): %r",
+            slot_idx,
+            candidate.name,
+            exc,
+        )
+        return None
+
+    if new_profile is None:
+        return None
+    if coherence_check is not None:
+        incoherent = coherence_check(new_profile, candidate)
+        if incoherent is not None:
+            rejected.append(incoherent)
+            return None
+    return new_profile
+
+
+def _dispatch_backfill_profile_saved(
+    on_profile_saved: Optional[Callable],
+    slot_idx: int,
+    new_profile: OasisAgentProfile,
+    candidate: EntityNode,
+) -> None:
+    """Ruft on_profile_saved mit candidate auf (Fallback auf 2-Arg Signatur)."""
+    if on_profile_saved is None:
+        return
+    try:
+        try:
+            on_profile_saved(slot_idx, new_profile, candidate)
+        except TypeError:
+            on_profile_saved(slot_idx, new_profile)
+    except Exception as cb_exc:  # noqa: BLE001
+        _legacy.logger.warning(
+            "on_profile_saved checkpoint callback failed for backfill slot %d: %s",
+            slot_idx,
+            cb_exc,
+        )
+
+
+def _backfill_rejected_slots(
+    self: Any,
+    *,
+    profiles: List[Optional[OasisAgentProfile]],
+    entities: List[EntityNode],
+    reserve_entities: List[EntityNode],
+    use_llm: bool,
+    rejected: List["PersonaIneligible"],
+    coherence_check: Optional[
+        Callable[[OasisAgentProfile, EntityNode], Optional[PersonaIneligible]]
+    ] = None,
+    on_profile_saved: Optional[Callable[[int, OasisAgentProfile], None]] = None,
+) -> None:
     """Besetzt abgelehnte Persona-Slots aus dem Reservepool nach (#1247).
 
     ``coherence_check`` (#1759) prueft jedes nachrueckende Profil wie die
@@ -57,96 +168,59 @@ Callable [[OasisAgentProfile ,EntityNode ],Optional [PersonaIneligible ]]
     Honorarkraft liefe dann mit UUID, Name, Typ und Aktivitaetsprofil von
     Moodle (CodeRabbit PR #1258).
     """
-    slot_types ={
-    idx :(entity .get_entity_type ()or "Entity")
-    for idx ,entity in enumerate (entities )
+    slot_types = {
+        idx: (entity.get_entity_type() or "Entity")
+        for idx, entity in enumerate(entities)
     }
-    open_slots =[idx for idx ,profile in enumerate (profiles )if profile is None ]
-    if not open_slots :
+    open_slots = [idx for idx, profile in enumerate(profiles) if profile is None]
+    if not open_slots:
         return
 
-    reserve_slots =self ._build_demographic_slots (reserve_entities )
-    used :set [int ]=set ()
-    filled =0
+    reserve_slots = self._build_demographic_slots(reserve_entities)
+    used: set[int] = set()
+    filled = 0
 
-    def _next_candidate (preferred_type :Optional [str ])->Optional [int ]:
-        """Naechster unverbrauchter Reserve-Index, Typgleichheit bevorzugt.
-
-        Issue #1247 (CodeRabbit PR #1258): Ohne Typpraeferenz verbraucht die
-        Nachbesetzung stur den naechsten Eintrag. Gehoert der einer anderen
-        Rollenfamilie, faellt ein aktiver ``PersonaQuotaPlan`` anschliessend
-        durch ``_validate_persona_quota`` — und auch ohne Plan verschwindet
-        die Typvertretung, die das Round-Robin des Caps gerade gesichert
-        hat, obwohl weiter hinten ein gleichartiger Kandidat steht.
-        """
-        if preferred_type :
-            for idx ,entity in enumerate (reserve_entities ):
-                if idx in used :
-                    continue
-                if (entity .get_entity_type ()or "Entity")==preferred_type :
-                    return idx
-        for idx in range (len (reserve_entities )):
-            if idx not in used :
-                return idx
-        return None
-
-    for slot_idx in open_slots :
-        preferred =slot_types .get (slot_idx )if slot_types else None
-        while True :
-            reserve_index =_next_candidate (preferred )
-            if reserve_index is None :
+    for slot_idx in open_slots:
+        preferred = slot_types.get(slot_idx) if slot_types else None
+        while True:
+            reserve_index = _find_next_reserve_candidate(reserve_entities, used, preferred)
+            if reserve_index is None:
                 break
-            candidate =reserve_entities [reserve_index ]
-            candidate_slot =reserve_slots [reserve_index ]
-            used .add (reserve_index )
-            try :
-                new_profile :Optional [OasisAgentProfile ]=self .generate_profile_from_entity (
-                entity =candidate ,
-                user_id =slot_idx ,
-                use_llm =use_llm ,
-                demographic_slot =candidate_slot ,
-                )
-            except PersonaIneligible as rejection :
-                rejected .append (rejection )
+            candidate = reserve_entities[reserve_index]
+            candidate_slot = reserve_slots[reserve_index]
+            used.add(reserve_index)
+            new_profile = _try_generate_backfill_profile(
+                self,
+                candidate,
+                slot_idx,
+                candidate_slot,
+                use_llm,
+                coherence_check,
+                rejected,
+            )
+            if new_profile is None:
                 continue
-            except BudgetExceededError :
-            # Ausnahme von "Nachruecker duerfen den Lauf nicht kippen":
-            # ein erschoepftes Hartbudget soll ihn genau das.
-                raise
-            except Exception as exc :# noqa: BLE001 — Nachrücker duerfen den Lauf nicht kippen
-                _legacy .logger .warning (
-                "Nachbesetzung fuer Slot %d fehlgeschlagen (%s): %r",
-                slot_idx ,
-                candidate .name ,
-                exc ,
-                )
-                continue
-            if new_profile is None :
-                continue
-            if coherence_check is not None :
-                incoherent =coherence_check (new_profile ,candidate )
-                if incoherent is not None :
-                    rejected .append (incoherent )
-                    continue
-            profiles [slot_idx ]=new_profile
+
+            profiles[slot_idx] = new_profile
             # Die Entity am selben Index mittauschen, damit die
             # Config-Generierung den Nachruecker beschreibt und nicht die
             # abgelehnte Entitaet.
-            register_taken_display_name (self ,new_profile )
-            if slot_idx <len (entities ):
-                entities [slot_idx ]=candidate
-            filled +=1
+            register_taken_display_name(self, new_profile)
+            if slot_idx < len(entities):
+                entities[slot_idx] = candidate
+            _dispatch_backfill_profile_saved(on_profile_saved, slot_idx, new_profile, candidate)
+            filled += 1
             break
 
-    _legacy .logger .info (
-    "Persona-Eligibility: %d Kandidat(en) abgelehnt, %d von %d freien "
-    "Plaetzen aus der Reserve nachbesetzt (Reserve: %d Kandidaten). "
-    "Abgelehnt: %s",
-    len (rejected ),
-    filled ,
-    len (open_slots ),
-    len (reserve_entities ),
-    ", ".join (f"{r .entity_name } ({r .entity_type })"for r in rejected [:10 ]),
+    _legacy.logger.info(
+        "Persona-Eligibility: %d Kandidat(en) abgelehnt, %d von %d freien "
+        "Plaetzen aus der Reserve nachbesetzt (Reserve: %d Kandidaten). "
+        "Abgelehnt: %s",
+        len(rejected),
+        filled,
+        len(open_slots),
+        len(reserve_entities),
+        ", ".join(f"{r.entity_name} ({r.entity_type})" for r in rejected[:10]),
     )
 
 
@@ -223,7 +297,8 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
 
         for future in concurrent .futures .as_completed (future_to_entity ):
             idx ,entity =future_to_entity [future ]
-            entity_type =entity .get_entity_type ()or "Entity"
+            get_type = getattr(entity, "get_entity_type", None)
+            entity_type = (get_type() if callable(get_type) else getattr(entity, "entity_type", None)) or "Entity"
             try :
                 result_idx ,profile ,error =future .result ()
             except BudgetExceededError :
@@ -237,6 +312,7 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
                 raise
             except Exception as e :# noqa: BLE001
                 _legacy .logger .error (f"Thread execution failed unexpectedly for entity {entity .name }: {str (e )}")
+                fallback_segment = getattr(entity, "segment", None) or getattr(entity, "_quota_segment", None) or (entity_type if entity_type != "Entity" else None)
                 profile =OasisAgentProfile (
                 user_id =idx ,
                 user_name =self ._generate_username (entity .name ),
@@ -246,6 +322,10 @@ self: Any ,generate_single_profile ,entities ,parallel_count ,process_result ,co
                 source_entity_uuid =entity .uuid ,
                 source_entity_type =entity_type ,
                 affiliation =entity .affiliation ,
+                segment =fallback_segment ,
+                generation_source ="rule_based",
+                generation_error =str (e )[:160 ],
+                identity_binding =_entity_binding (self ,entity ),
                 )
                 result_idx ,error =idx ,str (e )
             process_result (result_idx ,profile ,error )

@@ -526,16 +526,31 @@ def build_identity_binding_manifest(
     simulation_id: str, profiles: Sequence[Any]
 ) -> PersonaIdentityBindingManifest:
     """Ein vertragsgeprüfter Eintrag je Profil mit Bindung; Profile ohne Bindung fehlen."""
-    entries = [
-        PersonaIdentityBindingEntry(
-            user_id=profile.user_id,
-            user_name=profile.user_name,
-            persona_kind=profile.persona_kind,
-            binding=PersonaIdentityBinding.model_validate(profile.identity_binding),
-        )
-        for profile in profiles
-        if profile is not None and isinstance(getattr(profile, "identity_binding", None), Mapping)
-    ]
+    entries = []
+    for profile in profiles:
+        if profile is None:
+            continue
+        if isinstance(profile, Mapping):
+            binding = profile.get("identity_binding")
+            user_id = profile.get("user_id")
+            user_name = profile.get("user_name") or profile.get("username")
+            persona_kind = profile.get("persona_kind", "individual")
+        else:
+            binding = getattr(profile, "identity_binding", None)
+            user_id = getattr(profile, "user_id", None)
+            user_name = getattr(profile, "user_name", None) or getattr(profile, "username", None)
+            persona_kind = getattr(profile, "persona_kind", "individual")
+
+        if isinstance(binding, (Mapping, PersonaIdentityBinding)):
+            kind_val: Any = "collective" if str(persona_kind or "") == "collective" else "individual"
+            entries.append(
+                PersonaIdentityBindingEntry(
+                    user_id=int(user_id) if user_id is not None else 0,
+                    user_name=str(user_name or ""),
+                    persona_kind=kind_val,
+                    binding=PersonaIdentityBinding.model_validate(binding),
+                )
+            )
     return PersonaIdentityBindingManifest(simulation_id=simulation_id, entries=entries)
 
 

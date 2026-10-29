@@ -102,18 +102,38 @@ class PreparePersonaCheckpoint(BaseModel):
     updated_at: datetime
 
     def with_completed_profile(
-        self, index: int, profile: dict[str, Any]
+        self,
+        index: int,
+        profile: dict[str, Any],
+        *,
+        entity_uuid: Optional[str] = None,
     ) -> "PreparePersonaCheckpoint":
         """Liefert einen neuen Checkpoint mit einem zusätzlich abgeschlossenen Profil.
 
         Unveränderlich (kein In-Place-Mutate) — der Aufrufer hält die jeweils
         aktuelle Referenz selbst in seiner Closure, analog
         ``GraphBuildCheckpoint.with_completed_chunk``.
+
+        Wird ``entity_uuid`` übergeben (z. B. bei Nachbesetzung eines Slots
+        aus der Reserve), wird ``expanded_entity_uuids[index]`` auf diese UUID
+        aktualisiert und der verbrauchte Kandidat aus ``reserve_entity_uuids``
+        entfernt.
         """
         updated = {**self.completed_profiles, str(index): profile}
-        return self.model_copy(
-            update={"completed_profiles": updated, "updated_at": datetime.now(UTC)}
-        )
+        update_fields: dict[str, Any] = {
+            "completed_profiles": updated,
+            "updated_at": datetime.now(UTC),
+        }
+        if entity_uuid is not None and 0 <= index < len(self.expanded_entity_uuids):
+            if self.expanded_entity_uuids[index] != entity_uuid:
+                new_expanded = list(self.expanded_entity_uuids)
+                new_expanded[index] = entity_uuid
+                update_fields["expanded_entity_uuids"] = new_expanded
+            if entity_uuid in self.reserve_entity_uuids:
+                new_reserve = list(self.reserve_entity_uuids)
+                new_reserve.remove(entity_uuid)
+                update_fields["reserve_entity_uuids"] = new_reserve
+        return self.model_copy(update=update_fields)
 
 
 __all__ = ["PreparePersonaCheckpoint"]
