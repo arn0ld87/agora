@@ -190,12 +190,14 @@ class ReportAgentClaimsMixin:
                 ]
                 direct_count = len(direct_items)
 
-            resolved_evidence = []
             current_index = (self.evidence_map or {}).get("evidence_index") or {}
-            for binding in evidence_items:
-                record = current_index.get(binding.get("evidence_id"))
-                if record:
-                    resolved_evidence.append(dict(record) | dict(binding))
+            from .claim_qualification import resolve_claim_evidence_item
+
+            resolved_evidence = [
+                resolve_claim_evidence_item(binding, current_index)
+                for binding in evidence_items
+                if binding.get("evidence_id") in current_index
+            ]
 
             penalty = _agent_mod.detect_contradiction_penalty(
                 list(filter(_agent_mod.counts_for_confidence, resolved_evidence))

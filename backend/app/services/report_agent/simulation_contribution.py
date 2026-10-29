@@ -29,15 +29,13 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping
 
 from ...contracts.report_contract import EvidenceSourceKind, counts_for_confidence
+from .claim_qualification import (
+    SIMULATION_SOURCE_KINDS as _SIMULATION_KINDS,
+    valid_evidence_refs_for_claim,
+)
 
 #: Quellengattung einer beobachteten Handlung aus Phase 3.
 _ACTION_KIND = EvidenceSourceKind.agent_action.value
-
-#: Quellengattungen, die überhaupt aus der Simulation stammen.
-_SIMULATION_KINDS = frozenset({
-    EvidenceSourceKind.agent_quote.value,
-    _ACTION_KIND,
-})
 
 
 def _supporting_kinds(
@@ -49,29 +47,10 @@ def _supporting_kinds(
     Weder das Binding-Item noch der Record im Index dürfen aus manueller
     Graph-Handarbeit stammen (``graph_origin in ("manual", "edited")``).
     """
-    kinds: list[str] = []
-    seen_eids: set[str] = set()
-    for entry in claim.get("evidence") or []:
-        if not isinstance(entry, Mapping):
-            continue
-        if entry.get("supports_claim") is not True:
-            continue
-        if not counts_for_confidence(entry):
-            continue
-        eid = str(entry.get("evidence_id") or "")
-        if not eid or eid in seen_eids:
-            continue
-        seen_eids.add(eid)
-        record = evidence_index.get(eid)
-        if isinstance(record, Mapping):
-            if not counts_for_confidence(record):
-                continue
-            kinds.append(str(record.get("source_kind") or ""))
-        else:
-            # Unauflösbare Referenz: als unbekannte Gattung führen statt sie
-            # stillschweigend als Nicht-Simulation zu zählen.
-            kinds.append("")
-    return kinds
+    return _supporting_kinds_for_exported_claim(
+        {"evidence_refs": valid_evidence_refs_for_claim(claim, evidence_index)},
+        evidence_index,
+    )
 
 
 def _supporting_kinds_for_exported_claim(
