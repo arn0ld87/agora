@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
 
 from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
+from ._client_shim import get_client_attr as _get_client_attr
 from .errors import LLMOutputTruncatedError
 from .request_plan import (
     REASONING_EFFORT_QUIRK,
@@ -20,13 +20,6 @@ from .request_plan import (
 )
 
 logger = get_logger("agora.llm_client")
-
-
-def _get_client_attr(name: str, default: Any = None) -> Any:
-    mod = sys.modules.get("app.llm.client")
-    if mod is not None and hasattr(mod, name):
-        return getattr(mod, name)
-    return default
 
 
 class LLMClientChatMixin:

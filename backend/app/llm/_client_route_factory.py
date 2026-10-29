@@ -10,13 +10,7 @@ if TYPE_CHECKING:
     from .client import LLMClient
 
 
-def _get_client_attr(name: str, default: Any = None) -> Any:
-    import sys
-    mod = sys.modules.get("app.llm.client")
-    if mod is not None and hasattr(mod, name):
-        return getattr(mod, name)
-    return default
-
+from ._client_shim import get_client_attr as _get_client_attr
 
 
 class LLMClientRouteFactoryMixin:
