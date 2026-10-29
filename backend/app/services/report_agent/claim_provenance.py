@@ -52,12 +52,14 @@ ConfidenceScope = Literal[
 #: ``agent_quote`` und ``agent_action`` fehlen hier bewusst: beides sind
 #: Aeusserungen bzw. Handlungen simulierter Agenten. Ein Claim, den nur sie
 #: stuetzen, ist Simulationskonsens — unabhaengig von seinem Label.
-EVIDENCE_BOUND_SOURCE_KINDS = frozenset({
-    "seed_corpus",
-    "graph_edge",
-    "graph_relation",
-    "web_source",
-})
+EVIDENCE_BOUND_SOURCE_KINDS = frozenset(
+    {
+        "seed_corpus",
+        "graph_edge",
+        "graph_relation",
+        "web_source",
+    }
+)
 
 #: Nur diese beiden Gattungen tragen eine eigene Herkunftsangabe. Alles
 #: andere — Graph-Relation, Web-Treffer, Agentenhandlung, Inferenz — ist im
@@ -155,9 +157,7 @@ def _parse_voice_key_token(
     rest = rest.strip()
     if not rest:
         return None, None, None
-    if prefix in ("agent_id", "id") or (
-        prefix == "agent" and _looks_like_technical_id(rest)
-    ):
+    if prefix in ("agent_id", "id") or (prefix == "agent" and _looks_like_technical_id(rest)):
         return f"agent:{rest}", None, None
     if prefix in ("name", "agent_name", "agent"):
         return None, f"agent:{rest}", None
@@ -195,7 +195,9 @@ def _extract_voice_identity_parts(
     if name and name_key is None:
         name_key = f"agent:{name}"
 
-    group = _first_source_field(sources, "persona_stakeholder_group")
+    group = _first_source_field(sources, "persona_stakeholder_group", allow_raw=True)
+    if not group:
+        group = _first_source_field(sources, "stakeholder_group", allow_raw=True)
     group_key: Optional[str] = f"group:{group}" if group else None
 
     return id_key, name_key, other_vk, group_key
@@ -211,7 +213,7 @@ def _voice_key(item: Mapping[str, Any], record: Optional[Mapping[str, Any]]) -> 
        ``voice_key``) -> ``agent:<id>``
     2. Expliziter sonstiger ``voice_key`` -> normalisiert
     3. ``agent_name`` / ``raw.agent_name`` (oder Namens-``voice_key``) -> ``agent:<name>``
-    4. ``persona_stakeholder_group`` -> ``group:<gruppe>``
+    4. ``persona_stakeholder_group`` / ``stakeholder_group`` -> ``group:<gruppe>``
 
     ``None`` heisst: nicht ermittelbar. Der Aufrufer zaehlt das konservativ.
     """
@@ -220,6 +222,50 @@ def _voice_key(item: Mapping[str, Any], record: Optional[Mapping[str, Any]]) -> 
 
 
 resolve_voice_key = _voice_key
+
+
+def _build_name_to_ids_map(
+    parts_list: Sequence[tuple[Optional[str], Optional[str], Optional[str], Optional[str]]],
+) -> dict[str, set[str]]:
+    name_to_ids: dict[str, set[str]] = {}
+    for id_key, name_key, _, _ in parts_list:
+        if id_key and name_key:
+            name_to_ids.setdefault(name_key, set()).add(id_key)
+    return name_to_ids
+
+
+def _resolve_primary_voice_candidate(
+    id_key: Optional[str],
+    name_key: Optional[str],
+    other_vk: Optional[str],
+    group_key: Optional[str],
+    name_to_ids: Mapping[str, set[str]],
+) -> Optional[str]:
+    primary = id_key or other_vk or name_key or group_key
+    if primary is not None and id_key is None and other_vk is None and primary == name_key:
+        linked_ids = name_to_ids.get(name_key)
+        if linked_ids and len(linked_ids) == 1:
+            primary = next(iter(linked_ids))
+    return primary
+
+
+def _apply_group_fallback_collision(
+    candidate: Optional[str],
+    id_key: Optional[str],
+    name_key: Optional[str],
+    other_vk: Optional[str],
+    group_key: Optional[str],
+    group_to_speakers: Mapping[str, set[str]],
+) -> Optional[str]:
+    if (
+        candidate is not None
+        and candidate == group_key
+        and (not id_key and not name_key and not other_vk)
+    ):
+        speakers = group_to_speakers.get(group_key)
+        if speakers:
+            return sorted(speakers)[0]
+    return candidate
 
 
 def resolve_canonical_voice_keys(
@@ -232,27 +278,137 @@ def resolve_canonical_voice_keys(
     ``agent_name``, und ein weiterer Beleg derselben Persona nur ``agent_name``
     (ohne eigene ``agent_id``), wird der Namens-Schluessel eindeutig auf den
     kanonischen ``agent:<id>``-Schluessel abgebildet.
+
+    Kollisionsauflösung für Gruppen-Fallbacks (Befund 1.3):
+    Existiert für einen Beleg nur ein Gruppen-Fallback (group:<gruppe>), und im
+    selben Claim existiert bereits ein konkreter Sprecher (agent:<id> oder
+    agent:<name>) derselben Gruppe, so wird der anonyme Gruppen-Beleg auf diesen
+    Sprecher abgebildet. Ein anonymes Gruppenzitat derselben Gruppe zählt nicht als
+    zusätzliche unabhängige Stimme neben einem bekannten Sprecher dieser Gruppe.
     """
     parts_list = [_extract_voice_identity_parts(item, record) for item, record in pairs]
-    name_to_ids: dict[str, set[str]] = {}
-    for id_key, name_key, _, _ in parts_list:
-        if id_key and name_key:
-            name_to_ids.setdefault(name_key, set()).add(id_key)
+    name_to_ids = _build_name_to_ids_map(parts_list)
 
-    resolved_keys: list[Optional[str]] = []
+    group_to_speakers: dict[str, set[str]] = {}
+    resolved_candidates: list[Optional[str]] = []
     for id_key, name_key, other_vk, group_key in parts_list:
-        primary = id_key or other_vk or name_key or group_key
-        if (
-            primary is not None
-            and id_key is None
-            and other_vk is None
-            and primary == name_key
-        ):
-            linked_ids = name_to_ids.get(name_key)
-            if linked_ids and len(linked_ids) == 1:
-                primary = next(iter(linked_ids))
-        resolved_keys.append(primary)
-    return resolved_keys
+        primary = _resolve_primary_voice_candidate(
+            id_key, name_key, other_vk, group_key, name_to_ids
+        )
+        speaker_identity = id_key or other_vk or (primary if primary != group_key else None)
+        if speaker_identity and group_key:
+            group_to_speakers.setdefault(group_key, set()).add(speaker_identity)
+        resolved_candidates.append(primary)
+
+    return [
+        _apply_group_fallback_collision(
+            candidate, id_key, name_key, other_vk, group_key, group_to_speakers
+        )
+        for candidate, (id_key, name_key, other_vk, group_key) in zip(
+            resolved_candidates, parts_list
+        )
+    ]
+
+
+def _seed_doc_key(record: Mapping[str, Any]) -> Optional[str]:
+    """Ermittelt einen kanonischen Dokument-Schlüssel für Seed-Dokumente/Korpus-Belege.
+
+    Zwei Chunks oder Zitate aus demselben Seed-Dokument erhalten denselben Key
+    (z. B. ``doc:<id>``), damit sie als eine einzige Quelle zählen (Befund 1.2).
+    """
+    for field in ("source_doc_id", "document_id", "doc_id"):
+        val = record.get(field)
+        if val is not None and str(val).strip():
+            return f"doc:{str(val).strip()}"
+
+    anchor = str(record.get("source_id_anchor") or "").strip()
+    if anchor:
+        for pfx in ("seed_doc:", "seed-doc:", "doc:"):
+            if anchor.startswith(pfx):
+                rest = anchor[len(pfx) :]
+                doc_part = rest.split("#")[0].split(":")[0]
+                if doc_part:
+                    return f"doc:{doc_part}"
+        return f"anchor:{anchor}"
+
+    kind = str(record.get("source_kind") or record.get("type") or "").strip().lower()
+    if kind in {"seed_corpus", "seed_document", "document"}:
+        source = str(record.get("source") or "").strip()
+        if source:
+            doc_part = source.split("#")[0]
+            return f"doc:{doc_part}"
+
+    return None
+
+
+def _normalize_entry_pair(
+    entry: Any,
+) -> tuple[Mapping[str, Any], Optional[Mapping[str, Any]]]:
+    if isinstance(entry, tuple) and len(entry) == 2:
+        it, rec = entry
+        it_map = it if isinstance(it, Mapping) else {}
+        rec_map = rec if isinstance(rec, Mapping) else None
+        return it_map, rec_map
+    if isinstance(entry, Mapping):
+        return entry, entry
+    return {}, None
+
+
+def _resolve_non_voice_key(
+    item: Mapping[str, Any],
+    record: Optional[Mapping[str, Any]],
+    index: int,
+) -> tuple[str, str]:
+    rec_or_item = record if record is not None else item
+    doc_key = _seed_doc_key(rec_or_item) or _seed_doc_key(item)
+    if doc_key:
+        return ("doc", str(doc_key))
+
+    source_val = str(item.get("source") or (record.get("source") if record else "") or "").strip()
+    type_val = str(
+        item.get("type")
+        or (record.get("type") if record else "")
+        or item.get("source_kind")
+        or (record.get("source_kind") if record else "")
+        or "source"
+    ).strip()
+    eid = str(
+        item.get("evidence_id") or (record.get("evidence_id") if record else "") or ""
+    ).strip()
+
+    if source_val:
+        return ("source", f"{type_val}:{source_val}")
+    if eid:
+        return ("ref", eid)
+    return ("inline", str(index))
+
+
+def resolve_independent_source_keys(
+    items_or_pairs: Sequence[Any],
+) -> list[tuple[str, str]]:
+    """Löst eine Sequenz von Belegen in eindeutige Unabhängigkeitsschlüssel auf.
+
+    Akzeptiert entweder:
+    - eine Liste von (item, record)-Tupeln, oder
+    - eine Liste von Evidence-Dicts/Records (wobei record = item).
+
+    Rückgabe: Liste von Tupeln ``(kategorie, identitaet)``, passend indexiert zur Eingabe.
+    Stimmen werden kanonisch dedupliziert (inkl. Gruppen-Kollision aus Befund 1.3),
+    Seed-Dokumente werden auf ihre Dokument-ID dedupliziert (Befund 1.2),
+    sonstige Quellen behalten ihre Typ- und Quellen-Identität.
+    """
+    normalized_pairs = [_normalize_entry_pair(entry) for entry in items_or_pairs]
+    voice_keys = resolve_canonical_voice_keys(normalized_pairs)
+
+    keys: list[tuple[str, str]] = []
+    for i, (item, record) in enumerate(normalized_pairs):
+        vk = voice_keys[i]
+        if vk:
+            keys.append(("voice", str(vk)))
+        else:
+            keys.append(_resolve_non_voice_key(item, record, i))
+
+    return keys
 
 
 def count_supporting_voices(
@@ -343,6 +499,7 @@ __all__ = [
     "derive_aggregation_basis",
     "derive_confidence_scope",
     "resolve_canonical_voice_keys",
+    "resolve_independent_source_keys",
     "resolve_voice_key",
     "supporting_source_kinds",
 ]

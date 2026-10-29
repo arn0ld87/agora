@@ -15,6 +15,7 @@ from collections import Counter
 from typing import Any, Dict, List, Mapping, Optional
 
 from ...contracts.evidence_density_contract import EvidenceDensity
+from ...contracts.report_contract import counts_for_confidence
 from ...utils.logger import get_logger
 from ..confidence_calculator import _count_independent_sources
 from .artifact_read import read_contract_artifact
@@ -39,9 +40,11 @@ def _supporting_entries(
 ) -> List[Dict[str, Any]]:
     """Stützende Belege eines Claims, je ``evidence_id`` einmal.
 
-    Der Beleg im Claim trägt nur ``evidence_id`` und Bindungsfelder; ``type``,
-    ``source`` und ``voice_key`` stehen im Index. Beides wird zusammengeführt:
-    Felder des Index, überschrieben von gesetzten Feldern des Claim-Eintrags.
+    Der Beleg im Claim trägt ``evidence_id`` und Bindungsfelder; ``type``,
+    ``source``, ``provenance_class`` und ``voice_key`` stehen im kanonischen Index.
+    Der kanonische Index ist autoritativ gegenüber lokalen Feldern des Claim-Eintrags.
+    Ausgeschlossen werden Belege, die nicht stützen, nicht für Confidence zählen
+    (counts_for_confidence=False) oder disqualifizierende Provenance-Klassen tragen.
     """
     merged: Dict[str, Dict[str, Any]] = {}
     for entry in claim.get("evidence") or []:
@@ -54,8 +57,18 @@ def _supporting_entries(
         if key in merged:
             continue
         record = evidence_index.get(key)
-        combined: Dict[str, Any] = dict(record) if isinstance(record, Mapping) else {}
-        combined.update({k: v for k, v in entry.items() if v is not None})
+        combined: Dict[str, Any] = {k: v for k, v in entry.items() if v is not None}
+        if isinstance(record, Mapping):
+            combined.update(record)
+        if combined.get("supports_claim") is not True:
+            continue
+        if not counts_for_confidence(combined):
+            continue
+        prov_class = str(combined.get("provenance_class") or "").strip().lower()
+        if prov_class in {"template_scaffold", "hypothesis", "unverified", "inferred"}:
+            continue
+        if str(combined.get("source_kind") or "").strip().lower() == "inferred":
+            continue
         merged[key] = combined
     return list(merged.values())
 
