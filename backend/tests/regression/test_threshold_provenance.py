@@ -289,3 +289,146 @@ def test_report_v3_rejects_threshold_with_unknown_evidence_ref():
             ],
         )
 
+
+def test_prebound_ref_with_unrelated_number_is_stripped_and_downgraded():
+    """Befund 2.1: Ein Threshold, der vorab eine existierende Seed-Referenz
+    erhält, deren Text jedoch eine völlig andere Zahl/Kennzahl beschreibt,
+    darf nicht ungeprüft verified bleiben, sondern wird bereinigt."""
+    hallucinated = _threshold(
+        label="Projektbudget in EUR",
+        value=500.0,
+        unit="eur",
+        evidence_refs=["ev_seed_80"],
+        evidence_status="verified",
+    )
+
+    result = bind_threshold_provenance([hallucinated], [SEED])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_prebound_ref_with_matching_number_but_wrong_topic_is_stripped():
+    """Befund 2.1: Gleiche Zahl (80%), aber fremdes Label im Seed-Text
+    (Kantine statt Schulung) darf eine vorab gesetzte Referenz nicht legitimieren."""
+    noise = _record("An 80 Prozent der Standorte gibt es eine Kantine.", "ev_canteen")
+    prebound = _threshold(
+        label="Schulungsquote vor Produktivstart",
+        value=80.0,
+        unit="percent",
+        evidence_refs=["ev_canteen"],
+        evidence_status="verified",
+    )
+
+    result = bind_threshold_provenance([prebound], [noise])
+
+    assert result[0].evidence_refs == []
+    assert result[0].evidence_status == "heuristic"
+
+
+def test_prebound_ref_with_matching_number_and_topic_is_retained():
+    """Stimmen Zahl und Label im Seed-Text mit dem Schwellenwert überein,
+    bleibt die vorab gesetzte Referenz erhalten."""
+    prebound = _threshold(
+        label="Schulungsquote vor Produktivstart",
+        value=80.0,
+        unit="percent",
+        evidence_refs=["ev_seed_80"],
+        evidence_status="verified",
+    )
+
+    result = bind_threshold_provenance([prebound], [SEED])
+
+    assert result[0].evidence_refs == ["ev_seed_80"]
+    assert result[0].evidence_status == "verified"
+
+
+def test_prebound_date_ref_with_matching_date_and_label_is_retained():
+    """Finding 1 (PR #1892): Date-Thresholds mit gültigem Beleg (ISO, Punkt, Prosa)
+    und passendem Label behalten ihre Referenz und bleiben verified."""
+    record_prose = _record("Der Produktivstart ist der 15. Oktober 2026.", "ev_date_prose")
+    record_dot = _record("Produktivstart: 15.10.2026 im Hauptwerk.", "ev_date_dot")
+    record_iso = _record("Meilenstein Produktivstart: 2026-10-15.", "ev_date_iso")
+
+    date_th_prose = Threshold.model_validate({
+        "id": "th_d1",
+        "label": "Produktivstart",
+        "value": "2026-10-15",
+        "kind": "date",
+        "purpose": "target",
+        "origin": "document_requirement",
+        "evidence_refs": ["ev_date_prose"],
+        "evidence_status": "verified",
+    })
+    res_prose = bind_threshold_provenance([date_th_prose], [record_prose])
+    assert res_prose[0].evidence_refs == ["ev_date_prose"]
+    assert res_prose[0].evidence_status == "verified"
+
+    date_th_dot = date_th_prose.model_copy(update={"evidence_refs": ["ev_date_dot"]})
+    res_dot = bind_threshold_provenance([date_th_dot], [record_dot])
+    assert res_dot[0].evidence_refs == ["ev_date_dot"]
+    assert res_dot[0].evidence_status == "verified"
+
+    date_th_iso = date_th_prose.model_copy(update={"evidence_refs": ["ev_date_iso"]})
+    res_iso = bind_threshold_provenance([date_th_iso], [record_iso])
+    assert res_iso[0].evidence_refs == ["ev_date_iso"]
+    assert res_iso[0].evidence_status == "verified"
+
+
+def test_prebound_date_ref_with_mismatched_date_or_label_is_stripped_and_downgraded():
+    """Finding 1 (PR #1892): Stimmt das Datum im Text nicht oder fehlt der Label-Bezug,
+    wird die Referenz bereinigt und der Status sinkt auf heuristic."""
+    record_wrong_date = _record("Der Produktivstart ist der 15. November 2026.", "ev_wrong_date")
+    record_wrong_label = _record("Der Kantinenbetrieb startet am 15. Oktober 2026.", "ev_canteen")
+
+    date_th = Threshold.model_validate({
+        "id": "th_d1",
+        "label": "Produktivstart",
+        "value": "2026-10-15",
+        "kind": "date",
+        "purpose": "target",
+        "origin": "document_requirement",
+        "evidence_refs": ["ev_wrong_date"],
+        "evidence_status": "verified",
+    })
+    res_date = bind_threshold_provenance([date_th], [record_wrong_date])
+    assert res_date[0].evidence_refs == []
+    assert res_date[0].evidence_status == "heuristic"
+
+    date_th_label = date_th.model_copy(update={"evidence_refs": ["ev_canteen"]})
+    res_label = bind_threshold_provenance([date_th_label], [record_wrong_label])
+    assert res_label[0].evidence_refs == []
+    assert res_label[0].evidence_status == "heuristic"
+
+
+def test_derived_threshold_preserves_input_evidence_refs():
+    """Finding 2 (PR #1892): Derived-Thresholds behalten legitime Eingabebelege
+    (Teilwerte oder Labelbezug), während disqualifizierende oder leere Refs gefiltert werden."""
+    part_a = _record("Die Teilquote in Abteilung A beträgt 40 Prozent.", "ev_part_a")
+    part_b = {
+        "evidence_id": "ev_part_b",
+        "source_kind": "agent_quote",
+        "quote": "In Abteilung B erreichen wir 60 Prozent Quote.",
+    }
+    inferred = {
+        "evidence_id": "ev_inferred",
+        "source_kind": "inferred",
+        "snippet": "Daraus errechnet sich ein Mittelwert von 50 Prozent.",
+    }
+    unrelated = _record("Allgemeine Anmerkung ohne Zahlen und ohne Kontextbezug.", "ev_unrelated")
+
+    pool = [part_a, part_b, inferred, unrelated]
+
+    derived_th = _threshold(
+        label="Gesamtquote",
+        value=50.0,
+        unit="percent",
+        evidence_refs=["ev_part_a", "ev_part_b", "ev_inferred", "ev_unrelated"],
+        evidence_status="derived",
+    )
+
+    result = bind_threshold_provenance([derived_th], pool)
+
+    assert result[0].evidence_status == "derived"
+    assert result[0].evidence_refs == ["ev_part_a", "ev_part_b"]
+

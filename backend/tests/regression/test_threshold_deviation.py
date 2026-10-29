@@ -242,14 +242,63 @@ def test_ein_label_ohne_stichwort_bildet_keine_gruppe() -> None:
     assert find_threshold_conflicts(thresholds) == []
 
 
-def test_drei_werte_an_einem_bezugswert_sind_verbunden() -> None:
+def test_widerspruechliche_geschwister_abweichungen_sind_ein_konflikt() -> None:
+    """Befund 2.2: Weichen zwei Abschnitte unabhängig voneinander mit
+    unterschiedlichen Werten (6.0 vs 8.0) vom selben Basiswert (4.0) ab,
+    darf das ungerichtete Union-Find diesen Widerspruch nicht verschlucken.
+    """
     thresholds = [
         _threshold("T1_01", 4.0),
         _threshold("T5_01", 6.0, deviates_from="T1_01", deviation_rationale="a"),
         _threshold("T7_01", 8.0, deviates_from="T1_01", deviation_rationale="b"),
     ]
 
+    conflicts = find_threshold_conflicts(thresholds)
+    assert len(conflicts) == 1
+    assert len(conflicts[0]) == 3
+
+
+def test_geschwister_mit_identischem_zielwert_sind_verbunden() -> None:
+    """Nennen zwei Abschnitte denselben abweichenden Wert bezogen auf dieselbe
+    Basis, widersprechen sie einander nicht.
+    """
+    thresholds = [
+        _threshold("T1_01", 4.0),
+        _threshold("T5_01", 6.0, deviates_from="T1_01", deviation_rationale="a"),
+        _threshold("T7_01", 6.0, deviates_from="T1_01", deviation_rationale="b"),
+    ]
+
     assert find_threshold_conflicts(thresholds) == []
+
+
+def test_kette_von_abweichungen_ist_verbunden() -> None:
+    """T1_01 (4.0) -> T5_01 (6.0) -> T7_01 (8.0): Jeder Abschnitt begründet
+    die Abweichung vom vorherigen, die Kette ist konsistent.
+    """
+    thresholds = [
+        _threshold("T1_01", 4.0),
+        _threshold("T5_01", 6.0, deviates_from="T1_01", deviation_rationale="a"),
+        _threshold("T7_01", 8.0, deviates_from="T5_01", deviation_rationale="b"),
+    ]
+
+    assert find_threshold_conflicts(thresholds) == []
+
+
+def test_drop_unresolvable_deviations_bereinigt_widerspruechliche_geschwister() -> None:
+    """drop_unresolvable_deviations entfernt die spätere widersprüchliche
+    Abweichung, sodass die erste gültig bleibt und der unbegründete Wert
+    als Konflikt sichtbar wird.
+    """
+    thresholds = [
+        _threshold("T1_01", 4.0),
+        _threshold("T5_01", 6.0, deviates_from="T1_01", deviation_rationale="a"),
+        _threshold("T7_01", 8.0, deviates_from="T1_01", deviation_rationale="b"),
+    ]
+
+    cleaned = drop_unresolvable_deviations(thresholds)
+    assert cleaned[1].deviates_from == "T1_01"
+    assert cleaned[2].deviates_from is None
+    assert cleaned[2].deviation_rationale is None
 
 
 def test_verweis_auf_fremde_kennzahl_oder_ohne_begruendung_verbindet_nicht() -> None:
