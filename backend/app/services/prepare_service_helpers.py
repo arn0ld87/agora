@@ -170,9 +170,23 @@ def _build_profile_checkpoint_hooks(
     # statt sich auf ein Narrowing zu verlassen, das dort nicht mehr greift.
     checkpoint_simulation_id: str = simulation_id or checkpoint_box[0].simulation_id
 
-    def _on_profile_saved(index: int, profile: OasisAgentProfile) -> None:
+    def _on_profile_saved(
+        index: int,
+        profile: OasisAgentProfile,
+        entity: Optional[Any] = None,
+    ) -> None:
+        entity_uuid: Optional[str] = None
+        if entity is not None:
+            entity_uuid = getattr(entity, "uuid", None)
+            if entity_uuid is None and isinstance(entity, str):
+                entity_uuid = entity
+        if entity_uuid is None and profile is not None:
+            entity_uuid = getattr(profile, "source_entity_uuid", None)
+
         checkpoint_box[0] = checkpoint_box[0].with_completed_profile(
-            index, _ps._prepare_checkpoint.profile_to_dict(profile)
+            index,
+            _ps._prepare_checkpoint.profile_to_dict(profile),
+            entity_uuid=entity_uuid,
         )
         _ps._prepare_checkpoint.save_checkpoint(checkpoint_simulation_id, checkpoint_box[0])
 

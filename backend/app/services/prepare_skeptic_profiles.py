@@ -27,7 +27,7 @@ from ..contracts.pipeline_degradation_contract import DegradationKind, Degradati
 from ..utils.logger import get_logger
 from .degradation_collector import DegradationCollector
 from .oasis_profile_models import OasisAgentProfile
-from .persona_identity_binding import resolve_identity_binding
+from .persona_identity_binding import PersonaIdentityBinding
 from .simulation_stance_graph import SYNTHETIC_SKEPTIC_PREFIX
 
 if TYPE_CHECKING:
@@ -125,13 +125,10 @@ def build_skeptic_profiles(
         entity_name = str(agent_config.get("entity_name") or f"Skeptiker {agent_id}")
         entity_uuid = str(agent_config.get("entity_uuid"))
         entity_type = str(agent_config.get("entity_type") or "Person")
-        binding = resolve_identity_binding(
-            entity_uuid=entity_uuid,
-            entity_name=entity_name,
-            entity_type=entity_type,
-            attributes={"identity_origin": "synthetic_supplement"},
-            summary=texts["persona"].format(subject=subject),
-            is_collective_type=True,
+        binding = PersonaIdentityBinding(
+            origin="synthetic_supplement",
+            source_entity_uuid=entity_uuid,
+            source_name=entity_name,
         ).model_dump(mode="json")
         profiles.append(
             OasisAgentProfile(

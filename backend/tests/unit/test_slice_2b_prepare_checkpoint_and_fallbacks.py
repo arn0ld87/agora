@@ -26,6 +26,7 @@ from app.services.oasis_profile_batch_results import (
 from app.services.oasis_profile_generator import OasisAgentProfile
 from app.services.persona_identity_binding import build_identity_binding_manifest
 from app.services.persona_prepare_service import prepare_from_personas
+from app.services.prepare_checkpoint import new_checkpoint
 from app.services.prepare_service_helpers import _phase_generate_profiles
 from app.services.prepare_skeptic_profiles import (
     _phase_profile_synthetic_skeptics,
@@ -251,8 +252,10 @@ def test_skeptic_profiles_have_identity_binding_and_persisted(tmp_path):
     assert len(skeptics) == 2
     for sk in skeptics:
         assert sk.identity_binding is not None
-        assert sk.identity_binding["origin"] == "source_collective"
+        assert sk.identity_binding["origin"] == "synthetic_supplement"
         assert sk.identity_binding["source_name"] == sk.name
+        assert sk.persona_kind == "collective"
+        assert sk.generation_source == "rule_based"
 
     existing_profile = OasisAgentProfile(
         user_id=1,
@@ -459,7 +462,7 @@ def test_backfill_rejected_slots_calls_on_profile_saved():
     )
 
     assert profiles[0] == new_profile
-    on_profile_saved.assert_called_once_with(0, new_profile)
+    on_profile_saved.assert_called_once_with(0, new_profile, reserve_entity)
 
 
 def test_backfill_rejected_slots_error_in_callback_handled():
@@ -497,4 +500,96 @@ def test_backfill_rejected_slots_error_in_callback_handled():
     )
 
     assert profiles[0] == new_profile
-    failing_callback.assert_called_once_with(0, new_profile)
+    failing_callback.assert_called_once_with(0, new_profile, reserve_entity)
+
+
+# ============================================================================
+# Finding 1: Checkpoint entity substitution and reserve consumption
+# ============================================================================
+
+def test_checkpoint_with_completed_profile_substitutes_entity_and_consumes_reserve():
+    """Finding 1: with_completed_profile aktualisiert expanded_entity_uuids und bereinigt reserve_entity_uuids."""
+    cp = new_checkpoint(
+        simulation_id="sim_f1_test",
+        graph_id="graph_f1",
+        defined_entity_types=None,
+        max_agents=2,
+        persona_floor=2,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        primary_entity_uuids=["prim-1", "prim-2"],
+        reserve_entity_uuids=["res-1", "res-2"],
+        expanded_entity_uuids=["prim-1", "prim-2"],
+        entities_count=2,
+        entity_types=["Citizen"],
+        demographic_slots=[{"age": "20-29"}, {"age": "30-39"}],
+    )
+
+    profile_dict = {"user_id": 1, "name": "Res 1 Agent"}
+    updated_cp = cp.with_completed_profile(1, profile_dict, entity_uuid="res-1")
+
+    # Index 1 muss nun auf die Ersatz-UUID zeigen
+    assert updated_cp.expanded_entity_uuids == ["prim-1", "res-1"]
+    # Der verbrauchte Nachrücker darf nicht mehr in reserve_entity_uuids stehen
+    assert updated_cp.reserve_entity_uuids == ["res-2"]
+    assert "res-1" not in updated_cp.reserve_entity_uuids
+    assert updated_cp.completed_profiles["1"] == profile_dict
+
+
+def test_resume_preserves_backfill_substitution_and_prevents_duplicate_reserve_draw():
+    """Finding 1: Resume rekonstruiert die substituierte Entity und filtert verbrauchte Reserve-Kandidaten."""
+    from app.services.prepare_entities_merge import (
+        _lookup_expanded_entities_from_checkpoint,
+        _phase_read_entities_from_checkpoint,
+    )
+
+    sim_id = "sim_resume_f1"
+    # Checkpoint, bei dem Slot 1 aus der Reserve (res-1) nachbesetzt wurde.
+    # Selbst wenn reserve_entity_uuids im Altbestand res-1 noch enthielte:
+    cp = new_checkpoint(
+        simulation_id=sim_id,
+        graph_id="graph_f1",
+        defined_entity_types=None,
+        max_agents=2,
+        persona_floor=2,
+        use_llm_for_profiles=False,
+        effective_quota_plan=None,
+        primary_entity_uuids=["prim-1", "prim-2"],
+        reserve_entity_uuids=["res-1", "res-2"],
+        expanded_entity_uuids=["prim-1", "res-1"],
+        entities_count=2,
+        entity_types=["Citizen"],
+        demographic_slots=[{"age": "20-29"}, {"age": "30-39"}],
+    )
+
+    ent_prim1 = SimpleNamespace(uuid="prim-1", name="Prim 1", get_entity_type=lambda: "Citizen", affiliation=None)
+    ent_prim2 = SimpleNamespace(uuid="prim-2", name="Prim 2", get_entity_type=lambda: "Citizen", affiliation=None)
+    ent_res1 = SimpleNamespace(uuid="res-1", name="Res 1", get_entity_type=lambda: "Citizen", affiliation=None)
+    ent_res2 = SimpleNamespace(uuid="res-2", name="Res 2", get_entity_type=lambda: "Citizen", affiliation=None)
+
+    pool = [ent_prim1, ent_prim2, ent_res1, ent_res2]
+
+    mock_storage = MagicMock()
+    mock_reader = MagicMock()
+    mock_reader.filter_defined_entities.return_value = SimpleNamespace(entities=pool)
+
+    with (
+        patch("app.services.prepare_entities_merge._legacy.EntityReader", return_value=mock_reader),
+        patch("app.services.prepare_entities_merge._legacy.filter_eligible_entities", return_value=SimpleNamespace(eligible=pool, exclusions=None)),
+    ):
+        state = SimpleNamespace(simulation_id=sim_id, entities_count=0, entity_types=[])
+
+        # 1. Phase 1 Resume: reserve_entities darf den verbrauchten res-1 NICHT mehr enthalten!
+        filtered = _phase_read_entities_from_checkpoint(state, mock_storage, cp)
+        assert filtered is not None
+        assert len(filtered.entities) == 2  # prim-1, prim-2
+        reserve_uuids = [e.uuid for e in filtered.reserve_entities]
+        assert "res-1" not in reserve_uuids
+        assert reserve_uuids == ["res-2"]
+
+        # 2. Phase 2 Precomputed Entities: Slot 1 muss genau die Ersatz-Entity (res-1) tragen!
+        expanded = _lookup_expanded_entities_from_checkpoint(mock_storage, cp)
+        assert expanded is not None
+        assert len(expanded) == 2
+        assert expanded[0].uuid == "prim-1"
+        assert expanded[1].uuid == "res-1"
