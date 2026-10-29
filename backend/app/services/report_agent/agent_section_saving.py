@@ -57,6 +57,21 @@ def _drop_unrepairable_section_entries(
     return removed_entries
 
 
+def _collect_evidence_refs_from_claim(claim: Dict[str, Any], target: set[str]) -> None:
+    """Sammelt alle Evidence-IDs und -Referenzen aus einem Claim-Dict."""
+    for ev in claim.get("evidence") or []:
+        if isinstance(ev, dict) and ev.get("evidence_id"):
+            target.add(str(ev["evidence_id"]).strip())
+        elif isinstance(ev, str) and ev.strip():
+            target.add(ev.strip())
+    for ref in claim.get("evidence_refs") or []:
+        if ref and str(ref).strip():
+            target.add(str(ref).strip())
+    for ref in claim.get("supporting_evidence_ids") or []:
+        if ref and str(ref).strip():
+            target.add(str(ref).strip())
+
+
 def _extract_verified_claims_and_evidence_ids(
     verified_claims: Optional[List[Dict[str, Any]]],
 ) -> tuple[set[str], set[str]]:
@@ -72,18 +87,7 @@ def _extract_verified_claims_and_evidence_ids(
         cid = c.get("claim_id")
         if cid is not None and str(cid).strip():
             claim_ids.add(str(cid).strip())
-
-        for ev in (c.get("evidence") or []):
-            if isinstance(ev, dict) and ev.get("evidence_id"):
-                evidence_ids.add(str(ev["evidence_id"]).strip())
-            elif isinstance(ev, str) and ev.strip():
-                evidence_ids.add(ev.strip())
-        for ref in (c.get("evidence_refs") or []):
-            if ref and str(ref).strip():
-                evidence_ids.add(str(ref).strip())
-        for ref in (c.get("supporting_evidence_ids") or []):
-            if ref and str(ref).strip():
-                evidence_ids.add(str(ref).strip())
+        _collect_evidence_refs_from_claim(c, evidence_ids)
 
     return claim_ids, evidence_ids
 
@@ -99,6 +103,12 @@ _METADATA_TEXT_KEYS = (
     "step",
     "milestone",
     "item",
+    "titel",
+    "beschreibung",
+    "begruendung",
+    "massnahme",
+    "risiko",
+    "meilenstein",
 )
 
 
@@ -180,7 +190,14 @@ def _filter_structured_metadata_against_verified_section(
 
     claim_ids, evidence_ids = _extract_verified_claims_and_evidence_ids(verified_claims_list)
 
-    target_keys = ("recommendations", "change_recommendations", "risks", "timeline", "next_steps")
+    target_keys = (
+        "recommendations",
+        "change_recommendations",
+        "risks",
+        "timeline",
+        "next_steps",
+        "items",
+    )
     filtered: Dict[str, Any] = dict(structured_metadata)
 
     for key in target_keys:
@@ -189,8 +206,10 @@ def _filter_structured_metadata_against_verified_section(
             continue
 
         filtered[key] = [
-            entry for entry in items
-            if isinstance(entry, dict) and _is_metadata_entry_grounded(
+            entry
+            for entry in items
+            if isinstance(entry, dict)
+            and _is_metadata_entry_grounded(
                 entry,
                 verified_claim_ids=claim_ids,
                 verified_evidence_ids=evidence_ids,
@@ -295,15 +314,15 @@ class ReportAgentSectionSavingMixin(ReportAgentHypothesesMixin):
 
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)
 
-        raw_metadata = (getattr(self, "_pending_section_metadata", {}) or {}).get(
-            section_index, {}
-        )
+        raw_metadata = (getattr(self, "_pending_section_metadata", {}) or {}).get(section_index, {})
         filtered_metadata = _filter_structured_metadata_against_verified_section(
             raw_metadata,
             verified_claims=claims,
             persisted_content=content,
         )
-        if hasattr(self, "_pending_section_metadata") and isinstance(self._pending_section_metadata, dict):
+        if hasattr(self, "_pending_section_metadata") and isinstance(
+            self._pending_section_metadata, dict
+        ):
             self._pending_section_metadata[section_index] = filtered_metadata
 
         section_entry = {

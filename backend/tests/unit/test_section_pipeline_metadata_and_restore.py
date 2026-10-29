@@ -30,6 +30,7 @@ from app.services.report_agent.section_pipeline_types import (
 # Fakes
 # ---------------------------------------------------------------------------
 
+
 class FakeReportLogger:
     def __init__(self) -> None:
         self.section_metadata: List[Dict[str, Any]] = []
@@ -88,7 +89,9 @@ class FakeReportManager:
     def _get_section_path(self, _report_id: str, section_index: int) -> str:
         return str(self._MISSING_FOLDER / f"section_{section_index:02d}.md")
 
-    def update_progress(self, report_id: str, stage: str, progress: int, message: str, **kw: Any) -> None:
+    def update_progress(
+        self, report_id: str, stage: str, progress: int, message: str, **kw: Any
+    ) -> None:
         self.progress_calls.append({"stage": stage, "progress": progress, "message": message, **kw})
 
     def save_section(self, report_id: str, section_index: int, section: Any) -> None:
@@ -141,8 +144,13 @@ class FakeAgent:
     ) -> SectionEvidenceOutcome:
         self.saved_evidence_calls.append((report_id, section_index, section_title, content))
         # Simulieren, dass _save_evidence_section die Metadaten am Agenten aktualisiert
-        if hasattr(self, "_pending_section_metadata") and isinstance(self._pending_section_metadata, dict):
-            self._pending_section_metadata[section_index] = {"filtered": True, "title": section_title}
+        if hasattr(self, "_pending_section_metadata") and isinstance(
+            self._pending_section_metadata, dict
+        ):
+            self._pending_section_metadata[section_index] = {
+                "filtered": True,
+                "title": section_title,
+            }
         return self._evidence_outcome
 
 
@@ -175,6 +183,7 @@ def _make_test_ctx(
 # Befund 3.1: Metadaten-Filterung & State-Cleanup
 # ---------------------------------------------------------------------------
 
+
 def test_filter_structured_metadata_against_verified_section() -> None:
     verified_claims = [
         {
@@ -188,7 +197,9 @@ def test_filter_structured_metadata_against_verified_section() -> None:
             "evidence": [{"evidence_id": "ev_2"}],
         },
     ]
-    content = "Der Gesamttext besagt: Budget von 500k freigegeben. Ein Rollout in München ist geplant."
+    content = (
+        "Der Gesamttext besagt: Budget von 500k freigegeben. Ein Rollout in München ist geplant."
+    )
 
     metadata = {
         "summary": "Abschnittszusammenfassung",
@@ -196,8 +207,16 @@ def test_filter_structured_metadata_against_verified_section() -> None:
         "recommendations": [
             {"id": "r1", "claim_id": "c1", "text": "Plan einhalten"},  # überlebt: c1 verifiziert
             {"id": "r2", "claim_id": "c_dropped", "text": "Ungültig"},  # verworfen: Claim fehlt
-            {"id": "r3", "evidence_refs": ["ev_1"], "text": "Gestützt durch Ev1"},  # überlebt: ev_1 vorhanden
-            {"id": "r4", "evidence_refs": ["ev_unknown"], "text": "Falsche Ref"},  # verworfen: Ref fehlt
+            {
+                "id": "r3",
+                "evidence_refs": ["ev_1"],
+                "text": "Gestützt durch Ev1",
+            },  # überlebt: ev_1 vorhanden
+            {
+                "id": "r4",
+                "evidence_refs": ["ev_unknown"],
+                "text": "Falsche Ref",
+            },  # verworfen: Ref fehlt
             {"description": "Budget von 500k freigegeben."},  # überlebt: Dict-Text im Content
             {"description": "Völlig erfundene Phantasie."},  # verworfen: weder Claim noch Text
         ],
@@ -246,6 +265,78 @@ def test_filter_structured_metadata_against_verified_section() -> None:
     next_steps = filtered["next_steps"]
     assert len(next_steps) == 1
     assert next_steps[0]["step"] == "Rollout in München ist geplant."
+
+
+def test_filter_structured_metadata_table_items_slot() -> None:
+    """Codex Finding 1: Tabellen-Metadaten mit 'items' müssen ebenfalls gefiltert werden."""
+    # Fall A: verified_claims ist leer -> items müssen vollständig geleert werden
+    metadata_empty_claims = {
+        "items": [
+            {"id": "cr1", "titel": "Empfehlung A", "beschreibung": "Details"},
+        ]
+    }
+    filtered_empty = _filter_structured_metadata_against_verified_section(
+        metadata_empty_claims,
+        verified_claims=[],
+        persisted_content="Irgendein Text",
+    )
+    assert filtered_empty["items"] == []
+
+    # Fall B: verified_claims vorhanden -> items nach Grounding filtern
+    verified_claims = [
+        {"claim_id": "c1", "statement": "Statement 1", "evidence_refs": ["ev_1"]},
+    ]
+    content = "Der Text erwähnt ausdrücklich: Server migrieren und Kosten senken."
+    metadata_with_claims = {
+        "items": [
+            {"id": "cr1", "claim_id": "c1", "titel": "Claim-gestützt"},
+            {"id": "cr2", "claim_id": "c_missing", "titel": "Fehlender Claim"},
+            {"id": "cr3", "titel": "Server migrieren", "beschreibung": "Kosten senken"},
+            {"id": "cr4", "titel": "Unerwähnte Phantasie", "beschreibung": "Nirgendwo zu finden"},
+        ]
+    }
+    filtered = _filter_structured_metadata_against_verified_section(
+        metadata_with_claims,
+        verified_claims=verified_claims,
+        persisted_content=content,
+    )
+    assert len(filtered["items"]) == 2
+    assert filtered["items"][0]["id"] == "cr1"
+    assert filtered["items"][1]["id"] == "cr3"
+
+
+def test_filter_structured_metadata_canonical_german_fields() -> None:
+    """Codex Finding 2: Kanonische deutsche DTO-Felder (titel, beschreibung, etc.) werden erkannt."""
+    verified_claims = [
+        {"claim_id": "c1", "statement": "Verifizierter Claim"},
+    ]
+    content = "Wir planen: Pilotbetrieb im Werk Leipzig zügig starten. Hohe Latenz bei Netzausfall."
+
+    metadata = {
+        "change_recommendations": [
+            {"id": "cr1", "titel": "Pilotbetrieb im Werk Leipzig", "beschreibung": "Starten"},
+            {
+                "id": "cr2",
+                "titel": "Nicht existierendes Projekt",
+                "beschreibung": "Keine Erwähnung",
+            },
+        ],
+        "risks": [
+            {"id": "r1", "risiko": "Hohe Latenz bei Netzausfall"},
+            {"id": "r2", "risiko": "Meteoriteneinschlag"},
+        ],
+    }
+
+    filtered = _filter_structured_metadata_against_verified_section(
+        metadata,
+        verified_claims=verified_claims,
+        persisted_content=content,
+    )
+
+    assert len(filtered["change_recommendations"]) == 1
+    assert filtered["change_recommendations"][0]["id"] == "cr1"
+    assert len(filtered["risks"]) == 1
+    assert filtered["risks"][0]["id"] == "r1"
 
 
 def test_cleanup_pending_state() -> None:
@@ -327,6 +418,7 @@ def test_process_section_returns_filtered_metadata_and_unbound_refs() -> None:
 # Befund 3.2: Vollständige Wiederherstellung von Abschnitten
 # ---------------------------------------------------------------------------
 
+
 def test_restore_persisted_section_populates_all_fields() -> None:
     agent = FakeAgent()
     section = ReportSection(title="Historische Sektion", content="", description="")
@@ -376,7 +468,9 @@ def test_restore_persisted_section_populates_all_fields() -> None:
 
 def test_workflow_logic_records_quote_validation_failure_even_if_restored() -> None:
     """Prüft die Loop-Invariante aus workflow.py: quote_validation_failed wird vor result.restored registriert."""
-    section = ReportSection(title="Restaurierte Sektion mit Quote-Fehler", content="", description="")
+    section = ReportSection(
+        title="Restaurierte Sektion mit Quote-Fehler", content="", description=""
+    )
     result = SectionResult(
         section_index=0,
         title=section.title,
@@ -395,4 +489,3 @@ def test_workflow_logic_records_quote_validation_failure_even_if_restored() -> N
         pass  # continue im echten Loop
 
     assert quote_validation_failures == ["Restaurierte Sektion mit Quote-Fehler"]
-
