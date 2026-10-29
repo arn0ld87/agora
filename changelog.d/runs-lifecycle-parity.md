@@ -1,0 +1,6 @@
+### Fixed
+
+- runs: Lifecycle-Parität für Resume, Restart, Stop und Cancel wiederhergestellt (Re-Audit Befunde 4.1, 4.2 und 4.3).
+- runs_resume: Gespeicherte Simulationsplattform (`_resolve_simulation_platform`), konfigurierte `max_rounds` für Demo-Limits und Graph-Memory-Update-Settings (`enable_graph_memory_update`, `memory_update_graph_id`) durchgereicht. Manifest-Draft-Lifecycle integriert (`capture_draft_best_effort` vor Start, `discard_draft_best_effort` bei Start-Fehler) und Liveness-Check (`is_process_alive`) vor IPC-Soft-Resume eingebaut (Befund 4.1).
+- runs_restart: Vererbung des Workspace-Credential-Scopes (`_inherited_credential_scope_metadata`), Unterstützung von Session-Auth-Providern (`codex_cli` via `uses_session_auth`), FAILED-Status und Fehlermeldung am `SimulationState` bei Exception im Worker sowie zuverlässiges Job-Tracking und Cancel-Flag-Cleanup im `finally` implementiert (Befund 4.2).
+- runs_actions / simulation_run_actions: `execute_cancel_run` setzt nun auch für `pending`-Runs das Cancel-Flag und hält Status konsistent; `execute_stop_simulation` und `execute_stop_run` setzen `SimulationStatus.STOPPED` statt `SimulationStatus.PAUSED` und persistieren dies atomar über `manager._set_status` (Befund 4.3).
