@@ -275,7 +275,12 @@ def list_reports():
     # Ein Registerscan für alle Fassungen, nicht einer je Bericht (Issue #1804).
     generation = load_generation_info([r.report_id for r in reports])
     return json_success(
-        [_report_payload(r, generation) for r in reports],
+        [
+            ReportExportService.build_report_contract_model(
+                r, generation.get(r.report_id)
+            ).to_list_item()
+            for r in reports
+        ],
         count=len(reports),
     )
 
