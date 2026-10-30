@@ -118,19 +118,21 @@ Stand 08.11.2026 befristet als `source: container`, `status: open` im Register h
 | `postgrest/postgrest:v14.17` | 0 | 0 | 0 | 0 | 0 |
 | **Gesamt (9 Images)** | **41** | **509** | **35** | **1.182** | **506** |
 
-**Pin-Update vom 30.10.2026.** Die Tabelle oben beschreibt den Stand vor dem Update. Geprüft mit Trivy (`--ignore-unfixed`, `HIGH,CRITICAL`, Findings je Paket) vor dem Commit:
+**Pin-Update vom 30.10.2026.** Die Tabelle oben beschreibt den Stand vor dem Update. Stand nach dem Update im CI-Lauf 41055191120 (Trivy `--ignore-unfixed`, `HIGH,CRITICAL`, Findings je Paket):
 
 | Image | Fixable CRITICAL | Fixable HIGH |
 |---|---:|---:|
-| `supabase/postgres:17.11.0.013` | 0 | 0 |
-| `supabase/storage-api:v1.87.0` | 0 | 18 |
-| `supabase/gotrue:v2.197.0` | 0 | 10 |
+| `supabase/postgres:17.11.0.013` | 0 | 1 |
+| `supabase/supavisor:2.9.12` | 0 | 1 |
+| `supabase/gotrue:v2.197.0` | 0 | 24 |
 | `postgrest/postgrest:v14.18` | 0 | 0 |
-| `supabase/studio:2026.10.26-sha-478bd88` | 4 | 27 |
-| `supabase/realtime:v2.143.3` | 4 | 76 |
-| `supabase/postgres-meta:v0.100.0` | 7 | 38 |
+| `supabase/realtime:v2.143.3` | 4 | 54 |
+| `supabase/storage-api:v1.87.0` | 0 | 30 |
+| `supabase/postgres-meta:v0.100.0` | 7 | 36 |
+| `supabase/studio:2026.10.26-sha-478bd88` | 4 | 24 |
+| `envoyproxy/envoy:v1.39.1` | 0 | 2 |
 
-Es bleiben 15 fixbare CRITICAL-Findings; `realtime` v2.150.1 und `studio` 2026.10.26 waren am 30.10.2026 die neuesten Tags, `postgres-meta` v0.100.0 ebenfalls. `supabase/supavisor` bleibt auf 2.9.12, weil 2.9.13 im Scan 13 fixbare CRITICAL-Findings zeigte. Die vorhandenen High-Ausnahmen gelten nur für die alten Referenzen; für die neuen Referenzen gibt es noch keine. Das Gate `supabase-images` bleibt deshalb rot.
+Es bleiben 15 fixbare CRITICAL-Findings (in `studio` 4, `realtime` 4, `postgres-meta` 7) und 172 fixbare HIGH-Befunde. `supabase/supavisor` bleibt auf 2.9.12, weil 2.9.13 im Scan 13 fixbare CRITICAL-Findings zeigte. Die vorhandenen High-Ausnahmen gelten nur für die alten Referenzen; für die neuen Referenzen gibt es noch keine. Das Gate `supabase-images` bleibt deshalb rot.
 
 - **Frist:** 08.11.2026 für alle 506 offenen Container-High-Einträge (`owner: arn0ld87`, `approved_by: arn0ld87`). Danach schlägt der Deadline-Check fehl, auch ohne neuen Scan.
 - **Evidence:** [Run 38113209635](https://github.com/arn0ld87/agora/actions/runs/38113209635) (11.10.2026) und [Run 40812078141](https://github.com/arn0ld87/agora/actions/runs/40812078141) (29.10.2026) mit allen neun Trivy-JSON-Reports (`0.json`–`8.json`) als Artefakt.

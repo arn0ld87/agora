@@ -199,7 +199,7 @@ graph TD
 | LLM layer | ProviderConnection, AiRoute/LlmRoute, `LLMClient` |
 | Report | evidence collection, claim gates, degradation model, exports |
 
-Production Gunicorn intentionally runs with **one web worker** while process-local job/monitor state still exists — quantified in ADR-0015: the non-relocatable part is OS-level handles (`Popen` objects, in-process queues, open file descriptors) inside `SimulationRunner`, which only a persisted job queue with dedicated workers ([#1472](https://github.com/arn0ld87/agora/issues/1472)) can move. Increasing the worker count is not a harmless performance setting.
+Production Gunicorn intentionally runs with **one web worker** while process-local job/monitor state still exists — quantified in ADR-0015: the non-relocatable part is OS-level handles (`Popen` objects, in-process queues, open file descriptors) inside `SimulationRunner`, which only a persisted job queue with dedicated workers ([#1551](https://github.com/arn0ld87/agora/issues/1551)) can move. Increasing the worker count is not a harmless performance setting.
 
 A SQLAlchemy/Alembic-backed PostgreSQL layer exists alongside the file/JSON/SQLite stores (self-hosted Supabase is an optional Compose overlay). Repository adapters cover **project, simulation, job, report, and LLM profile metadata**; the optional workspace path has a PostgreSQL-only adapter. Each migrated metadata store keeps its file/SQLite default and has its own `AGORA_*_BACKEND` setting. Provider secrets remain in the file-backed Fernet store, and project documents, simulation artifacts, and report contents remain files. The shipped default does not require PostgreSQL; the adapter and activation details are in [`docs/STATUS.md`](./docs/STATUS.md).
 
