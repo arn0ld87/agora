@@ -44,6 +44,42 @@ class VoiceStance(BaseModel):
     interview_class: Optional[StanceClass] = None
 
 
+class PositionShift(BaseModel):
+    """Positionswechsel einer Stimme während der Simulation (Issue #1778, Schritt 3.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voice_key: str
+    agent_name: str
+    from_class: StanceClass
+    to_class: StanceClass
+    first_round: int
+    evidence_producer_key: str
+
+
+class StanceDeviation(BaseModel):
+    """Haltungsabweichung einer Stimme zwischen Start und Interview (Issue #1778, Schritt 3.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voice_key: str
+    agent_name: str
+    start_class: StanceClass
+    interview_class: StanceClass
+
+
+class Coalition(BaseModel):
+    """Koalition aus Stimmen gleicher Haltung über verschiedene Rollenfamilien (Issue #1778, Schritt 3.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stance_class: StanceClass
+    members: list[str] = Field(default_factory=list)
+    role_families: list[str] = Field(default_factory=list)
+    supporting_interactions: int = Field(default=0, ge=0)
+    example_producer_keys: list[str] = Field(default_factory=list)
+
+
 class StanceAnalysis(BaseModel):
     """Positionierungsquote und Lagerverteilung eines Laufs."""
 
@@ -59,6 +95,9 @@ class StanceAnalysis(BaseModel):
     camp_distribution: dict[StanceClass, int] = Field(default_factory=dict)
     voices: list[VoiceStance] = Field(default_factory=list)
     contributions: list[ClassifiedContribution] = Field(default_factory=list)
+    position_shifts: list[PositionShift] = Field(default_factory=list)
+    stance_deviations: list[StanceDeviation] = Field(default_factory=list)
+    coalitions: list[Coalition] = Field(default_factory=list)
     #: Beiträge mit klassifizierter Haltung.
     classified_total: int = Field(default=0, ge=0)
     #: Beiträge, deren Klassifikation ausfiel.

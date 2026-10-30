@@ -514,6 +514,56 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  image-build-gate:
+    # Aggregator- und Branch-Protection-Gate (#1861).
+    #
+    # Dient als stabiler, einheitlicher Pflicht-Check fuer Branch Protection
+    # ("Image-Build-Gate"), unabhaengig vom konkreten Trigger-Zweig.
+    #
+    # Bewertungslogik:
+    # - Auf PRs und push auf main laeuft prod-proxy-smoke nicht (result == 'skipped').
+    #   Das Gate erfordert build-only == success und akzeptiert den Skipped-Smoke.
+    # - Auf RC-/Release-Branches, v*-Tags und manuellem workflow_dispatch muss
+    #   sowohl build-only als auch prod-proxy-smoke gruen sein (success).
+    # - Schlaegt build-only fehl oder bricht prod-proxy-smoke mit failure/cancelled ab,
+    #   blockiert dieses Gate den gesamten PR/Build.
+    name: Image-Build-Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build-only, prod-proxy-smoke]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+
+      - name: Verify build gates
+        env:
+          BUILD_ONLY_RESULT: ${{ needs.build-only.result }}
+          SMOKE_RESULT: ${{ needs.prod-proxy-smoke.result }}
+        run: |
+          echo "=== Image-Build-Gate ==="
+          echo "build-only:        ${BUILD_ONLY_RESULT}"
+          echo "prod-proxy-smoke:  ${SMOKE_RESULT}"
+
+          if [ "${BUILD_ONLY_RESULT}" != "success" ]; then
+            echo "::error::Gate failed: build-only status is '${BUILD_ONLY_RESULT}'" >&2
+            exit 1
+          fi
+
+          if [ "${SMOKE_RESULT}" = "failure" ] || [ "${SMOKE_RESULT}" = "cancelled" ]; then
+            echo "::error::Gate failed: prod-proxy-smoke status is '${SMOKE_RESULT}'" >&2
+            exit 1
+          fi
+
+          echo "Image-Build-Gate: ALL GREEN"
+
   publish-build:
     # Schritt 3a: Pro Plattform bauen und per Digest nach GHCR schieben, OHNE
     # Tags. Erst der publish-Job setzt die Tags auf das Multi-Arch-Manifest.

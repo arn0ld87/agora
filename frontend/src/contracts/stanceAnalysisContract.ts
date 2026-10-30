@@ -49,6 +49,42 @@ export const VoiceStanceSchema = z
   .strict();
 export type VoiceStance = z.infer<typeof VoiceStanceSchema>;
 
+// === PositionShift (Issue #1778, Schritt 3.2) ===
+export const PositionShiftSchema = z
+  .object({
+    voice_key: z.string(),
+    agent_name: z.string(),
+    from_class: StanceClassSchema,
+    to_class: StanceClassSchema,
+    first_round: z.number().int(),
+    evidence_producer_key: z.string(),
+  })
+  .strict();
+export type PositionShift = z.infer<typeof PositionShiftSchema>;
+
+// === StanceDeviation (Issue #1778, Schritt 3.2) ===
+export const StanceDeviationSchema = z
+  .object({
+    voice_key: z.string(),
+    agent_name: z.string(),
+    start_class: StanceClassSchema,
+    interview_class: StanceClassSchema,
+  })
+  .strict();
+export type StanceDeviation = z.infer<typeof StanceDeviationSchema>;
+
+// === Coalition (Issue #1778, Schritt 3.3) ===
+export const CoalitionSchema = z
+  .object({
+    stance_class: StanceClassSchema,
+    members: z.array(z.string()).default([]),
+    role_families: z.array(z.string()).default([]),
+    supporting_interactions: z.number().int().min(0).default(0),
+    example_producer_keys: z.array(z.string()).default([]),
+  })
+  .strict();
+export type Coalition = z.infer<typeof CoalitionSchema>;
+
 // === StanceAnalysis (schemas/stance-analysis.schema.json) ===
 export const StanceAnalysisSchema = z
   .object({
@@ -62,6 +98,9 @@ export const StanceAnalysisSchema = z
       .default({}),
     voices: z.array(VoiceStanceSchema).default([]),
     contributions: z.array(ClassifiedContributionSchema).default([]),
+    position_shifts: z.array(PositionShiftSchema).default([]),
+    stance_deviations: z.array(StanceDeviationSchema).default([]),
+    coalitions: z.array(CoalitionSchema).default([]),
     classified_total: z.number().int().min(0).default(0),
     classification_failed: z.number().int().min(0).default(0),
   })

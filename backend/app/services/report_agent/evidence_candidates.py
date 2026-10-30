@@ -35,14 +35,29 @@ from ..evidence_binder import EmbedFn, candidate_text, retrieval_score
 DEFAULT_CANDIDATE_LIMIT = 12
 
 #: Eigene Plätze je Beleg-Typ, zusätzlich zur gemeinsamen Rangfolge
-#: (Issue #1778). Ein Interview wird über das beste von bis zu zwölf
+#: (Issue #1778, erweitert in #1766). Ein Interview wird über das beste von bis zu zwölf
 #: Satzfenstern bewertet, ein Simulationsbeitrag über einen einzigen Vektor.
 #: In der gemeinsamen Rangfolge verdrängten die Interviews deshalb die
 #: Beiträge: im Abnahmelauf ``report_89d20c11edc1`` lag bei 28 von 73 Claims
 #: ein Beitrag über der Retrieval-Schwelle, bei 21 davon kam er nicht unter die
 #: besten fünf. Reserviert ist nur die Prüfung — Schwelle und Entailment
 #: entscheiden unverändert, ob der Beitrag den Claim stützt.
-RESERVED_CANDIDATE_SLOTS: Mapping[str, int] = {"agent_action": 2}
+RESERVED_CANDIDATE_SLOTS: Mapping[str, int] = {
+    "agent_action": 2,
+    "seed_corpus": 2,
+}
+
+
+def _matches_evidence_type(item: Dict[str, Any], evidence_type: str) -> bool:
+    """Prüft, ob ein Item dem gesuchten Evidenz-Typ entspricht.
+
+    Berücksichtigt sowohl `type` als auch `source_kind` (z. B. seed_corpus / seed_document).
+    """
+    if item.get("type") == evidence_type or item.get("source_kind") == evidence_type:
+        return True
+    if evidence_type == "seed_corpus" and item.get("type") == "seed_document":
+        return True
+    return False
 
 
 class EvidenceCandidatePool:
@@ -174,10 +189,12 @@ class EvidenceCandidatePool:
         selected = [item for _, _, item in scored[: self._limit]]
         rest = [item for _, _, item in scored[self._limit:]]
         for evidence_type, slots in self._reserved_slots.items():
-            missing = slots - sum(1 for item in selected if item.get("type") == evidence_type)
+            missing = slots - sum(
+                1 for item in selected if _matches_evidence_type(item, evidence_type)
+            )
             if missing > 0:
                 selected.extend(
-                    [item for item in rest if item.get("type") == evidence_type][:missing]
+                    [item for item in rest if _matches_evidence_type(item, evidence_type)][:missing]
                 )
         return selected
 

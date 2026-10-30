@@ -7,8 +7,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   ClassifiedContributionSchema,
+  CoalitionSchema,
+  PositionShiftSchema,
   StanceAnalysisSchema,
   StanceClassSchema,
+  StanceDeviationSchema,
   VoiceStanceSchema,
 } from '../stanceAnalysisContract';
 import stanceAnalysisJson from '../../../../schemas/stance-analysis.schema.json';
@@ -120,6 +123,15 @@ describe('stanceAnalysisContract — Schema-Drift', () => {
     );
     expect(shapeKeys(ClassifiedContributionSchema)).toEqual(
       propertyKeys(stanceAnalysisJson.$defs.ClassifiedContribution),
+    );
+    expect(shapeKeys(PositionShiftSchema)).toEqual(
+      propertyKeys(stanceAnalysisJson.$defs.PositionShift),
+    );
+    expect(shapeKeys(StanceDeviationSchema)).toEqual(
+      propertyKeys(stanceAnalysisJson.$defs.StanceDeviation),
+    );
+    expect(shapeKeys(CoalitionSchema)).toEqual(
+      propertyKeys(stanceAnalysisJson.$defs.Coalition),
     );
   });
 

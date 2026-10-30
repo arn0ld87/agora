@@ -646,15 +646,26 @@ def _build_partial_report(
 
 
 def _apply_requirement_check(report: Report, agent: Any, report_id: str) -> None:
-    """Issue #1302: maschinelle Vollständigkeitprüfung vor dem Abschluss."""
+    """Issue #1302 / #1778: maschinelle Vollständigkeitprüfung vor dem Abschluss."""
     if not _wf.Config.REPORT_REQUIREMENT_CHECKER_ENABLED:
         return
-    requirement_intent = detect_report_intent(
-        getattr(agent, "simulation_requirement", "") or ""
-    )
+    simulation_requirement = getattr(agent, "simulation_requirement", "") or ""
+    requirement_intent = detect_report_intent(simulation_requirement)
+    has_contested_question: Optional[bool] = None
+    stance_analysis = getattr(agent, "stance_analysis", None)
+    if stance_analysis is not None:
+        if isinstance(stance_analysis, dict):
+            has_contested_question = bool(stance_analysis.get("applicable"))
+        else:
+            has_contested_question = bool(getattr(stance_analysis, "applicable", False))
+
     missing_requirements = find_missing_requirements(
         [report.markdown_content],
-        checklist=checklist_for_intent(requirement_intent),
+        checklist=checklist_for_intent(
+            requirement_intent,
+            has_contested_question=has_contested_question,
+            simulation_requirement=simulation_requirement if stance_analysis is not None else None,
+        ),
     )
     if not missing_requirements:
         return

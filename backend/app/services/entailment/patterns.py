@@ -243,21 +243,137 @@ _SCOPE_PREPOSITION_WINDOW = 3
 #: trägt die Aussage.
 _TAIL_PREDICATE_MIN_TOKENS = 2
 
-_FROM_TO_RE = re.compile(
-    rf"von\s+(?:{_NUMBER_VALUE})\s*(?:%|Prozent)?\s*bis\s+zu\s+(?:{_NUMBER_VALUE})",
-    re.IGNORECASE,
-)
-
 _RANGE_RE = re.compile(
-    rf"(?:{_NUMBER_VALUE})\s*(?:bis(?!\s+zu\b)|to|[–—]|(?<=\d)\s*-\s*(?=\d))\s*"
-    rf"(?:{_NUMBER_VALUE})",
+    rf"(?P<lower>{_NUMBER_VALUE})\s*(?:bis(?!\s+zu\b)|to|[–—]|(?<=\d)\s*-\s*(?=\d))\s*"
+    rf"(?P<upper>{_NUMBER_VALUE})",
     re.IGNORECASE,
 )
 
 _BETWEEN_RE = re.compile(
-    rf"zwischen\s+(?:{_NUMBER_VALUE})\s*(?:%|Prozent)?\s*und\s*(?:{_NUMBER_VALUE})",
+    rf"zwischen\s+(?P<lower>{_NUMBER_VALUE})\s*(?:%|Prozent)?\s*und\s*(?P<upper>{_NUMBER_VALUE})",
     re.IGNORECASE,
 )
+
+_FROM_TO_RE = re.compile(
+    rf"von\s+(?P<lower>{_NUMBER_VALUE})\s*(?:%|Prozent)?\s*bis\s+zu\s+(?P<upper>{_NUMBER_VALUE})",
+    re.IGNORECASE,
+)
+
+#: Einheiten-Schreibweisen und Normalisierungen.
+_UNIT_ALIASES: dict[str, str] = {
+    "%": "percent",
+    "prozent": "percent",
+    "percent": "percent",
+    "pct": "percent",
+    "stunden": "hours",
+    "stunde": "hours",
+    "std": "hours",
+    "h": "hours",
+    "hours": "hours",
+    "hour": "hours",
+    "tage": "days",
+    "tag": "days",
+    "days": "days",
+    "day": "days",
+    "wochen": "weeks",
+    "woche": "weeks",
+    "weeks": "weeks",
+    "week": "weeks",
+    "monate": "months",
+    "monat": "months",
+    "months": "months",
+    "month": "months",
+    "jahre": "years",
+    "jahr": "years",
+    "years": "years",
+    "year": "years",
+    "minuten": "minutes",
+    "minute": "minutes",
+    "min": "minutes",
+    "minutes": "minutes",
+    "sekunden": "seconds",
+    "sekunde": "seconds",
+    "sek": "seconds",
+    "s": "seconds",
+    "seconds": "seconds",
+    "euro": "eur",
+    "€": "eur",
+    "eur": "eur",
+    "stück": "count",
+    "stueck": "count",
+    "anzahl": "count",
+    "fälle": "count",
+    "faelle": "count",
+    "schulen": "count",
+    "lehrkräfte": "count",
+    "lehrkraefte": "count",
+    "teilnehmende": "count",
+    "teilnehmer": "count",
+    "count": "count",
+}
+
+
+def normalize_unit(unit: str) -> str:
+    """Normalisiert eine Einheitenangabe auf kanonische Kurzform."""
+    lowered = (unit or "").strip().lower()
+    return _UNIT_ALIASES.get(lowered, lowered)
+
+
+_MONTHS = (
+    "januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember|"
+    "january|february|march|april|may|june|july|august|september|october|november|december"
+)
+
+_DATE_RE = re.compile(
+    rf"\b(?:[1-9]|[12]\d|3[01])\.\s*(?:{_MONTHS})\b",
+    re.IGNORECASE,
+)
+
+_YEAR_CONTEXT_RE = re.compile(
+    rf"\b(?:im\s+jahr|jahr|jahre|jahres|stand(?:\s+vom)?|ab(?:\s+dem)?|seit|bis\s+zum|zum|vom|in|im|aus|für|fuer|q[1-4]|{_MONTHS})\s+"
+    rf"(?P<year>19\d\d|20\d\d)\b",
+    re.IGNORECASE,
+)
+
+_PROJECT_YEAR_RE = re.compile(
+    r"\b[A-ZÄÖÜ][a-zA-ZÄÖÜäöüß0-9_-]+\s+(?P<year>19\d\d|20\d\d)\b"
+)
+
+_VERB_DISCONNECTORS = frozenset({
+    "gilt", "gelten", "galt", "endet", "endete", "startet", "startete", "beginnt",
+    "begann", "liegt", "lag", "sitzt", "saß", "steht", "stand", "gab", "gibt",
+    "war", "waren", "ist", "sind", "wurde", "wurden", "hat", "haben", "wird", "werden",
+    "zeigt", "zeigte", "reichte", "kam", "kamen",
+})
+
+_ARTICLE_DISCONNECTORS = frozenset({
+    "die", "der", "das", "den", "dem", "des", "eine", "einer", "eines", "einem", "einen", "ein",
+})
+
+
+def _is_calendar_year_or_date(value: float, match_start: int, match_end: int, sentence: str) -> bool:
+    """Prüft, ob eine Zahl eine reine Datums- oder Jahresangabe ist."""
+    for dm in _DATE_RE.finditer(sentence):
+        if dm.start() <= match_start and match_end <= dm.end():
+            return True
+        if abs(dm.end() - match_start) <= 2 or abs(match_end - dm.start()) <= 2:
+            return True
+
+    if 1900 <= value <= 2099 and value.is_integer():
+        for ym in _YEAR_CONTEXT_RE.finditer(sentence):
+            if ym.start("year") <= match_start and match_end <= ym.end("year"):
+                return True
+        for pm in _PROJECT_YEAR_RE.finditer(sentence):
+            if pm.start("year") <= match_start and match_end <= pm.end("year"):
+                return True
+        prefix_window = sentence[max(0, match_start - 25):match_start].lower()
+        if any(w in prefix_window for w in ("im jahr", "stand", "ab", "seit", "bis", "zum", "vom", "im", "in")):
+            return True
+        tail_window = sentence[match_end:min(len(sentence), match_end + 30)].strip().lower().split()
+        if tail_window and tail_window[0] in _VERB_DISCONNECTORS:
+            return True
+
+    return False
 
 #: Ab diesem Containment-Overlap gilt eine Aussage als dieselbe Aussage.
 PREDICATE_MATCH_THRESHOLD = 0.5
@@ -299,6 +415,7 @@ __all__ = [
     "RETRIEVAL_RELEVANCE_THRESHOLD",
     "TOPIC_MATCH_THRESHOLD",
     "_ABSOLUTE_RE",
+    "_ARTICLE_DISCONNECTORS",
     "_AT_LEAST_MARKERS",
     "_AT_MOST_MARKERS",
     "_BETWEEN_RE",
@@ -319,5 +436,9 @@ __all__ = [
     "_STOPWORDS",
     "_SUBJECT_CONNECTORS",
     "_TAIL_PREDICATE_MIN_TOKENS",
+    "_UNIT_ALIASES",
+    "_VERB_DISCONNECTORS",
     "_WORD_NUMBERS",
+    "_is_calendar_year_or_date",
+    "normalize_unit",
 ]

@@ -50,6 +50,143 @@
       "title": "ClassifiedContribution",
       "type": "object"
     },
+    "Coalition": {
+      "additionalProperties": false,
+      "description": "Koalition aus Stimmen gleicher Haltung \u00fcber verschiedene Rollenfamilien (Issue #1778, Schritt 3.3).",
+      "properties": {
+        "example_producer_keys": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Example Producer Keys",
+          "type": "array"
+        },
+        "members": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "role_families": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Role Families",
+          "type": "array"
+        },
+        "stance_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "Stance Class",
+          "type": "string"
+        },
+        "supporting_interactions": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Supporting Interactions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stance_class"
+      ],
+      "title": "Coalition",
+      "type": "object"
+    },
+    "PositionShift": {
+      "additionalProperties": false,
+      "description": "Positionswechsel einer Stimme w\u00e4hrend der Simulation (Issue #1778, Schritt 3.2).",
+      "properties": {
+        "agent_name": {
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "evidence_producer_key": {
+          "title": "Evidence Producer Key",
+          "type": "string"
+        },
+        "first_round": {
+          "title": "First Round",
+          "type": "integer"
+        },
+        "from_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "From Class",
+          "type": "string"
+        },
+        "to_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "To Class",
+          "type": "string"
+        },
+        "voice_key": {
+          "title": "Voice Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voice_key",
+        "agent_name",
+        "from_class",
+        "to_class",
+        "first_round",
+        "evidence_producer_key"
+      ],
+      "title": "PositionShift",
+      "type": "object"
+    },
+    "StanceDeviation": {
+      "additionalProperties": false,
+      "description": "Haltungsabweichung einer Stimme zwischen Start und Interview (Issue #1778, Schritt 3.2).",
+      "properties": {
+        "agent_name": {
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "interview_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "Interview Class",
+          "type": "string"
+        },
+        "start_class": {
+          "enum": [
+            "in_favour",
+            "opposed",
+            "undecided"
+          ],
+          "title": "Start Class",
+          "type": "string"
+        },
+        "voice_key": {
+          "title": "Voice Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "voice_key",
+        "agent_name",
+        "start_class",
+        "interview_class"
+      ],
+      "title": "StanceDeviation",
+      "type": "object"
+    },
     "VoiceStance": {
       "additionalProperties": false,
       "description": "Haltung einer Stimme: Startwert, Beitr\u00e4ge und Interview.",
@@ -157,6 +294,13 @@
       "title": "Classified Total",
       "type": "integer"
     },
+    "coalitions": {
+      "items": {
+        "$ref": "#/$defs/Coalition"
+      },
+      "title": "Coalitions",
+      "type": "array"
+    },
     "contested_statement": {
       "anyOf": [
         {
@@ -176,6 +320,13 @@
       "title": "Contributions",
       "type": "array"
     },
+    "position_shifts": {
+      "items": {
+        "$ref": "#/$defs/PositionShift"
+      },
+      "title": "Position Shifts",
+      "type": "array"
+    },
     "positioning_ratio": {
       "anyOf": [
         {
@@ -189,6 +340,13 @@
       ],
       "default": null,
       "title": "Positioning Ratio"
+    },
+    "stance_deviations": {
+      "items": {
+        "$ref": "#/$defs/StanceDeviation"
+      },
+      "title": "Stance Deviations",
+      "type": "array"
     },
     "voices": {
       "items": {

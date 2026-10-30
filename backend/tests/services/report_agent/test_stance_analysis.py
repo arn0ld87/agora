@@ -563,3 +563,53 @@ def test_workflow_rechnet_neu_wenn_die_gespeicherten_stimmen_nicht_zur_konfigura
     assert [voice["start_class"] for voice in second["voices"]] != [
         voice["start_class"] for voice in first["voices"]
     ]
+
+
+def test_build_stance_analysis_computes_shifts_deviations_and_coalitions():
+    """Etappe 3 (#1778): Positionswechsel über den Lauf, Abweichungen zwischen Start
+    und Interview sowie rollenübergreifende Koalitionen werden strukturiert berechnet."""
+    llm = _StubLLM(_by_keyword)
+    cfg = _config("opposing", "supportive", "opposing")
+    cfg["agent_configs"][0]["role_family"] = "buerger"
+    cfg["agent_configs"][1]["role_family"] = "verwaltung"
+    cfg["agent_configs"][2]["role_family"] = "politik"
+
+    actions = [
+        # Agent 0 starts opposing ("opposed"), shifts to in_favour in round 3 -> PositionShift
+        _action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern.", post_id="p0"),
+        _action(0, "Agent 0", 3, "Die Schließung ist richtig.", post_id="p1"),
+        # Agent 1 starts supportive ("in_favour"), stays in_favour in round 3 and likes Agent 0's post -> Coalition with Agent 0
+        _action(1, "Agent 1", 3, "Die Schließung ist richtig.", post_id="p2"),
+        {
+            "round_num": 3,
+            "timestamp": "2026-01-01T03:05:00",
+            "platform": "reddit",
+            "agent_id": 1,
+            "agent_name": "Agent 1",
+            "action_type": "LIKE_POST",
+            "action_args": {"post_id": "p1", "post_author_name": "Agent 0"},
+            "result": None,
+            "success": True,
+        },
+        # Agent 2 starts opposing ("opposed"), has no in_favour contribution, but interview_stances maps to "in_favour" -> StanceDeviation
+    ]
+    interview_stances = {"agent:2": "in_favour"}
+
+    analysis = build_stance_analysis("sim-1", cfg, actions, interview_stances, llm)
+
+    assert len(analysis.position_shifts) == 1
+    assert analysis.position_shifts[0].voice_key == "agent:0"
+    assert analysis.position_shifts[0].from_class == "opposed"
+    assert analysis.position_shifts[0].to_class == "in_favour"
+    assert analysis.position_shifts[0].first_round == 3
+
+    assert len(analysis.stance_deviations) == 1
+    assert analysis.stance_deviations[0].voice_key == "agent:2"
+    assert analysis.stance_deviations[0].start_class == "opposed"
+    assert analysis.stance_deviations[0].interview_class == "in_favour"
+
+    assert len(analysis.coalitions) == 1
+    assert analysis.coalitions[0].stance_class == "in_favour"
+    assert set(analysis.coalitions[0].members) == {"agent:0", "agent:1"}
+    assert analysis.coalitions[0].supporting_interactions >= 1
+

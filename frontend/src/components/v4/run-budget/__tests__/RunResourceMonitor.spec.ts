@@ -197,6 +197,14 @@ describe('RunResourceMonitor', () => {
     expect(wrapper.find('[data-testid="budget-row-tokens"]').exists()).toBe(false)
   })
 
+  it('zeigt bei fehlgeschlagenem Run-Lookup (z. B. 404) Fehlerhinweis statt Kein-Budget-Meldung', async () => {
+    vi.mocked(getRun).mockResolvedValue({ success: false, error: 'Not found' } as never)
+    const wrapper = mountMonitor()
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="budget-none"]').exists()).toBe(false)
+  })
+
   it('pollt alle 5 s, solange der Status aktiv ist', async () => {
     mockGetRun({ budget: makeBudget(), usage: null, termination_reason: null })
     mountMonitor()

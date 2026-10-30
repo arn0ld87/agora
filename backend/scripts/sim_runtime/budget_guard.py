@@ -312,7 +312,14 @@ class SubprocessBudgetGuard:
                 cached_input_tokens=cached_input_tokens,
             )
         except Exception as exc:  # noqa: BLE001 — Recording darf die Sim nicht stören
-            print(f"[budget-guard] usage recording failed: {exc}", flush=True)
+            try:
+                from app.utils.logger import get_logger
+
+                get_logger("agora.sim_runtime.budget_guard").warning(
+                    "[budget-guard] usage recording failed: %s", exc
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
         if override is not None:
             # Reservierung aus ``_enforce_before_physical_call`` erst NACH dem
@@ -458,7 +465,14 @@ class SubprocessBudgetGuard:
                 handle.write("\n")
             os.replace(tmp_path, path)
         except OSError as exc:
-            print(f"[budget-guard] abort marker write failed: {exc}", flush=True)
+            try:
+                from app.utils.logger import get_logger
+
+                get_logger("agora.sim_runtime.budget_guard").warning(
+                    "[budget-guard] abort marker write failed: %s", exc
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
 
 class _UsageTrackingModelProxy:

@@ -7,7 +7,8 @@ entities and relations from text chunks, guided by the graph's ontology.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -86,6 +87,42 @@ class NerExtractionResult(BaseModel):
     entities: List[NerEntity] = Field(default_factory=list)
     relations: List[NerRelation] = Field(default_factory=list)
 
+# ---------------------------------------------------------------------------
+# Tabellen- und Listen-Erkennung & Vorverarbeitung (Issue #1292).
+# ---------------------------------------------------------------------------
+
+_MD_TABLE_LINE_RE = re.compile(r"^\s*\|.*\|\s*$", re.MULTILINE)
+_MD_TABLE_SEPARATOR_RE = re.compile(r"^\s*\|(?:\s*:?-+:?\s*\|)+\s*$", re.MULTILINE)
+_MD_LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+.+", re.MULTILINE)
+
+
+def detect_structural_elements(text: str) -> Tuple[bool, bool]:
+    """Prüft, ob der Text Markdown-Tabellen oder Aufzählungslisten enthält.
+
+    Returns:
+        (has_table, has_list)
+    """
+    has_table = bool(_MD_TABLE_LINE_RE.search(text))
+    has_list = bool(_MD_LIST_ITEM_RE.search(text))
+    return has_table, has_list
+
+
+def _preprocess_structured_text(text: str) -> str:
+    """Bereitet tabellarische und listenförmige Texte lesbarer für das LLM auf.
+
+    Entfernt reine Markdown-Tabellen-Trennlinien (|---|---|:---:|), die kleinere
+    und mittlere Modelle oft verwirren oder zu leeren/verkürzten JSON-Antworten
+    führen, lässt aber alle Datenzeilen und Zellenwerte intakt.
+    """
+    if not text:
+        return ""
+    # Bereinige reine Separator-Zeilen wie |---|---|
+    cleaned_lines = []
+    for line in text.splitlines():
+        if _MD_TABLE_SEPARATOR_RE.match(line):
+            continue
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines)
 # System prompt template for NER/RE extraction.
 # {context_block} wird durch _build_context_block() befüllt oder bleibt leer.
 _SYSTEM_PROMPT = """You are a Named Entity Recognition and Relation Extraction system.
@@ -97,8 +134,8 @@ ONTOLOGY:
 RULES:
 1. Use the ontology types as preferred labels. If a relation clearly exists in the text but
    no matching ontology type fits, use the most descriptive UPPER_SNAKE_CASE label you can
-   derive from the text (e.g. ACQUIRED, REPORTS_TO, COLLABORATES_WITH). Never omit a
-   relation just because the ontology does not explicitly list its type.
+   derive from the text (e.g. ACQUIRED, REPORTS_TO, COLLABORATES_WITH, OPERATES, FUNDS).
+   Never omit a relation just because the ontology does not explicitly list its type.
 2. Normalize entity names: strip whitespace, use canonical form (e.g., "Jack Ma" not "ma jack").
 3. Each entity must have: name, type (from ontology or a reasonable fallback), and optional attributes.
 4. Each relation must have: source entity name, target entity name, relation type, and a fact
@@ -110,7 +147,13 @@ RULES:
    and similar) must be resolved to the entity named in the context or chunk — NEVER extract
    them as standalone entities.
 8. Extract entities ONLY from the current chunk, not from the context block.
-9. Table rows and list items often contain named entities — extract them too.
+9. TABLES & LISTS:
+   - For Markdown tables: each row typically describes an entity (e.g. in the first column or subject column)
+     and its related entities, roles, or locations across other columns. Extract the row subject as an entity,
+     extract named entities from other cells, and create relations between them based on table headers.
+   - For bullet or numbered lists: list items often introduce key actors, partner organizations, programs, or criteria.
+     Extract entities and their relationships to the list heading/subject.
+   - Ignore markdown structural separator lines (such as |---|---|).
 
 EXAMPLES of well-formed relation output:
   Text: "Müller GmbH übernahm Schmidt KG am 1. Januar 2024 für 5 Mio EUR."
@@ -127,6 +170,23 @@ EXAMPLES of well-formed relation output:
   → {{"source": "Universität Leipzig", "target": "Fraunhofer-Institut",
       "type": "COLLABORATES_WITH",
       "fact": "Die Universität Leipzig arbeitet mit dem Fraunhofer-Institut zusammen."}}
+
+  Text (Table):
+  | Organisation | Programm | Standort |
+  | Bundesministerium für Wirtschaft | KI-Innovationsfonds | Berlin |
+  → Entities: "Bundesministerium für Wirtschaft" (Organization), "KI-Innovationsfonds" (Program), "Berlin" (Location)
+  → Relations:
+    {{"source": "Bundesministerium für Wirtschaft", "target": "KI-Innovationsfonds", "type": "FUNDS", "fact": "Bundesministerium für Wirtschaft finanziert KI-Innovationsfonds in Berlin"}}
+    {{"source": "Bundesministerium für Wirtschaft", "target": "Berlin", "type": "LOCATED_IN", "fact": "Bundesministerium für Wirtschaft mit Standort Berlin"}}
+
+  Text (List):
+  * Dr. Weber koordiniert die Stakeholder-Allianz.
+  * Partner: Charité Berlin und Siemens Healthineers.
+  → Entities: "Dr. Weber" (Person), "Stakeholder-Allianz" (Organization), "Charité Berlin" (Organization), "Siemens Healthineers" (Organization)
+  → Relations:
+    {{"source": "Dr. Weber", "target": "Stakeholder-Allianz", "type": "COORDINATES", "fact": "Dr. Weber koordiniert die Stakeholder-Allianz."}}
+    {{"source": "Stakeholder-Allianz", "target": "Charité Berlin", "type": "HAS_PARTNER", "fact": "Partner: Charité Berlin"}}
+    {{"source": "Stakeholder-Allianz", "target": "Siemens Healthineers", "type": "HAS_PARTNER", "fact": "Partner: Siemens Healthineers"}}
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -191,13 +251,27 @@ class NERExtractor:
         if not text or not text.strip():
             return {"entities": [], "relations": []}
 
+        # Tabellen- und Listen-Erkennung (Issue #1292)
+        has_table, has_list = detect_structural_elements(text)
+        processed_text = _preprocess_structured_text(text.strip())
+
         ontology_desc = self._format_ontology(ontology)
         context_block = _build_context_block(context)
         system_msg = _SYSTEM_PROMPT.format(
             ontology_description=ontology_desc,
             context_block=context_block,
         )
-        user_msg = _USER_PROMPT.format(text=text.strip())
+
+        user_content_parts = [f"Extract entities and relations from the following text:\n\n{processed_text}"]
+        if has_table:
+            user_content_parts.append(
+                "\nNote: The text contains one or more tables. Make sure to extract entities from row cells and capture relations between column values in each row."
+            )
+        if has_list:
+            user_content_parts.append(
+                "\nNote: The text contains bullet/numbered lists. Ensure actors, organizations, and concepts mentioned in list items are extracted with their relations."
+            )
+        user_msg = "\n".join(user_content_parts)
 
         messages = [
             {"role": "system", "content": system_msg},
@@ -307,12 +381,15 @@ class NERExtractor:
         cleaned_relations = _clean_relations(relations, cleaned_entities)
 
         # 0-Entitäten-Warnung bei substantiellem Chunk (Issue #1470, #1292)
-        if not cleaned_entities and len(source_text) > 200:
+        if not cleaned_entities and len(source_text) > 100:
+            has_table, has_list = detect_structural_elements(source_text)
             logger.warning(
                 "NER: Kein Entity extrahiert aus substantiellem Chunk "
-                "(chunk_len=%d, relations=%d) — möglicher Extraktionsfehler",
+                "(chunk_len=%d, relations=%d, has_table=%s, has_list=%s) — möglicher Extraktionsfehler",
                 len(source_text),
                 len(cleaned_relations),
+                has_table,
+                has_list,
             )
 
         return {

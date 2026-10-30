@@ -21,8 +21,11 @@ from pydantic import BaseModel, ConfigDict
 
 from ...contracts.stance_analysis_contract import (
     ClassifiedContribution,
+    Coalition,
+    PositionShift,
     StanceAnalysis,
     StanceClass,
+    StanceDeviation,
     VoiceStance,
 )
 from ...utils.logger import get_logger
@@ -230,11 +233,13 @@ def _voices(
         agent_id = agent_config.get("agent_id")
         if not isinstance(agent_id, int):
             continue
+        role_family_raw = agent_config.get("role_family") or agent_config.get("entity_type")
+        role_family = str(role_family_raw).strip() if role_family_raw else None
         voices.append(
             VoiceStance(
                 voice_key=f"agent:{agent_id}",
                 agent_name=str(agent_config.get("entity_name") or f"Agent {agent_id}"),
-                role_family=agent_config.get("role_family") or None,
+                role_family=role_family or None,
                 start_class=_START_CLASS_BY_CONFIG_STANCE.get(
                     str(agent_config.get("stance") or "").strip().lower(), "undecided"
                 ),
@@ -244,22 +249,289 @@ def _voices(
     return voices
 
 
+def _compute_interview_classes(
+    interviews: Sequence[Mapping[str, Any]],
+) -> Dict[str, StanceClass]:
+    """Berechnet die Haltungsklasse je Stimme aus den Interview-Belegen."""
+    stances_by_voice: Dict[str, List[float]] = {}
+    for item in interviews:
+        vkey = item.get("voice_key")
+        if not vkey and item.get("agent_id") is not None:
+            vkey = f"agent:{item['agent_id']}"
+        raw = item.get("raw")
+        if not vkey and isinstance(raw, Mapping) and raw.get("agent_id") is not None:
+            vkey = f"agent:{raw['agent_id']}"
+        if not vkey:
+            continue
+
+        stance_val = item.get("topic_stance")
+        if stance_val is None and isinstance(raw, Mapping):
+            stance_val = raw.get("topic_stance")
+        if isinstance(stance_val, (int, float)) and not isinstance(stance_val, bool):
+            stances_by_voice.setdefault(str(vkey), []).append(float(stance_val))
+
+    result: Dict[str, StanceClass] = {}
+    for vkey, stances in stances_by_voice.items():
+        if not stances:
+            continue
+        mean_val = sum(stances) / len(stances)
+        if mean_val >= 0.25:
+            result[vkey] = "in_favour"
+        elif mean_val <= -0.25:
+            result[vkey] = "opposed"
+        else:
+            result[vkey] = "undecided"
+    return result
+
+
 def _camps(voices: Sequence[VoiceStance]) -> tuple[Dict[StanceClass, int], int]:
     """Lagerverteilung und Zahl der positionierten Stimmen.
 
     Positioniert ist eine Stimme mit mindestens einem Beitrag ``in_favour``
-    oder ``opposed``; alle anderen zählen im Lager ``undecided``.
+    oder ``opposed`` oder einer Interviewhaltung ``in_favour`` oder ``opposed``;
+    alle anderen zählen im Lager ``undecided``.
     """
     camp_distribution: Dict[StanceClass, int] = {"in_favour": 0, "opposed": 0, "undecided": 0}
     voices_positioned = 0
     for voice in voices:
-        positioned = any(stance != "undecided" for stance in voice.contribution_classes)
+        all_classes = list(voice.contribution_classes)
+        if voice.interview_class:
+            all_classes.append(voice.interview_class)
+        positioned = any(stance != "undecided" for stance in all_classes)
         if positioned:
             voices_positioned += 1
-            camp_distribution[_camp_of(voice.contribution_classes)] += 1
+            camp_distribution[_camp_of(all_classes)] += 1
         else:
             camp_distribution["undecided"] += 1
     return camp_distribution, voices_positioned
+
+
+def _compute_position_shifts(
+    voices: Sequence[VoiceStance],
+    contributions: Sequence[ClassifiedContribution],
+) -> List[PositionShift]:
+    """Positionswechsel: Startklasse weicht von der Endklasse im letzten Drittel ab."""
+    if not contributions:
+        return []
+    max_round = max((c.round_num for c in contributions), default=0)
+    cutoff = max_round * (2.0 / 3.0)
+
+    by_agent_id: Dict[int, List[ClassifiedContribution]] = {}
+    for c in contributions:
+        by_agent_id.setdefault(c.agent_id, []).append(c)
+
+    shifts: List[PositionShift] = []
+    for voice in voices:
+        try:
+            agent_id = int(voice.voice_key.split(":")[-1])
+        except (ValueError, IndexError):
+            continue
+
+        agent_contributions = sorted(by_agent_id.get(agent_id, []), key=lambda c: c.round_num)
+        late_contributions = [c for c in agent_contributions if c.round_num > cutoff]
+        late_classes = [c.stance_class for c in late_contributions]
+        in_favour_count = sum(1 for s in late_classes if s == "in_favour")
+        opposed_count = sum(1 for s in late_classes if s == "opposed")
+
+        if in_favour_count > opposed_count:
+            end_class: StanceClass = "in_favour"
+        elif opposed_count > in_favour_count:
+            end_class = "opposed"
+        else:
+            end_class = "undecided"
+
+        if voice.start_class != end_class and end_class in ("in_favour", "opposed"):
+            matching = [c for c in agent_contributions if c.stance_class == end_class]
+            if matching:
+                first = matching[0]
+                shifts.append(
+                    PositionShift(
+                        voice_key=voice.voice_key,
+                        agent_name=voice.agent_name,
+                        from_class=voice.start_class,
+                        to_class=end_class,
+                        first_round=first.round_num,
+                        evidence_producer_key=first.producer_key,
+                    )
+                )
+    return shifts
+
+
+def _compute_stance_deviations(
+    voices: Sequence[VoiceStance],
+    contributions: Sequence[ClassifiedContribution],
+    position_shift_voice_keys: set[str],
+) -> List[StanceDeviation]:
+    """Haltungsabweichungen zwischen Start und Interview ohne passenden Beitrag."""
+    by_agent_id: Dict[int, List[ClassifiedContribution]] = {}
+    for c in contributions:
+        by_agent_id.setdefault(c.agent_id, []).append(c)
+
+    deviations: List[StanceDeviation] = []
+    for voice in voices:
+        if voice.voice_key in position_shift_voice_keys:
+            continue
+        if voice.interview_class is None:
+            continue
+        if voice.interview_class == voice.start_class:
+            continue
+
+        try:
+            agent_id = int(voice.voice_key.split(":")[-1])
+        except (ValueError, IndexError):
+            continue
+
+        agent_contributions = by_agent_id.get(agent_id, [])
+        has_matching_contrib = any(
+            c.stance_class == voice.interview_class for c in agent_contributions
+        )
+        if not has_matching_contrib:
+            deviations.append(
+                StanceDeviation(
+                    voice_key=voice.voice_key,
+                    agent_name=voice.agent_name,
+                    start_class=voice.start_class,
+                    interview_class=voice.interview_class,
+                )
+            )
+    return deviations
+
+
+_SUPPORTING_ACTION_TYPES = frozenset({"LIKE_POST", "LIKE_COMMENT", "REPOST", "QUOTE_POST"})
+
+
+def _compute_coalitions(
+    voices: Sequence[VoiceStance],
+    contributions: Sequence[ClassifiedContribution],
+    actions: Sequence[Mapping[str, Any]],
+) -> List[Coalition]:
+    """Koalitionen: Akteure gleicher Endklasse mit zustimmenden Interaktionen über Rollenfamilien."""
+    if not actions:
+        return []
+
+    import networkx as nx
+    from ..network_analytics import _build_lookup_indexes, _extract_target_agent
+
+    max_round = max((c.round_num for c in contributions), default=0)
+    cutoff = max_round * (2.0 / 3.0)
+
+    by_agent_id: Dict[int, List[ClassifiedContribution]] = {}
+    for c in contributions:
+        by_agent_id.setdefault(c.agent_id, []).append(c)
+
+    end_classes: Dict[str, StanceClass] = {}
+    for voice in voices:
+        try:
+            aid = int(voice.voice_key.split(":")[-1])
+        except (ValueError, IndexError):
+            continue
+        agent_contributions = [c for c in by_agent_id.get(aid, []) if c.round_num > cutoff]
+        late_classes = [c.stance_class for c in agent_contributions]
+        in_favour_count = sum(1 for s in late_classes if s == "in_favour")
+        opposed_count = sum(1 for s in late_classes if s == "opposed")
+        if in_favour_count > opposed_count:
+            end_classes[voice.voice_key] = "in_favour"
+        elif opposed_count > in_favour_count:
+            end_classes[voice.voice_key] = "opposed"
+        else:
+            end_classes[voice.voice_key] = "undecided"
+
+    actions_list = [dict(a) for a in actions]
+    name_to_id, comment_to_author = _build_lookup_indexes(actions_list)
+
+    coalitions: List[Coalition] = []
+    for target_stance in ("in_favour", "opposed"):
+        camp_voice_keys = {
+            voice.voice_key: voice
+            for voice in voices
+            if end_classes.get(voice.voice_key) == target_stance
+        }
+        if len(camp_voice_keys) < 2:
+            continue
+
+        G = nx.Graph()
+        for vkey in camp_voice_keys:
+            G.add_node(vkey)
+
+        edge_interactions: Dict[tuple[str, str], int] = Counter()
+        edge_producers: Dict[tuple[str, str], List[str]] = {}
+
+        for action in actions_list:
+            atype = str(action.get("action_type") or "").upper()
+            if atype not in _SUPPORTING_ACTION_TYPES:
+                continue
+            src = action.get("agent_id")
+            if src is None:
+                continue
+            try:
+                src_id = int(src)
+            except (TypeError, ValueError):
+                continue
+            src_key = f"agent:{src_id}"
+            if src_key not in camp_voice_keys:
+                continue
+
+            tgt_id = _extract_target_agent(action, name_to_id, comment_to_author)
+            if tgt_id is None or tgt_id == src_id:
+                continue
+            tgt_key = f"agent:{tgt_id}"
+            if tgt_key not in camp_voice_keys:
+                continue
+
+            edge = (min(src_key, tgt_key), max(src_key, tgt_key))
+            G.add_edge(src_key, tgt_key)
+            edge_interactions[edge] += 1
+            pkey = str(build_action_evidence_item(action).get("producer_key") or "")
+            if pkey:
+                producers = edge_producers.setdefault(edge, [])
+                if pkey not in producers:
+                    producers.append(pkey)
+
+        components = [c for c in nx.connected_components(G) if len(c) >= 2]
+        for comp in components:
+            role_families_set = {
+                camp_voice_keys[vkey].role_family
+                for vkey in comp
+                if camp_voice_keys[vkey].role_family
+            }
+            if len(role_families_set) < 2:
+                continue
+
+            sorted_members = sorted(
+                comp,
+                key=lambda k: int(k.split(":")[-1]) if k.split(":")[-1].isdigit() else k,
+            )
+            sorted_role_families = sorted(role_families_set)
+
+            total_interactions = 0
+            comp_producers: List[str] = []
+            for u in comp:
+                for v in comp:
+                    if u < v:
+                        edge = (min(u, v), max(u, v))
+                        total_interactions += edge_interactions.get(edge, 0)
+                        for p in edge_producers.get(edge, []):
+                            if p not in comp_producers:
+                                comp_producers.append(p)
+
+            coalitions.append(
+                Coalition(
+                    stance_class=target_stance,
+                    members=sorted_members,
+                    role_families=sorted_role_families,
+                    supporting_interactions=total_interactions,
+                    example_producer_keys=comp_producers[:5],
+                )
+            )
+
+    coalitions.sort(
+        key=lambda c: (
+            0 if c.stance_class == "in_favour" else 1,
+            -c.supporting_interactions,
+            c.members,
+        )
+    )
+    return coalitions
 
 
 def build_stance_analysis(
@@ -269,11 +541,7 @@ def build_stance_analysis(
     interview_stances: Optional[Mapping[str, StanceClass]],
     llm_client: Any,
 ) -> StanceAnalysis:
-    """Baut Positionierungsquote und Lagerverteilung eines Laufs.
-
-    ``interview_stances`` bleibt in dieser Etappe ungenutzt;
-    ``VoiceStance.interview_class`` ist ``None``.
-    """
+    """Baut Positionierungsquote und Lagerverteilung eines Laufs."""
     statement = _contested_statement(simulation_config)
     if statement is None:
         return StanceAnalysis(applicable=False)
@@ -283,7 +551,17 @@ def build_stance_analysis(
 
     classified = _classified_contributions(contributions, classes)
     voices = _voices(simulation_config, classified)
+
+    if interview_stances:
+        for voice in voices:
+            if voice.voice_key in interview_stances:
+                voice.interview_class = interview_stances[voice.voice_key]
+
     camp_distribution, voices_positioned = _camps(voices)
+    shifts = _compute_position_shifts(voices, classified)
+    shift_keys = {s.voice_key for s in shifts}
+    deviations = _compute_stance_deviations(voices, classified, shift_keys)
+    coalitions = _compute_coalitions(voices, classified, actions)
 
     voices_total = len(voices)
     analysis = StanceAnalysis(
@@ -295,6 +573,9 @@ def build_stance_analysis(
         camp_distribution=camp_distribution,
         voices=voices,
         contributions=classified,
+        position_shifts=shifts,
+        stance_deviations=deviations,
+        coalitions=coalitions,
         classified_total=len(classified),
         classification_failed=len(contributions) - len(classified),
     )
@@ -306,6 +587,47 @@ def build_stance_analysis(
         analysis.classified_total,
         analysis.classification_failed,
     )
+    return analysis
+
+
+def update_stance_analysis_with_interviews(
+    report_folder: str,
+    interview_items: Sequence[Mapping[str, Any]],
+    actions: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> Optional[StanceAnalysis]:
+    """Aktualisiert die Haltungsanalyse nach Abschluss der Interviews."""
+    analysis = load_stance_analysis(report_folder)
+    if analysis is None or not analysis.applicable:
+        return analysis
+
+    interview_classes = _compute_interview_classes(interview_items)
+    if not interview_classes:
+        return analysis
+
+    for voice in analysis.voices:
+        if voice.voice_key in interview_classes:
+            voice.interview_class = interview_classes[voice.voice_key]
+
+    camp_distribution, voices_positioned = _camps(analysis.voices)
+    analysis.camp_distribution = camp_distribution
+    analysis.voices_positioned = voices_positioned
+    analysis.positioning_ratio = (
+        voices_positioned / analysis.voices_total if analysis.voices_total else None
+    )
+
+    shifts = _compute_position_shifts(analysis.voices, analysis.contributions)
+    analysis.position_shifts = shifts
+    shift_keys = {s.voice_key for s in shifts}
+    analysis.stance_deviations = _compute_stance_deviations(
+        analysis.voices, analysis.contributions, shift_keys
+    )
+
+    if actions is not None:
+        analysis.coalitions = _compute_coalitions(
+            analysis.voices, analysis.contributions, actions
+        )
+
+    save_stance_analysis(report_folder, analysis)
     return analysis
 
 
@@ -368,4 +690,8 @@ __all__ = [
     "build_stance_analysis",
     "classify_contributions",
     "save_stance_analysis",
+    "update_stance_analysis_with_interviews",
+    "PositionShift",
+    "StanceDeviation",
+    "Coalition",
 ]

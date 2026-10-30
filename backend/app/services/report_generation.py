@@ -391,6 +391,9 @@ class ReportGenerationService:
             },
         )
 
+        from .preflight_cli_session import verify_route_cli_preflight
+        verify_route_cli_preflight(resolved_route, run_id=run_record["run_id"])
+
         storage = current_app.extensions.get('neo4j_storage')
         if not storage:
             raise RuntimeError("GraphStorage not initialized — check Neo4j connection")

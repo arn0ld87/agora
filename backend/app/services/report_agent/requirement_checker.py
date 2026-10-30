@@ -210,11 +210,13 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             r"positionswechsel",
             r"positionsänderung",
             r"position(en)?\s+(ge)?ändert",
+            r"kein(e(n)?)?\s+positionswechsel\s+beobachtet",
         ),
         patterns_en=(
             r"position shift",
             r"change[ds]? (its|their|his|her) position",
             r"shifted position",
+            r"no position shift (was )?observed",
         ),
     ),
     Requirement(
@@ -225,32 +227,84 @@ DEFAULT_REQUIREMENT_CHECKLIST: tuple[Requirement, ...] = (
             r"koalition(en)?\b",
             r"b[üu]ndnis(s(es)?|se)?\b",
             r"allianzen?\b",
+            r"keine?\s+koalition(en)?\s+gebildet",
         ),
         patterns_en=(
             r"coalitions?\b",
             r"alliances?\b",
             r"blocs?\b",
+            r"no coalition(s)? (was |were )?formed",
         ),
     ),
+)
+
+#: Signalwörter in der Fragestellung, die Stop-/Expand-Bedingungen verlangen.
+_EXPAND_STOP_TRIGGERS: tuple[str, ...] = (
+    "pilot",
+    "stufenweise",
+    "schrittweise",
+    "einführung",
+    "einfuehrung",
+    "rollout",
+    "ausweit",
+    "skalier",
+    "testphase",
+    "phased",
+    "roll-out",
+    "scale up",
 )
 
 
 def checklist_for_intent(
     intent: "Optional[ReportIntent]",
+    has_contested_question: Optional[bool] = None,
+    simulation_requirement: Optional[str] = None,
 ) -> tuple[Requirement, ...]:
     """Checkliste für einen Report-Intent — „alle vier Varianten abgedeckt".
 
     Die vier entscheidungsorientierten Presets (FULL/OPINION/RISK/COMPARISON)
-    tragen laut #1322 dieselbe Handlungsempfehlung und damit dieselbe
-    Default-Checkliste. Der explorative Report prüft nichts (siehe Modul-
-    Docstring). Unbekannte Intents fallen konservativ auf den Default —
-    lieber ein geprüfter als ein ungeprüfter Bericht.
+    tragen laut #1322 dieselbe Handlungsempfehlung. Der explorative Report prüft
+    nichts (siehe Modul-Docstring).
+
+    Pflichtaspekte nach Issue #1778 (Etappe 3), sofern Kontext übergeben wird:
+    - stakeholder_widersprueche und fruehwarnindikatoren: immer.
+    - stop_bedingungen und expand_bedingungen: nur wenn simulation_requirement
+      stufenweise Einführung, Pilotierung oder Skalierung andeutet (oder None).
+    - positionswechsel und koalitionen: nur wenn eine Streitfrage vorliegt
+      (has_contested_question=True oder None).
     """
     from ..report_intent import ReportIntent  # noqa: PLC0415 — zyklischer Import
 
     if intent == ReportIntent.EXPLORATIVE:
         return ()
-    return DEFAULT_REQUIREMENT_CHECKLIST
+
+    if has_contested_question is None and simulation_requirement is None:
+        return DEFAULT_REQUIREMENT_CHECKLIST
+
+    by_id = {req.id: req for req in DEFAULT_REQUIREMENT_CHECKLIST}
+    selected: list[Requirement] = []
+
+    if "stakeholder_widersprueche" in by_id:
+        selected.append(by_id["stakeholder_widersprueche"])
+    if "fruehwarnindikatoren" in by_id:
+        selected.append(by_id["fruehwarnindikatoren"])
+
+    req_lower = (simulation_requirement or "").lower()
+    if simulation_requirement is None or any(
+        trigger in req_lower for trigger in _EXPAND_STOP_TRIGGERS
+    ):
+        if "stop_bedingungen" in by_id:
+            selected.append(by_id["stop_bedingungen"])
+        if "expand_bedingungen" in by_id:
+            selected.append(by_id["expand_bedingungen"])
+
+    if has_contested_question is None or has_contested_question:
+        if "positionswechsel" in by_id:
+            selected.append(by_id["positionswechsel"])
+        if "koalitionen" in by_id:
+            selected.append(by_id["koalitionen"])
+
+    return tuple(selected)
 
 
 def find_missing_requirements(
