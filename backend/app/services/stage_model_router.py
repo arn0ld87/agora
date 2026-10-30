@@ -176,6 +176,10 @@ class StageModelRouter:
     ) -> ResolvedRoute:
         """Adapt a resolved canonical ``AiRoute`` to the legacy ResolvedRoute."""
         options = dict(route.provider_options)
+        if route.source:
+            options.setdefault("source", route.source)
+        if route.fallback_reason:
+            options.setdefault("fallback_reason", route.fallback_reason)
         legacy = options.pop("__legacy_stage_route__", None) or {}
         base_url = options.get("base_url")
         if not base_url and route.provider_connection_id:

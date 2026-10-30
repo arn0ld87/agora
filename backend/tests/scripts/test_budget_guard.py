@@ -675,3 +675,49 @@ class TestReportAttributionErrorPathsUseStructuredLogging:
             "report record_after_call failed" in record.getMessage()
             for record in caplog.records
         )
+
+    def test_usage_recording_failure_is_logged_not_printed(
+        self, run_ledger, monkeypatch, caplog, capsys
+    ):
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.sim_runtime.budget_guard"), "propagate", True
+        )
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("ledger write boom")
+
+        monkeypatch.setattr(guard, "_invocation_logger", _boom)
+
+        with caplog.at_level(logging.WARNING, logger="agora.sim_runtime.budget_guard"):
+            guard.record_call(latency_ms=10.0, success=True, prompt_tokens=5, completion_tokens=5)
+
+        assert any(
+            "usage recording failed" in record.getMessage()
+            for record in caplog.records
+        )
+        assert "usage recording failed" not in capsys.readouterr().out
+
+    def test_abort_marker_write_failure_is_logged_not_printed(
+        self, run_ledger, monkeypatch, caplog, capsys
+    ):
+        monkeypatch.setattr(logging.getLogger("agora"), "propagate", True)
+        monkeypatch.setattr(
+            logging.getLogger("agora.sim_runtime.budget_guard"), "propagate", True
+        )
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+
+        def _os_boom(*args, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("os.makedirs", _os_boom)
+
+        with caplog.at_level(logging.WARNING, logger="agora.sim_runtime.budget_guard"):
+            guard._write_abort_marker({"dimension": "calls", "observed": 5, "threshold": 5})
+
+        assert any(
+            "abort marker write failed" in record.getMessage()
+            for record in caplog.records
+        )
+        assert "abort marker write failed" not in capsys.readouterr().out

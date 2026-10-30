@@ -95,6 +95,7 @@ def budget_abort_env(tmp_path, monkeypatch, report_personas):
     monkeypatch.setattr(rg, "seed_run_stage_routing", lambda *a, **k: None)
 
     resolved_route = SimpleNamespace(
+        stage="report",
         provider_id="ollama",
         model="qwen2.5:32b",
         base_url_sanitized="http://localhost:11434/v1",

@@ -44,6 +44,7 @@ def test_is_codex_cli_available_false_when_which_finds_nothing(monkeypatch):
 
 def _mock_available(monkeypatch) -> None:
     monkeypatch.setattr(codex_cli_mod.shutil, "which", lambda _binary: "/usr/local/bin/codex")
+    monkeypatch.setattr(codex_cli_mod, "verify_codex_cli_session_ready", lambda: None)
 
 
 def test_create_success_returns_openai_shaped_message(monkeypatch):

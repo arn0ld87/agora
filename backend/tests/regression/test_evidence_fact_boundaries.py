@@ -366,3 +366,46 @@ def test_bis_zu_ohne_startwert_bleibt_obergrenze():
     """Gegenprobe zur Abgrenzung: ohne `von` ist es eine echte Schranke."""
     facts = extract_numeric_facts("Die Nacharbeit dauert bis zu neun Stunden.")
     assert [(f.value, f.bound.value) for f in facts] == [(9.0, "at_most")]
+
+
+def test_markdown_tabelle_wird_strukturiert_erfasst():
+    """Markdown-Tabellen erfassen Zahlen mit Spaltenkoepfen und Einheiten (#1766)."""
+    table = (
+        "| Route | Fahrzeit (min) | Verspätung |\n"
+        "|---|---|---|\n"
+        "| RE 1 | 45 | 3 |\n"
+        "| RB 10 | 318 | 12 |\n"
+    )
+    facts = extract_numeric_facts(table)
+    assert len(facts) == 4
+    fahrzeiten = [f for f in facts if f.predicate == "Fahrzeit"]
+    assert len(fahrzeiten) == 2
+    assert sorted(f.value for f in fahrzeiten) == [45.0, 318.0]
+    assert all(f.unit == "minutes" for f in fahrzeiten)
+    assert {f.subject for f in fahrzeiten} == {"RE 1", "RB 10"}
+
+
+def test_markdown_table_range_cells_do_not_emit_exact_point_facts():
+    """Tabellenzellen mit Spannen (z. B. 6–9 oder 10-20%) duerfen keine EXACT-Punktwerte erzeugen."""
+    table = (
+        "| Route | Spanne (min) | Anteil | Punktwert (min) |\n"
+        "|---|---|---|---|\n"
+        "| RE 1 | 6–9 | 10 - 20 % | 45 |\n"
+    )
+    facts = extract_numeric_facts(table)
+    assert [(f.predicate, f.value, f.bound.value, f.unit) for f in facts] == [
+        ("Punktwert", 45.0, "exact", "minutes")
+    ]
+
+
+def test_kalenderjahre_und_daten_erzeugen_keine_fakten():
+    """Jahreszahlen und Datumsangaben duerfen nicht als Fakten fehlinterpretiert werden (#1766)."""
+    facts_date = extract_numeric_facts("Zum 30. Juni 2027 endet das Projekt.")
+    assert facts_date == []
+
+    facts_year = extract_numeric_facts("Ab 2026 gilt die Regelung.")
+    assert facts_year == []
+
+    facts_mixed = extract_numeric_facts("Im Jahr 2027 nahmen 120 Teilnehmende teil.")
+    assert len(facts_mixed) == 1
+    assert facts_mixed[0].value == 120.0

@@ -53,6 +53,11 @@ ENV UV_LINK_MODE=copy
 # Siehe docs/dependency-risk-register.md, Abschnitt "nltk-Baseline".
 ENV NLTK_DISABLE_IMPORT_SECURITY=1
 
+# Unterbindet automatische CLI-Hintergrund-Updates im Container (Issue #1861).
+# Reproduzierbarkeit und Supply-Chain-Pins dürfen zur Laufzeit nicht
+# durch automatische In-Place-Bumps überschrieben werden.
+ENV DISABLE_AUTOUPDATER=1
+
 ENV TZ=Europe/Berlin
 
 WORKDIR /app
@@ -332,7 +337,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     FLASK_HOST=0.0.0.0 \
     PATH="/app/backend/.venv/bin:$PATH" \
-    NLTK_DISABLE_IMPORT_SECURITY=1
+    NLTK_DISABLE_IMPORT_SECURITY=1 \
+    DISABLE_AUTOUPDATER=1
 
 WORKDIR /app
 

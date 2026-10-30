@@ -329,3 +329,59 @@ def _reusable_persisted_outline(
         logger.info("Persistierter Outline ist strukturell ungueltig — wird neu geplant")
         return None
     return outline
+
+
+def _refresh_stance_analysis_with_interviews(
+    agent: Any, report_id: str
+) -> Optional[Dict[str, Any]]:
+    """Aktualisiert die Haltungsanalyse nach den Abschnitten mit gesammelten Interview-Belegen."""
+    evidence_map = getattr(agent, "evidence_map", None)
+    if not isinstance(evidence_map, dict):
+        return getattr(agent, "stance_analysis", None)
+    evidence_index = evidence_map.get("evidence_index")
+    if not isinstance(evidence_index, dict):
+        return getattr(agent, "stance_analysis", None)
+
+    interview_items = [
+        record
+        for record in evidence_index.values()
+        if isinstance(record, dict) and record.get("type") == "agent_interview"
+    ]
+    if not interview_items:
+        return getattr(agent, "stance_analysis", None)
+
+    report_folder = _wf.ReportManager._get_report_folder(report_id)
+    actions = None
+    try:
+        from ..simulation_runner import SimulationRunner
+
+        actions = [
+            action.to_dict()
+            for action in SimulationRunner.get_all_actions(agent.simulation_id)
+        ]
+    except Exception as exc:  # noqa: BLE001 — ohne Aktionen bleiben nur die Koalitionen stehen
+        logger.warning(
+            "Haltungsanalyse %s: Aktionen fuer Interview-Nachfuehrung nicht lesbar (%r)",
+            report_id,
+            exc,
+        )
+        actions = None
+
+    try:
+        updated = _wf.update_stance_analysis_with_interviews(
+            report_folder, interview_items, actions=actions
+        )
+    except Exception as exc:  # noqa: BLE001 — Post-Interview-Update darf Bericht nicht abbrechen
+        logger.warning(
+            "Haltungsanalyse %s: Interview-Nachfuehrung fehlgeschlagen (%s)",
+            report_id,
+            exc,
+        )
+        return getattr(agent, "stance_analysis", None)
+
+    if updated is not None:
+        dumped = updated.model_dump(mode="json")
+        agent.stance_analysis = dumped
+        return dumped
+    return getattr(agent, "stance_analysis", None)
+

@@ -25,7 +25,7 @@ services:
   # PostgreSQL. Source of Truth fuer App-Metadaten ab Phase 3.
   db:
     container_name: agora-supabase-db
-    image: ${POSTGRES_IMAGE:-supabase/postgres:17.6.1.136}
+    image: ${POSTGRES_IMAGE:-supabase/postgres:17.11.0.013}
     restart: unless-stopped
     volumes:
       - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
@@ -123,7 +123,7 @@ services:
   # (Plan §14) — `/auth/v1/health` ist das Abnahmekriterium von Phase 1.
   auth:
     container_name: agora-supabase-auth
-    image: ${GOTRUE_IMAGE:-supabase/gotrue:v2.196.0}
+    image: ${GOTRUE_IMAGE:-supabase/gotrue:v2.197.0}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
@@ -195,7 +195,7 @@ services:
   # fuer Flask"); PostgREST bedient Studio und spaeter das Frontend.
   rest:
     container_name: agora-supabase-rest
-    image: ${POSTGREST_IMAGE:-postgrest/postgrest:v14.17}
+    image: ${POSTGREST_IMAGE:-postgrest/postgrest:v14.18}
     restart: unless-stopped
     depends_on:
       db:
@@ -229,7 +229,7 @@ services:
   realtime:
     container_name: agora-supabase-realtime
     hostname: realtime-dev.supabase-realtime
-    image: ${REALTIME_IMAGE:-supabase/realtime:v2.134.10}
+    image: ${REALTIME_IMAGE:-supabase/realtime:v2.143.3}
     restart: unless-stopped
     depends_on:
       db:
@@ -273,7 +273,7 @@ services:
   # imgproxy ist nicht Teil des Stacks, deshalb keine Bildtransformation.
   storage:
     container_name: agora-supabase-storage
-    image: ${STORAGE_IMAGE:-supabase/storage-api:v1.74.0}
+    image: ${STORAGE_IMAGE:-supabase/storage-api:v1.87.0}
     restart: unless-stopped
     depends_on:
       db:
@@ -309,7 +309,7 @@ services:
   # Schema-Introspektion fuer Studio.
   meta:
     container_name: agora-supabase-meta
-    image: ${POSTGRES_META_IMAGE:-supabase/postgres-meta:v0.99.0}
+    image: ${POSTGRES_META_IMAGE:-supabase/postgres-meta:v0.100.0}
     restart: unless-stopped
     depends_on:
       db:
@@ -327,7 +327,7 @@ services:
   # bzw. ueber VPN/Tailscale erreichbar (Plan §7 "Exposition").
   studio:
     container_name: agora-supabase-studio
-    image: ${STUDIO_IMAGE:-supabase/studio:2026.09.07-sha-7996410}
+    image: ${STUDIO_IMAGE:-supabase/studio:2026.10.26-sha-478bd88}
     restart: unless-stopped
     healthcheck:
       test:

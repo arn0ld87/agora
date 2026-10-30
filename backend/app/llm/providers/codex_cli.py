@@ -179,6 +179,7 @@ def is_codex_cli_available() -> bool:
 
 
 CODEX_HOME_ENV = "CODEX_HOME"
+AGORA_CODEX_HOME_ENV = "AGORA_CODEX_HOME"
 """Env-Variable der Codex-CLI selbst — bestimmt, wo sie ihre Anmeldung ablegt.
 
 Im Container zeigt sie auf ``/home/agora/.codex``; auf dem Host setzt der
@@ -187,19 +188,39 @@ Operator sie beim ``codex login`` auf ein Agora-eigenes Verzeichnis
 wird. Siehe ``deploy/compose/docker-compose.codex-cli.yml``.
 """
 
-CodexCredentialState = Literal["ok", "missing", "unreadable", "empty"]
+CodexCredentialState = Literal[
+    "ok", "missing", "unreadable", "empty", "session_dir_not_writable"
+]
 
 
 def codex_cli_home() -> Path:
-    """Verzeichnis, in dem die Codex-CLI ihre Anmeldung erwartet."""
+    """Verzeichnis, in dem die Codex-CLI ihre Anmeldung erwartet.
+
+    Priorisiert ``CODEX_HOME`` (CLI-Standard); faellt auf ``AGORA_CODEX_HOME``
+    zurueck, falls gesetzt, andernfalls auf ``~/.codex``.
+    """
     raw = os.environ.get(CODEX_HOME_ENV, "").strip()
     if raw:
         return Path(raw)
+    agora_raw = os.environ.get(AGORA_CODEX_HOME_ENV, "").strip()
+    if agora_raw:
+        return Path(agora_raw)
     return Path(os.path.expanduser("~")) / ".codex"
 
 
+def _check_directory_writable(directory: Path) -> bool:
+    """Prueft Schreibbarkeit eines Verzeichnisses via Probe-Datei-Operation."""
+    probe = directory / f".agora_probe_write_{os.getpid()}"
+    try:
+        probe.touch(exist_ok=True)
+        probe.unlink(missing_ok=True)
+        return True
+    except (PermissionError, OSError):
+        return False
+
+
 def codex_cli_credential_state(home: Path | None = None) -> CodexCredentialState:
-    """Unterscheidet die drei Arten, auf die der Login fehlen kann.
+    """Unterscheidet die Arten, auf die der Login fehlen oder scheitern kann.
 
     Bewusst *kein* Test auf einen konkreten Dateinamen der CLI: deren internes
     Anmeldeformat ist nicht Teil unseres Vertrags und hat sich in der
@@ -209,16 +230,27 @@ def codex_cli_credential_state(home: Path | None = None) -> CodexCredentialState
     ``unreadable`` ist der praktisch haeufigste Fall: existiert das
     Host-Verzeichnis beim ``up`` noch nicht, legt Docker es als root an, und
     der Container-User (uid=1000) kommt nicht hinein.
+
+    ``session_dir_not_writable`` tritt auf, wenn das Verzeichnis zwar lesbar
+    und befuellt ist, aber fuer die aktuelle UID keine Schreibrechte besitzt.
     """
     home = home or codex_cli_home()
     try:
         if not home.is_dir():
             return "missing"
-        return "ok" if any(home.iterdir()) else "empty"
+        if not any(home.iterdir()):
+            return "empty"
     except PermissionError:
         return "unreadable"
     except OSError:
         return "unreadable"
+
+    sessions_dir = home / "sessions"
+    target_dir = sessions_dir if sessions_dir.is_dir() else home
+    if not _check_directory_writable(target_dir):
+        return "session_dir_not_writable"
+
+    return "ok"
 
 
 @dataclass(frozen=True)
@@ -268,6 +300,13 @@ class CodexCliReadiness:
                 f"Codex-Credential-Verzeichnis {self.home} ist nicht lesbar — "
                 "meist von Docker als root angelegt. Verzeichnis vor dem "
                 f"`up` anlegen und uid=1000 Zugriff geben. {hint}"
+            )
+        if self.credentials == "session_dir_not_writable":
+            uid = os.getuid() if hasattr(os, "getuid") else "unknown"
+            return (
+                f"Codex-Session-Verzeichnis {self.home} ist fuer die aktuelle UID {uid} "
+                "nicht beschreibbar (z. B. root-owned 0755 Mount). Berechtigungen "
+                f"fuer uid={uid} korrigieren (z. B. `chown -R {uid}:{uid}`). {hint}"
             )
         return f"Codex-CLI ist installiert, aber nicht angemeldet. {hint}"
 
@@ -590,6 +629,7 @@ class _CodexCliCompletions:
         uebersetzt. Ohne das bleiben OASIS-Agenten handlungsunfaehig — sie
         waehlen ihre Aktionen ausschliesslich ueber Werkzeugaufrufe.
         """
+        verify_codex_cli_session_ready()
         prompt = _flatten_messages(messages or [])
         if tools:
             prompt += build_tool_prompt(tools)
@@ -638,6 +678,35 @@ def build_shim_message(text: str) -> _ShimMessage:
 class _CodexCliChatNamespace:
     def __init__(self) -> None:
         self.completions = _CodexCliCompletions()
+
+
+def verify_codex_cli_session_ready(home: Path | None = None) -> None:
+    """Verifiziert die Einsatzbereitschaft der Codex-CLI-Session (Issue #1834).
+
+    Prueft Binary, Credential-Verzeichnis und Schreibbarkeit des Session-Mounts.
+    Wirft ``LlmProviderError`` mit ``code="provider_unavailable"``, wenn der
+    Mount fehlt, unlesbar ist, keine Session existiert oder das Session-Verzeichnis
+    nicht beschreibbar ist. Verhindert kryptische Abstuerze wie
+    ``failed to initialize in-process app-server client: Permission denied``
+    zur Laufzeit von ``codex exec``.
+    """
+    home = home or codex_cli_home()
+    binary_present = is_codex_cli_available()
+    readiness = CodexCliReadiness(
+        binary_present=binary_present,
+        home=home,
+        credentials=codex_cli_credential_state(home) if binary_present else "missing",
+    )
+    if not readiness.ready:
+        msg = readiness.status_message or "Codex CLI session is not ready"
+        raise LlmProviderError(
+            NormalizedLlmError(
+                provider="codex_cli",
+                code="provider_unavailable",
+                message=msg,
+                retryable=False,
+            )
+        )
 
 
 class CodexCliClient:

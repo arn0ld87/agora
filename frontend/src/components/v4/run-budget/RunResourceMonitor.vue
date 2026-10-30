@@ -86,7 +86,10 @@ function parseStartedAtMs(value: unknown): number | null {
 
 async function tick(): Promise<void> {
   const res = await getRun(props.runId)
-  if (!res?.success) return
+  if (!res?.success) {
+    loadError.value = true
+    return
+  }
   const data = res.data as RunRecord | undefined
   budget.value = data?.budget ?? null
   usage.value = data?.usage ?? null
@@ -321,7 +324,7 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <p v-else class="rb-monitor__no-budget" data-testid="budget-none">
+    <p v-else-if="!loadError" class="rb-monitor__no-budget" data-testid="budget-none">
       {{ t('runBudget.monitorNoBudget') }}
     </p>
 

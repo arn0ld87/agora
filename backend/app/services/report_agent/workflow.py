@@ -86,6 +86,7 @@ from .stance_analysis import (
     has_contested_statement,
     load_stance_analysis,
     save_stance_analysis,
+    update_stance_analysis_with_interviews,
     voices_match_config,
 )
 from .text_verification import verify_prose
@@ -130,6 +131,7 @@ from .workflow_outline import (
     _load_persona_fallback_stats,
     _load_persona_floor,
     _mark_incomplete_for_persona_floor,
+    _refresh_stance_analysis_with_interviews,
     _reusable_persisted_outline,
     _stance_analysis_of,
     _validate_outline_structure,
@@ -347,6 +349,8 @@ def generate_report(
                 current_section=None,
                 completed_sections=completed_section_titles,
             )
+
+        _refresh_stance_analysis_with_interviews(agent, report_id)
 
         assembling_message = "Assembling the complete report..."
         if progress_callback:

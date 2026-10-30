@@ -160,6 +160,26 @@ class TestChecklistForIntent:
             DEFAULT_REQUIREMENT_CHECKLIST
         )
 
+    def test_context_filters_contested_question_and_rollout_triggers(self):
+        """#1778 Schritt 3.5: Ohne Streitfrage und ohne Pilot-/Rollout-Bezug
+        bleiben nur Widersprüche und Frühwarnindikatoren Pflicht."""
+        checklist = checklist_for_intent(
+            ReportIntent.FULL,
+            has_contested_question=False,
+            simulation_requirement="Schließung der Geburtshilfe Hollerau zum 30.06.2027",
+        )
+        assert [r.id for r in checklist] == [
+            "stakeholder_widersprueche",
+            "fruehwarnindikatoren",
+        ]
+
+        checklist_with_pilot_and_contested = checklist_for_intent(
+            ReportIntent.FULL,
+            has_contested_question=True,
+            simulation_requirement="Stufenweise Einführung und Pilotphase prüfen",
+        )
+        assert checklist_with_pilot_and_contested == DEFAULT_REQUIREMENT_CHECKLIST
+
 
 # ---------------------------------------------------------------------------
 # Unit: Degradation-Form (analog collect_run_degradations)

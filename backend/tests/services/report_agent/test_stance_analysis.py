@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List
 
 import pytest
@@ -563,3 +565,106 @@ def test_workflow_rechnet_neu_wenn_die_gespeicherten_stimmen_nicht_zur_konfigura
     assert [voice["start_class"] for voice in second["voices"]] != [
         voice["start_class"] for voice in first["voices"]
     ]
+
+
+def test_build_stance_analysis_computes_shifts_deviations_and_coalitions():
+    """Etappe 3 (#1778): Positionswechsel über den Lauf, Abweichungen zwischen Start
+    und Interview sowie rollenübergreifende Koalitionen werden strukturiert berechnet."""
+    llm = _StubLLM(_by_keyword)
+    cfg = _config("opposing", "supportive", "opposing")
+    cfg["agent_configs"][0]["role_family"] = "buerger"
+    cfg["agent_configs"][1]["role_family"] = "verwaltung"
+    cfg["agent_configs"][2]["role_family"] = "politik"
+
+    actions = [
+        # Agent 0 starts opposing ("opposed"), shifts to in_favour in round 3 -> PositionShift
+        _action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern.", post_id="p0"),
+        _action(0, "Agent 0", 3, "Die Schließung ist richtig.", post_id="p1"),
+        # Agent 1 starts supportive ("in_favour"), stays in_favour in round 3 and likes Agent 0's post -> Coalition with Agent 0
+        _action(1, "Agent 1", 3, "Die Schließung ist richtig.", post_id="p2"),
+        {
+            "round_num": 3,
+            "timestamp": "2026-01-01T03:05:00",
+            "platform": "reddit",
+            "agent_id": 1,
+            "agent_name": "Agent 1",
+            "action_type": "LIKE_POST",
+            "action_args": {"post_id": "p1", "post_author_name": "Agent 0"},
+            "result": None,
+            "success": True,
+        },
+        # Agent 2 starts opposing ("opposed"), has no in_favour contribution, but interview_stances maps to "in_favour" -> StanceDeviation
+    ]
+    interview_stances = {"agent:2": "in_favour"}
+
+    analysis = build_stance_analysis("sim-1", cfg, actions, interview_stances, llm)
+
+    assert len(analysis.position_shifts) == 1
+    assert analysis.position_shifts[0].voice_key == "agent:0"
+    assert analysis.position_shifts[0].from_class == "opposed"
+    assert analysis.position_shifts[0].to_class == "in_favour"
+    assert analysis.position_shifts[0].first_round == 3
+
+    assert len(analysis.stance_deviations) == 1
+    assert analysis.stance_deviations[0].voice_key == "agent:2"
+    assert analysis.stance_deviations[0].start_class == "opposed"
+    assert analysis.stance_deviations[0].interview_class == "in_favour"
+
+    assert len(analysis.coalitions) == 1
+    assert analysis.coalitions[0].stance_class == "in_favour"
+    assert set(analysis.coalitions[0].members) == {"agent:0", "agent:1"}
+    assert analysis.coalitions[0].supporting_interactions >= 1
+
+
+def test_workflow_aktualisiert_stance_analysis_mit_interviews_nach_abschnitten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nach den Abschnitten fuehrt der Workflow Interview-Belege in stance_analysis.json nach."""
+    from app.services.report_agent import workflow as wf
+    from app.services.report_agent.stance_analysis import load_stance_analysis
+    from app.services.simulation_runner import SimulationRunner
+
+    report_folder = str(tmp_path)
+    monkeypatch.setattr(wf.ReportManager, "_get_report_folder", lambda _rid: report_folder)
+
+    cfg = _config("Das Werk soll geschlossen werden.")
+    actions = [
+        _action(0, "Agent 0", 1, "Wir müssen die Schließung verhindern."),
+        _action(1, "Agent 1", 2, "Wir müssen die Schließung verhindern."),
+    ]
+    llm = _StubLLM(lambda _text: "opposed")
+    initial =build_stance_analysis("sim-1", cfg, actions, None, llm)
+    save_stance_analysis(report_folder, initial)
+
+    monkeypatch.setattr(
+        SimulationRunner,
+        "get_all_actions",
+        lambda _sid: [SimpleNamespace(to_dict=lambda a=a: a) for a in actions],
+    )
+
+    agent = SimpleNamespace(
+        simulation_id="sim-1",
+        stance_analysis=initial.model_dump(mode="json"),
+        evidence_map={
+            "evidence_index": {
+                "E1": {
+                    "type": "agent_interview",
+                    "voice_key": "agent:0",
+                    "topic_stance": 0.8,
+                    "quote": "Ich bin absolut dafür, ich unterstütze das Vorhaben ausdrücklich.",
+                }
+            }
+        },
+    )
+
+    updated_dict = wf._refresh_stance_analysis_with_interviews(agent, "rep-1")
+    assert updated_dict is not None
+    persisted = load_stance_analysis(report_folder)
+    assert persisted is not None
+    v0 = next(v for v in persisted.voices if v.voice_key == "agent:0")
+    assert v0.interview_class == "in_favour"
+    assert len(persisted.stance_deviations) == 1
+    assert persisted.stance_deviations[0].voice_key == "agent:0"
+    assert agent.stance_analysis["stance_deviations"][0]["voice_key"] == "agent:0"
+
+

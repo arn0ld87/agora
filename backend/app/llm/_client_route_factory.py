@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 from ..contracts.llm_routing_contract import ResolvedRoute
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
 
 
 from ._client_shim import get_client_attr as _get_client_attr
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClientRouteFactoryMixin:
@@ -69,6 +72,15 @@ class LLMClientRouteFactoryMixin:
             )
             if real_base:
                 base_url = real_base
+
+        logger.info(
+            "LLMClient.from_route: stage=%s provider_id=%s model=%s source=%s run_id=%s",
+            route.stage,
+            route.provider_id,
+            route.model,
+            route.provider_options.get("source", "unknown"),
+            run_id,
+        )
 
         return cls(
             api_key=api_key,
