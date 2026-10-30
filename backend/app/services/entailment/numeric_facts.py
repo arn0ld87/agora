@@ -174,88 +174,135 @@ def _numeric_spans(sentence: str) -> List[tuple[str, "re.Match[str]"]]:
     return spans
 
 
-def _extract_table_numeric_facts(text: str) -> List[NumericFact]:
-    """Extrahiert Zahlen strukturiert aus Markdown-Tabellen."""
-    lines = text.splitlines()
-    table_blocks: List[List[str]] = []
-    current_block: List[str] = []
-    for line in lines:
+def _split_markdown_table_blocks(text: str) -> List[List[str]]:
+    """Gruppiert aufeinanderfolgende Markdown-Tabellenzeilen in Blöcke."""
+    blocks: List[List[str]] = []
+    current: List[str] = []
+    for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 2:
-            current_block.append(stripped)
-        else:
-            if current_block:
-                table_blocks.append(current_block)
-                current_block = []
-    if current_block:
-        table_blocks.append(current_block)
+            current.append(stripped)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
 
+
+def _resolve_table_cell_unit(cell: str, col_header: str) -> str:
+    """Bestimmt die kanonische Einheit einer Tabellenzelle anhand Zelle und Spaltenkopf."""
+    if "%" in cell or "%" in col_header or "prozent" in col_header.lower():
+        return "percent"
+    m_unit = re.search(r"\(([^)]+)\)", col_header)
+    raw_u = m_unit.group(1) if m_unit else cell
+    unit = normalize_unit(raw_u)
+    if unit != raw_u:
+        return unit
+    for token in col_header.lower().split():
+        nu = normalize_unit(token)
+        if nu != token:
+            return nu
+    return "count"
+
+
+def _resolve_table_cell_bound(cell: str) -> BoundKind:
+    """Erkennt Schranken-Operatoren in einer Tabellenzelle."""
+    if re.search(r"(?:>=|mindestens|at least)", cell, re.I):
+        return BoundKind.AT_LEAST
+    if re.search(r"(?:<=|<|bis zu|höchstens|max)", cell, re.I):
+        return BoundKind.AT_MOST
+    return BoundKind.EXACT
+
+
+def _is_table_year_value(val: float, cell: str, col_header: str) -> bool:
+    """Filtert Kalenderjahre in Tabellen-Zellen heraus."""
+    if not (1900 <= val <= 2099):
+        return False
+    header_low = col_header.lower()
+    return "jahr" in header_low or "stand" in header_low or "jahr" in cell.lower()
+
+
+def _extract_table_cell_facts(
+    cell: str,
+    col_idx: int,
+    total_cols: int,
+    row_label: str,
+    col_header: str,
+    row_str: str,
+) -> List[NumericFact]:
+    """Extrahiert Punktwerte aus einer einzelnen Tabellenzelle (ohne Spannen)."""
+    if col_idx == 0 and total_cols > 1 and not cell.replace(".", "").isdigit():
+        return []
+
+    cell_bound = _resolve_table_cell_bound(cell)
+    unit = _resolve_table_cell_unit(cell, col_header)
+    range_spans = _range_spans(cell)
+
+    if col_idx == 0:
+        subj = row_label if not row_label.isdigit() else col_header
+        pred = col_header
+    else:
+        subj = row_label if row_label else col_header
+        clean_header = re.sub(r"\s*\([^)]+\)", "", col_header).strip()
+        pred = clean_header or col_header
+
+    cell_facts: List[NumericFact] = []
+    for nm in re.finditer(_NUMBER_VALUE, cell):
+        if any(lo <= nm.start() < hi for lo, hi in range_spans):
+            continue
+        val = _parse_number(nm.group(0))
+        if val is None or _is_table_year_value(val, cell, col_header):
+            continue
+        cell_facts.append(
+            NumericFact(
+                value=val,
+                unit=unit,
+                subject=subj,
+                predicate=pred,
+                modality=FactModality.FACTUAL,
+                raw=row_str,
+                bound=cell_bound,
+                scope=frozenset(),
+            )
+        )
+    return cell_facts
+
+
+def _extract_table_block_facts(block: List[str]) -> List[NumericFact]:
+    """Extrahiert numerische Fakten aus einem einzelnen Markdown-Tabellenblock."""
+    if len(block) < 3:
+        return []
+    delimiter_cells = [c.strip() for c in block[1].split("|")[1:-1]]
+    if not all(re.match(r"^:?-+:?$", c) for c in delimiter_cells if c):
+        return []
+    headers = [c.strip() for c in block[0].split("|")[1:-1]]
     facts: List[NumericFact] = []
-    for block in table_blocks:
-        if len(block) < 3:
+    for row_str in block[2:]:
+        cells = [c.strip() for c in row_str.split("|")[1:-1]]
+        if not cells:
             continue
-        delimiter_cells = [c.strip() for c in block[1].split("|")[1:-1]]
-        if not all(re.match(r"^:?-+:?$", c) for c in delimiter_cells if c):
-            continue
-        headers = [c.strip() for c in block[0].split("|")[1:-1]]
-        for row_str in block[2:]:
-            cells = [c.strip() for c in row_str.split("|")[1:-1]]
-            if not cells:
-                continue
-            row_label = cells[0]
-            for col_idx, cell in enumerate(cells):
-                if col_idx == 0 and len(cells) > 1 and not cell.replace(".", "").isdigit():
-                    continue
-                cell_bound = BoundKind.EXACT
-                if re.search(r"(?:>=|mindestens|at least)", cell, re.I):
-                    cell_bound = BoundKind.AT_LEAST
-                elif re.search(r"(?:<=|<|bis zu|höchstens|max)", cell, re.I):
-                    cell_bound = BoundKind.AT_MOST
+        row_label = cells[0]
+        for col_idx, cell in enumerate(cells):
+            col_header = headers[col_idx] if col_idx < len(headers) else ""
+            facts.extend(
+                _extract_table_cell_facts(
+                    cell=cell,
+                    col_idx=col_idx,
+                    total_cols=len(cells),
+                    row_label=row_label,
+                    col_header=col_header,
+                    row_str=row_str,
+                )
+            )
+    return facts
 
-                col_header = headers[col_idx] if col_idx < len(headers) else ""
-                unit = "count"
-                if "%" in cell or "%" in col_header or "prozent" in col_header.lower():
-                    unit = "percent"
-                else:
-                    m_unit = re.search(r"\(([^)]+)\)", col_header)
-                    raw_u = m_unit.group(1) if m_unit else cell
-                    unit = normalize_unit(raw_u)
-                    if unit == raw_u:
-                        for token in col_header.lower().split():
-                            nu = normalize_unit(token)
-                            if nu != token:
-                                unit = nu
-                                break
-                        else:
-                            unit = "count"
 
-                num_matches = list(re.finditer(_NUMBER_VALUE, cell))
-                for nm in num_matches:
-                    val = _parse_number(nm.group(0))
-                    if val is None:
-                        continue
-                    if 1900 <= val <= 2099 and ("jahr" in col_header.lower() or "stand" in col_header.lower() or "jahr" in cell.lower()):
-                        continue
-                    if col_idx == 0:
-                        subj = row_label if not row_label.isdigit() else col_header
-                        pred = col_header
-                    else:
-                        subj = row_label if row_label else col_header
-                        clean_header = re.sub(r"\s*\([^)]+\)", "", col_header).strip()
-                        pred = clean_header or col_header
-
-                    facts.append(
-                        NumericFact(
-                            value=val,
-                            unit=unit,
-                            subject=subj,
-                            predicate=pred,
-                            modality=FactModality.FACTUAL,
-                            raw=row_str,
-                            bound=cell_bound,
-                            scope=frozenset(),
-                        )
-                    )
+def _extract_table_numeric_facts(text: str) -> List[NumericFact]:
+    """Extrahiert Zahlen strukturiert aus Markdown-Tabellen."""
+    facts: List[NumericFact] = []
+    for block in _split_markdown_table_blocks(text):
+        facts.extend(_extract_table_block_facts(block))
     return facts
 
 

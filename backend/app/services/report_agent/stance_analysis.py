@@ -400,6 +400,167 @@ def _compute_stance_deviations(
 _SUPPORTING_ACTION_TYPES = frozenset({"LIKE_POST", "LIKE_COMMENT", "REPOST", "QUOTE_POST"})
 
 
+def _compute_late_end_classes(
+    voices: Sequence[VoiceStance],
+    contributions: Sequence[ClassifiedContribution],
+) -> Dict[str, StanceClass]:
+    """Bestimmt die Haltung je Stimme im letzten Drittel der Runden."""
+    max_round = max((c.round_num for c in contributions), default=0)
+    cutoff = max_round * (2.0 / 3.0)
+
+    by_agent_id: Dict[int, List[ClassifiedContribution]] = {}
+    for c in contributions:
+        if c.round_num > cutoff:
+            by_agent_id.setdefault(c.agent_id, []).append(c)
+
+    end_classes: Dict[str, StanceClass] = {}
+    for voice in voices:
+        try:
+            aid = int(voice.voice_key.split(":")[-1])
+        except (ValueError, IndexError):
+            continue
+        late_classes = [c.stance_class for c in by_agent_id.get(aid, [])]
+        in_favour_count = sum(1 for s in late_classes if s == "in_favour")
+        opposed_count = sum(1 for s in late_classes if s == "opposed")
+        if in_favour_count > opposed_count:
+            end_classes[voice.voice_key] = "in_favour"
+        elif opposed_count > in_favour_count:
+            end_classes[voice.voice_key] = "opposed"
+        else:
+            end_classes[voice.voice_key] = "undecided"
+    return end_classes
+
+
+def _resolve_supporting_interaction_pair(
+    action: Mapping[str, Any],
+    camp_voice_keys: Mapping[str, VoiceStance],
+    name_to_id: Dict[str, int],
+    comment_to_author: Dict[int, int],
+) -> Optional[tuple[str, str]]:
+    """Löst Quelle und Ziel einer zustimmenden Aktion innerhalb desselben Lagers auf."""
+    from ..network_analytics import _extract_target_agent
+
+    atype = str(action.get("action_type") or "").upper()
+    if atype not in _SUPPORTING_ACTION_TYPES:
+        return None
+    src = action.get("agent_id")
+    if src is None:
+        return None
+    try:
+        src_id = int(src)
+    except (TypeError, ValueError):
+        return None
+    src_key = f"agent:{src_id}"
+    if src_key not in camp_voice_keys:
+        return None
+
+    tgt_id = _extract_target_agent(dict(action), name_to_id, comment_to_author)
+    if tgt_id is None or tgt_id == src_id:
+        return None
+    tgt_key = f"agent:{tgt_id}"
+    if tgt_key not in camp_voice_keys:
+        return None
+    return (min(src_key, tgt_key), max(src_key, tgt_key))
+
+
+def _build_camp_interaction_graph(
+    camp_voice_keys: Mapping[str, VoiceStance],
+    actions_list: Sequence[Dict[str, Any]],
+    name_to_id: Dict[str, int],
+    comment_to_author: Dict[int, int],
+) -> tuple[Any, Dict[tuple[str, str], int], Dict[tuple[str, str], List[str]]]:
+    """Baut den Interaktionsgraphen eines Lagers samt Kantenzählern und Belegschlüsseln."""
+    import networkx as nx
+
+    graph = nx.Graph()
+    for vkey in camp_voice_keys:
+        graph.add_node(vkey)
+
+    edge_interactions: Dict[tuple[str, str], int] = Counter()
+    edge_producers: Dict[tuple[str, str], List[str]] = {}
+
+    for action in actions_list:
+        edge = _resolve_supporting_interaction_pair(
+            action, camp_voice_keys, name_to_id, comment_to_author
+        )
+        if edge is None:
+            continue
+        graph.add_edge(edge[0], edge[1])
+        edge_interactions[edge] += 1
+        pkey = str(build_action_evidence_item(action).get("producer_key") or "")
+        if pkey:
+            producers = edge_producers.setdefault(edge, [])
+            if pkey not in producers:
+                producers.append(pkey)
+
+    return graph, edge_interactions, edge_producers
+
+
+def _aggregate_component_interactions(
+    comp: set[str],
+    edge_interactions: Mapping[tuple[str, str], int],
+    edge_producers: Mapping[tuple[str, str], List[str]],
+) -> tuple[int, List[str]]:
+    """Summiert Interaktionen und eindeutige Belegschlüssel einer Zusammenhangskomponente."""
+    total_interactions = 0
+    comp_producers: List[str] = []
+    sorted_nodes = sorted(comp)
+    for idx, u in enumerate(sorted_nodes):
+        for v in sorted_nodes[idx + 1 :]:
+            edge = (u, v)
+            total_interactions += edge_interactions.get(edge, 0)
+            for pkey in edge_producers.get(edge, []):
+                if pkey not in comp_producers:
+                    comp_producers.append(pkey)
+    return total_interactions, comp_producers
+
+
+def _extract_camp_coalitions(
+    target_stance: StanceClass,
+    camp_voice_keys: Mapping[str, VoiceStance],
+    actions_list: Sequence[Dict[str, Any]],
+    name_to_id: Dict[str, int],
+    comment_to_author: Dict[int, int],
+) -> List[Coalition]:
+    """Extrahiert Koalitionen für ein einzelnes Lager."""
+    import networkx as nx
+
+    if len(camp_voice_keys) < 2:
+        return []
+
+    graph, edge_interactions, edge_producers = _build_camp_interaction_graph(
+        camp_voice_keys, actions_list, name_to_id, comment_to_author
+    )
+
+    coalitions: List[Coalition] = []
+    for comp in nx.connected_components(graph):
+        if len(comp) < 2:
+            continue
+        role_families_set = {
+            family for vkey in comp if (family := camp_voice_keys[vkey].role_family)
+        }
+        if len(role_families_set) < 2:
+            continue
+
+        sorted_members = sorted(
+            comp,
+            key=lambda k: int(k.split(":")[-1]) if k.split(":")[-1].isdigit() else k,
+        )
+        total_interactions, comp_producers = _aggregate_component_interactions(
+            comp, edge_interactions, edge_producers
+        )
+        coalitions.append(
+            Coalition(
+                stance_class=target_stance,
+                members=sorted_members,
+                role_families=sorted(role_families_set),
+                supporting_interactions=total_interactions,
+                example_producer_keys=comp_producers[:5],
+            )
+        )
+    return coalitions
+
+
 def _compute_coalitions(
     voices: Sequence[VoiceStance],
     contributions: Sequence[ClassifiedContribution],
@@ -409,33 +570,9 @@ def _compute_coalitions(
     if not actions:
         return []
 
-    import networkx as nx
-    from ..network_analytics import _build_lookup_indexes, _extract_target_agent
+    from ..network_analytics import _build_lookup_indexes
 
-    max_round = max((c.round_num for c in contributions), default=0)
-    cutoff = max_round * (2.0 / 3.0)
-
-    by_agent_id: Dict[int, List[ClassifiedContribution]] = {}
-    for c in contributions:
-        by_agent_id.setdefault(c.agent_id, []).append(c)
-
-    end_classes: Dict[str, StanceClass] = {}
-    for voice in voices:
-        try:
-            aid = int(voice.voice_key.split(":")[-1])
-        except (ValueError, IndexError):
-            continue
-        agent_contributions = [c for c in by_agent_id.get(aid, []) if c.round_num > cutoff]
-        late_classes = [c.stance_class for c in agent_contributions]
-        in_favour_count = sum(1 for s in late_classes if s == "in_favour")
-        opposed_count = sum(1 for s in late_classes if s == "opposed")
-        if in_favour_count > opposed_count:
-            end_classes[voice.voice_key] = "in_favour"
-        elif opposed_count > in_favour_count:
-            end_classes[voice.voice_key] = "opposed"
-        else:
-            end_classes[voice.voice_key] = "undecided"
-
+    end_classes = _compute_late_end_classes(voices, contributions)
     actions_list = [dict(a) for a in actions]
     name_to_id, comment_to_author = _build_lookup_indexes(actions_list)
 
@@ -446,83 +583,11 @@ def _compute_coalitions(
             for voice in voices
             if end_classes.get(voice.voice_key) == target_stance
         }
-        if len(camp_voice_keys) < 2:
-            continue
-
-        G = nx.Graph()
-        for vkey in camp_voice_keys:
-            G.add_node(vkey)
-
-        edge_interactions: Dict[tuple[str, str], int] = Counter()
-        edge_producers: Dict[tuple[str, str], List[str]] = {}
-
-        for action in actions_list:
-            atype = str(action.get("action_type") or "").upper()
-            if atype not in _SUPPORTING_ACTION_TYPES:
-                continue
-            src = action.get("agent_id")
-            if src is None:
-                continue
-            try:
-                src_id = int(src)
-            except (TypeError, ValueError):
-                continue
-            src_key = f"agent:{src_id}"
-            if src_key not in camp_voice_keys:
-                continue
-
-            tgt_id = _extract_target_agent(action, name_to_id, comment_to_author)
-            if tgt_id is None or tgt_id == src_id:
-                continue
-            tgt_key = f"agent:{tgt_id}"
-            if tgt_key not in camp_voice_keys:
-                continue
-
-            edge = (min(src_key, tgt_key), max(src_key, tgt_key))
-            G.add_edge(src_key, tgt_key)
-            edge_interactions[edge] += 1
-            pkey = str(build_action_evidence_item(action).get("producer_key") or "")
-            if pkey:
-                producers = edge_producers.setdefault(edge, [])
-                if pkey not in producers:
-                    producers.append(pkey)
-
-        components = [c for c in nx.connected_components(G) if len(c) >= 2]
-        for comp in components:
-            role_families_set = {
-                camp_voice_keys[vkey].role_family
-                for vkey in comp
-                if camp_voice_keys[vkey].role_family
-            }
-            if len(role_families_set) < 2:
-                continue
-
-            sorted_members = sorted(
-                comp,
-                key=lambda k: int(k.split(":")[-1]) if k.split(":")[-1].isdigit() else k,
+        coalitions.extend(
+            _extract_camp_coalitions(
+                target_stance, camp_voice_keys, actions_list, name_to_id, comment_to_author
             )
-            sorted_role_families = sorted(role_families_set)
-
-            total_interactions = 0
-            comp_producers: List[str] = []
-            for u in comp:
-                for v in comp:
-                    if u < v:
-                        edge = (min(u, v), max(u, v))
-                        total_interactions += edge_interactions.get(edge, 0)
-                        for p in edge_producers.get(edge, []):
-                            if p not in comp_producers:
-                                comp_producers.append(p)
-
-            coalitions.append(
-                Coalition(
-                    stance_class=target_stance,
-                    members=sorted_members,
-                    role_families=sorted_role_families,
-                    supporting_interactions=total_interactions,
-                    example_producer_keys=comp_producers[:5],
-                )
-            )
+        )
 
     coalitions.sort(
         key=lambda c: (

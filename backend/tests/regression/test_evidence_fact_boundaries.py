@@ -385,6 +385,19 @@ def test_markdown_tabelle_wird_strukturiert_erfasst():
     assert {f.subject for f in fahrzeiten} == {"RE 1", "RB 10"}
 
 
+def test_markdown_table_range_cells_do_not_emit_exact_point_facts():
+    """Tabellenzellen mit Spannen (z. B. 6–9 oder 10-20%) duerfen keine EXACT-Punktwerte erzeugen."""
+    table = (
+        "| Route | Spanne (min) | Anteil | Punktwert (min) |\n"
+        "|---|---|---|---|\n"
+        "| RE 1 | 6–9 | 10 - 20 % | 45 |\n"
+    )
+    facts = extract_numeric_facts(table)
+    assert [(f.predicate, f.value, f.bound.value, f.unit) for f in facts] == [
+        ("Punktwert", 45.0, "exact", "minutes")
+    ]
+
+
 def test_kalenderjahre_und_daten_erzeugen_keine_fakten():
     """Jahreszahlen und Datumsangaben duerfen nicht als Fakten fehlinterpretiert werden (#1766)."""
     facts_date = extract_numeric_facts("Zum 30. Juni 2027 endet das Projekt.")
