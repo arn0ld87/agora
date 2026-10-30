@@ -118,6 +118,20 @@ Stand 08.11.2026 befristet als `source: container`, `status: open` im Register h
 | `postgrest/postgrest:v14.17` | 0 | 0 | 0 | 0 | 0 |
 | **Gesamt (9 Images)** | **41** | **509** | **35** | **1.182** | **506** |
 
+**Pin-Update vom 30.10.2026.** Die Tabelle oben beschreibt den Stand vor dem Update. Geprüft mit Trivy (`--ignore-unfixed`, `HIGH,CRITICAL`, Findings je Paket) vor dem Commit:
+
+| Image | Fixable CRITICAL | Fixable HIGH |
+|---|---:|---:|
+| `supabase/postgres:17.11.0.013` | 0 | 0 |
+| `supabase/storage-api:v1.87.0` | 0 | 18 |
+| `supabase/gotrue:v2.197.0` | 0 | 10 |
+| `postgrest/postgrest:v14.18` | 0 | 0 |
+| `supabase/studio:2026.10.26-sha-478bd88` | 4 | 27 |
+| `supabase/realtime:v2.143.3` | 4 | 76 |
+| `supabase/postgres-meta:v0.100.0` | 7 | 38 |
+
+Es bleiben 15 fixbare CRITICAL-Findings; `realtime` v2.150.1 und `studio` 2026.10.26 waren am 30.10.2026 die neuesten Tags, `postgres-meta` v0.100.0 ebenfalls. `supabase/supavisor` bleibt auf 2.9.12, weil 2.9.13 im Scan 13 fixbare CRITICAL-Findings zeigte. Die vorhandenen High-Ausnahmen gelten nur für die alten Referenzen; für die neuen Referenzen gibt es noch keine. Das Gate `supabase-images` bleibt deshalb rot.
+
 - **Frist:** 08.11.2026 für alle 506 offenen Container-High-Einträge (`owner: arn0ld87`, `approved_by: arn0ld87`). Danach schlägt der Deadline-Check fehl, auch ohne neuen Scan.
 - **Evidence:** [Run 38113209635](https://github.com/arn0ld87/agora/actions/runs/38113209635) (11.10.2026) und [Run 40812078141](https://github.com/arn0ld87/agora/actions/runs/40812078141) (29.10.2026) mit allen neun Trivy-JSON-Reports (`0.json`–`8.json`) als Artefakt.
 - **Auflösung:** Sobald das koordinierte Supabase-Stack-Upgrade (Upstream `supabase/supabase` `docker/docker-compose.yml` vom 22.10.2026: `studio:2026.10.12-sha-3699278`, `gotrue:v2.197.0`, `postgrest:v14.18`, `realtime:v2.143.3`, `storage-api:v1.81.0`, `postgres-meta:v0.100.0`, `supavisor:2.9.13`) durchgeführt und gegen das Migrations-/Upgrade-Runbook ([`runbooks/upgrade.md`](runbooks/upgrade.md)) verifiziert ist, Pins anheben, neu scannen und erledigte Einträge auf `resolved` setzen.

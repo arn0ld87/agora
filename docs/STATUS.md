@@ -650,7 +650,7 @@ Die Seite „Eigene Anbieter-Keys" bietet alle BYOK-fähigen Anbieter an (OpenAI
 Seit #1618 lädt das Frontend Ablage und Run-Listen nach, sobald sich im aktiven Workspace ein Projekt, eine Simulation, ein Run oder ein Report ändert. Das Ereignis ist nur ein Signal: Die Daten kommen weiter über die Flask-API, der Payload wird nicht gelesen. Das SSE laufender Läufe bleibt unverändert, ebenso das Polling als Rückfallebene.
 - **Datenbank:** Alembic `dc4e84e7c000` nimmt die vier Tabellen in die Publication `supabase_realtime` auf, nur für `INSERT` und `UPDATE`. `DELETE` kann Realtime nicht gegen RLS prüfen. Ohne Publication (reines PostgreSQL, CI) ist die Migration ein No-op.
 - **Sichtbarkeit:** Realtime prüft je Abonnent die RLS-Policy für `authenticated` aus #1615. Das Frontend verwirft zusätzlich Ereignisse aus einem fremden Workspace und lädt höchstens einmal pro Sekunde und Tabelle nach.
-- **Dienst:** `realtime` (`supabase/realtime:v2.134.10`) läuft im Supabase-Stack, ohne Host-Port und nur über das Gateway erreichbar (`/realtime/v1/`).
+- **Dienst:** `realtime` (`supabase/realtime:v2.143.3`) läuft im Supabase-Stack, ohne Host-Port und nur über das Gateway erreichbar (`/realtime/v1/`).
 - **Schalter:** `AGORA_SUPABASE_REALTIME=true`, Default aus. `GET /api/auth/config` meldet `realtime_enabled` nur bei aktivem JWT.
 
 Verifiziert mit Vitest (Kanal, Filter, fremder Workspace, Bündelung, Anbindung in Ablage und Run-Polling) und Integrationstests gegen PostgreSQL (Migration mit und ohne Publication, RLS-Matrix unter `authenticated` mit nachgebildetem `auth.uid()`). Eine Realtime-E2E-Prüfung gegen den laufenden Stack gibt es nicht. **Umgeschaltet ist nichts.**
