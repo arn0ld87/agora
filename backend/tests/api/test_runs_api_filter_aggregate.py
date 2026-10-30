@@ -122,6 +122,18 @@ def test_list_default_returns_runs_list_response_shape(env):
     assert data["total"] == 2
 
 
+def test_list_omits_event_log_but_detail_keeps_it(env):
+    run = _create_run(env["registry"], status="completed")
+
+    listed = env["client"].get("/api/runs").get_json()["data"]["runs"]
+    detail = env["client"].get(f"/api/runs/{run['run_id']}").get_json()["data"]
+    events = env["client"].get(f"/api/runs/{run['run_id']}/events").get_json()["data"]
+
+    assert "events" not in listed[0]
+    assert detail["events"]
+    assert events
+
+
 # ---------------------------------------------------------------------------
 # Test 2: ?status=processing
 # ---------------------------------------------------------------------------

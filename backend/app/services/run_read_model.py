@@ -277,7 +277,14 @@ def build_runs_list_response(
     """Enrich a list of runs with bounded per-request caches and validate ``RunsListResponse``."""
     sim_cache: dict = {}
     project_cache: dict = {}
-    enriched = [attach_summary_fn(run, sim_cache, project_cache) for run in runs]
+    enriched = [
+        {
+            key: value
+            for key, value in attach_summary_fn(run, sim_cache, project_cache).items()
+            if key != "events"
+        }
+        for run in runs
+    ]
 
     aggregation = None
     if status_counts is not None:
