@@ -764,7 +764,7 @@
   "$id": "https://alexle135.de/schemas/runs-list-response.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Normierter List-Response f\u00fcr GET /api/runs.",
+  "description": "Normierter List-Response f\u00fcr GET /api/runs (ohne ``events``).\n\nDas Event-Log kommt nur \u00fcber ``GET /api/runs/<id>`` und\n``GET /api/runs/<id>/events``.",
   "properties": {
     "aggregation": {
       "anyOf": [

@@ -355,6 +355,10 @@ class ReportModel(BaseModel):
     #: ``GET /api/runs/<run_id>/llm-routing`` (Stufe ``report_generation``).
     generation_run_id: Optional[str] = Field(default=None, max_length=100)
 
+    def to_list_item(self) -> dict[str, Any]:
+        """Listenform für ``GET /api/report/list``: ohne den Berichtstext."""
+        return self.model_dump(mode="json", exclude={"markdown_content"})
+
     @property
     def degraded(self) -> bool:
         """Ist der Bericht auf einem beeinträchtigten Lauf entstanden?

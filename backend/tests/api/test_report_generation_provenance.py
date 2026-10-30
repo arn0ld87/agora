@@ -192,6 +192,19 @@ class TestReportListCarriesGenerationProvenance:
         for item in by_id.values():
             ReportModel.model_validate(item)
 
+    def test_list_omits_markdown_but_detail_keeps_it(self, client):
+        report_id = _new_report_id()
+        _save_report(report_id)
+        report = ReportManager.get_report(report_id)
+        report.markdown_content = "# Berichtstext"
+        ReportManager.save_report(report)
+
+        listed = client.get("/api/report/list").get_json()["data"]
+        detail = client.get(f"/api/report/{report_id}").get_json()["data"]
+
+        assert "markdown_content" not in listed[0]
+        assert detail["markdown_content"] == "# Berichtstext"
+
     def test_list_scans_the_registry_once_not_per_report(self, client, monkeypatch):
         for _ in range(3):
             _save_report(_new_report_id())

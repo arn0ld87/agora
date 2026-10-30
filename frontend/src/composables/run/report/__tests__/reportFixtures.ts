@@ -36,5 +36,10 @@ export function evidenceMap(report = 'report_1') {
 
 /** Rohform der Listenantwort (`GET /api/report/list`). */
 export function listEnvelope(items: unknown[]) {
-  return { success: true, data: items }
+  const data = items.map((item) => {
+    if (typeof item !== 'object' || item === null) return item
+    const { markdown_content: _text, ...listItem } = item as Record<string, unknown>
+    return listItem
+  })
+  return { success: true, data }
 }

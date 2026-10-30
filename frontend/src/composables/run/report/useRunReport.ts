@@ -53,8 +53,10 @@ import {
   type EvidenceEnvelope,
 } from '@/api/report'
 import {
+  ReportListItemSchema,
   ReportSchema,
   type Report,
+  type ReportListItem,
 } from '@/contracts/reportContract'
 import { PENDING_REPORT_ID } from '@/utils/reportRoute'
 import type { ReportLifecycleStatus } from '@/composables/useReportGeneration'
@@ -141,7 +143,7 @@ const ListEnvelopeSchema = z.object({
   error: z.string().nullish(),
 })
 
-function versionDate(r: Report): string {
+function versionDate(r: ReportListItem): string {
   return r.completed_at || r.created_at || ''
 }
 
@@ -152,10 +154,10 @@ export function parseVersions(envelope: unknown): VersionsState {
   if (!outer.data.success || !outer.data.data) {
     return { status: 'failed', reason: outer.data.error || 'listReports' }
   }
-  const reports: Report[] = []
+  const reports: ReportListItem[] = []
   let invalid = 0
   for (const item of outer.data.data) {
-    const parsed = ReportSchema.safeParse(item)
+    const parsed = ReportListItemSchema.safeParse(item)
     if (parsed.success) reports.push(parsed.data)
     else invalid += 1
   }

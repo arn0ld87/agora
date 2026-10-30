@@ -24,7 +24,7 @@ import { getRunLlmRouting } from '@/api/llmRouting'
 import { getReportEvidence, listReports } from '@/api/report'
 import { RunDetailSchema, RunsListResponseSchema } from '@/contracts/runsContract'
 import { RunUsageSchema, TerminationReasonSchema, type RunUsage } from '@/contracts/runBudgetContract'
-import { ReportSchema } from '@/contracts/reportContract'
+import { ReportListItemSchema } from '@/contracts/reportContract'
 import { ProjectSchema } from '@/contracts/projectContract'
 import { ApiError } from '@/api/envelope'
 import {
@@ -195,7 +195,7 @@ async function loadReports(simulationId: string): Promise<ReportInfo[]> {
   const res = await listReports({ simulation_id: simulationId, limit: 50 })
   const env = res as unknown as { success?: boolean; data?: unknown; error?: string }
   if (!env?.success) throw new Error(env?.error || 'listReports')
-  const parsed = z.array(ReportSchema).safeParse(env.data)
+  const parsed = z.array(ReportListItemSchema).safeParse(env.data)
   if (!parsed.success) throw new Error(`Vertragsbruch GET /api/report/list: ${parsed.error.message}`)
   const sorted = [...parsed.data].sort((a, b) =>
     (b.completed_at || b.created_at || '').localeCompare(a.completed_at || a.created_at || ''),

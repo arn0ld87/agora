@@ -98,7 +98,11 @@ class RunsAggregation(BaseModel):
 
 
 class RunsListResponse(BaseModel):
-    """Normierter List-Response für GET /api/runs."""
+    """Normierter List-Response für GET /api/runs (ohne ``events``).
+
+    Das Event-Log kommt nur über ``GET /api/runs/<id>`` und
+    ``GET /api/runs/<id>/events``.
+    """
 
     model_config = _STRICT
 

@@ -7,7 +7,7 @@ import { resolveStatusMessage } from '../i18n/statusMessage'
 import { useOperatorAccess } from './useOperatorAccess'
 import { reportTarget } from '../utils/reportRoute'
 import type { RunDetail } from '../contracts/runsContract'
-import type { Report } from '../contracts/reportContract'
+import type { ReportListItem } from '../contracts/reportContract'
 import type { ProjectResponse } from '../api/graph'
 import type { NextAction, ShelfFilter, ShelfJobRow, ShelfObject, ShelfSource } from '../types/shelf'
 
@@ -240,7 +240,7 @@ function statusLineFor(latest: RunDetail, jobCount: number, t: Translate, te?: T
 /** Reine Aggregation — getrennt vom Composable, damit sie testbar ist. */
 export function buildShelfObjects(
   runs: RunDetail[],
-  reports: Report[],
+  reports: ReportListItem[],
   projects: ProjectResponse[],
   templates: PersonaTemplateRecord[],
   t: Translate,
@@ -410,8 +410,8 @@ export function useShelf(t: Translate, te?: TranslateExists) {
     if (seq !== loadSeq) return
     const runs: RunDetail[] =
       runsRes.status === 'fulfilled' ? ((runsRes.value as { data?: { runs?: RunDetail[] } }).data?.runs ?? []) : []
-    const reports: Report[] =
-      reportsRes.status === 'fulfilled' ? (((reportsRes.value as { data?: unknown }).data as Report[] | undefined) ?? []) : []
+    const reports: ReportListItem[] =
+      reportsRes.status === 'fulfilled' ? (((reportsRes.value as { data?: unknown }).data as ReportListItem[] | undefined) ?? []) : []
     const projects: ProjectResponse[] =
       projectsRes.status === 'fulfilled' ? (((projectsRes.value as { data?: unknown }).data as ProjectResponse[] | undefined) ?? []) : []
     // Die Templates liegen in envelope.data.templates — NICHT direkt auf

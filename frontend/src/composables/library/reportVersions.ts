@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ReportSchema } from '../../contracts/reportContract'
+import { ReportListItemSchema } from '../../contracts/reportContract'
 import { reportStatusState, type LibraryState } from './runState'
 
 /**
@@ -45,7 +45,7 @@ export function parseReportVersions(envelope: unknown): ReportVersionsResult {
   }> = []
   let invalid = 0
   for (const item of outer.data.data) {
-    const parsed = ReportSchema.safeParse(item)
+    const parsed = ReportListItemSchema.safeParse(item)
     if (!parsed.success) {
       invalid += 1
       continue

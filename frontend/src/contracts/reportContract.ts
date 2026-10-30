@@ -473,6 +473,10 @@ export const ReportSchema = z.object({
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 
+/** Eintrag aus `GET /api/report/list`: ohne Berichtstext, den liefert `GET /api/report/<id>`. */
+export const ReportListItemSchema = ReportSchema.omit({ markdown_content: true });
+export type ReportListItem = z.infer<typeof ReportListItemSchema>;
+
 /**
  * Protokoll einer lokalen Claim-Degradierung (Issue #1006).
  *
