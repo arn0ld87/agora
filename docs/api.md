@@ -262,6 +262,10 @@ Die Run-API umfasst unter anderem:
 
 `GET /api/runs` liefert kein `events`-Feld; das Event-Log steht in `GET /api/runs/<run_id>` und `GET /api/runs/<run_id>/events`.
 
+`GET /api/report/list` liefert kein `markdown_content`; den Berichtstext liefern `GET /api/report/<id>` und `GET /api/report/by-simulation/<simulation_id>`.
+
+JSON-Antworten ab 1 KiB kommen gzip-komprimiert, wenn der Client `Accept-Encoding: gzip` sendet. SSE-Streams und Dateidownloads bleiben unkomprimiert.
+
 Ungültige Filterparameter von `GET /api/runs` (z. B. `limit` außerhalb 1–200, unbekannter `status`) liefern `400` mit `code: "validation_error"`, einem Text in `error` und den Pydantic-Details unter `details` (#1679).
 
 `GET /api/runs/<run_id>/export` liefert seit #1680 nur explizit allowlistete Artefakte: `manifest.json`, `runtime_llm_routing.json`, `llm_call_events.jsonl`, `usage_summary.json`, `budget_warnings.json` sowie `stages/*_llm_route_snapshot.json` und `stages/*_ai_route_snapshot.json` (Allowlist: `backend/app/services/run_export.py::EXPORT_ALLOWED_PATTERNS`, erhoben aus dem Inventar aller Writer ins Run-Verzeichnis). Alles andere — insbesondere versehentlich ins Run-Verzeichnis geratene Dateien wie `.env` oder `secrets.json` — wird nicht ausgeliefert und stattdessen in der im ZIP enthaltenen `export-report.json` unter `skipped` (mit `reason`: `not_in_allowlist`, `symlink` oder `outside_run_dir`) sichtbar gemeldet; zusätzlich loggt der Endpoint die übersprungenen Dateien strukturiert. Symlinks und Pfade, deren realer Speicherort außerhalb des Run-Verzeichnisses liegt, werden nie exportiert. Neue Writer ins Run-Verzeichnis müssen ihr Artefakt im selben Change in die Allowlist aufnehmen, sonst bleibt es im Export sichtbar `skipped`.

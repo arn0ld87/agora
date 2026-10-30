@@ -530,6 +530,10 @@ def create_app(config_class=Config):
             extra={'request_id': g.request_id},
         )
 
+    from .utils.compression import gzip_json_response
+
+    app.after_request(gzip_json_response)
+
     @app.after_request
     def log_response(response):
         req_id = getattr(g, 'request_id', None)
