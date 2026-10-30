@@ -1,0 +1,3 @@
+### Security
+
+- **Synchronisation der High-Ausnahmen für Supabase-Images (#1670):** Nach dem Supabase-Pin-Update (PR 1) wurden die Container-Ausnahmen in `docs/dependency-risk-exceptions.json` gegen den CI-Trivy-Scan (Run 41055191120) synchronisiert. 164 neue High-Ausnahmen wurden eingetragen, 3 bestehende Ausnahmen für unveränderte Pins (`envoy`, `supavisor`) aktualisiert (Frist: 2026-11-29) und 503 veraltete Ausnahmen auf `status: resolved` gesetzt. Alle 172 fixbaren High-Befunde (167 offene Ausnahmen) sind damit abgedeckt. 15 fixbare Upstream-CRITICAL-Befunde (Realtime 4, postgres-meta 7, Studio 4) verbleiben bestimmungsgemäß ohne Ausnahme als Blocker im Gate, bis Upstream diese Basis-Pakete patcht.
