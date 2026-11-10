@@ -384,7 +384,9 @@ WORKDIR /app
 #
 # 2026-09-30: CVE-2026-84782 / -75804, openssl/openssl-provider-legacy
 # 3.5.7-1~deb13u2 -> 3.5.7-1~deb13u3.
-ARG APT_SECURITY_EPOCH=2026-09-30
+#
+# 2026-11-10: CVE-2026-109518 (apt/libapt-pkg7.0 3.0.3 -> 3.0.4), CVE-2026-76844 / -85091 (zlib1g 1:1.3.dfsg+really1.3.1-1+b1 -> 1:1.3.dfsg+really1.3.1-1+deb13u1).
+ARG APT_SECURITY_EPOCH=2026-11-10
 RUN echo "apt security epoch: ${APT_SECURITY_EPOCH}" \
   && apt-get update \
   && apt-get upgrade -y \
