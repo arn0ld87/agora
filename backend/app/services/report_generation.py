@@ -7,6 +7,7 @@ from typing import Dict
 
 from flask import current_app
 
+from ..contracts.report_v3 import ReportMode
 from ..services.document_roles import load_document_roles
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.report_agent.output_contract import is_deliverable_report_status
@@ -53,6 +54,7 @@ def finish_completed_run(
     report_id: str,
     simulation_id: str,
     report_status: str | None = None,
+    message: str | None = None,
 ) -> None:
     """Setzt den Erfolgs-Endzustand eines fertigen Reports (Issue #1243).
 
@@ -79,7 +81,7 @@ def finish_completed_run(
         run_id,
         status="completed",
         progress=100,
-        message="Report generated",
+        message=message or "Report generated",
         termination_reason=None,
         artifacts=ArtifactLocator.existing_paths({
             "report": ArtifactLocator.report_artifacts(report_id),
@@ -123,6 +125,185 @@ def finish_cancelled_run(run_id: str, *, report_id: str, simulation_id: str) -> 
 
 
 class ReportGenerationService:
+    @staticmethod
+    def execute_report_job(
+        *,
+        run_id: str,
+        task_id: str,
+        task_manager: TaskManager,
+        report_id: str,
+        simulation_id: str,
+        graph_id: str,
+        simulation_requirement: str,
+        report_mode: ReportMode,
+        model_name: str | None,
+        llm_client,
+        graph_tools,
+        document_roles: Dict[str, str],
+        cancel_run_id: str | None = None,
+        message_key: str | None = None,
+        agent_factory,
+        report_manager,
+        run_registry,
+        finish_completed_run_fn,
+        finish_cancelled_run_fn,
+    ) -> None:
+        """Der gemeinsame Report-Job-Koerper von Start und Resume (Slice 1).
+
+        Beide Wege erzeugen denselben Report: Agent aufbauen, generieren,
+        speichern, Endzustand setzen. Vorher existierte der Koerper zweimal
+        (ReportGenerationService._wire_and_enqueue_generation und
+        api/runs_resume.py::_resume_report_generate); die Kopien drifteten
+        auseinander:
+
+        * Bug A (#1479): der Resume-Pfad speicherte ohne report_mode und fiel
+          damit immer auf DEFAULT_REPORT_MODE zurueck.
+        * Bug B (#1479): nur der Resume-Pfad setzte metadata.report_status.
+
+        Die Collaborators werden bewusst als Parameter uebergeben: Start- und
+        Resume-Pfad greifen auf unterschiedliche Modul-Namespaces zu (app.api.runs
+        vs. app.services.report_generation), und Tests patchen genau diese
+        Attribute.
+        """
+        from .run_budget import BudgetExceededError, mark_budget_abort
+
+        effective_cancel_run_id = cancel_run_id or run_id
+        try:
+            task_manager.update_task(
+                task_id,
+                status=TaskStatus.PROCESSING,
+                progress=0,
+                message="Initializing Report Agent...",
+                message_key=message_key,
+            )
+            agent = agent_factory(
+                graph_id=graph_id,
+                simulation_id=simulation_id,
+                simulation_requirement=simulation_requirement,
+                graph_tools=graph_tools,
+                llm_client=llm_client,
+                model_name=model_name,
+                # Issue #1240: Szenario-/Erwartungstext stuetzt keinen Claim.
+                document_roles=document_roles,
+            )
+
+            def progress_callback(stage, progress, message):
+                task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
+
+            # Issue #1243: ohne cancel_run_id prueft generate_report gar nicht erst
+            # -- der /cancel-Endpoint quittierte 202 und der Report lief bis zum
+            # Ende durch.
+            report = agent.generate_report(
+                progress_callback=progress_callback,
+                report_id=report_id,
+                report_mode=report_mode,
+                cancel_run_id=effective_cancel_run_id,
+            )
+            # Bug A: der Modus muss mitgespeichert werden, sonst faellt der
+            # Report auf DEFAULT_REPORT_MODE zurueck.
+            report_manager.save_report(report, report_mode=report_mode)
+            # Issue #1006: INCOMPLETE ist ein Teilergebnis, kein Fehlschlag. Der
+            # Report existiert, ist lesbar und exportierbar -- nur einzelne Claims
+            # wurden lokal abgestuft oder eine Section ist fehlgeschlagen.
+            if was_run_cancelled(run_id):
+                # Issue #1243: der Teilreport aus _build_partial_report traegt
+                # status=COMPLETED (success-with-caveat). Ohne diesen Zweig faende
+                # der Nutzer den abgebrochenen Lauf als regulaer abgeschlossen
+                # wieder -- nicht unterscheidbar von einem Report, der alle
+                # Sections geschrieben hat.
+                # Reihenfolge ist bindend (dieselbe Falle wie #978): der Task
+                # spiegelt sich per RunRegistry.sync_task auf den Run zurueck und
+                # wuerde stopped wieder mit completed ueberschreiben. Der
+                # detaillierte Run-Update laeuft zuletzt.
+                task_manager.complete_task(
+                    task_id,
+                    result={
+                        "report_id": report.report_id,
+                        "simulation_id": simulation_id,
+                        "status": report.status.value,
+                        "cancelled": True,
+                    },
+                )
+                finish_cancelled_run_fn(
+                    run_id,
+                    report_id=report_id,
+                    simulation_id=simulation_id,
+                )
+            elif is_deliverable_report_status(report.status):
+                _incomplete = report.status == ReportStatus.INCOMPLETE
+                # Bug B: der gemeinsame Endzustand setzt metadata.report_status
+                # in BEIDEN Pfaden.
+                finish_completed_run_fn(
+                    run_id,
+                    report_id=report_id,
+                    simulation_id=simulation_id,
+                    report_status=report.status.value,
+                    message=(
+                        "Report generated with degraded claims"
+                        if _incomplete
+                        else "Report generated"
+                    ),
+                )
+                task_manager.complete_task(
+                    task_id,
+                    result={
+                        "report_id": report.report_id,
+                        "simulation_id": simulation_id,
+                        "status": report.status.value,
+                    },
+                )
+            else:
+                error_message = report.error or "Report generation failed"
+                run_registry.update_run(
+                    run_id,
+                    status="failed",
+                    message=error_message,
+                    error=error_message,
+                    artifacts=ArtifactLocator.existing_paths({
+                        "report": ArtifactLocator.report_artifacts(report_id),
+                        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+                    }),
+                    resume_capability={
+                        "available": True,
+                        "action": "resume",
+                        "label": "Continue report generation",
+                    },
+                )
+                task_manager.fail_task(task_id, error_message)
+        except BudgetExceededError as exc:
+            # Budgetabbruch (#764): Teilresultate bleiben erhalten, Status
+            # "stopped" + termination_reason statt technischem "failed".
+            logger.warning(
+                "Report generation budget-aborted (run_id=%s, report_id=%s): %s",
+                run_id, report_id, exc,
+            )
+            # Reihenfolge ist bindend (Issue #978, gleiche Falle wie #841 in
+            # api/simulation_prepare.py): fail_task() spiegelt den Task per
+            # TaskManager.update_task -> RunRegistry.sync_task auf den Run
+            # zurueck und setzt dabei status="failed" + message="Task failed".
+            # Liefe es nach mark_budget_abort(), wuerde es den soeben gesetzten
+            # "stopped"-Status samt Budgetbegruendung wieder ueberschreiben. Der
+            # detaillierte Run-Update muss deshalb zuletzt laufen.
+            task_manager.fail_task(task_id, str(exc))
+            mark_budget_abort(run_id, exc.dimension, exc.observed, exc.threshold)
+        except Exception:
+            logger.exception("Report generation failed (run_id=%s, report_id=%s)", run_id, report_id)
+            import traceback
+            error_msg = traceback.format_exc()
+            run_registry.update_run(
+                run_id,
+                status="failed",
+                message=error_msg,
+                error=error_msg,
+                artifacts=ArtifactLocator.existing_paths({
+                    "report": ArtifactLocator.report_artifacts(report_id),
+                    "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+                }),
+            )
+            task_manager.fail_task(task_id, error_msg)
+
+
+
     @staticmethod
     def can_reuse_existing_report(
         force_regenerate: bool,
@@ -288,6 +469,10 @@ class ReportGenerationService:
                 "branch_depth": state.branch_depth,
                 "llm_model": llm_model_override,
                 "llm_provider": llm_runtime.redacted_metadata() or None,
+                # Issue #1479: der Modus muss am Run stehen, damit ein Resume
+                # denselben Modus verwendet (sonst faellt er auf
+                # DEFAULT_REPORT_MODE zurueck).
+                "report_mode": report_mode,
             },
         ) as lifecycle:
             run_record = lifecycle.record
@@ -418,132 +603,26 @@ class ReportGenerationService:
         graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
         def run_generate():
-            from .run_budget import BudgetExceededError, mark_budget_abort
-
-            try:
-                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, progress=0, message="Initializing Report Agent...")
-                agent = ReportAgent(
-                    graph_id=graph_id,
-                    simulation_id=simulation_id,
-                    simulation_requirement=simulation_requirement,
-                    graph_tools=graph_tools,
-                    llm_client=shared_llm_client,
-                    model_name=resolved_route.model,
-                    # Issue #1240: Szenario-/Erwartungstext stützt keinen Claim.
-                    document_roles=load_document_roles(state.project_id),
-                )
-                def progress_callback(stage, progress, message):
-                    task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
-                # Issue #1243: ohne cancel_run_id prueft generate_report gar
-                # nicht erst — der /cancel-Endpoint quittierte 202 und der
-                # Report lief bis zum Ende durch.
-                report = agent.generate_report(
-                    progress_callback=progress_callback,
-                    report_id=report_id,
-                    report_mode=report_mode,
-                    cancel_run_id=run_record["run_id"],
-                )
-                ReportManager.save_report(report, report_mode=report_mode)
-                # Issue #1006: INCOMPLETE ist ein Teilergebnis, kein Fehlschlag.
-                # Der Report existiert, ist lesbar und exportierbar — nur
-                # einzelne Claims wurden lokal abgestuft oder eine Section ist
-                # fehlgeschlagen. Ihn in den failed-Zweig zu schicken hiesse:
-                # der Nutzer liest "Report generation failed", obwohl das
-                # Ergebnis vorliegt, und bekommt ein Resume angeboten, das
-                # bereits fertige Sections ohnehin ueberspringt. Genau diese
-                # Zustellungsluecke haette den Fix aus #1006 in der Oberflaeche
-                # wirkungslos gemacht.
-                if was_run_cancelled(run_record["run_id"]):
-                    # Issue #1243: der Teilreport aus _build_partial_report
-                    # traegt status=COMPLETED (success-with-caveat). Ohne
-                    # diesen Zweig faende der Nutzer den abgebrochenen Lauf als
-                    # regulaer abgeschlossen wieder — nicht unterscheidbar von
-                    # einem Report, der alle Sections geschrieben hat.
-                    # Reihenfolge ist bindend (dieselbe Falle wie #978): der
-                    # Task spiegelt sich per RunRegistry.sync_task auf den Run
-                    # zurueck und wuerde "stopped" wieder mit "completed"
-                    # ueberschreiben. Der detaillierte Run-Update laeuft zuletzt.
-                    task_manager.complete_task(
-                        task_id,
-                        result={
-                            "report_id": report.report_id,
-                            "simulation_id": simulation_id,
-                            "status": report.status.value,
-                            "cancelled": True,
-                        },
-                    )
-                    finish_cancelled_run(
-                        run_record["run_id"],
-                        report_id=report_id,
-                        simulation_id=simulation_id,
-                    )
-                elif is_deliverable_report_status(report.status):
-                    _incomplete = report.status == ReportStatus.INCOMPLETE
-                    run_registry.update_run(
-                        run_record["run_id"],
-                        status="completed",
-                        progress=100,
-                        message=(
-                            "Report generated with degraded claims"
-                            if _incomplete
-                            else "Report generated"
-                        ),
-                        artifacts=ArtifactLocator.existing_paths({
-                            "report": ArtifactLocator.report_artifacts(report_id),
-                            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
-                        }),
-                        resume_capability={"available": False, "action": None, "label": None},
-                    )
-                    task_manager.complete_task(task_id, result={"report_id": report.report_id, "simulation_id": simulation_id, "status": report.status.value})
-                else:
-                    run_registry.update_run(
-                        run_record["run_id"],
-                        status="failed",
-                        message=report.error or "Report generation failed",
-                        error=report.error or "Report generation failed",
-                        artifacts=ArtifactLocator.existing_paths({
-                            "report": ArtifactLocator.report_artifacts(report_id),
-                            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
-                        }),
-                        resume_capability={"available": True, "action": "resume", "label": "Continue report generation"},
-                    )
-                    task_manager.fail_task(task_id, report.error or "Report generation failed")
-            except BudgetExceededError as exc:
-                # Budgetabbruch (#764): Teilresultate bleiben erhalten, Status
-                # "stopped" + termination_reason statt technischem "failed".
-                logger.warning(
-                    "Report generation budget-aborted (run_id=%s, report_id=%s): %s",
-                    run_record["run_id"], report_id, exc,
-                )
-                # Reihenfolge ist bindend (Issue #978, gleiche Falle wie #841 in
-                # api/simulation_prepare.py): fail_task() spiegelt den Task per
-                # TaskManager.update_task -> RunRegistry.sync_task auf den Run
-                # zurueck und setzt dabei status="failed" + message="Task failed".
-                # Liefe es nach mark_budget_abort(), wuerde es den soeben
-                # gesetzten "stopped"-Status samt Budgetbegruendung wieder
-                # ueberschreiben — genau das Symptom im E2E-Smoke
-                # frontend/tests/e2e/run-budget.spec.ts. Der detaillierte
-                # Run-Update muss deshalb zuletzt laufen.
-                task_manager.fail_task(task_id, str(exc))
-                mark_budget_abort(
-                    run_record["run_id"], exc.dimension, exc.observed, exc.threshold
-                )
-            except Exception:
-                logger.exception("Report generation failed (run_id=%s, report_id=%s)", run_record["run_id"], report_id)
-                import traceback
-                error_msg = traceback.format_exc()
-                run_registry.update_run(
-                    run_record["run_id"],
-                    status="failed",
-                    message=error_msg,
-                    error=error_msg,
-                    artifacts=ArtifactLocator.existing_paths({
-                        "report": ArtifactLocator.report_artifacts(report_id),
-                        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
-                    }),
-                )
-                task_manager.fail_task(task_id, error_msg)
-
+            cls.execute_report_job(
+                run_id=run_record["run_id"],
+                task_id=task_id,
+                task_manager=task_manager,
+                report_id=report_id,
+                simulation_id=simulation_id,
+                graph_id=graph_id,
+                simulation_requirement=simulation_requirement,
+                report_mode=report_mode,
+                model_name=resolved_route.model,
+                llm_client=shared_llm_client,
+                graph_tools=graph_tools,
+                document_roles=load_document_roles(state.project_id),
+                cancel_run_id=run_record["run_id"],
+                agent_factory=ReportAgent,
+                report_manager=ReportManager,
+                run_registry=run_registry,
+                finish_completed_run_fn=finish_completed_run,
+                finish_cancelled_run_fn=finish_cancelled_run,
+            )
         from ..jobs import enqueue
         # run_id: Issue #1472 — siehe simulation_prepare.
         def scoped_run_generate():

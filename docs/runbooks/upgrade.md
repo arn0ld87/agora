@@ -24,6 +24,11 @@ Ein Upgrade besteht in Agora aus mehr als einem neuen Image: Ab `0.10` gehören 
 
 ## Persistenz-Änderungen außerhalb des Versionssprungs
 
+**`report_mode` und `report_status` in den Run-Metadaten von `report_generate` (PR #1922).** `POST /api/report/generate` schreibt den gewählten Berichtsmodus (`strict`, `balanced`, `explorative`) als `metadata.report_mode` an den Run. `POST /api/runs/<id>/resume` liest ihn dort und erzeugt und speichert den fortgesetzten Bericht im selben Modus. Vorher fiel jeder Resume auf `balanced` zurück. Außerdem setzt jetzt auch ein normal gestarteter Bericht `metadata.report_status` (`completed`/`incomplete`), bisher tat das nur der Resume-Pfad (#1479).
+
+- **Upgrade:** Keine Migration. Bestehende Runs ohne `metadata.report_mode` und Runs mit unbekanntem Wert werden beim Resume weiter mit `DEFAULT_REPORT_MODE` (`balanced`) fortgesetzt, wie bisher. `report_status` fehlt bei Altläufen, bis sie erneut abgeschlossen werden.
+- **Rollback-Implikation:** Ein älterer Stand ignoriert `metadata.report_mode` und setzt Resumes wieder mit `balanced` fort. Die zusätzlichen Metadaten stören ihn nicht.
+
 **`run_events.json` bei Berichts-Resumes (PR #1884).** `uploads/reports/<report_id>/run_events.json` speichert zusätzlich die drei optionalen Listenfelder `forced_final_sections`, `metadata_failed_sections` und `quote_validation_failed_sections` (jeweils `list[int]`), damit ein unterbrochener und per Resume fortgesetzter Berichtslauf die Qualitäts-Signale bereits abgeschlossener Abschnitte bei der finalen `status`-/`status_reason`-Ableitung nicht verliert.
 
 - **Upgrade:** Keine Migration nötig. Bestehende Läufe ohne diese Schlüssel werden beim Resume über Default-Listen (`[]`) eingelesen.
