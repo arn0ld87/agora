@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from ..contracts.llm_routing_contract import StageId
     from ..utils.llm_client import LLMClient
 
+from ..services.report_generation import ReportGenerationService
+
 
 def _runs_module():
     from . import runs
@@ -424,6 +426,23 @@ def _resume_or_restart_simulation_run(run: dict):
     return {"run_id": new_run["run_id"], "status": new_run_state.runner_status.value, "message": "Simulation restarted"}
 
 
+def _resolve_report_mode_from_run(run: dict) -> str:
+    """Liest den Report-Modus aus den Run-Metadaten (Issue #1479, Bug A).
+
+    Fehlendes Feld (Altlauf) oder ein unbekannter Wert fallen auf
+    ``DEFAULT_REPORT_MODE`` zurueck -- ein Resume darf nie mit einem
+    ungueltigen Modus laufen.
+    """
+    from typing import get_args
+
+    from ..contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode
+
+    raw = (run.get("metadata") or {}).get("report_mode")
+    allowed = set(get_args(ReportMode))
+    if isinstance(raw, str) and raw in allowed:
+        return raw
+    return DEFAULT_REPORT_MODE
+
 def _resume_report_generate(run: dict):
     _runs_mod = _runs_module()
     report_id = run.get("linked_ids", {}).get("report_id") or run.get("entity_id")
@@ -500,96 +519,32 @@ def _resume_report_generate(run: dict):
         metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run["run_id"]},
     )
 
-    from ..services.run_budget import BudgetExceededError, mark_budget_abort
-
     def run_generate():
-        try:
-            task_manager.update_task(
-                task_id,
-                status=_runs_mod.TaskStatus.PROCESSING,
-                progress=0,
-                message="Initializing Report Agent...",
-                message_key="run.report_initializing",
-            )
-            agent = _runs_mod.ReportAgent(
-                graph_id=graph_id,
-                simulation_id=simulation_id,
-                simulation_requirement=project.simulation_requirement or "",
-                graph_tools=graph_tools,
-                llm_client=shared_llm_client,
-                model_name=llm_model_override,
-                # Issue #1240: Szenario-/Erwartungstext stützt keinen Claim.
-                document_roles=_runs_mod.load_document_roles(project.project_id),
-            )
-
-            def progress_callback(stage, progress, message):
-                task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
-
-            # Issue #1243: auch der Resume-Pfad muss abbrechbar sein — ohne
-            # cancel_run_id liest generate_report das Flag nie.
-            report = agent.generate_report(
-                progress_callback=progress_callback,
-                report_id=report_id,
-                cancel_run_id=run["run_id"],
-            )
-            _runs_mod.ReportManager.save_report(report)
-            if _runs_mod.was_run_cancelled(run["run_id"]):
-                # Teilreport nach Nutzerabbruch traegt status=COMPLETED; ohne
-                # diesen Zweig waere er von einem vollstaendigen Lauf nicht zu
-                # unterscheiden.
-                # Reihenfolge bindend (#978): complete_task spiegelt sich per
-                # sync_task auf den Run zurueck und wuerde "stopped" wieder
-                # ueberschreiben. Der Run-Update laeuft zuletzt.
-                task_manager.complete_task(
-                    task_id,
-                    result={
-                        "report_id": report_id,
-                        "simulation_id": simulation_id,
-                        "cancelled": True,
-                    },
-                )
-                _runs_mod.finish_cancelled_run(
-                    run["run_id"], report_id=report_id, simulation_id=simulation_id
-                )
-            elif _runs_mod.is_deliverable_report_status(report.status):
-                # Issue #1479: ein INCOMPLETE-Report ist ein ehrliches
-                # Teilergebnis, kein Fehlschlag — die alte Gleichheitsprüfung
-                # gegen COMPLETED schickte ihn in den else-Zweig und meldete
-                # den Resume faelschlich als "failed".
-                _runs_mod.finish_completed_run(
-                    run["run_id"],
-                    report_id=report_id,
-                    simulation_id=simulation_id,
-                    report_status=report.status.value,
-                )
-                task_manager.complete_task(
-                    task_id,
-                    result={"report_id": report_id, "simulation_id": simulation_id, "status": report.status.value},
-                )
-            else:
-                _runs_mod.run_registry.update_run(
-                    run["run_id"],
-                    status="failed",
-                    message=report.error or "Report generation failed",
-                    error=report.error,
-                )
-                task_manager.fail_task(task_id, report.error or "Report generation failed")
-        except BudgetExceededError as exc:
-            # Budgetabbruch (#984): Teilresultate bleiben erhalten, Status
-            # "stopped" + termination_reason statt technischem "failed".
-            # Reihenfolge bindend (#978, gleiche Falle wie #841): fail_task()
-            # zuerst — sync_task setzt generisch "failed" —, der detaillierte
-            # mark_budget_abort() zuletzt (setzt stopped + termination_reason).
-            _runs_mod.logger.warning(
-                "Resume report budget-aborted (run_id=%s, report_id=%s): %s",
-                run["run_id"], report_id, exc,
-            )
-            task_manager.fail_task(task_id, str(exc))
-            mark_budget_abort(run["run_id"], exc.dimension, exc.observed, exc.threshold)
-        except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
-            _runs_mod.run_registry.update_run(run["run_id"], status="failed", message=str(exc), error=str(exc))
-            task_manager.fail_task(task_id, str(exc))
-
+        # Issue #1479 (Bug A): der Modus steht seit dem Start in den
+        # Run-Metadaten. Altlaeufe ohne das Feld fallen auf den Default
+        # zurueck -- ein unbekannter Modus ebenso.
+        report_mode = _resolve_report_mode_from_run(run)
+        ReportGenerationService.execute_report_job(
+            run_id=run["run_id"],
+            task_id=task_id,
+            task_manager=task_manager,
+            report_id=report_id,
+            simulation_id=simulation_id,
+            graph_id=graph_id,
+            simulation_requirement=project.simulation_requirement or "",
+            report_mode=report_mode,
+            model_name=llm_model_override,
+            llm_client=shared_llm_client,
+            graph_tools=graph_tools,
+            document_roles=_runs_mod.load_document_roles(project.project_id),
+            cancel_run_id=run["run_id"],
+            message_key="run.report_initializing",
+            agent_factory=_runs_mod.ReportAgent,
+            report_manager=_runs_mod.ReportManager,
+            run_registry=_runs_mod.run_registry,
+            finish_completed_run_fn=lambda run_id, **kw: _runs_mod.finish_completed_run(run_id, **kw),
+            finish_cancelled_run_fn=lambda run_id, **kw: _runs_mod.finish_cancelled_run(run_id, **kw),
+        )
     _runs_mod.run_registry.update_run(
         run["run_id"], status="processing", progress=0, message="Report generation resumed", message_key="run.report_resumed"
     )
