@@ -98,45 +98,32 @@ belegt noch keinen sauberen Stichtag-Scan; dessen Ergebnis wird separat festgeha
 
 ### Supabase-Images: befristete High-Ausnahmen vom 11.10.2026 (aktualisiert 30.10.2026)
 
-Die neun Image-Pins in `supabase/docker-compose.yml` wurden am 11.10.2026 (Run 38113209635)
-und erneut am 29./30.10.2026 (Run 40812078141) vollständig mit Trivy gescannt. Für 506
-eindeutige High-Befunde (399 vom 11.10.2026 plus 107 neue Trivy-DB-Einträge vom 29.10.2026,
-vor allem `linux-libc-dev`, `@modelcontextprotocol/sdk`, `undici`, `libexpat1`, `curl`,
-`util-linux`) nennt Trivy eine `FixedVersion` auf Paketebene; die gepinnten Images sind mit
-Stand 08.11.2026 befristet als `source: container`, `status: open` im Register hinterlegt.
+Die neun Image-Pins in `supabase/docker-compose.yml` wurden am 11.10.2026 (Run 38113209635),
+am 29./30.10.2026 (Run 40812078141) und nach dem Pin-Update am 30.10.2026 (Run 41055191120)
+vollständig mit Trivy gescannt. Für die neuen Image-Tags wurden 164 neue befristete High-Ausnahmen
+hinterlegt, 3 Ausnahmen für unveränderte Pins (`envoyproxy/envoy:v1.39.1` und `supabase/supavisor:2.9.12`)
+aktualisiert und 503 veraltete Ausnahmen auf `status: resolved` gesetzt.
+Für alle 172 fixbaren High-Befunde (22 unikate Ausnahmen für 27 Studio-Findings wegen duplizierter
+Paketpfade in dist/exe) existieren damit 167 offene Ausnahmen mit Frist 2026-11-29.
 
 | Image | Fixable CRITICAL | Fixable HIGH (Findings) | Unfixable CRITICAL | Unfixable HIGH | Offene High-Ausnahmen (`dependency-risk-exceptions.json`) |
 |---|---:|---:|---:|---:|---:|
-| `supabase/studio:2026.09.07-sha-7996410` | 23 | 226 | 5 | 258 | 223 |
-| `supabase/storage-api:v1.74.0` | 5 | 77 | 0 | 0 | 77 |
-| `supabase/realtime:v2.134.10` | 4 | 76 | 0 | 74 | 76 |
-| `supabase/postgres:17.6.1.136` | 1 | 51 | 0 | 0 | 51 |
-| `supabase/postgres-meta:v0.99.0` | 8 | 44 | 1 | 56 | 44 |
-| `supabase/gotrue:v2.196.0` | 0 | 32 | 0 | 1 | 32 |
+| `supabase/studio:2026.10.26-sha-478bd88` | 4 | 27 | 4 | 263 | 22 |
+| `supabase/storage-api:v1.87.0` | 0 | 18 | 0 | 0 | 18 |
+| `supabase/realtime:v2.143.3` | 4 | 76 | 0 | 74 | 76 |
+| `supabase/postgres:17.11.0.013` | 0 | 0 | 0 | 0 | 0 |
+| `supabase/postgres-meta:v0.100.0` | 7 | 38 | 1 | 56 | 38 |
+| `supabase/gotrue:v2.197.0` | 0 | 10 | 0 | 1 | 10 |
 | `envoyproxy/envoy:v1.39.1` | 0 | 2 | 0 | 0 | 2 |
-| `supabase/supavisor:2.9.12` | 0 | 1 | 29 | 793 | 1 |
-| `postgrest/postgrest:v14.17` | 0 | 0 | 0 | 0 | 0 |
-| **Gesamt (9 Images)** | **41** | **509** | **35** | **1.182** | **506** |
+| `supabase/supavisor:2.9.12` | 0 | 1 | 28 | 811 | 1 |
+| `postgrest/postgrest:v14.18` | 0 | 0 | 0 | 0 | 0 |
+| **Gesamt (9 Images)** | **15** | **172** | **33** | **1.205** | **167** |
 
-**Pin-Update vom 30.10.2026.** Die Tabelle oben beschreibt den Stand vor dem Update. Geprüft mit Trivy (`--ignore-unfixed`, `HIGH,CRITICAL`, Findings je Paket) vor dem Commit:
-
-| Image | Fixable CRITICAL | Fixable HIGH |
-|---|---:|---:|
-| `supabase/postgres:17.11.0.013` | 0 | 0 |
-| `supabase/storage-api:v1.87.0` | 0 | 18 |
-| `supabase/gotrue:v2.197.0` | 0 | 10 |
-| `postgrest/postgrest:v14.18` | 0 | 0 |
-| `supabase/studio:2026.10.26-sha-478bd88` | 4 | 27 |
-| `supabase/realtime:v2.143.3` | 4 | 76 |
-| `supabase/postgres-meta:v0.100.0` | 7 | 38 |
-
-Es bleiben 15 fixbare CRITICAL-Findings; `realtime` v2.150.1 und `studio` 2026.10.26 waren am 30.10.2026 die neuesten Tags, `postgres-meta` v0.100.0 ebenfalls. `supabase/supavisor` bleibt auf 2.9.12, weil 2.9.13 im Scan 13 fixbare CRITICAL-Findings zeigte. Die vorhandenen High-Ausnahmen gelten nur für die alten Referenzen; für die neuen Referenzen gibt es noch keine. Das Gate `supabase-images` bleibt deshalb rot.
-
-- **Frist:** 08.11.2026 für alle 506 offenen Container-High-Einträge (`owner: arn0ld87`, `approved_by: arn0ld87`). Danach schlägt der Deadline-Check fehl, auch ohne neuen Scan.
-- **Evidence:** [Run 38113209635](https://github.com/arn0ld87/agora/actions/runs/38113209635) (11.10.2026) und [Run 40812078141](https://github.com/arn0ld87/agora/actions/runs/40812078141) (29.10.2026) mit allen neun Trivy-JSON-Reports (`0.json`–`8.json`) als Artefakt.
-- **Auflösung:** Sobald das koordinierte Supabase-Stack-Upgrade (Upstream `supabase/supabase` `docker/docker-compose.yml` vom 22.10.2026: `studio:2026.10.12-sha-3699278`, `gotrue:v2.197.0`, `postgrest:v14.18`, `realtime:v2.143.3`, `storage-api:v1.81.0`, `postgres-meta:v0.100.0`, `supavisor:2.9.13`) durchgeführt und gegen das Migrations-/Upgrade-Runbook ([`runbooks/upgrade.md`](runbooks/upgrade.md)) verifiziert ist, Pins anheben, neu scannen und erledigte Einträge auf `resolved` setzen.
-- **Nicht abgedeckt (bewusster Gate-Blocker):** 41 Critical-Befunde mit verfügbarem Fix (Studio 23, postgres-meta 8, Storage 5, Realtime 4, Postgres 1; betroffen sind `perl`/`libperl5.36`, `next`, `tar`, `libbrotli1`/`brotli-libs`, `python3`/`pyc`, `piscina`, `proxy-addr`, `tinypool`, `@sentry/nextjs`, `simple-git`/`@simple-git/argv-parser`, `dompurify`). Die Richtlinie in `check_dependency_risk_register.py` lässt für Critical keine Risikoakzeptanz (`status: open`) zu. Der Job „Supabase image CVEs + exception gate" bleibt deshalb bestimmungsgemäß rot, bis die Basis-Images diese Critical-Pakete gepatcht haben.
-- Befunde ohne verfügbaren Fix (35 Critical, 1.182 High) brauchen keinen Eintrag: Der Gate meldet sie als sichtbare Warnung (`--fixable-only`).
+- **Frist:** 2026-11-29 für alle 167 offenen Container-High-Einträge (`owner: arn0ld87`, `approved_by: arn0ld87`). Danach schlägt der Deadline-Check fehl, auch ohne neuen Scan.
+- **Evidence:** [Run 41055191120](https://github.com/arn0ld87/agora/actions/runs/41055191120) (30.10.2026) mit allen neun Trivy-JSON-Reports (`0.json`–`8.json`) als Artefakt.
+- **Historie & Bereinigung:** 503 Container-Einträge für frühere Tags (Run 38113209635 und Run 40812078141) wurden auf `status: resolved` gesetzt.
+- **Nicht abgedeckt (bewusster Gate-Blocker):** 15 Critical-Befunde mit verfügbarem Fix (postgres-meta 7, Realtime 4, Studio 4; betroffen sind `libbrotli1`, `perl-base`, `piscina`, `proxy-addr`, `tinypool`, `@sentry/nextjs`, `dompurify`, `next`). Die Richtlinie in `check_dependency_risk_register.py` lässt für Critical keine Risikoakzeptanz (`status: open`) zu. Der Job „Supabase image CVEs + exception gate" bleibt deshalb bestimmungsgemäß rot, bis Upstream diese Critical-Pakete in neuen Image-Releases patcht.
+- Befunde ohne verfügbaren Fix (33 Critical, 1.205 High) brauchen keinen Eintrag: Das Gate meldet sie als sichtbare Warnung (`--fixable-only`).
 
 ## Aktive Baseline
 
