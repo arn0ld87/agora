@@ -20,7 +20,7 @@ dependencies = [
     "neo4j>=5.15.0",
 
     # OASIS social-media simulation
-    "camel-oasis==0.2.5",
+    "camel-oasis==0.2.6",
     "camel-ai==0.2.78",
 
     # nltk ist bewusst KEINE Dependency mehr (#1410). Zwischenzeitlich stand es
